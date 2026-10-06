@@ -113,10 +113,7 @@ internal static class ShimMethodEmitter
                 CalledAddedMethodKeys = calledAddedMethodKeys,
                 SourceStartLine = queued.SourceStartLine,
                 SourceEndLine = queued.SourceEndLine,
-                LifecycleNote = ComputeLifecycleNote(
-                    queued.MethodDeclaration,
-                    queued.MethodSymbol,
-                    typeState.TypeSymbol),
+                LifecycleNote = ComputeEntryLifecycleNote(queued, typeState.TypeSymbol),
                 ReplacesCompiledMethod = queued.ReplacesCompiledMethod,
                 HomeAssemblyName = typeState.HomeAssemblyName
             });
@@ -184,6 +181,28 @@ internal static class ShimMethodEmitter
         }
 
         return string.Format(LifecycleNotes.SelectDirectFormat(methodName), methodName);
+    }
+
+    /// <summary>
+    /// The note a queued method's entry carries: the one-shot lifecycle note when the method is
+    /// one, else the Test Runner note when it is an added test method, else none.
+    /// </summary>
+    // Why the one-shot note first: the rows that carry it today keep it unchanged. Why the
+    // added-test condition is the warning's: a row gets the note exactly when the run warns.
+    internal static string ComputeEntryLifecycleNote(QueuedShimMethod queued, INamedTypeSymbol typeSymbol)
+    {
+        string oneShotNote = ComputeLifecycleNote(queued.MethodDeclaration, queued.MethodSymbol, typeSymbol);
+        if (oneShotNote != null)
+        {
+            return oneShotNote;
+        }
+
+        if (queued.IsAddedMethod && TestAttributeNames.HasTestAttribute(queued.MethodDeclaration))
+        {
+            return TestAttributeNames.AddedTestMethodLifecycleNote;
+        }
+
+        return null;
     }
 
     internal static bool IsOneShotLifecycleMethodName(string methodName)

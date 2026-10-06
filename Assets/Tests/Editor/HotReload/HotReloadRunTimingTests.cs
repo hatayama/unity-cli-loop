@@ -70,5 +70,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Throws<ArgumentOutOfRangeException>(() => timing.Complete(-1));
         }
+
+        /// <summary>
+        /// What: the time outside the three phases is reported as the total minus the phases.
+        /// </summary>
+        [Test]
+        public void Complete_ReportsOtherAsTotalMinusThePhases()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+            timing.AddAnalysis(100);
+            timing.AddShimCompile(200);
+            timing.AddPatch(30);
+
+            Assert.That(timing.Complete(1000).OtherMs, Is.EqualTo(670));
+        }
+
+        /// <summary>
+        /// What: a total that the phases fill exactly leaves nothing outside them.
+        /// </summary>
+        [Test]
+        public void Complete_TotalEqualToThePhases_ReportsZeroOther()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+            timing.AddAnalysis(100);
+            timing.AddShimCompile(200);
+            timing.AddPatch(30);
+
+            Assert.That(timing.Complete(330).OtherMs, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a total shorter than the phases inside it is refused instead of reporting a
+        /// negative time outside the phases.
+        /// </summary>
+        [Test]
+        public void Complete_TotalBelowThePhases_Throws()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+            timing.AddAnalysis(100);
+            timing.AddShimCompile(200);
+            timing.AddPatch(30);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => timing.Complete(329));
+        }
     }
 }

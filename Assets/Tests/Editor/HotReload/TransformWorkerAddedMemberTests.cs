@@ -720,6 +720,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method with a test attribute says on its own entry that the Unity Test
+        /// Runner will not discover it until a compile, so a reader of its row alone learns it.
+        /// </summary>
+        [TestCase("[Test]\n        public void AddedProbe()\n        {\n        }", "AddedProbe")]
+        [TestCase(
+            "[UnityTest]\n        public System.Collections.IEnumerator AddedUnityProbe()\n        {\n"
+            + "            yield break;\n        }",
+            "AddedUnityProbe")]
+        public async Task Emit_AddedTestMethod_CarriesTestRunnerLifecycleNote(string addedMember, string methodName)
+        {
+            // Why written out: the worker's constant lives in its own program, which the tests
+            // cannot reference.
+            const string expectedNote =
+                "Test method: not discovered by the Unity Test Runner until 'uloop compile'; "
+                + "'uloop run-tests --skip-compile' will not find or run it.";
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, addedMember);
+            string sourcePath = WriteEdited("AddedTestMethodNote" + methodName + ".cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, methodName);
+            Assert.That(added, Is.Not.Null, methodName + " must be an entry.");
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(added.lifecycleNote, Is.EqualTo(expectedNote));
+        }
+
+        /// <summary>
+        /// What: a compiled method whose body was edited and that gained a test attribute is not
+        /// an added method, so its entry carries no Test Runner note, as it gets no warning.
+        /// </summary>
+        [Test]
+        public async Task Emit_EditedExistingTestMethod_HasNoLifecycleNote()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            const string originalExistingValue =
+                "        public int ExistingValue()\n        {\n            return 1;\n        }";
+            Assert.That(onDisk, Does.Contain(originalExistingValue));
+            // Why the body changes too: an unchanged body is recorded as unchanged and has no
+            // entry, so the note could not be checked.
+            string edited = onDisk.Replace(
+                originalExistingValue,
+                "        [Test]\n        public int ExistingValue()\n        {\n            return 99;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("EditedExistingTestMethodNote.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null, "The edited ExistingValue must be an entry.");
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.lifecycleNote, Is.Null.Or.Empty);
+        }
+
+        /// <summary>
+        /// What: an added method without a test attribute carries no Test Runner note.
+        /// </summary>
+        [Test]
+        public async Task Emit_AddedPlainMethod_HasNoLifecycleNote()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public void AddedPlainProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedPlainMethodNote.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedPlainProbe");
+            Assert.That(added, Is.Not.Null, "AddedPlainProbe must be an entry.");
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(added.lifecycleNote, Is.Null.Or.Empty);
+        }
+
+        /// <summary>
         /// What: added methods with a qualified [TestCase], [global::NUnit.Framework.Test],
         /// [UnityTest], or [SetUp] each produce a Unity Test Runner warning that names that method.
         /// </summary>

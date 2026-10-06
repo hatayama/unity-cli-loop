@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Globalization;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -51,9 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasMethodFailure,
             int patchedMethodCount,
             int addedMethodCount,
-            int skippedMethodCount,
+            string skippedCountSuffix,
             out string message)
         {
+            Debug.Assert(skippedCountSuffix != null, "skippedCountSuffix must not be null.");
+
             message = null;
             if (outcomes.Count == 0)
             {
@@ -94,13 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.AlreadyActive));
             // Why counted here: "no method body needed patching" otherwise reads as if every
             // method edit of the run was unchanged, while some of them were Skipped.
-            if (skippedMethodCount > 0)
-            {
-                message += string.Format(
-                    CultureInfo.InvariantCulture,
-                    HotReloadConstants.SkippedCountApplyMessageSuffixFormat,
-                    skippedMethodCount);
-            }
+            message += skippedCountSuffix;
 
             return true;
         }
