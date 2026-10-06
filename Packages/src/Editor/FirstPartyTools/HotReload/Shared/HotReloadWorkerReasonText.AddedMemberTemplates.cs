@@ -20,6 +20,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Plain(
                     "Added generic methods are skipped; hot reload cannot emit a typed shim for them.",
                     0).EndingWith(CompileCallToAction));
+            // Why no compile call to action is appended: the sentence already ends with the compile
+            // as the step after passing the file that declares the type.
+            templates.Add(
+                HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved,
+                Plain(
+                    "The method signature names a type the hot-reload compilation could not resolve "
+                    + "('{0}'), so hot reload cannot tell whether this method already exists in the "
+                    + "compiled assembly. If the type is declared in another file of this edit, pass "
+                    + "that file with --files too; otherwise run 'uloop compile'.",
+                    1));
             // Why each method-group reason names a step before the compile: a call to an added
             // method is rewritten, so a lambda applies without leaving Play Mode, and the compile
             // the reason used to name alone sent readers out of Play Mode for an edit that applies.

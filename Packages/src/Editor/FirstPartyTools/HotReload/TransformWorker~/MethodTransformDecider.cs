@@ -457,6 +457,15 @@ internal static class MethodTransformDecider
         IMethodSymbol methodSymbol,
         MethodDeclarationSyntax methodDeclaration)
     {
+        // Why first: a signature type that does not bind is what made the method miss its compiled
+        // counterpart, so a generic or virtual reason would describe a method that may not be new.
+        if (UnresolvedSignatureTypes.TryFindInSignature(methodSymbol, out ITypeSymbol unresolvedType))
+        {
+            return WorkerReason.Of(
+                HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved,
+                unresolvedType.ToDisplayString());
+        }
+
         if (methodSymbol.IsAbstract || methodSymbol.IsVirtual || methodSymbol.IsOverride)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodVirtualOrAbstract);

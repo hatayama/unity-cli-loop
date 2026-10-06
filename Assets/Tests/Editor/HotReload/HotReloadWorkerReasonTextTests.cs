@@ -253,6 +253,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
                 + "Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved,
+                new[] { "Missing<T>" },
+                "The method signature names a type the hot-reload compilation could not resolve "
+                + "('Missing<T>'), so hot reload cannot tell whether this method already exists "
+                + "in the compiled assembly. If the type is declared in another file of this edit, pass "
+                + "that file with --files too; otherwise run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodMethodGroupReference,
                 new[] { "Helper", " (such as 'a => Helper(a)')" },
                 "Methods that capture the added method 'Helper' as a method group or delegate are "

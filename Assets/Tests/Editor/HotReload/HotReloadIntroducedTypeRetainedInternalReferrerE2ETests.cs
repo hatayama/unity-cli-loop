@@ -523,6 +523,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
         }
 
+        /// <summary>
+        /// Verifies that a retained introduced type with a method whose signature names a type
+        /// reached only through another file's global using still has a body edit patched: the
+        /// reload that edits the body checks the declaration against its record with that using
+        /// in scope, as the reload that introduced it did.
+        /// </summary>
+        [Test]
+        public async Task Run_RetainedTypeWithGlobalAliasInASignature_BodyEditIsPatched()
+        {
+            const string callerExpression = "new RetainedGlobalAliasSignature().Read()";
+            await RunInIntroducedTypeDomainAsync(async _ =>
+            {
+                HotReloadOrchestratorResult first = await RunAsync(
+                    "GlobalAliasSignatureFirst",
+                    callerExpression,
+                    Owner(OwnerPath, RetainedGlobalAliasSignature(1)));
+                AssertIntroduced(first, "RetainedGlobalAliasSignature");
+                Assert.That(CallTheCaller(), Is.EqualTo(1), DescribeOutcomes(first));
+
+                HotReloadOrchestratorResult edited = await RunAsync(
+                    "GlobalAliasSignatureSecond",
+                    callerExpression,
+                    Owner(OwnerPath, RetainedGlobalAliasSignature(2)));
+
+                AssertAppliedWithoutSkips(edited);
+                AssertAlreadyActive(edited, "RetainedGlobalAliasSignature");
+                AssertOutcome(edited, HotReloadMethodOutcomeKind.Patched, Namespace + ".RetainedGlobalAliasSignature.Read");
+                Assert.That(CallTheCaller(), Is.EqualTo(2), DescribeOutcomes(edited));
+            });
+        }
+
         // The modifier-less shape puts a doc comment and an attribute above the header, so the
         // header the worker rewrites is not the first token of the declaration. Why not
         // [Serializable]: a serializable type is never introduced at all.
@@ -636,6 +667,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    }";
         }
 
+        // HotReloadGlobalAlias resolves only through the test assembly's global using, and this
+        // file has no using directive of its own.
+        private static string RetainedGlobalAliasSignature(int value)
+        {
+            return "internal sealed class RetainedGlobalAliasSignature\n"
+                + "    {\n"
+                + "        " + NoInlining + "public int Read() { return " + value.ToString() + "; }\n"
+                + "\n"
+                + "        public int Take(HotReloadGlobalAlias builder) { return 0; }\n"
+                + "    }";
+        }
+
         // The compiled host file with an internal introduced type declared above the host class,
         // and the given members added to the host.
         private static Dictionary<string, string> HostWithNeighbour(int readValue, string hostMembers)
@@ -691,6 +734,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.Fail("No " + kind + " row mentions " + methodFragment + ".\n" + DescribeOutcomes(result));
+        }
+
+        private static void AssertAlreadyActive(HotReloadOrchestratorResult result, string simpleName)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.AlreadyActive
+                    && outcome.MetadataName == Namespace + "." + simpleName)
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(simpleName + " must be reported as already active.\n" + DescribeOutcomes(result));
         }
 
         // Each method calling a non-public accessor is skipped for the given reason, and the methods
