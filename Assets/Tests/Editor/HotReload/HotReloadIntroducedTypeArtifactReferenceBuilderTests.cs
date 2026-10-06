@@ -417,6 +417,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 target.Home,
                 HotReloadCompositionRoot.Services.Domain,
                 _projectRoot,
+                ReferencePublicizer.CollectResolverSearchDirectories(input.referencePaths),
                 exposeInternals);
         }
 

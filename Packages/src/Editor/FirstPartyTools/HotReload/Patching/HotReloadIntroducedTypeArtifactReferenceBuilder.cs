@@ -15,6 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Builds the references one artifact compiles against: the worker's raw references, or,
         /// when <paramref name="exposeInternals"/> is set, the same list with the target assembly
         /// and its retained artifacts replaced by copies whose internal members are public.
+        /// <paramref name="resolverSearchDirectories"/> are where Cecil looks for the assemblies
+        /// those copies refer to while it writes them.
         /// </summary>
         /// <remarks>
         /// Why only the target and its retained artifacts: the declarations belong to the target
@@ -28,9 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadTypeHome targetHome,
             HotReloadDomain domain,
             string projectRoot,
+            IReadOnlyCollection<string> resolverSearchDirectories,
             bool exposeInternals)
         {
-            ValidateBuildArguments(transformInput, targetHome, domain, projectRoot);
+            ValidateBuildArguments(transformInput, targetHome, domain, projectRoot, resolverSearchDirectories);
             if (!exposeInternals)
             {
                 return HotReloadArtifactCompileReferences.Raw(BuildRawReferencePaths(transformInput));
@@ -51,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // and the other artifacts of the domain, and Cecil resolves them while writing a copy.
             IReadOnlyCollection<string> searchDirectories = HotReloadShimReferenceBuilder.CollectArtifactSearchDirectories(
                 retainedHomes,
-                ReferencePublicizer.CollectResolverSearchDirectories(references));
+                resolverSearchDirectories);
 
             // Why only a resolution failure becomes a result: Cecil could not find an assembly a copy
             // needs, which fails this preparation like any other unusable reference. A missing file or
@@ -99,7 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto transformInput,
             HotReloadTypeHome targetHome,
             HotReloadDomain domain,
-            string projectRoot)
+            string projectRoot,
+            IReadOnlyCollection<string> resolverSearchDirectories)
         {
             if (transformInput == null)
             {
@@ -119,6 +123,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (string.IsNullOrEmpty(projectRoot))
             {
                 throw new ArgumentException("projectRoot must not be null or empty.", nameof(projectRoot));
+            }
+
+            if (resolverSearchDirectories == null)
+            {
+                throw new ArgumentNullException(nameof(resolverSearchDirectories));
             }
         }
 
