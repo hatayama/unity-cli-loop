@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // a patch this run leaves active can still call its earlier shim body. Either way the
         // skipped writer may still assign the field. Both lists hold display labels, which is
         // the form the worker's skipped rows use.
-        internal static string[] CollectActiveMethodLabels(
+        private static string[] CollectActiveMethodLabels(
             IReadOnlyList<HotReloadGroupFile> files,
             HotReloadDomain domain)
         {
