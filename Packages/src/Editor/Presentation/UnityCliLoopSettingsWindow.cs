@@ -357,7 +357,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view?.UpdateSingleToolToggle(toolName, enabled);
 
             // Skill synchronization can touch many files, so defer it to keep UI input responsive.
-            EditorApplication.delayCall += () => _skillsPresenter.ApplyToolToggleSideEffects(toolName, enabled).Forget();
+            MainThreadSwitcher.AddContinuation(() => _skillsPresenter.ApplyToolToggleSideEffects(toolName, enabled).Forget());
         }
 
         private void UpdateShowConfiguration(bool show)
