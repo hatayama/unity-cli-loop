@@ -24,6 +24,15 @@ const (
 	hotReloadRecommendedNextActionField    = "RecommendedNextAction"
 	hotReloadMessageField                  = "Message"
 	hotReloadWarningsField                 = "Warnings"
+	hotReloadOutcomeField                  = "Outcome"
+	hotReloadAutoRefreshHeldField          = "AutoRefreshHeld"
+	hotReloadAutoRefreshHoldMessageField   = "AutoRefreshHoldMessage"
+)
+
+// Raw JSON values, because the response fields are edited as encoded JSON.
+const (
+	hotReloadOutcomeReplacedByCompileJSON = `"ReplacedByCompile"`
+	hotReloadAutoRefreshReleasedJSON      = "false"
 )
 
 const (
@@ -152,23 +161,58 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 	}
 	// The reload's own next action says to run 'uloop compile', which this command just did.
 	delete(fields, hotReloadRecommendedNextActionField)
+	// Before the compile sentence is appended, so the hold sentence is still at the end of Message.
+	if err := settleHotReloadStateAfterCompile(fields); err != nil {
+		return nil, err
+	}
 	if err := appendHotReloadCompileSucceededMessage(fields); err != nil {
 		return nil, err
 	}
 	return json.Marshal(fields)
 }
 
-// A Message that is missing or not a string is left alone: only an older or unexpected package
-// sends one, and inventing a Message would claim a reload summary the Editor never wrote.
-// Why the first byte is checked: decoding JSON null into a string succeeds and leaves it empty,
-// so the decode alone would turn a null Message into one that holds only the suffix.
-func appendHotReloadCompileSucceededMessage(fields map[string]json.RawMessage) error {
-	raw := fields[hotReloadMessageField]
-	if len(raw) == 0 || raw[0] != '"' {
+// A successful compile reloaded the domain: every edit is compiled in, the patches are gone, and
+// the Auto Refresh hold is released, so the reload's own Outcome and hold sentence are stale.
+// Outcome is written even for an older package that sent none, so every merged response says the
+// compile replaced the reload. AutoRefreshHeld is only corrected, never added: a response without
+// it comes from a package that never reported the hold.
+func settleHotReloadStateAfterCompile(fields map[string]json.RawMessage) error {
+	fields[hotReloadOutcomeField] = json.RawMessage(hotReloadOutcomeReplacedByCompileJSON)
+	if _, present := fields[hotReloadAutoRefreshHeldField]; present {
+		fields[hotReloadAutoRefreshHeldField] = json.RawMessage(hotReloadAutoRefreshReleasedJSON)
+	}
+	return removeHotReloadHoldSentence(fields)
+}
+
+// Removes " <AutoRefreshHoldMessage>" from the end of Message, where the Editor appended it, so the
+// CLI never needs its own copy of the sentence. Anything else is left alone: an older package sends
+// no AutoRefreshHoldMessage, and a run that did not arm the hold omits it.
+func removeHotReloadHoldSentence(fields map[string]json.RawMessage) error {
+	holdSentence, isString, err := readHotReloadStringField(fields, hotReloadAutoRefreshHoldMessageField)
+	if err != nil || !isString {
+		return err
+	}
+	message, isString, err := readHotReloadStringField(fields, hotReloadMessageField)
+	if err != nil || !isString {
+		return err
+	}
+	withoutHold, found := strings.CutSuffix(message, " "+holdSentence)
+	if !found {
 		return nil
 	}
-	message := ""
-	if err := json.Unmarshal(raw, &message); err != nil {
+	trimmed, err := json.Marshal(withoutHold)
+	if err != nil {
+		return err
+	}
+	fields[hotReloadMessageField] = trimmed
+	return nil
+}
+
+// A Message that is missing or not a string is left alone: only an older or unexpected package
+// sends one, and inventing a Message would claim a reload summary the Editor never wrote.
+func appendHotReloadCompileSucceededMessage(fields map[string]json.RawMessage) error {
+	message, isString, err := readHotReloadStringField(fields, hotReloadMessageField)
+	if err != nil || !isString {
 		return err
 	}
 	appended, err := json.Marshal(message + hotReloadCompileFallbackSucceededMessageSuffix)
@@ -177,6 +221,22 @@ func appendHotReloadCompileSucceededMessage(fields map[string]json.RawMessage) e
 	}
 	fields[hotReloadMessageField] = appended
 	return nil
+}
+
+// readHotReloadStringField decodes a response field that holds a JSON string, and reports false for
+// a field that is missing or holds anything else.
+// Why the first byte is checked: decoding JSON null into a string succeeds and leaves it empty, so
+// the decode alone would treat a null field as an empty string and write a string back over it.
+func readHotReloadStringField(fields map[string]json.RawMessage, name string) (string, bool, error) {
+	raw := fields[name]
+	if len(raw) == 0 || raw[0] != '"' {
+		return "", false, nil
+	}
+	value := ""
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false, err
+	}
+	return value, true, nil
 }
 
 // hotReloadUnappliedPointer names the response field that explains the unapplied edits, so the
