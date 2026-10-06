@@ -486,10 +486,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return response;
         }
 
-        private const string ExistingDroppedSourcePath = "Assets/Tests/Editor/HotReload/HotReloadDefaultFilesTests.cs";
-
-        // A script on disk, so a run given it through --files names a file that exists.
+        // This test file: a script that is on disk, so a run given it through --files names a file
+        // that exists.
         private const string ExistingScriptPath = "Assets/Tests/Editor/HotReload/HotReloadDefaultFilesTests.cs";
+
+        private const string ExistingDroppedSourcePath = ExistingScriptPath;
 
         private const string AppliedMessageTail =
             "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1.";
