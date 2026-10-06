@@ -96,6 +96,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: every entry that patches an existing method is resolved through the resolver the
+        /// caller passes in, which is how one matcher of the run answers all of a group's entries.
+        /// </summary>
+        [Test]
+        public void ResolveEntries_ResolvesEachExistingMethodEntryThroughTheGivenResolver()
+        {
+            TransformWorkerEntryDto[] entries =
+            {
+                BuildExistingMethodEntry(
+                    nameof(HotReloadCoreFixture.StaticPing),
+                    new string[0],
+                    "StaticPing__shim0"),
+                BuildExistingMethodEntry(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    new[] { "System.Int32" },
+                    "ReplaceableCompute__shim0")
+            };
+            int resolveCalls = 0;
+            HotReloadMethodResolver counting = (home, typeMetadataName, methodName, parameterTypeFullNames, genericArity) =>
+            {
+                resolveCalls++;
+                return _matcher.Resolve(home, typeMetadataName, methodName, parameterTypeFullNames, genericArity);
+            };
+
+            HotReloadEntryResolution.Result result = HotReloadEntryResolution.ResolveEntries(
+                TestAssemblyHome,
+                FileHomeResolver,
+                counting,
+                FilePath,
+                ShimAssembly,
+                entries,
+                new Dictionary<string, string>(),
+                new HotReloadAddedCalleeIndex(entries));
+
+            Assert.That(result.AllResolved, Is.True);
+            Assert.That(resolveCalls, Is.EqualTo(2));
+        }
+
+        /// <summary>
         /// What: an entry naming a shim method the shim assembly does not declare fails the whole
         /// file — the result is not all-resolved, the failing row is reported Failed, and every
         /// other row of the file is reported Skipped with the atomic-file reason.
