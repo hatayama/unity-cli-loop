@@ -317,6 +317,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why here and not only at the run entry: the tool normalizes script paths for its own
             // selection and response rows, and PackageInfo is main-thread only, which this path is.
             services.PackageRootCapture.CaptureCurrent();
+            // Why here: a request that waited out a domain reload runs before the Editor's first update
+            // tick, where the capture is scheduled, and both the default selection below and the run
+            // read the snapshot of the compile that reload loaded.
+            services.SourceSnapshotCapture.EnsureCaptured();
             HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
                 parameters.Files,
                 services.ChangeDetector.Detect,
