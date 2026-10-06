@@ -439,7 +439,8 @@ Wire details:
   already hold active patches are re-applied so they bind to the newest shim. Shim compile errors caused by references to
   members that are still missing are reported with that hint, and changed `const` values
   (including enum members) are compared against the compiled target assembly and reported as
-  a response warning; other outside-body edits stay silent.
+  a response warning; other outside-body edits are reported as a response warning when a
+  verified source baseline is available, and stay silent without one.
 - A Unity message added to an existing `MonoBehaviour` is delivered by a generated proxy
   component that hot reload attaches to each live instance while Play Mode runs, because
   Unity's own message discovery only sees the compiled class. `Start`, `Update`,
