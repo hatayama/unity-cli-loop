@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outcomes.Add(
                     HotReloadMethodOutcome.Failed(
                         "(file)",
-                        "Compiled assembly not found at '" + home.DllPath + "'. Compile the project first.",
+                        HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(projectRoot, home.DllPath),
                         assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
