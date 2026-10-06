@@ -114,6 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "HotReloadInternalMonoBehaviourBase.cs",
             "HotReloadIntroducedTypeStageProbe.cs",
             "HotReloadInternalSignatureProbe.cs",
+            "HotReloadGlobalUsingBehaviourBase.cs",
         };
 
         /// <summary>

@@ -356,6 +356,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a Unity object base class the edited source reaches only through another
+        /// assembly file's global using is still seen, so the introduced type is refused instead of
+        /// being planned against an unresolved base.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_SiblingGlobalUsingBringsUnityObjectBase_IsRefused()
+        {
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("SiblingGlobalUsingUnityObjectBase");
+            string sourcePath = Path.Combine(directory, "Introduced.cs");
+            string emptyPath = Path.Combine(directory, "Empty.cs");
+            File.WriteAllText(
+                sourcePath,
+                "namespace GlobalUsingUnityObjectFixture { public class Introduced : HotReloadGlobalUsingBehaviourBase { } }");
+            File.WriteAllText(emptyPath, string.Empty);
+            string globalUsingsPath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadGlobalUsings.cs"));
+            Assert.That(File.Exists(globalUsingsPath), Is.True, "Global usings fixture missing: " + globalUsingsPath);
+
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(
+                sourcePath,
+                emptyPath,
+                new[] { globalUsingsPath });
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto output = result.Output.files[0];
+            Assert.That(output.parseErrors, Is.Empty);
+            Assert.That(output.introducedTypes, Is.Empty);
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(output.introducedTypeDiagnostics),
+                Has.Some.Contains("Unity object introduced type requires a compile"));
+        }
+
+        /// <summary>
         /// Verifies that root imports remain in compilation-unit scope when a namespace contains
         /// a relative namespace with the same name as the imported global namespace.
         /// </summary>
