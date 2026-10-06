@@ -68,6 +68,9 @@ Cecil looks up the assemblies a publicized copy refers to in the directories of 
 assembly's compile references first, then in those of every assembly it references transitively.
 When a verified snapshot marks a currently patched method as unchanged, the
 orchestrator reverts that patch to the compiled IL instead of re-emitting a shim.
+The outside-method-body warning compares against the same snapshot, the source of the last
+compile, so a declaration edit made since then keeps the warning on every reload until
+`uloop compile`; comment-only differences do not count.
 
 ## Spike Findings
 
@@ -440,7 +443,8 @@ Wire details:
   already hold active patches are re-applied so they bind to the newest shim. Shim compile errors caused by references to
   members that are still missing are reported with that hint, and changed `const` values
   (including enum members) are compared against the compiled target assembly and reported as
-  a response warning; other outside-body edits stay silent.
+  a response warning; other outside-body edits are reported as a response warning when a
+  verified source baseline is available, and stay silent without one.
 - A Unity message added to an existing `MonoBehaviour` is delivered by a generated proxy
   component that hot reload attaches to each live instance while Play Mode runs, because
   Unity's own message discovery only sees the compiled class. `Start`, `Update`,

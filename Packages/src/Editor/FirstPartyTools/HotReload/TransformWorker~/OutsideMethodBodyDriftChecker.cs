@@ -18,10 +18,10 @@ using Microsoft.CodeAnalysis.Text;
 internal static class OutsideMethodBodyDriftChecker
 {
     internal const string OutsideMethodBodyDriftWarningFormat =
-        "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+        "Edits outside method bodies in {0} (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up.";
 
     internal const string OutsideMethodBodyNamedDriftWarningFormat =
-        "Edits outside method bodies in {0} ({1}) are not applied by hot reload; run uloop compile to pick them up.";
+        "Edits outside method bodies in {0} ({1}) since the last compile are not applied by hot reload; run uloop compile to pick them up.";
 
     internal static void AppendOutsideMethodBodyDriftWarningIfNeeded(
         CompilationUnitSyntax snapshotRoot,
