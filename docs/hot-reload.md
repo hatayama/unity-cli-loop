@@ -53,6 +53,15 @@ nothing but the `global using` directives collected from the assembly's other so
 a type a sibling file imports through a `global using` would not bind, and an existing method whose
 signature names that type would look like an added method.
 
+Methods and property getters of a `partial` type are patched like any other. When an edited file
+declares a partial type, the worker reads the assembly's other sources, keeps only the declarations
+of that type's other parts, and adds them to the transform compilation as binding-only trees:
+nothing is transformed or reported from them. A part counts only when the Editor's changed-file scan
+compared it with the last compile's source snapshot and found it unchanged, so the type's edited
+methods are skipped when a part changed and was not passed (the reason names that file) or when the
+scan was incomplete (no snapshot, or more than 50 changed files); a body that names a member no
+readable part declares, typically a source generator's output, is skipped on its own.
+
 Skip reasons and introduced-type diagnostics leave the worker as a reason `code` plus its
 `args` (and an optional free-form detail), never as a sentence. Only the Editor's
 `HotReloadWorkerReasonText` turns those into the English a caller reads, so a wording change

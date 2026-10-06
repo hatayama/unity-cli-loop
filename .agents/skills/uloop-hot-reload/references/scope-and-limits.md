@@ -9,6 +9,8 @@ implementations) are never scanned: **edits** to them produce **no per-method
 entry at all** and are silently not applied — use `uloop compile` for those.
 Adding a constructor, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
+Methods and property getters of `partial` types are patched like any other; the
+other parts of the type are read from the assembly's source files.
 
 ## Added methods and fields
 
@@ -399,7 +401,9 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 
 | Condition | Why |
 |-----------|-----|
-| Method on a `partial` type (including a type nested inside a partial outer type) | A single file cannot provide a complete semantic model |
+| Method on a `partial` type when another part of the type changed since the last compile and was not passed | Hot reload binds against the compiled type; pass that file with `--files` too, or run `uloop compile` |
+| Method on a `partial` type when the other parts could not be checked against the last compile (no source snapshot yet, or more than 50 changed files in the assembly) | Run `uloop compile` |
+| Method on a `partial` type whose body names a member no source file of the assembly declares | A part generated at compile time (a source generator's output) is not visible to hot reload; run `uloop compile` |
 | Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
