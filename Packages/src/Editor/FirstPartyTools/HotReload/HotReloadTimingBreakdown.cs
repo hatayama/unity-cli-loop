@@ -13,6 +13,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ShimCompileMs = RequireElapsed(shimCompileMs, nameof(shimCompileMs));
             PatchMs = RequireElapsed(patchMs, nameof(patchMs));
             TotalMs = RequireElapsed(totalMs, nameof(totalMs));
+
+            // Why refuse instead of clamping: the phases are spans inside the run's total, so a
+            // shorter total means a phase was measured outside the run.
+            long otherMs = totalMs - analysisMs - shimCompileMs - patchMs;
+            if (otherMs < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(totalMs),
+                    totalMs,
+                    "Total milliseconds must cover the phases.");
+            }
+
+            OtherMs = otherMs;
         }
 
         // Transform worker runs, introduced-type preparation included.
@@ -24,7 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Applying the patches.
         public long PatchMs { get; }
 
-        // The whole run, which also covers file resolution and planning, so it exceeds the sum.
+        // Outside the three phases: file resolution, planning, the checks that find unchanged
+        // methods, and the like.
+        public long OtherMs { get; }
+
+        // The whole run, the three phases included.
         public long TotalMs { get; }
 
         internal static long RequireElapsed(long milliseconds, string parameterName)

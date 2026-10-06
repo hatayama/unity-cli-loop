@@ -851,6 +851,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response.Timing.AnalysisMs, Is.EqualTo(5), "AnalysisMs");
             Assert.That(response.Timing.ShimCompileMs, Is.EqualTo(7), "ShimCompileMs");
             Assert.That(response.Timing.PatchMs, Is.EqualTo(1), "PatchMs");
+            Assert.That(response.Timing.OtherMs, Is.EqualTo(37), "OtherMs");
             Assert.That(response.Timing.TotalMs, Is.EqualTo(50), "TotalMs");
         }
 

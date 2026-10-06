@@ -140,6 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AnalysisMs = timing.AnalysisMs,
                 ShimCompileMs = timing.ShimCompileMs,
                 PatchMs = timing.PatchMs,
+                OtherMs = timing.OtherMs,
                 TotalMs = timing.TotalMs
             };
         }
