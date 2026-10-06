@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BodyEdit edit = FindEdit(editName);
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
 
-            AssertPatchedAsEdited(result, FixtureKind.Plain, edit);
+            await AssertPatchedAsEditedAsync(result, FixtureKind.Plain, edit);
         }
 
         /// <summary>
@@ -155,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BodyEdit edit = FindEdit(editName);
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
 
-            AssertPatchedAsEdited(result, FixtureKind.Partial, edit);
+            await AssertPatchedAsEditedAsync(result, FixtureKind.Partial, edit);
         }
 
         /// <summary>
@@ -169,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BodyEdit edit = FindEdit("InternalMethodOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo");
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
 
-            AssertAppliedAsEditedOrSkipped(result, FixtureKind.Partial, edit);
+            await AssertAppliedAsEditedOrSkippedAsync(result, FixtureKind.Partial, edit);
         }
 
         /// <summary>
@@ -183,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BodyEdit edit = FindEdit(editName);
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
 
-            AssertAppliedAsEditedOrSkipped(result, FixtureKind.Partial, edit);
+            await AssertAppliedAsEditedOrSkippedAsync(result, FixtureKind.Partial, edit);
         }
 
         /// <summary>
@@ -197,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BodyEdit edit = FindEdit(editName);
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
 
-            AssertAppliedAsEditedOrSkipped(result, FixtureKind.Plain, edit);
+            await AssertAppliedAsEditedOrSkippedAsync(result, FixtureKind.Plain, edit);
         }
 
         /// <summary>
@@ -212,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BodyEdit edit = FindEdit(editName);
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
 
-            AssertPatchedAsEdited(result, FixtureKind.Plain, edit);
+            await AssertPatchedAsEditedAsync(result, FixtureKind.Plain, edit);
         }
 
         /// <summary>
@@ -231,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 101);
             HotReloadOrchestratorResult result = await RunEditAsync(fixture, edit);
 
-            AssertPatchedAsEdited(result, fixture, edit);
+            await AssertPatchedAsEditedAsync(result, fixture, edit);
         }
 
         /// <summary>
@@ -443,15 +443,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
         }
 
-        private static void AssertPatchedAsEdited(HotReloadOrchestratorResult result, FixtureKind fixture, BodyEdit edit)
+        private static async Task AssertPatchedAsEditedAsync(HotReloadOrchestratorResult result, FixtureKind fixture, BodyEdit edit)
         {
             Assert.That(FindRow(result, FixtureTypeName(fixture), edit.MethodName).Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), FormatOutcomes(result));
-            Assert.That(CallFixture(fixture, edit.MethodName), Is.EqualTo(edit.EditedValue), FormatOutcomes(result));
+            int value = await CallFixtureAsync(fixture, edit.MethodName);
+            Assert.That(value, Is.EqualTo(edit.EditedValue), FormatOutcomes(result));
         }
 
         // Why the value follows the row: a skipped row keeps the compiled body, and a patched row
         // must run the edited one. A call that throws fails the test, which is the point.
-        private static void AssertAppliedAsEditedOrSkipped(HotReloadOrchestratorResult result, FixtureKind fixture, BodyEdit edit)
+        private static async Task AssertAppliedAsEditedOrSkippedAsync(HotReloadOrchestratorResult result, FixtureKind fixture, BodyEdit edit)
         {
             HotReloadMethodOutcomeKind kind = FindRow(result, FixtureTypeName(fixture), edit.MethodName).Kind;
             Assert.That(
@@ -459,7 +460,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(HotReloadMethodOutcomeKind.Patched).Or.EqualTo(HotReloadMethodOutcomeKind.Skipped),
                 FormatOutcomes(result));
             int expected = kind == HotReloadMethodOutcomeKind.Patched ? edit.EditedValue : CompiledValue(fixture, edit.MethodName);
-            Assert.That(CallFixture(fixture, edit.MethodName), Is.EqualTo(expected), FormatOutcomes(result));
+            int value = await CallFixtureAsync(fixture, edit.MethodName);
+            Assert.That(value, Is.EqualTo(expected), FormatOutcomes(result));
         }
 
         private static int CompiledValue(FixtureKind fixture, string methodName)
@@ -483,7 +485,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
-        private static int CallFixture(FixtureKind fixture, string methodName)
+        // Why async: the async fixture method is awaited rather than waited on, because an EditMode
+        // test must not block the main thread on a task.
+        private static async Task<int> CallFixtureAsync(FixtureKind fixture, string methodName)
         {
             if (fixture == FixtureKind.Plain)
             {
@@ -503,7 +507,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     case DerivedPropertyGetter:
                         return plain.DerivedProperty;
                     case AsyncValue:
-                        return plain.AsyncValue().GetAwaiter().GetResult();
+                        return await plain.AsyncValue();
                     case RaiseDerivedEvent:
                         return plain.RaiseDerivedEvent();
                 }
@@ -526,7 +530,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     case DerivedPropertyGetter:
                         return partial.DerivedProperty;
                     case AsyncValue:
-                        return partial.AsyncValue().GetAwaiter().GetResult();
+                        return await partial.AsyncValue();
                     case RaiseDerivedEvent:
                         return partial.RaiseDerivedEvent();
                 }
