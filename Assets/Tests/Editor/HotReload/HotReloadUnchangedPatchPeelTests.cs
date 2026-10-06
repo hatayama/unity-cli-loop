@@ -229,6 +229,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(run.Reverted, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: the filter names only the methods that hold a live patch: none before the patch,
+        /// StaticPing while it is patched, and none again once the peel has removed that patch.
+        /// </summary>
+        [Test]
+        public void CollectPatchedMethodNames_ListsTheNamesOfLivePatchesOnly()
+        {
+            HotReloadDomainTestAccess access = new HotReloadDomainTestAccess();
+            Assert.That(
+                HotReloadUnchangedPeelFilter.CollectPatchedMethodNames(access.Domain.ListGenerations()),
+                Is.Empty,
+                "Nothing is patched yet.");
+
+            HotReloadGroupFile file = ArrangeUnchangedMethodWithActivePatch();
+            Assert.That(
+                HotReloadUnchangedPeelFilter.CollectPatchedMethodNames(access.Domain.ListGenerations()),
+                Is.EquivalentTo(new[] { nameof(HotReloadCoreFixture.StaticPing) }));
+
+            RevertRows(file, Row(FixtureMetadataName, nameof(HotReloadCoreFixture.StaticPing)));
+            Assert.That(
+                HotReloadUnchangedPeelFilter.CollectPatchedMethodNames(access.Domain.ListGenerations()),
+                Is.Empty,
+                "A peeled patch is no longer live, so its name must not keep rows resolving.");
+        }
+
         private static void Revert(HotReloadGroupFile file)
         {
             HotReloadCompositionRoot.Services.EntryApplier.RevertUnchangedPatchesPerFile(
