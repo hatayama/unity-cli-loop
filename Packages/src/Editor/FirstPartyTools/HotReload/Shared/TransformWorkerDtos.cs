@@ -372,8 +372,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int sourceStartLine;
         public int sourceEndLine;
 
-        // Null/empty when the method is not a one-shot lifecycle method and is not only called
-        // from them inside this file.
+        // Null/empty unless the method is a one-shot lifecycle method or an added method with a
+        // test attribute.
         public string lifecycleNote;
 
         // True when this addedMethod entry replaces a compiled method whose return type changed.

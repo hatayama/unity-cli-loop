@@ -346,8 +346,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + " of the patched and added rows re-applied changes from earlier reloads in sibling files.";
             }
 
-            // Why counted here: the totals only count what was applied, so a run that skipped
-            // some of the edits otherwise reads as if every one of them took effect.
+            // Why the Skipped count goes here: the totals only count what was applied, so a run
+            // that skipped some of the edits otherwise reads as if every one of them took effect.
             message += skippedCountSuffix;
 
             return AppendStaleSummary(message, result);
