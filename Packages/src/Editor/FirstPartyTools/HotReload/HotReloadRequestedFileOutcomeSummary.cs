@@ -90,5 +90,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return count;
         }
+
+        /// <summary>
+        /// Counts the Skipped rows that belong to a sibling file the run pulled in to re-apply its
+        /// earlier changes, as opposed to the files the caller asked about.
+        /// </summary>
+        // Why apart from the Patched and Added count: the message reports Skipped rows in a count
+        // of their own, which includes the sibling ones while Outcome leaves them out.
+        public static int CountSkippedSiblingOutcomes(
+            IReadOnlyList<HotReloadMethodOutcome> methods,
+            IReadOnlyCollection<string> reappliedSiblingPaths,
+            Func<string, string> toProjectRelativeScriptPath)
+        {
+            Debug.Assert(methods != null, "methods must not be null.");
+            Debug.Assert(reappliedSiblingPaths != null, "reappliedSiblingPaths must not be null.");
+            Debug.Assert(
+                toProjectRelativeScriptPath != null,
+                "toProjectRelativeScriptPath must not be null.");
+
+            HotReloadReappliedSiblingFiles siblingFiles =
+                new HotReloadReappliedSiblingFiles(reappliedSiblingPaths, toProjectRelativeScriptPath);
+            int count = 0;
+            for (int index = 0; index < methods.Count; index++)
+            {
+                HotReloadMethodOutcome outcome = methods[index];
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Skipped)
+                {
+                    continue;
+                }
+
+                if (siblingFiles.Contains(outcome.FilePath))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
     }
 }

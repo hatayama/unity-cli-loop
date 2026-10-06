@@ -506,6 +506,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: how many method outcomes of this run were Skipped.
         public const string SkippedCountApplyMessageSuffixFormat = " Skipped: {0}.";
 
+        // Format: how many method outcomes of this run were Skipped, and how many of those belong
+        // to sibling files the run re-applied on its own.
+        public const string SkippedCountWithSiblingRowsApplyMessageSuffixFormat =
+            " Skipped: {0} ({1} in sibling files the run re-applied on its own; Outcome does not count those).";
+
         // Format: how many types this run introduced.
         public const string IntroducedTypesOnlyApplyMessageFormat =
             "Hot reload introduced {0} type(s); no method body needed patching.";

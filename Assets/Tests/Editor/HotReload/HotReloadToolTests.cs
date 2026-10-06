@@ -2369,7 +2369,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: an applied run that re-applied a sibling's earlier changes says how many of the
         /// Patched and Added rows came from those siblings, right after the counts they are part of,
-        /// so a reader who edited one method is not left wondering where the rest came from.
+        /// so a reader who edited one method is not left wondering where the rest came from. Its
+        /// Skipped count says the same of the Skipped rows.
         /// </summary>
         [Test]
         public void BuildApplyResponse_SiblingRowsReapplied_SaysHowManyOfTheCountsCameFromSiblings()
@@ -2393,7 +2394,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Does.StartWith(
                     "Hot reload applied. PatchedTotal=2, ActivePatchTotal=2. Added: 1. "
-                    + "2 of the patched and added rows re-applied changes from earlier reloads in sibling files. Skipped: 1."));
+                    + "2 of the patched and added rows re-applied changes from earlier reloads in sibling files. "
+                    + "Skipped: 1 (1 in sibling files the run re-applied on its own; Outcome does not count those)."));
         }
 
         /// <summary>
@@ -2434,7 +2436,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a pulled-in sibling whose rows were all Skipped re-applied nothing, so the message
-        /// adds no re-applied count for it.
+        /// adds no re-applied count for it, while its Skipped count names the row as a sibling's.
         /// </summary>
         [Test]
         public void BuildApplyResponse_SiblingRowsAllSkipped_AddsNoReappliedCount()
@@ -2453,6 +2455,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
             Assert.That(response.Message, Does.Not.Contain("re-applied changes from earlier reloads"));
+            Assert.That(response.Message, Does.Contain(" Skipped: 1 (1 in sibling files"));
+        }
+
+        /// <summary>
+        /// What: when the requested file and a sibling both have Skipped rows, the Skipped count
+        /// still covers every row and says how many of them are the sibling's. The sibling also has
+        /// a Patched row, so counting every sibling row instead of its Skipped ones fails.
+        /// </summary>
+        [Test]
+        public void BuildApplyMessage_RequestedAndSiblingRowsSkipped_SaysHowManySkippedRowsAreSiblings()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Edited", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Skipped("Type.Skip", "reason", "Assets/Requested.cs"),
+                    HotReloadMethodOutcome.Patched("Sibling.Earlier", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.FirstSkip", "reason", "Assets/Sibling.cs"),
+                    HotReloadMethodOutcome.Skipped("Sibling.SecondSkip", "reason", "Assets/Sibling.cs")
+                },
+                new List<string>(),
+                patchedTotal: 2,
+                activePatchTotal: 2,
+                reappliedSiblingPaths: new[] { "Assets/Sibling.cs" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Message, Does.Contain(" Skipped: 3 (2 in sibling files"));
         }
 
         /// <summary>
@@ -2834,6 +2864,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.StartWith(
                     string.Format(HotReloadConstants.IntroducedTypesOnlyApplyMessageFormat, 1)
                     + " Skipped: 2."));
+        }
+
+        /// <summary>
+        /// What: a run that only introduced a type also says when its Skipped row belongs to a
+        /// sibling it re-applied on its own, as the ordinary applied message does.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_IntroducedTypeOnlyWithSiblingSkipped_SaysTheSkippedRowIsASibling()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("Sibling.Skip", "reason", "Assets/Sibling.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    reappliedSiblingPaths: new[] { "Assets/Sibling.cs" },
+                    introducedTypes: new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.Introduced(
+                            "Example.Introduced",
+                            "IntroducedAssembly",
+                            "Assets/Requested.cs")
+                    }));
+
+            Assert.That(
+                response.Message,
+                Does.StartWith(
+                    string.Format(HotReloadConstants.IntroducedTypesOnlyApplyMessageFormat, 1)
+                    + " Skipped: 1 (1 in sibling files"));
         }
 
         /// <summary>
