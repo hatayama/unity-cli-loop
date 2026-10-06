@@ -285,13 +285,26 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) compileExecutionResult {
+	result, _ := runFreshCompileAttempt(ctx, connection, params, stderr, compileWait, freshCompileAttemptOptions{})
+	return result
+}
+
+// runFreshCompileAttempt sends one compile request and waits for Unity to report its result.
+func runFreshCompileAttempt(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+	options freshCompileAttemptOptions,
+) (compileExecutionResult, freshCompileAttemptOutcome) {
 	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
 	if timeoutErr != nil {
 		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 
 	requestID, err := prepareCompileWaitParams(params)
@@ -300,7 +313,7 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
@@ -326,7 +339,7 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 
 	spinner.Update("Waiting for domain reload to complete...")
@@ -345,7 +358,7 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 	if !completed {
 		spinner.Stop()
@@ -357,9 +370,9 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			time.Since(waitStartedAt),
 			compilePendingRecordLifetime-waitTimeout,
 		))
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
-	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome)
+	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome), freshCompileAttemptFinal
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {
