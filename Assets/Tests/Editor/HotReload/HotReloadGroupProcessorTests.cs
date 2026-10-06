@@ -734,6 +734,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task<HotReloadTimingBreakdown> RunGroupWithPhaseStubsAsync(PhaseStubs stubs)
         {
             HotReloadRunTiming timing = new HotReloadRunTiming();
+            // Why time the call instead of passing a fixed total: the stubs really wait, so the
+            // phases hold measured times, and only the time around the call is a total that
+            // covers them, as in the production run.
+            Stopwatch total = new Stopwatch();
             using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
                 HotReloadGroupProcessorDependencies.Create(
                     files => true,
@@ -745,11 +749,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 try
                 {
+                    total.Start();
                     await HotReloadCompositionRoot.Services.GroupProcessor.ProcessGroupAsync(
                         new[] { stubs.GroupFile },
                         "phase-timing-test",
                         timing,
                         CancellationToken.None);
+                    total.Stop();
                 }
                 catch (OperationCanceledException exception)
                 {
@@ -759,7 +765,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             }
 
-            return timing.Complete(0);
+            return timing.Complete(total.ElapsedMilliseconds);
         }
 
         private static TransformWorkerEntryDto CreateAtomicEntry(string projectRelativePath)

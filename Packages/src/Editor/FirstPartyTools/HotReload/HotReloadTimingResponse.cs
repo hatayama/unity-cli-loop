@@ -15,9 +15,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public long PatchMs { get; set; }
 
         /// <summary>
-        /// The whole run inside the Editor. It also covers file resolution and planning, so it
-        /// exceeds the sum of the phases.
+        /// What is left of TotalMs after the three phases: file resolution, planning, and the
+        /// checks that find unchanged methods.
         /// </summary>
+        public long OtherMs { get; set; }
+
+        /// <summary>The whole run inside the Editor.</summary>
         public long TotalMs { get; set; }
     }
 }
