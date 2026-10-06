@@ -91,9 +91,9 @@ func waitForV2ProjectOpened(
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
-	// V2 server auto-start is scheduled on EditorApplication.delayCall, which does not run while
-	// the Editor window is unfocused (V3 moved its recovery onto the main-thread dispatcher, which
-	// drains on update and tick and signals a tick when work is enqueued; see
+	// V2 server auto-start is scheduled on EditorApplication.delayCall, which was observed not to
+	// run while the Editor window is unfocused (V3 moved its recovery onto the main-thread
+	// dispatcher, which drains on update and tick and signals a tick when work is enqueued; see
 	// UnityCliLoopServerController.OnServerLoopUnexpectedlyExited). V2 has no equivalent, so
 	// focus once after the lockfile gate. Focus failure is non-fatal: log and continue into the
 	// readiness probe.
