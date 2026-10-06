@@ -350,7 +350,7 @@ func runFreshCompileAttempt(
 		requestID:      requestID,
 		forceRecompile: compileForceRecompileEnabled(params),
 		timeout:        waitTimeout,
-		pollInterval:   compileWaitPollInterval,
+		pollInterval:   freshWaitPollIntervalFor(compileWait),
 	}, compileWait)
 	if waitErr != nil {
 		spinner.Stop()
