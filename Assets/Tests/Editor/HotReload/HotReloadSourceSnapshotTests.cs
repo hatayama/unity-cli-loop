@@ -30,6 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+        private const string CoreFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadCoreFixtures.cs";
         private const string PredefinedEditorAssemblyName = "Assembly-CSharp-Editor";
         private const string PredefinedEditorFixtureProjectRelativePath =
             "Assets/RegressionHarness/AnnotatedScreenshotMismatch/Editor/AnnotatedScreenshotMismatchSceneBuilder.cs";
@@ -66,6 +68,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Document.Hash must equal the hash of the on-disk source bytes (algorithm="
                 + document.HashAlgorithm + ").");
+        }
+
+        /// <summary>
+        /// What: the PDB document index finds, for files of two assemblies, the same document a walk that stops at the first matching sequence point returns.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_ReturnsTheSameDocumentAsTheWalk()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+
+            AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), FixtureProjectRelativePath);
+            AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), CoreFixtureProjectRelativePath);
+            AssertIndexFindsTheWalkedDocument(
+                index,
+                Path.Combine(
+                    projectRoot,
+                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    PredefinedEditorAssemblyName + HotReloadConstants.CompiledAssemblyExtension),
+                PredefinedEditorFixtureProjectRelativePath);
+        }
+
+        private static void AssertIndexFindsTheWalkedDocument(
+            HotReloadPdbDocumentIndex index,
+            string dllPath,
+            string projectRelativePath)
+        {
+            string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+            Document walked = FindDocumentForProjectRelativePath(dllPath, pdbPath, projectRelativePath);
+            Assert.That(walked, Is.Not.Null, "Precondition: the walk must find a document for " + projectRelativePath);
+
+            bool found = index.TryFindDocument(
+                dllPath,
+                pdbPath,
+                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath),
+                projectRelativePath,
+                out HotReloadPdbDocument indexed);
+
+            Assert.That(found, Is.True, projectRelativePath);
+            Assert.That(indexed.Url, Is.EqualTo(walked.Url), projectRelativePath);
+            Assert.That(indexed.HashAlgorithm, Is.EqualTo(walked.HashAlgorithm), projectRelativePath);
+            Assert.That(indexed.Hash.SequenceEqual(walked.Hash), Is.True, projectRelativePath);
         }
 
         /// <summary>
