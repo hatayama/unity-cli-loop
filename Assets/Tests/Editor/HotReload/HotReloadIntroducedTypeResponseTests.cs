@@ -625,6 +625,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         response.Success,
                         Is.False,
                         "A refused type declaration must fail the run.");
+                    Assert.That(
+                        response.FailedTotal,
+                        Is.EqualTo(0),
+                        "No method row failed, so only the refused declaration can make the Outcome Failed.");
+                    Assert.That(
+                        response.Outcome,
+                        Is.EqualTo("Failed"),
+                        "A refused declaration alone must answer Failed.");
                     Assert.That(response.IntroducedTypes.Count, Is.EqualTo(1));
                     Assert.That(response.IntroducedTypes[0].Kind, Is.EqualTo("Failed"));
                     Assert.That(response.IntroducedTypes[0].Reason, Is.EqualTo(InjectedTypeFailureReason));
@@ -683,6 +691,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                     Assert.That(response.Success, Is.False, "A refused declaration must fail the run.");
                     Assert.That(
+                        response.Outcome,
+                        Is.EqualTo("Failed"),
+                        "A refused declaration must answer Failed even beside a bound declaration, which counts as live.");
+                    Assert.That(
                         CountTypeRows(response, "AlreadyActive"),
                         Is.EqualTo(1),
                         "A declaration bound from a retained assembly is still bound.");
@@ -712,6 +724,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadResponse response = await RunAgainstTheHostAsync();
 
                     Assert.That(response.Success, Is.False, "A failed preparation must fail the run.");
+                    Assert.That(response.Outcome, Is.EqualTo("Failed"), "A failed preparation must answer Failed.");
                     Assert.That(
                         response.IntroducedTypes.Count,
                         Is.EqualTo(0),

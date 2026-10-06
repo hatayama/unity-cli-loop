@@ -370,3 +370,140 @@ func TestHotReloadCompileFallbackRejectsNonObjectResponses(t *testing.T) {
 		t.Fatalf("expected the non-object error, got %v", err)
 	}
 }
+
+// Verifies a successful fallback compile turns the reload's Outcome into ReplacedByCompile, reports
+// the Auto Refresh hold released, and removes exactly the hold sentence the reload appended to
+// Message, with its leading space, while AutoRefreshHoldMessage stays as the record of what was
+// removed.
+func TestInjectHotReloadCompileFallback_CompileSucceeded_SettlesFinalState(t *testing.T) {
+	cases := []struct {
+		name        string
+		reload      string
+		wantMessage string
+	}{
+		{
+			name:        "nothing applied",
+			reload:      `{"Success":true,"Outcome":"NothingApplied","CompileFallback":"Requested","AutoRefreshHeld":true,"AutoRefreshHoldMessage":"HOLD SENTENCE","Message":"Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2. HOLD SENTENCE"}`,
+			wantMessage: "Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2.",
+		},
+		{
+			name:        "partially applied",
+			reload:      `{"Success":true,"Outcome":"PartiallyApplied","CompileFallback":"Requested","AutoRefreshHeld":true,"AutoRefreshHoldMessage":"HOLD SENTENCE","Message":"Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1. HOLD SENTENCE"}`,
+			wantMessage: "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. Skipped: 1.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged, err := injectHotReloadCompileFallback(json.RawMessage(tc.reload), json.RawMessage(`{"Success":true}`))
+			if err != nil {
+				t.Fatalf("inject failed: %v", err)
+			}
+			fields := decodeSingleJSONObject(t, string(merged))
+			assertJSONStringField(t, fields, "Outcome", "ReplacedByCompile")
+			if string(fields["AutoRefreshHeld"]) != "false" {
+				t.Fatalf("AutoRefreshHeld must be false once the compile released the hold: %s", merged)
+			}
+			assertJSONStringField(t, fields, "Message", tc.wantMessage+hotReloadCompileFallbackSucceededMessageSuffix)
+			assertJSONStringField(t, fields, "AutoRefreshHoldMessage", "HOLD SENTENCE")
+		})
+	}
+}
+
+// Verifies a failed fallback compile leaves Outcome, AutoRefreshHeld, AutoRefreshHoldMessage and
+// Message as the reload wrote them.
+func TestInjectHotReloadCompileFallback_CompileFailed_KeepsReloadState(t *testing.T) {
+	merged, err := injectHotReloadCompileFallback(
+		json.RawMessage(`{"Success":true,"Outcome":"NothingApplied","CompileFallback":"Requested","AutoRefreshHeld":true,"AutoRefreshHoldMessage":"HOLD SENTENCE","Message":"Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2. HOLD SENTENCE"}`),
+		json.RawMessage(`{"Success":false,"Errors":[{"Message":"CS0103"}]}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	fields := decodeSingleJSONObject(t, string(merged))
+	assertJSONStringField(t, fields, "Outcome", "NothingApplied")
+	if string(fields["AutoRefreshHeld"]) != "true" {
+		t.Fatalf("AutoRefreshHeld must stay as the reload reported it: %s", merged)
+	}
+	assertJSONStringField(t, fields, "Message", "Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2. HOLD SENTENCE")
+	assertJSONStringField(t, fields, "AutoRefreshHoldMessage", "HOLD SENTENCE")
+}
+
+// Verifies a successful fallback compile over an older package's response, which has neither
+// Outcome nor AutoRefreshHoldMessage, still adds Outcome ReplacedByCompile, appends the compile
+// sentence without removing anything from Message, and turns AutoRefreshHeld false only when the
+// response has the field.
+func TestInjectHotReloadCompileFallback_OlderPackageWithoutOutcome_StillSettles(t *testing.T) {
+	cases := []struct {
+		name        string
+		reload      string
+		wantMessage string
+		// Raw JSON of AutoRefreshHeld after the merge; empty when the field must stay absent.
+		wantAutoRefreshHeld string
+	}{
+		{
+			name:                "with AutoRefreshHeld",
+			reload:              `{"Success":true,"CompileFallback":"Requested","AutoRefreshHeld":true,"Message":"Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2. HOLD SENTENCE"}`,
+			wantMessage:         "Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2. HOLD SENTENCE",
+			wantAutoRefreshHeld: "false",
+		},
+		{
+			name:        "without AutoRefreshHeld",
+			reload:      `{"Success":true,"CompileFallback":"Requested","Message":"Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2."}`,
+			wantMessage: "Hot reload applied. PatchedTotal=0, ActivePatchTotal=0. Skipped: 2.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged, err := injectHotReloadCompileFallback(json.RawMessage(tc.reload), json.RawMessage(`{"Success":true}`))
+			if err != nil {
+				t.Fatalf("inject failed: %v", err)
+			}
+			fields := decodeSingleJSONObject(t, string(merged))
+			assertJSONStringField(t, fields, "Outcome", "ReplacedByCompile")
+			assertJSONStringField(t, fields, "Message", tc.wantMessage+hotReloadCompileFallbackSucceededMessageSuffix)
+			if string(fields["AutoRefreshHeld"]) != tc.wantAutoRefreshHeld {
+				t.Fatalf("AutoRefreshHeld mismatch: want %q, got %q", tc.wantAutoRefreshHeld, fields["AutoRefreshHeld"])
+			}
+		})
+	}
+}
+
+// Verifies a fallback compile that succeeded after a reload with Failed rows replaces the Failed
+// Outcome with ReplacedByCompile, together with Success.
+func TestInjectHotReloadCompileFallback_CompileSucceededAfterFailedReload_ReplacesFailedOutcome(t *testing.T) {
+	merged, err := injectHotReloadCompileFallback(
+		json.RawMessage(`{"Success":false,"Outcome":"Failed","CompileFallback":"Requested","Message":"Hot reload finished with one or more Failed outcomes."}`),
+		json.RawMessage(`{"Success":true}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	fields := decodeSingleJSONObject(t, string(merged))
+	if string(fields["Success"]) != "true" {
+		t.Fatalf("Success must become the compile's: %s", merged)
+	}
+	assertJSONStringField(t, fields, "Outcome", "ReplacedByCompile")
+}
+
+// Verifies a successful fallback compile removes the hold sentence only from the end of Message,
+// where the reload appended it, and leaves the same text elsewhere in Message alone.
+func TestInjectHotReloadCompileFallback_CompileSucceeded_RemovesTheHoldSentenceOnlyAtTheEnd(t *testing.T) {
+	merged, err := injectHotReloadCompileFallback(
+		json.RawMessage(`{"Success":true,"Outcome":"NothingApplied","CompileFallback":"Requested","AutoRefreshHeld":true,"AutoRefreshHoldMessage":"HOLD SENTENCE","Message":"Skipped: 2. HOLD SENTENCE See Warnings."}`),
+		json.RawMessage(`{"Success":true}`))
+	if err != nil {
+		t.Fatalf("inject failed: %v", err)
+	}
+	fields := decodeSingleJSONObject(t, string(merged))
+	assertJSONStringField(t, fields, "Message", "Skipped: 2. HOLD SENTENCE See Warnings."+hotReloadCompileFallbackSucceededMessageSuffix)
+}
+
+// Fails the test unless the field holds want as a JSON string.
+func assertJSONStringField(t *testing.T, fields map[string]json.RawMessage, name string, want string) {
+	t.Helper()
+	got := ""
+	if err := json.Unmarshal(fields[name], &got); err != nil {
+		t.Fatalf("%s must be a JSON string: %v (raw %s)", name, err, fields[name])
+	}
+	if got != want {
+		t.Fatalf("%s mismatch:\nwant %q\ngot  %q", name, want, got)
+	}
+}
