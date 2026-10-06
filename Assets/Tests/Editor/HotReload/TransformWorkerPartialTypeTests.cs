@@ -67,6 +67,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string OtherPartPropertyGetter = "get { return OtherPartProperty; }";
         private const string OtherPartPropertyGetterEdited = "get { return OtherPartProperty + 100; }";
 
+        // Fixtures of the internal-visibility repro tests. None of them declares the types whose
+        // non-public members the edited bodies use, so the worker sees those types as compiled.
+        private const string FixtureDirectoryProjectRelativePath = "Assets/Tests/Editor/HotReload/";
+        private const string CallerFileName = "HotReloadInternalMemberCaller.cs";
+        private const string PlainDerivedFileName = "HotReloadPlainDerivedFixture.cs";
+        private const string PartialDerivedFileName = "HotReloadPartialDerivedFixture.cs";
+        private const string CallerInternalCallBody = "return HotReloadInternalMemberHost.InternalStaticValue();";
+        private const string CallerInternalCallBodyEdited = "return HotReloadInternalMemberHost.InternalStaticValue() + 100;";
+        private const string CallerPlainValueBody = "return 1;";
+        private const string PlainDerivedValueBody = "return 10;";
+        private const string PartialDerivedValueBody = "return 9;";
+
         /// <summary>
         /// What: a body that reads a private field declared in another part of the type is emitted.
         /// </summary>
@@ -501,6 +513,272 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertSkippedAsOtherPartChanged(result, "OwnOnly", UnreadableProjectRelativePath);
             AssertFileHasParseErrors(result, UnreadableProjectRelativePath);
+        }
+
+        /// <summary>
+        /// What: shape A of the internal-visibility regression. A body of a partial type that calls an
+        /// internal method of a plain type the run was not given binds, as the same call from a plain
+        /// type does (the control run of the same test).
+        /// </summary>
+        [Test]
+        public async Task Repro_PartialTypeBodyCallingInternalMethodOfUnpassedPlainType_Binds()
+        {
+            const string call = "HotReloadInternalMemberHost.InternalStaticValue()";
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildCallerPlainValueEdit("ReproAControl.cs", call)
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("ReproAPartial.cs", call)
+            });
+
+            AssertControlAndReproEmitted(control, "PlainValue", repro, "OwnOnly");
+        }
+
+        /// <summary>
+        /// What: shape B of the regression with the plain file passed. A plain type's body that calls
+        /// an internal method of an unpassed type binds when an edit of a partial type is in the same
+        /// run, as it does when the plain file is passed alone (the control run of the same test).
+        /// </summary>
+        [Test]
+        public async Task Repro_PlainFilePassedNextToPartialTypeEdit_CallingInternalMethodOfUnpassedType_Binds()
+        {
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildCallerInternalCallEdit("ReproB1Control.cs")
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("ReproB1Partial.cs", "2"),
+                BuildCallerInternalCallEdit("ReproB1Caller.cs")
+            });
+
+            AssertControlAndReproEmitted(control, "CallsInternal", repro, "CallsInternal");
+        }
+
+        /// <summary>
+        /// What: shape B of the regression as the field run had it: the plain file comes back as a
+        /// sibling to re-bind its active patches while an edit of a partial type is passed. Its body
+        /// that calls an internal method of an unpassed type binds, as it does when the passed edit is
+        /// in a plain type (the control run of the same test).
+        /// </summary>
+        [Test]
+        public async Task Repro_PlainSiblingBroughtBackNextToPartialTypeEdit_CallingInternalMethodOfUnpassedType_Binds()
+        {
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(PlainDerivedFileName, "ReproB2ControlPassed.cs", PlainDerivedValueBody, "return 11;"),
+                AsReappliedSibling(BuildCallerInternalCallEdit("ReproB2ControlSibling.cs"))
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("ReproB2Partial.cs", "2"),
+                AsReappliedSibling(BuildCallerInternalCallEdit("ReproB2Sibling.cs"))
+            });
+
+            AssertControlAndReproEmitted(control, "CallsInternal", repro, "CallsInternal");
+        }
+
+        /// <summary>
+        /// What: shape C of the regression. A body of a partial type that calls an internal method
+        /// another partial type declares in a separate file the run was not given binds, as the same
+        /// call from a plain type does (the control run of the same test).
+        /// </summary>
+        [Test]
+        public async Task Repro_PartialTypeBodyCallingInternalMethodOfAnotherUnpassedPartialType_Binds()
+        {
+            const string call = "new HotReloadPartialInternalPeer().PeerInternalValue()";
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildCallerPlainValueEdit("ReproC1Control.cs", call)
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("ReproC1Partial.cs", call)
+            });
+
+            AssertControlAndReproEmitted(control, "PlainValue", repro, "OwnOnly");
+        }
+
+        /// <summary>
+        /// What: shape C with the other partial type's file wrapped whole in a conditional-compilation
+        /// block whose symbol the assembly defines: the call binds, as the same call from a plain type
+        /// does (the control run of the same test).
+        /// </summary>
+        [Test]
+        public async Task Repro_PartialTypeBodyCallingInternalMethodOfAnotherUnpassedPartialTypeInAConditionalFile_Binds()
+        {
+            const string call = "new HotReloadPartialInternalGuardedPeer().GuardedPeerInternalValue()";
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildCallerPlainValueEdit("ReproC2Control.cs", call)
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("ReproC2Partial.cs", call)
+            });
+
+            AssertControlAndReproEmitted(control, "PlainValue", repro, "OwnOnly");
+        }
+
+        /// <summary>
+        /// What: the reach of the regression over member kinds. A body of a partial type that uses a
+        /// non-public member of a type the run was not given binds, as the same use from a plain type
+        /// does (the control run of the same test).
+        /// </summary>
+        [TestCase("InternalInstanceMethod", "new HotReloadInternalMemberHost().InternalInstanceValue()")]
+        [TestCase("InternalField", "new HotReloadInternalMemberHost().InternalField")]
+        [TestCase("InternalProperty", "new HotReloadInternalMemberHost().InternalProperty")]
+        [TestCase("InternalType", "HotReloadInternalOnlyType.Value()")]
+        [TestCase("ProtectedInternalMethod", "new HotReloadInternalMemberHost().ProtectedInternalValue()")]
+        [TestCase(
+            "PublicMemberOfInternalTypeOfAnotherAssemblyThroughInternalsVisibleTo",
+            "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.HotReloadConstants.TestSourcesRelativeDirectory.Length")]
+        [TestCase(
+            "InternalMemberOfPublicTypeOfAnotherAssemblyThroughInternalsVisibleTo",
+            "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointCapturedVariable.FromSnapshot(null).Name.Length")]
+        public async Task Repro_PartialTypeBodyUsingNonPublicMemberOfUnpassedType_Binds(string memberKind, string expression)
+        {
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildCallerPlainValueEdit("ReproKindControl" + memberKind + ".cs", expression)
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("ReproKindPartial" + memberKind + ".cs", expression)
+            });
+
+            AssertControlAndReproEmitted(control, "PlainValue", repro, "OwnOnly");
+        }
+
+        /// <summary>
+        /// What: the reach of the regression over members a compiled base type grants its derived
+        /// types. A body of a partial type that uses such a member binds, as the same use from a plain
+        /// derived type does (the control run of the same test).
+        /// </summary>
+        [TestCase("Protected", "ProtectedValue()")]
+        [TestCase("PrivateProtected", "PrivateProtectedValue()")]
+        [TestCase("InheritedInternal", "InternalInstanceValue()")]
+        public async Task Repro_DerivedPartialTypeBodyUsingBaseMemberOfUnpassedType_Binds(string memberKind, string expression)
+        {
+            TransformWorkerClientResult control = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    PlainDerivedFileName,
+                    "ReproBaseControl" + memberKind + ".cs",
+                    PlainDerivedValueBody,
+                    "return " + expression + ";")
+            });
+            TransformWorkerClientResult repro = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    PartialDerivedFileName,
+                    "ReproBasePartial" + memberKind + ".cs",
+                    PartialDerivedValueBody,
+                    "return " + expression + ";")
+            });
+
+            AssertControlAndReproEmitted(control, "DerivedValue", repro, "DerivedValue");
+        }
+
+        // A fixture file next to these tests, edited once and described as a passed run source whose
+        // snapshot is the file on disk.
+        private static TransformWorkerSourceDto BuildEditedFixtureSource(
+            string fileName,
+            string editedFileName,
+            string fragment,
+            string replacement)
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(fileName));
+            return new TransformWorkerSourceDto
+            {
+                sourcePath = WriteEdited(editedFileName, ReplaceOnce(onDisk, fragment, replacement)),
+                projectRelativePath = FixtureDirectoryProjectRelativePath + fileName,
+                snapshotSource = onDisk
+            };
+        }
+
+        // The edited main part of the partial fixture, with OwnOnly returning the given expression.
+        private static TransformWorkerSourceDto BuildFixtureOwnOnlyEdit(string editedFileName, string returnedExpression)
+        {
+            string editedOwnOnly =
+                "        public int OwnOnly()\n        {\n            return " + returnedExpression + ";\n        }";
+            return BuildEditedFixtureSource(FixtureFileName, editedFileName, OwnOnlyDeclaration, editedOwnOnly);
+        }
+
+        // The plain caller with PlainValue returning the given expression.
+        private static TransformWorkerSourceDto BuildCallerPlainValueEdit(string editedFileName, string returnedExpression)
+        {
+            return BuildEditedFixtureSource(
+                CallerFileName,
+                editedFileName,
+                CallerPlainValueBody,
+                "return " + returnedExpression + ";");
+        }
+
+        // The plain caller with an edit inside the body that calls the internal method.
+        private static TransformWorkerSourceDto BuildCallerInternalCallEdit(string editedFileName)
+        {
+            return BuildEditedFixtureSource(
+                CallerFileName,
+                editedFileName,
+                CallerInternalCallBody,
+                CallerInternalCallBodyEdited);
+        }
+
+        private static TransformWorkerSourceDto AsReappliedSibling(TransformWorkerSourceDto source)
+        {
+            source.reappliedSibling = true;
+            return source;
+        }
+
+        // Why one assertion over both runs: the control and the repro fail for different reasons, and
+        // the reader needs both runs' rows even when the control already failed.
+        private static void AssertControlAndReproEmitted(
+            TransformWorkerClientResult control,
+            string controlMethodName,
+            TransformWorkerClientResult repro,
+            string reproMethodName)
+        {
+            List<string> failures = new List<string>();
+            CollectMissingEntry("control", control, controlMethodName, failures);
+            CollectMissingEntry("repro", repro, reproMethodName, failures);
+            Assert.That(failures, Is.Empty, string.Join("\n\n", failures));
+        }
+
+        private static void CollectMissingEntry(
+            string runLabel,
+            TransformWorkerClientResult result,
+            string methodName,
+            List<string> failures)
+        {
+            if (!result.Success)
+            {
+                failures.Add(runLabel + " run failed: " + result.ErrorMessage);
+                return;
+            }
+
+            if (FindEntry(result, methodName) == null)
+            {
+                failures.Add(
+                    runLabel + ": missing entry for " + methodName + ".\n"
+                    + FormatSkipped(result) + "\n" + FormatFileErrors(result));
+            }
+        }
+
+        private static string FormatFileErrors(TransformWorkerClientResult result)
+        {
+            List<string> rows = new List<string>();
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                foreach (string parseError in file.parseErrors ?? Array.Empty<string>())
+                {
+                    rows.Add(file.projectRelativePath + " :: " + parseError);
+                }
+            }
+
+            return rows.Count == 0 ? "FileErrors=(none)" : "FileErrors=\n" + string.Join("\n", rows);
         }
 
         // The edited main part. OwnOnly reads only its own part, so it binds whether or not the other
