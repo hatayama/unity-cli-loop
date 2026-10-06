@@ -7,5 +7,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public static class HotReloadSiblingConstDefinitions
     {
         public const int SiblingTuning = 6;
+
+        // Why typed through the global using alone: a changed sibling naming this const has a
+        // value only in a compilation that carries the assembly's global usings.
+        public const HotReloadGlobalUsingMode SiblingMode = HotReloadGlobalUsingMode.First;
     }
 }

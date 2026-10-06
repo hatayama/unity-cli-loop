@@ -115,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "HotReloadIntroducedTypeStageProbe.cs",
             "HotReloadInternalSignatureProbe.cs",
             "HotReloadGlobalUsingBehaviourBase.cs",
+            "HotReloadGlobalUsingMode.cs",
         };
 
         /// <summary>
@@ -1144,6 +1145,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Has.None.EqualTo(
                     "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with 7 yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change."),
                 "Sibling const-drift warnings must stay on siblingConstDriftWarnings, not declarationDriftWarnings.");
+        }
+
+        /// <summary>
+        /// What: a changed sibling const whose type the sibling names only through another file's
+        /// global using is still compared with the compiled value and reported as drifted.
+        /// </summary>
+        [Test]
+        public async Task Run_WithChangedSiblingConstOfGlobalUsingEnumType_EmitsSiblingConstDriftWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string siblingPath = Path.Combine(directory, "SiblingGlobalUsingEnumConstDrift.cs");
+            File.WriteAllText(
+                siblingPath,
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    public static class HotReloadSiblingConstDefinitions\n"
+                + "    {\n"
+                + "        public const HotReloadGlobalUsingMode SiblingMode = HotReloadGlobalUsingMode.Second;\n"
+                + "    }\n"
+                + "}\n");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveE2EFixturePath(),
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk,
+                additionalAssemblySourcePaths: null,
+                changedSiblingSourcePaths: new[] { siblingPath });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.siblingConstDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.siblingConstDriftWarnings,
+                Has.Some.Contain("HotReloadSiblingConstDefinitions.SiblingMode is 2 in the edited source but 1"),
+                "The sibling const must bind its enum type through the assembly's global using.\n"
+                + string.Join("\n", result.Output.siblingConstDriftWarnings));
         }
 
         /// <summary>
