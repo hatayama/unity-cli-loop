@@ -518,6 +518,11 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
+        if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(node))
+        {
+            return original;
+        }
+
         return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
     }
 
