@@ -518,6 +518,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
+        // Why only before the final qualification, not with the name-side checks at the top:
+        // returning there would also skip the accessor-read and added-field rewrites above, and
+        // a pattern naming a member the shim cannot reach could then compile and fail at run time.
         if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(node))
         {
             return original;
