@@ -3,7 +3,7 @@
 ## How a Reload Applies
 
 1. Resolves each file to its compiled assembly via `CompilationPipeline`, then groups the files by that assembly. Each group runs the worker once and produces one shim assembly, so the members one file adds are visible to the bodies edited in its siblings; groups are processed one after another and never affect each other.
-2. Rewrites each editable method body of the group into a static shim in an out-of-process Roslyn worker. When an async, iterator, lambda, local-function, or LINQ-query body touches private/internal members, those accesses are rewritten to accessor delegates so the body can compile and run from the shim assembly (the delegation shape in step 4).
+2. Rewrites each editable method body of the group into a static shim in an out-of-process Roslyn worker. When an async, iterator, lambda, local-function, or LINQ-query body touches private/internal members, those accesses are rewritten to accessor delegates so the body can compile and run from the shim assembly (the delegation shape in step 4). An `internal` member of a type the reload was not given cannot be rewritten this way, so such a body is `Skipped` (`scope-and-limits.md`).
 3. Compiles the group's shims into one assembly against publicized reference copies, loads the result into the Editor domain, and binds every shim type's accessor delegates (`__BindAccessors`) before any patch is applied.
 4. Patches each original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`) in one of two shapes: transplant copies the shim's IL into the original method, while delegation rewrites the original to forward its arguments to the shim, which runs as normally compiled code.
 

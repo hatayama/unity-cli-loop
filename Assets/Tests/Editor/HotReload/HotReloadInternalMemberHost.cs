@@ -65,6 +65,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadInternalMemberHost[] { new HotReloadInternalMemberHost() };
         }
 
+        internal event System.Action InternalEvent;
+
+        /// <summary>
+        /// Calls the handlers subscribed to <see cref="InternalEvent"/> and returns how many there
+        /// were, so a test can tell that a subscription took effect.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int RaiseInternalEvent()
+        {
+            System.Action handlers = InternalEvent;
+            if (handlers == null)
+            {
+                return 0;
+            }
+
+            handlers();
+            return handlers.GetInvocationList().Length;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void NoOp()
+        {
+        }
+
         /// <summary>
         /// A type nested in the host, so a test can name an internal member through the nested type.
         /// </summary>

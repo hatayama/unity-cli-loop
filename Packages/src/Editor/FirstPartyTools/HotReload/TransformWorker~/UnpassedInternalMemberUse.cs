@@ -17,13 +17,21 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 /// </remarks>
 internal sealed class UnpassedInternalMemberUse
 {
-    private static readonly HashSet<string> MemberNotFoundDiagnosticIds =
-        new HashSet<string>(StringComparer.Ordinal) { "CS0103", "CS1061", "CS0117" };
+    private const string SimpleNameLookupDiagnosticId = "CS0103";
 
-    private UnpassedInternalMemberUse(INamedTypeSymbol declaringType, bool canBePatchedInPlace)
+    private static readonly HashSet<string> MemberNotFoundDiagnosticIds =
+        new HashSet<string>(StringComparer.Ordinal) { SimpleNameLookupDiagnosticId, "CS1061", "CS0117" };
+
+    private UnpassedInternalMemberUse(
+        INamedTypeSymbol declaringType,
+        bool canBePatchedInPlace,
+        bool mayRunOutsideThePatchedMethod,
+        bool isSimpleNameLookup)
     {
         DeclaringType = declaringType;
         CanBePatchedInPlace = canBePatchedInPlace;
+        MayRunOutsideThePatchedMethod = mayRunOutsideThePatchedMethod;
+        IsSimpleNameLookup = isSimpleNameLookup;
     }
 
     /// <summary>The compiled type that declares the member, read with every member visible.</summary>
@@ -31,6 +39,20 @@ internal sealed class UnpassedInternalMemberUse
 
     /// <summary>True when the patched method itself runs the use, so a guard may let the body through.</summary>
     internal bool CanBePatchedInPlace { get; }
+
+    /// <summary>
+    /// True when the use runs outside the patched method (in a closure, an async or iterator state
+    /// machine, or a delegating shim), or when a closure in the body works with a value the worker
+    /// could not resolve, so the worker cannot rule out that the closure reaches the member.
+    /// </summary>
+    internal bool MayRunOutsideThePatchedMethod { get; }
+
+    /// <summary>
+    /// True when the lookup of a bare name failed (CS0103), such as an inherited member named
+    /// without 'this.'. Not a member name of an object initializer or a property pattern, which has
+    /// no receiver either but is looked up on the type being created or matched.
+    /// </summary>
+    internal bool IsSimpleNameLookup { get; }
 
     /// <summary>
     /// The use <paramref name="error"/> reports, or null when the error is not a missing member that
@@ -80,14 +102,21 @@ internal sealed class UnpassedInternalMemberUse
             return null;
         }
 
+        bool mayRunOutsideThePatchedMethod =
+            RunsOutsideThePatchedMethod(name, bodyNode, methodDeclarationOrNull, decision)
+            || HasAClosureOverAnUnresolvedValue(bodyNode, semanticModel);
+
         // Why a bare name is out of reach: the shim is a static method, and it qualifies a bare
         // member name only when the worker binds the name. This member never binds there, so the
         // name would reach the shim compile unqualified and fail the whole file.
         bool canBePatchedInPlace = hasReceiver
             && IsPatchableKind(member, name)
-            && !RunsOutsideThePatchedMethod(name, bodyNode, methodDeclarationOrNull, decision)
-            && !HasAClosureOverAnUnresolvedValue(bodyNode, semanticModel);
-        return new UnpassedInternalMemberUse(member.ContainingType, canBePatchedInPlace);
+            && !mayRunOutsideThePatchedMethod;
+        return new UnpassedInternalMemberUse(
+            member.ContainingType,
+            canBePatchedInPlace,
+            mayRunOutsideThePatchedMethod,
+            error.Id == SimpleNameLookupDiagnosticId);
     }
 
     private static SimpleNameSyntax FindReportedNameOrNull(Diagnostic error, SyntaxNode bodyNode)

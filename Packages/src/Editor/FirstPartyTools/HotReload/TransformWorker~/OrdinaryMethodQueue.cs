@@ -317,7 +317,7 @@ internal static class OrdinaryMethodQueue
         // added-member binding check, with its own reason.
         if (!isAddedMethod && decision.SkipReason == null)
         {
-            WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(
+            WorkerReason unresolvedNameSkip = UnresolvedBodyNameGuard.DescribeSkipOrNull(
                 typeState.TypeDeclaration,
                 semanticModel,
                 methodBodyNode,
@@ -325,9 +325,9 @@ internal static class OrdinaryMethodQueue
                 decision,
                 typeState.TypeSymbol,
                 typeState.TargetAssembly);
-            if (partialSkip != null)
+            if (unresolvedNameSkip != null)
             {
-                decision = MethodTransformDecision.Skip(partialSkip);
+                decision = MethodTransformDecision.Skip(unresolvedNameSkip);
             }
         }
 

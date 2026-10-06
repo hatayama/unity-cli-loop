@@ -7,13 +7,14 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
-/// Skips a body on a partial type that names something no visible part declares, instead of
-/// letting it fail the whole file in the shim compile: a part generated at compile time is
-/// invisible to the worker, so the name may be perfectly valid. An internal member of a compiled
-/// type the run was not given looks just as missing to the worker; such a use goes through when
-/// the patched method runs it itself, and is skipped with a reason that says why otherwise.
+/// Skips an edited body that names something the worker cannot resolve, where emitting it would
+/// break. On a partial type, a name no visible part declares is skipped instead of failing the
+/// whole file in the shim compile: a part generated at compile time is invisible to the worker,
+/// so the name may be perfectly valid. An internal member of a compiled type the run was not given
+/// looks just as missing to the worker, on a partial or a plain type; a use of it the patched
+/// method cannot reach is skipped with a reason that says why.
 /// </summary>
-internal static class PartialTypeBodyGuard
+internal static class UnresolvedBodyNameGuard
 {
     // Why only these: other binding errors are expected (a compiled API still expects the
     // compiled copy of a type the run declares from source) and the shim compile settles
@@ -24,8 +25,9 @@ internal static class PartialTypeBodyGuard
         new HashSet<string>(StringComparer.Ordinal) { "CS0103", "CS1061", "CS0117", "CS0246" };
 
     /// <summary>
-    /// The skip reason for the body, or null when the type is not partial, or when the body names
-    /// nothing unresolved apart from internal members the patched method can reach.
+    /// The skip reason for the body, or null when every name in it the worker cannot resolve is an
+    /// internal member the patched method can reach, or, on a plain type, is not such a member at
+    /// all, which the shim compile settles as before.
     /// </summary>
     internal static WorkerReason DescribeSkipOrNull(
         TypeDeclarationSyntax typeDeclaration,
@@ -36,10 +38,12 @@ internal static class PartialTypeBodyGuard
         INamedTypeSymbol typeSymbol,
         IAssemblySymbol targetAssembly)
     {
-        if (bodyNode == null || !PartialTypeParts.IsPartialOrNestedInPartial(typeDeclaration))
+        if (bodyNode == null)
         {
             return null;
         }
+
+        bool isPartial = PartialTypeParts.IsPartialOrNestedInPartial(typeDeclaration);
 
         // Why every error and not the first: an internal member the patched method can reach says
         // nothing about the next error, which may be a name nothing declares.
@@ -66,10 +70,18 @@ internal static class PartialTypeBodyGuard
                 targetAssembly);
             if (use == null)
             {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformPartialBodyUnbound, diagnosticText);
+                if (isPartial)
+                {
+                    return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformPartialBodyUnbound, diagnosticText);
+                }
+
+                // Why a plain type goes on: some of these names bind in the shim compile, such as an
+                // internal member of another assembly that grants access through InternalsVisibleTo,
+                // and such a body is patched and runs today. The shim compile reports the rest.
+                continue;
             }
 
-            if (use.CanBePatchedInPlace)
+            if (IsWithinReach(use, isPartial))
             {
                 continue;
             }
@@ -81,5 +93,22 @@ internal static class PartialTypeBodyGuard
         }
 
         return null;
+    }
+
+    // Why the two rules differ: a partial type skips a body whose names do not resolve, and lets
+    // through only the uses a run has shown to work in place. A plain type emits such a body, so
+    // only the uses known to break are closed there: one that runs outside the patched method,
+    // where the runtime checks access and the call throws, and a bare name, which reaches the shim
+    // compile unqualified and fails the whole file. A method passed as a delegate, an event, and a
+    // member named in an object initializer or a property pattern stay patched on a plain type,
+    // as they were.
+    private static bool IsWithinReach(UnpassedInternalMemberUse use, bool isPartial)
+    {
+        if (isPartial)
+        {
+            return use.CanBePatchedInPlace;
+        }
+
+        return !use.MayRunOutsideThePatchedMethod && !use.IsSimpleNameLookup;
     }
 }
