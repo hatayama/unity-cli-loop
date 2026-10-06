@@ -102,7 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IntPtr[] tokens = new IntPtr[_liveTokens.Count];
                 _liveTokens.CopyTo(tokens);
                 // Why clear before ending: every token handed to End has already left the set, so a hold
-                // disposed later finds nothing and cannot end it a second time.
+                // disposed later finds nothing and cannot end it a second time. A second end is a crash, not
+                // an exception: endActivity: on an ended token stops the Editor with SIGTRAP. A mutation test
+                // brought the Editor down this way when a hold disposed after a reload's close ended its token.
                 _liveTokens.Clear();
                 foreach (IntPtr token in tokens)
                 {
@@ -128,7 +130,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             lock (_gate)
             {
                 // Why remove before End: the token must leave the set even when End throws, so neither a
-                // second Dispose nor a later close can end it again.
+                // second Dispose nor a later close can end it again. Ending a token twice does not throw: the
+                // Editor stops with SIGTRAP, as a mutation test that skipped this check showed.
                 if (!_liveTokens.Remove(token))
                 {
                     return;
