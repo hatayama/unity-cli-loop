@@ -18,23 +18,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class UnityCliLoopExecutionRouterActivityTests
     {
         /// <summary>
-        /// Verifies a tool runs while one activity is held, and the activity ends once the tool returns.
+        /// Verifies the activity stays held while a tool's task is still pending, and ends only once the
+        /// tool completes, so an asynchronous command is covered for its whole length.
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_Tool_HoldsAnActivityWhileTheToolRuns_AndReleasesItAfterwards()
+        public async Task ExecuteAsync_Tool_HoldsTheActivityWhileTheToolIsPending_AndReleasesItWhenItCompletes()
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
-            ActivityObservingTool tool = new ActivityObservingTool(api);
+            PendingTool tool = new PendingTool(api);
             UnityCliLoopExecutionRouter router = CreateRouter(api, tool);
 
-            UnityCliLoopToolResponse response = await router.ExecuteAsync(
-                ActivityObservingTool.Name,
+            Task<UnityCliLoopToolResponse> run = router.ExecuteAsync(
+                PendingTool.Name,
                 new JObject(),
                 CancellationToken.None);
+            try
+            {
+                // Why these are read before the tool completes: a router that released the hold before
+                // awaiting the tool would already show the activity as ended here. A tool that completes
+                // synchronously cannot tell the two apart, because the whole call finishes before it returns.
+                Assert.That(run.IsCompleted, Is.False);
+                Assert.That(tool.LiveCountWhileRunning, Is.EqualTo(1));
+                Assert.That(api.LiveCount, Is.EqualTo(1));
+                Assert.That(api.EndedTokens, Is.Empty);
+            }
+            finally
+            {
+                // Why in finally: a failed assertion must not leave the tool's task pending.
+                tool.Complete(new ActivityTestResponse());
+            }
+
+            UnityCliLoopToolResponse response = await run;
 
             Assert.That(response, Is.InstanceOf<ActivityTestResponse>());
-            Assert.That(tool.LiveCountWhileRunning, Is.EqualTo(1));
             Assert.That(api.BeginCount, Is.EqualTo(1));
+            Assert.That(api.EndedTokens.Count, Is.EqualTo(1));
             Assert.That(api.LiveCount, Is.EqualTo(0));
         }
 
@@ -146,15 +164,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Tool that records how many activities were live while it ran.
+        /// Tool whose task stays pending until the test completes it, and that records how many
+        /// activities were live when it started.
         /// </summary>
-        private sealed class ActivityObservingTool : IUnityCliLoopTool
+        private sealed class PendingTool : IUnityCliLoopTool
         {
-            public const string Name = "activity-observing-test";
+            public const string Name = "activity-pending-test";
 
             private readonly RecordingProcessActivityApi _api;
+            private readonly TaskCompletionSource<UnityCliLoopToolResponse> _completion =
+                new TaskCompletionSource<UnityCliLoopToolResponse>();
 
-            public ActivityObservingTool(RecordingProcessActivityApi api)
+            public PendingTool(RecordingProcessActivityApi api)
             {
                 _api = api;
             }
@@ -168,7 +189,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
             {
                 LiveCountWhileRunning = _api.LiveCount;
-                return Task.FromResult<UnityCliLoopToolResponse>(new ActivityTestResponse());
+                return _completion.Task;
+            }
+
+            public void Complete(UnityCliLoopToolResponse response)
+            {
+                _completion.TrySetResult(response);
             }
         }
 
