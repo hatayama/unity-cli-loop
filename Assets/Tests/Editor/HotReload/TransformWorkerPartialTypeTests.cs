@@ -25,6 +25,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureFileName = "HotReloadPartialTypeFixture.cs";
         private const string OtherPartFileName = "HotReloadPartialTypeFixture.Other.cs";
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
+        private const string OtherPartProjectRelativePath = "Assets/Tests/Editor/HotReload/" + OtherPartFileName;
+        private const string UnrelatedBrokenProjectRelativePath = "Assets/Tests/Editor/HotReload/PartialUnrelatedBrokenRunFile.cs";
+        private const string UnreadableProjectRelativePath = "Assets/Tests/Editor/HotReload/PartialUnreadableRunFile.cs";
+        private const string OtherPartOwnMethodBody = "return PartialTuning - 1;";
+        private const string OtherPartOwnMethodBodyWithSyntaxError = "return PartialTuning - ;";
+
+        // A part of the fixture whose "partial" is misspelled. Nothing else in it says "partial",
+        // so only the type name in its text tells that the file was meant to hold a part.
+        private const string MisspelledPartialPart =
+            "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+            + "{\n"
+            + "    public partal class HotReloadPartialTypeFixture\n"
+            + "    {\n"
+            + "        private int MisspelledPartValue()\n"
+            + "        {\n"
+            + "            return 3;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        // A broken file that names none of the fixture's partial types.
+        private const string UnrelatedBrokenFile =
+            "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+            + "{\n"
+            + "    internal static class HotReloadUnrelatedBrokenHelper\n"
+            + "    {\n"
+            + "        internal static int Value()\n"
+            + "        {\n"
+            + "            return 1 + ;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
         private const string OwnOnlyDeclaration =
             "        public int OwnOnly()\n        {\n            return 1;\n        }";
         private const string OwnOnlyEdited =
@@ -325,6 +358,204 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(skipped.reason.code, Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature));
         }
 
+        /// <summary>
+        /// What: when another part of the type has a syntax error, the edited method is skipped with a
+        /// reason that names that file, even though the file is not listed as changed.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenAnotherPartHasASyntaxError_NamesThatFile()
+        {
+            string brokenSibling = WriteEdited(
+                "PartialSiblingWithSyntaxError.cs",
+                ReplaceOnce(
+                    File.ReadAllText(ResolveFixturePath(OtherPartFileName)),
+                    OtherPartOwnMethodBody,
+                    OtherPartOwnMethodBodyWithSyntaxError));
+            List<string> assemblySourcePaths = new List<string>(BuildAssemblySourcePathsWithout(OtherPartFileName))
+            {
+                brokenSibling
+            };
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(
+                new[] { BuildOwnOnlyEditSource("PartialSiblingWithSyntaxErrorEdited.cs") },
+                assemblySourcePathsOverride: assemblySourcePaths.ToArray());
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedAsOtherPartChanged(result, "OwnOnly", "PartialSiblingWithSyntaxError.cs");
+        }
+
+        /// <summary>
+        /// What: when the run is also given another part of the type and that part has a syntax error,
+        /// the edited method is skipped with a reason that names the broken file, and the broken file
+        /// reports its parse errors on its own row.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenAPassedOtherPartHasASyntaxError_NamesThatFile()
+        {
+            string brokenOtherPart = ReplaceOnce(
+                File.ReadAllText(ResolveFixturePath(OtherPartFileName)),
+                OtherPartOwnMethodBody,
+                OtherPartOwnMethodBodyWithSyntaxError);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildOwnOnlyEditSource("PartialPassedPartWithSyntaxErrorEdited.cs"),
+                BuildOtherPartSource("PartialPassedPartWithSyntaxError.cs", brokenOtherPart)
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedAsOtherPartChanged(result, "OwnOnly", OtherPartProjectRelativePath);
+            AssertFileHasParseErrors(result, OtherPartProjectRelativePath);
+        }
+
+        /// <summary>
+        /// What: when another passed part misspells "partial", so its tree no longer declares a part of
+        /// the type, the edited method is still skipped with a reason that names that file.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenAPassedOtherPartMisspellsPartial_NamesThatFile()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildOwnOnlyEditSource("PartialPassedPartMisspelledEdited.cs"),
+                BuildOtherPartSource("PartialPassedPartMisspelled.cs", MisspelledPartialPart)
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedAsOtherPartChanged(result, "OwnOnly", OtherPartProjectRelativePath);
+            AssertFileHasParseErrors(result, OtherPartProjectRelativePath);
+        }
+
+        /// <summary>
+        /// What: a broken file in the same run that never names the partial type does not keep the
+        /// type's edited method from being emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeBodyEdit_WithABrokenRunFileThatNeverNamesTheType_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildOwnOnlyEditSource("PartialUnrelatedBrokenRunFileEdited.cs"),
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = WriteEdited("PartialUnrelatedBrokenRunFile.cs", UnrelatedBrokenFile),
+                    projectRelativePath = UnrelatedBrokenProjectRelativePath,
+                    snapshotSource = string.Empty
+                }
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "OwnOnly");
+            AssertFileHasParseErrors(result, UnrelatedBrokenProjectRelativePath);
+        }
+
+        /// <summary>
+        /// What: when a file listed as changed since the last compile misspells "partial", the type
+        /// name in its text still marks it as a part of the type, and the edited method is skipped
+        /// with a reason that names it.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenAChangedFileMisspellsPartial_NamesThatFile()
+        {
+            string misspelledSibling = WriteEdited("PartialChangedSiblingMisspelled.cs", MisspelledPartialPart);
+            List<string> assemblySourcePaths =
+                new List<string>(BuildAbsoluteAssemblySourcePaths(FindCompilationAssembly().sourceFiles))
+                {
+                    misspelledSibling
+                };
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(
+                new[] { BuildOwnOnlyEditSource("PartialChangedSiblingMisspelledEdited.cs") },
+                assemblySourcePathsOverride: assemblySourcePaths.ToArray(),
+                changedSiblingSourcePaths: new[] { misspelledSibling });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedAsOtherPartChanged(result, "OwnOnly", "PartialChangedSiblingMisspelled.cs");
+        }
+
+        /// <summary>
+        /// What: when another file of the run cannot be read, nothing tells which types it holds parts
+        /// of, so the edited method of the partial type is skipped with a reason that names that file.
+        /// </summary>
+        [Test]
+        public async Task Skip_PartialTypeBodyEdit_WhenAnotherRunFileCannotBeRead_NamesThatFile()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string missingPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.TestSourcesRelativeDirectory,
+                "PartialUnreadableRunFile.cs");
+            Assert.That(File.Exists(missingPath), Is.False, "The unreadable run file must not exist: " + missingPath);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildOwnOnlyEditSource("PartialUnreadableRunFileEdited.cs"),
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = missingPath,
+                    projectRelativePath = UnreadableProjectRelativePath,
+                    snapshotSource = string.Empty
+                }
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedAsOtherPartChanged(result, "OwnOnly", UnreadableProjectRelativePath);
+            AssertFileHasParseErrors(result, UnreadableProjectRelativePath);
+        }
+
+        // The edited main part. OwnOnly reads only its own part, so it binds whether or not the other
+        // part is visible, and only an untrusted other part can keep it from being emitted.
+        private static TransformWorkerSourceDto BuildOwnOnlyEditSource(string editedFileName)
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            return new TransformWorkerSourceDto
+            {
+                sourcePath = WriteEdited(editedFileName, ReplaceOnce(onDisk, OwnOnlyDeclaration, OwnOnlyEdited)),
+                projectRelativePath = FixtureProjectRelativePath,
+                snapshotSource = onDisk
+            };
+        }
+
+        // A run file that stands for the fixture's other part, with the given text.
+        private static TransformWorkerSourceDto BuildOtherPartSource(string editedFileName, string contents)
+        {
+            return new TransformWorkerSourceDto
+            {
+                sourcePath = WriteEdited(editedFileName, contents),
+                projectRelativePath = OtherPartProjectRelativePath,
+                snapshotSource = File.ReadAllText(ResolveFixturePath(OtherPartFileName))
+            };
+        }
+
+        private static void AssertSkippedAsOtherPartChanged(
+            TransformWorkerClientResult result,
+            string methodName,
+            string namedPath)
+        {
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be applied.\n" + FormatSkipped(result));
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName);
+            Assert.That(skipped, Is.Not.Null, "Missing skipped row for " + methodName + ".\n" + FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformPartialOtherPartChanged),
+                FormatSkipped(result));
+            Assert.That(HotReloadWorkerReasonText.Render(skipped.reason), Does.Contain(namedPath), FormatSkipped(result));
+        }
+
+        private static void AssertFileHasParseErrors(TransformWorkerClientResult result, string projectRelativePath)
+        {
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                if (file.projectRelativePath == projectRelativePath)
+                {
+                    Assert.That(file.parseErrors, Is.Not.Empty, "Expected parse errors on " + projectRelativePath);
+                    return;
+                }
+            }
+
+            Assert.Fail("Missing file row for " + projectRelativePath);
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(
             string editedFileName,
             string fragment,
@@ -473,6 +704,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] changedSiblingSourcePaths = null,
             bool changedSiblingScanComplete = true)
         {
+            TransformWorkerSourceDto source = new TransformWorkerSourceDto
+            {
+                sourcePath = sourcePath,
+                projectRelativePath = projectRelativePath,
+                snapshotSource = snapshotSource
+            };
+            return await RunWorkerOnSourcesAsync(
+                new[] { source },
+                assemblySourcePathsOverride,
+                changedSiblingSourcePaths,
+                changedSiblingScanComplete);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnSourcesAsync(
+            TransformWorkerSourceDto[] sources,
+            string[] assemblySourcePathsOverride = null,
+            string[] changedSiblingSourcePaths = null,
+            bool changedSiblingScanComplete = true)
+        {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
                 projectRoot,
@@ -490,15 +740,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = sourcePath,
-                        projectRelativePath = projectRelativePath,
-                        snapshotSource = snapshotSource
-                    }
-                },
+                sources = sources,
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
