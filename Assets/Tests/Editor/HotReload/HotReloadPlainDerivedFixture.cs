@@ -50,5 +50,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             [MethodImpl(MethodImplOptions.NoInlining)]
             get { return 40; }
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async System.Threading.Tasks.Task<int> AsyncValue()
+        {
+            await System.Threading.Tasks.Task.CompletedTask;
+            return 50;
+        }
     }
 }

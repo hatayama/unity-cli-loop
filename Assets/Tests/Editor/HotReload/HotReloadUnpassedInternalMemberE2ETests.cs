@@ -18,9 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// the reload was not given: what each row reports, and what the method does when called.
     /// </summary>
     /// <remarks>
-    /// Why two groups of edits: a straight-line body runs as IL copied into the patched method,
+    /// Why separate groups of edits: a straight-line body runs as IL copied into the patched method,
     /// while a lambda or iterator body runs in code the shim assembly compiles on its own, and a
     /// name inherited by simple name has to be qualified before the shim can compile it at all.
+    /// A partial type also skips some uses that run in the patched method, such as a method passed
+    /// as a delegate, so those have a group of their own.
     /// </remarks>
     public class HotReloadUnpassedInternalMemberE2ETests
     {
@@ -37,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string IteratorValues = "IteratorValues";
         private const string ClosureSeedPlusValue = "ClosureSeedPlusValue";
         private const string DerivedPropertyGetter = "get_DerivedProperty";
+        private const string AsyncValue = "AsyncValue";
 
         // Public only because a test case argument has to be as visible as the test method.
         public enum FixtureKind
@@ -91,8 +94,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Edits the shim cannot run as written: a simple name it cannot qualify, or a use inside a
-        // lambda or iterator, which the shim assembly compiles as ordinary code of its own, also when
-        // the lambda reaches the member through the result of another internal member.
+        // lambda, local function, anonymous method, iterator or async method, or in a getter that runs
+        // through a delegating shim, which the shim assembly compiles as ordinary code of its own, also
+        // when the lambda reaches the member through the result of another internal member. A lambda
+        // that only uses such a result as a value is here too, because the worker cannot tell it from
+        // one that reaches the member through the result.
         private static IEnumerable<string> EditsThatDoNotRunInThePatchedMethod()
         {
             yield return "InheritedInternalMethodBySimpleName";
@@ -104,6 +110,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalStaticMethodInIterator";
             yield return "InternalInstanceMethodInLambdaOverAnInternalResult";
             yield return "InternalFieldInLambdaParameterFromAnInternalResult";
+            yield return "InternalStaticMethodInLocalFunction";
+            yield return "InternalStaticMethodInAnonymousMethod";
+            yield return "InternalStaticMethodInAsyncMethod";
+            yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateFieldInGetter";
+            yield return "InternalFieldReadIntoAVarCapturedByALambda";
+        }
+
+        // Edits whose body runs as IL copied into the patched method but uses an internal member in a
+        // form a partial type does not patch: a method passed as a delegate, an event, or a member
+        // named in an object initializer or a property pattern.
+        private static IEnumerable<string> EditsThatOnlyAPlainTypeRunsInThePatchedMethod()
+        {
+            yield return "InternalStaticMethodPassedAsDelegate";
+            yield return "InternalInstanceMethodPassedAsDelegate";
+            yield return "InternalEventSubscription";
+            yield return "InternalFieldInObjectInitializer";
+            yield return "InternalPropertyInPropertyPattern";
         }
 
         /// <summary>
@@ -159,6 +182,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
 
             AssertAppliedAsEditedOrSkipped(result, FixtureKind.Partial, edit);
+        }
+
+        /// <summary>
+        /// What: the same edits on a plain type are either patched and return the edited value, or
+        /// skipped and keep the compiled behavior. They are never reported as patched and then fail
+        /// when called, and never fail the file.
+        /// </summary>
+        [TestCaseSource(nameof(EditsThatDoNotRunInThePatchedMethod))]
+        public async Task Run_PlainTypeBodyUsingInternalMemberOfUnpassedType_IsAppliedAsEditedOrSkipped(string editName)
+        {
+            BodyEdit edit = FindEdit(editName);
+            HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
+
+            AssertAppliedAsEditedOrSkipped(result, FixtureKind.Plain, edit);
+        }
+
+        /// <summary>
+        /// What: an edited body of a plain type that passes an internal method of a compiled type the
+        /// reload was not given as a delegate, subscribes to its internal event, or names its internal
+        /// member in an object initializer or a property pattern is patched, and the method returns
+        /// the edited value.
+        /// </summary>
+        [TestCaseSource(nameof(EditsThatOnlyAPlainTypeRunsInThePatchedMethod))]
+        public async Task Run_PlainTypeBodyUsingInternalMemberAsADelegateEventInitializerOrPattern_PatchesBehavior(string editName)
+        {
+            BodyEdit edit = FindEdit(editName);
+            HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
+
+            AssertPatchedAsEdited(result, FixtureKind.Plain, edit);
         }
 
         /// <summary>
@@ -326,6 +378,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return BodyEdit.OfDerivedValue(
                         "return System.Array.Exists(HotReloadInternalMemberHost.InternalHosts(), host => host.InternalField > 0) ? 100 : 0;",
                         100);
+                case "InternalStaticMethodInLocalFunction":
+                    return BodyEdit.OfDerivedValue(
+                        "int Read() { return HotReloadInternalMemberHost.InternalStaticValue() + 100; }\n"
+                        + "            return Read();",
+                        101);
+                case "InternalStaticMethodInAnonymousMethod":
+                    return BodyEdit.OfDerivedValue(
+                        "System.Func<int> read = delegate { return HotReloadInternalMemberHost.InternalStaticValue() + 100; };\n"
+                        + "            return read();",
+                        101);
+                case "InternalStaticMethodInAsyncMethod":
+                    return new BodyEdit(AsyncValue, "return 50;", "return HotReloadInternalMemberHost.InternalStaticValue() + 100;", 101);
+                case "InternalStaticMethodNextToLambdaReadingOwnPrivateFieldInGetter":
+                    return new BodyEdit(
+                        DerivedPropertyGetter,
+                        "return 40;",
+                        "System.Func<int> read = () => this._seed; return read() + HotReloadInternalMemberHost.InternalStaticValue();",
+                        1001);
+                case "InternalFieldReadIntoAVarCapturedByALambda":
+                    return BodyEdit.OfDerivedValue(
+                        "var seed = new HotReloadInternalMemberHost().InternalField;\n"
+                        + "            System.Func<int> read = () => seed + 100;\n"
+                        + "            return read();",
+                        103);
+                case "InternalStaticMethodPassedAsDelegate":
+                    return BodyEdit.OfDerivedValue(
+                        "System.Func<int> read = HotReloadInternalMemberHost.InternalStaticValue;\n"
+                        + "            return read() + 100;",
+                        101);
+                case "InternalInstanceMethodPassedAsDelegate":
+                    return BodyEdit.OfDerivedValue(
+                        "System.Func<int> read = new HotReloadInternalMemberHost().InternalInstanceValue;\n"
+                        + "            return read() + 100;",
+                        102);
+                case "InternalEventSubscription":
+                    return BodyEdit.OfDerivedValue(
+                        "HotReloadInternalMemberHost host = new HotReloadInternalMemberHost();\n"
+                        + "            host.InternalEvent += HotReloadInternalMemberHost.NoOp;\n"
+                        + "            return host.RaiseInternalEvent() + 100;",
+                        101);
+                case "InternalFieldInObjectInitializer":
+                    return BodyEdit.OfDerivedValue("return new HotReloadInternalMemberHost { InternalField = 150 }.InternalField;", 150);
+                case "InternalPropertyInPropertyPattern":
+                    return BodyEdit.OfDerivedValue("return new HotReloadInternalMemberHost() is { InternalProperty: 4 } ? 104 : 0;", 104);
                 default:
                     throw new ArgumentException("Unknown edit: " + editName);
             }
@@ -372,6 +468,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return 30;
                 case ClosureSeedPlusValue:
                     return 1007;
+                case AsyncValue:
+                    return 50;
+                case DerivedPropertyGetter:
+                    return 40;
                 default:
                     return 1000;
             }
@@ -396,6 +496,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         return First(plain.IteratorValues());
                     case DerivedPropertyGetter:
                         return plain.DerivedProperty;
+                    case AsyncValue:
+                        return plain.AsyncValue().GetAwaiter().GetResult();
                 }
             }
             else
@@ -415,6 +517,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         return First(partial.IteratorValues());
                     case DerivedPropertyGetter:
                         return partial.DerivedProperty;
+                    case AsyncValue:
+                        return partial.AsyncValue().GetAwaiter().GetResult();
                 }
             }
 
