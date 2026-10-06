@@ -47,6 +47,17 @@ uloop --project-path <PROJECT_ROOT>/Library/VP/mppm<id> simulate-keyboard --acti
 uloop's one-command-at-a-time rule is per Editor, so commands to different players (or to the
 main Editor) do not block each other.
 
+## Hot reload
+
+- A hot-reload patch lives in the Editor process it was applied to. A patch applied to the
+  main Editor does not reach the Virtual Players, and a player's own
+  `uloop --project-path <PROJECT_ROOT>/Library/VP/mppm<id> hot-reload --status` reports no
+  active patch.
+- Hot reload cannot patch a Virtual Player yet: a player loads the main project's
+  `Library/ScriptAssemblies` and has none under its own root. `hot-reload --files ...` sent
+  to a player reports the file as `Failed`, and the CLI then compiles in that player, which
+  brings the edit in (`Outcome` is `ReplacedByCompile`).
+
 ## Known limitations
 
 - `Stop` sent while Virtual Players are still starting (the main Editor is not yet in Play Mode)
