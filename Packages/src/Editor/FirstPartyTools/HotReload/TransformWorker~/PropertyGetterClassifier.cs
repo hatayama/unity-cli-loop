@@ -93,6 +93,18 @@ internal static class PropertyGetterClassifier
             return (true, decision);
         }
 
+        WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(typeDeclaration, semanticModel, getterBodyNode);
+        if (partialSkip != null)
+        {
+            skipped.Add(new WorkerSkipped
+            {
+                SourceProjectRelativePath = sourceProjectRelativePath,
+                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                Reason = partialSkip
+            });
+            return (true, MethodTransformDecision.Skip(partialSkip));
+        }
+
         (WorkerReason addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
             getterBodyNode,
             semanticModel,

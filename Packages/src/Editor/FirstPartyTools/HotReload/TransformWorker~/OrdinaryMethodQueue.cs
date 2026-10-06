@@ -310,6 +310,20 @@ internal static class OrdinaryMethodQueue
             }
         }
 
+        // Why existing methods only: an added method's unbound body is already skipped by the
+        // added-member binding check, with its own reason.
+        if (!isAddedMethod && decision.SkipReason == null)
+        {
+            WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(
+                typeState.TypeDeclaration,
+                semanticModel,
+                methodBodyNode);
+            if (partialSkip != null)
+            {
+                decision = MethodTransformDecision.Skip(partialSkip);
+            }
+        }
+
         return decision;
     }
 
