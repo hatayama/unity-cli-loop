@@ -54,6 +54,11 @@ type compileCompletionOptions struct {
 	untilEditorReady bool
 	timeout          time.Duration
 	pollInterval     time.Duration
+	// resendBefore, when not zero, lets a fresh compile's wait end with errCompileRequestMissing
+	// once the request is known to be lost and enough time is left to send it again.
+	resendBefore time.Time
+	// serverRestartSeen says the compile send already ended with the connection dropping.
+	serverRestartSeen bool
 }
 
 type compileStatusResponse struct {
@@ -204,6 +209,7 @@ func waitForCompileCompletionWithDeps(
 
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
+	missing := compileRequestMissingTracker{serverRestartSeen: options.serverRestartSeen}
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -225,6 +231,10 @@ func waitForCompileCompletionWithDeps(
 		if err == nil {
 			lastStatus = status
 			observedStatus = true
+		}
+		if missing.observe(status, err) && canResendCompile(options.resendBefore) {
+			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), errCompileRequestMissing
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 		observeCompileWaitInterim(&interim, deps, status, err)
