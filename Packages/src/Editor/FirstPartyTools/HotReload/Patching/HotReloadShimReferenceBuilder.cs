@@ -421,8 +421,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Derive Cecil search dirs from Unity's actual compile references so publicize
             // resolves netstandard/engine modules without hardcoding Editor Contents layouts.
+            // Referenced assemblies count transitively: Cecil may need a DLL only they list.
             IReadOnlyCollection<string> resolverSearchDirectories =
-                ReferencePublicizer.CollectResolverSearchDirectories(compilationAssembly.allReferences);
+                HotReloadResolverSearchDirectories.Collect(compilationAssembly);
 
             List<string> references = new List<string>();
             string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(
