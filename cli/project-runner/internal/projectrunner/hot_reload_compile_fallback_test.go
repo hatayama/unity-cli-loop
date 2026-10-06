@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -257,6 +259,18 @@ func runHotReloadWithFakeCompile(
 	compileResult compileExecutionResult,
 ) (string, string, int, int) {
 	t.Helper()
+	return runHotReloadWithDelayedFakeCompile(t, hotReloadResponse, compileResult, 0)
+}
+
+// Same as runHotReloadWithFakeCompile, but the fake compile answers only after delay, so a test can
+// tell a compile time that was measured from one that was never measured.
+func runHotReloadWithDelayedFakeCompile(
+	t *testing.T,
+	hotReloadResponse string,
+	compileResult compileExecutionResult,
+	delay time.Duration,
+) (string, string, int, int) {
+	t.Helper()
 	projectRoot := t.TempDir()
 	listener := newLoopbackIpcListener(t)
 	requests := make(chan map[string]any, 1)
@@ -267,6 +281,7 @@ func runHotReloadWithFakeCompile(
 	compileCalls := 0
 	hotReloadFallbackCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
 		compileCalls++
+		time.Sleep(delay)
 		return compileResult
 	}
 	t.Cleanup(func() {
@@ -494,6 +509,111 @@ func TestInjectHotReloadCompileFallback_CompileSucceeded_RemovesTheHoldSentenceO
 	}
 	fields := decodeSingleJSONObject(t, string(merged))
 	assertJSONStringField(t, fields, "Message", "Skipped: 2. HOLD SENTENCE See Warnings."+hotReloadCompileFallbackSucceededMessageSuffix)
+}
+
+// Verifies the fallback compile's time joins the phases the Editor reported in Timing, which stay
+// as they were.
+func TestAddHotReloadFallbackCompileTimingKeepsTheEditorPhases(t *testing.T) {
+	fields := addHotReloadFallbackCompileTimingOf(
+		t,
+		`{"Success":true,"Timing":{"AnalysisMs":120,"ShimCompileMs":800,"PatchMs":3,"TotalMs":1000}}`)
+
+	want := map[string]int64{"AnalysisMs": 120, "ShimCompileMs": 800, "PatchMs": 3, "TotalMs": 1000, "FallbackCompileMs": 1500}
+	if timing := decodeHotReloadTiming(t, fields); !reflect.DeepEqual(timing, want) {
+		t.Fatalf("Timing mismatch:\nwant %v\ngot  %v", want, timing)
+	}
+}
+
+// Verifies a response from an older package, which sends no Timing, gets one holding only the
+// fallback compile's time.
+func TestAddHotReloadFallbackCompileTimingCreatesTimingForAnOlderPackage(t *testing.T) {
+	fields := addHotReloadFallbackCompileTimingOf(t, `{"Success":true}`)
+
+	want := map[string]int64{"FallbackCompileMs": 1500}
+	if timing := decodeHotReloadTiming(t, fields); !reflect.DeepEqual(timing, want) {
+		t.Fatalf("Timing mismatch:\nwant %v\ngot  %v", want, timing)
+	}
+}
+
+// Verifies a Timing of JSON null counts as absent and becomes an object holding the fallback
+// compile's time.
+func TestAddHotReloadFallbackCompileTimingTreatsNullTimingAsAbsent(t *testing.T) {
+	fields := addHotReloadFallbackCompileTimingOf(t, `{"Success":true,"Timing":null}`)
+
+	want := map[string]int64{"FallbackCompileMs": 1500}
+	if timing := decodeHotReloadTiming(t, fields); !reflect.DeepEqual(timing, want) {
+		t.Fatalf("Timing mismatch:\nwant %v\ngot  %v", want, timing)
+	}
+}
+
+// Verifies adding the fallback compile's time leaves every other field of the merged response as
+// it was.
+func TestAddHotReloadFallbackCompileTimingKeepsTheOtherFields(t *testing.T) {
+	fields := addHotReloadFallbackCompileTimingOf(t, `{"Success":false,"CompileFallbackNote":"x"}`)
+
+	if len(fields) != 3 || string(fields["Success"]) != "false" || string(fields["CompileFallbackNote"]) != `"x"` {
+		t.Fatalf("only Timing may be added to the merged response: %v", fields)
+	}
+}
+
+// Verifies a successful fallback compile reports how long it ran in Timing.FallbackCompileMs, beside
+// the phases the Editor reported.
+func TestRunHotReloadRecordsFallbackCompileMsWhenTheCompileSucceeded(t *testing.T) {
+	stdout, stderr, _, code := runHotReloadWithDelayedFakeCompile(
+		t,
+		`{"Success":true,"CompileFallback":"Requested","Timing":{"AnalysisMs":120,"ShimCompileMs":800,"PatchMs":3,"TotalMs":1000}}`,
+		compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0},
+		20*time.Millisecond,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code mismatch: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	timing := decodeHotReloadTiming(t, decodeSingleJSONObject(t, stdout))
+	if timing["FallbackCompileMs"] < 20 || timing["AnalysisMs"] != 120 {
+		t.Fatalf("Timing must keep the Editor phases and measure the compile: %v", timing)
+	}
+}
+
+// Verifies a failed fallback compile still reports how long it ran, while Success stays false.
+func TestRunHotReloadRecordsFallbackCompileMsWhenTheCompileFailed(t *testing.T) {
+	stdout, stderr, _, code := runHotReloadWithDelayedFakeCompile(
+		t,
+		`{"Success":true,"CompileFallback":"Requested"}`,
+		compileExecutionResult{result: json.RawMessage(`{"Success":false,"Errors":[{"Message":"CS0103"}]}`), exitCode: 1},
+		20*time.Millisecond,
+	)
+
+	if code != 1 {
+		t.Fatalf("exit code mismatch: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	fields := decodeSingleJSONObject(t, stdout)
+	if string(fields["Success"]) != "false" {
+		t.Fatalf("Success must stay the failed compile's: %s", stdout)
+	}
+	if timing := decodeHotReloadTiming(t, fields); timing["FallbackCompileMs"] < 20 {
+		t.Fatalf("Timing must measure the failed compile too: %v", timing)
+	}
+}
+
+// Adds a 1500 ms fallback compile to a merged response and decodes the result.
+func addHotReloadFallbackCompileTimingOf(t *testing.T, merged string) map[string]json.RawMessage {
+	t.Helper()
+	withTiming, err := addHotReloadFallbackCompileTiming([]byte(merged), 1500*time.Millisecond)
+	if err != nil {
+		t.Fatalf("adding the fallback compile time failed: %v", err)
+	}
+	return decodeSingleJSONObject(t, string(withTiming))
+}
+
+// Decodes the Timing object of a response into its millisecond values; a missing Timing fails.
+func decodeHotReloadTiming(t *testing.T, fields map[string]json.RawMessage) map[string]int64 {
+	t.Helper()
+	timing := map[string]int64{}
+	if err := json.Unmarshal(fields["Timing"], &timing); err != nil {
+		t.Fatalf("Timing must be an object of milliseconds: %v (raw %s)", err, fields["Timing"])
+	}
+	return timing
 }
 
 // Fails the test unless the field holds want as a JSON string.
