@@ -56,6 +56,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "last compile must be passed with --files. Otherwise run 'uloop compile'.",
                     1));
             templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
+                Plain(
+                    "{0}. That member is internal to {1}, whose source this reload was not given. Hot reload patches "
+                    + "a use of such a member only where it is a field, a property or a method call written with its "
+                    + "receiver ('this.Name', 'Type.Name', 'value.Name') in the method's own statements: not a bare "
+                    + "name, a method passed as a delegate, or a use inside a lambda, local function, query, iterator "
+                    + "or async method, or in a body patched through a delegating shim. Qualify a bare name with "
+                    + "'this.' or the type name, or run 'uloop compile'.",
+                    2));
+            templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 Plain(
                     "Struct (value type) methods are skipped; byref instance transplant is unverified. "

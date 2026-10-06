@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         MethodTransformPartialOtherPartChanged,
         MethodTransformPartialOtherPartsUnverified,
         MethodTransformPartialBodyUnbound,
+        MethodTransformUnpassedInternalMemberOutOfReach,
         MethodTransformStructHost,
         MethodTransformGenericMethodOrType,
         MethodTransformExplicitInterfaceImplementation,

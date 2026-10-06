@@ -229,6 +229,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "time is not visible to it, and a file added since the last compile must be passed with "
                 + "--files. Otherwise run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
+                new[] { "CS0117: 'Host' does not contain a definition for 'Value'", "'Host'" },
+                "CS0117: 'Host' does not contain a definition for 'Value'. That member is internal to 'Host', "
+                + "whose source this reload was not given. Hot reload patches a use of such a member only where "
+                + "it is a field, a property or a method call written with its receiver ('this.Name', "
+                + "'Type.Name', 'value.Name') in the method's own statements: not a bare name, a method passed "
+                + "as a delegate, or a use inside a lambda, local function, query, iterator or async method, or "
+                + "in a body patched through a delegating shim. Qualify a bare name with 'this.' or the type "
+                + "name, or run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 NoArgs,
                 "Struct (value type) methods are skipped; byref instance transplant is unverified. "
