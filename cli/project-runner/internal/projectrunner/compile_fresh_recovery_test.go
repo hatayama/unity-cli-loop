@@ -230,16 +230,31 @@ func vibeLogContextNumber(t *testing.T, entry map[string]any, key string) float6
 	return value
 }
 
+// compileResendLogEntry returns the only resend entry in the project's CLI vibe log.
+func compileResendLogEntry(t *testing.T, projectRoot string) map[string]any {
+	t.Helper()
+	entries := cliVibeEntriesForOperation(t, readOnlyCliVibeLog(t, projectRoot), "cli_compile_request_resend")
+	if len(entries) != 1 {
+		t.Fatalf("compile resend log entries = %d, want 1", len(entries))
+	}
+	return entries[0]
+}
+
 // Verifies a request Unity lost across a server restart is sent again with a new request ID after
-// three Ready answers without a result, instead of waiting out the whole timeout.
+// three Ready answers without a result, instead of waiting out the whole timeout, and that the
+// resend is logged as a lost request under the first request's ID.
 func TestFreshCompileRecoveryResendsWhenUnityLostTheRequest(t *testing.T) {
+	enableCliVibeLog(t)
 	scenario := newCompileRecoveryScenario(t,
 		[]compileRecoverySend{recoverySendDisconnected(), recoverySendAnswered()},
 		[]compileRecoveryAnswer{recoveryMissing()},
 		[]compileRecoveryAnswer{recoveryDone(compileRecoveryDefinitiveResult)},
 	)
+	projectRoot := t.TempDir()
+	var stderrBuffer bytes.Buffer
 
-	result, stderr := runCompileRecovery(t, context.Background(), scenario, map[string]any{})
+	result := runFreshCompileRecoveringWithDeps(context.Background(), unreachableConnection(projectRoot), map[string]any{}, &stderrBuffer, scenario.deps())
+	stderr := stderrBuffer.String()
 
 	if scenario.sendCount() != 2 {
 		t.Fatalf("compile sends = %d, want 2", scenario.sendCount())
@@ -255,6 +270,16 @@ func TestFreshCompileRecoveryResendsWhenUnityLostTheRequest(t *testing.T) {
 	}
 	if queries := scenario.queriesOf(0); queries != 3 {
 		t.Fatalf("queries for the lost request = %d, want 3", queries)
+	}
+	resend := compileResendLogEntry(t, projectRoot)
+	if reason := vibeLogContextString(t, resend, "reason"); reason != "request_missing" {
+		t.Fatalf("resend reason = %q, want request_missing", reason)
+	}
+	if attempt := vibeLogContextNumber(t, resend, "attempt"); attempt != 1 {
+		t.Fatalf("resend attempt = %v, want 1", attempt)
+	}
+	if requestID := vibeLogContextString(t, resend, "request_id"); requestID != scenario.sentIDs[0] {
+		t.Fatalf("resend request_id = %q, want the lost request's ID %q", requestID, scenario.sentIDs[0])
 	}
 }
 
@@ -575,7 +600,8 @@ func TestFreshCompileRecoveryKeepsWaitingForALostRequestWhenLittleWaitTimeIsLeft
 }
 
 // Verifies the first attempt waits exactly as long as --timeout-seconds says, while a resent
-// compile waits only for the time that is left.
+// compile waits only for the time that is left, and that the resend after a busy rejection is
+// logged as one.
 func TestFreshCompileRecoveryGivesAResendOnlyTheTimeThatIsLeft(t *testing.T) {
 	enableCliVibeLog(t)
 	scenario := newCompileRecoveryScenario(t,
@@ -597,6 +623,10 @@ func TestFreshCompileRecoveryGivesAResendOnlyTheTimeThatIsLeft(t *testing.T) {
 	}
 	if second := vibeLogContextNumber(t, prepared[1], "timeout_ms"); second >= 600000 {
 		t.Fatalf("resent attempt timeout_ms = %v, want less than 600000", second)
+	}
+	resend := compileResendLogEntry(t, projectRoot)
+	if reason := vibeLogContextString(t, resend, "reason"); reason != "editor_busy" {
+		t.Fatalf("resend reason = %q, want editor_busy", reason)
 	}
 }
 
