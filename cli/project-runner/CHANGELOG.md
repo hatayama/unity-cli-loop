@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.7.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.6.2...uloop-project-runner-v3.7.0) (2026-10-06)
+
+
+### Features
+
+* Rerun only the tests that failed in the last run with run-tests --rerun-failed ([#3161](https://github.com/hatayama/unity-cli-loop/issues/3161)) ([5671841](https://github.com/hatayama/unity-cli-loop/commit/56718411a3a3d8a8f217b2a7b274745f9c0a6d3f))
+* uloop status reports whether Unity can take a command now, without side effects ([#3163](https://github.com/hatayama/unity-cli-loop/issues/3163)) ([dbfd8b5](https://github.com/hatayama/unity-cli-loop/commit/dbfd8b538d7d0ac23b703b5793fb3fd3184ea2d9))
+* uloop verify-project finds .meta, GUID, conflict-marker, and manifest problems without starting Unity ([#3162](https://github.com/hatayama/unity-cli-loop/issues/3162)) ([bc15f81](https://github.com/hatayama/unity-cli-loop/commit/bc15f81f07a360a0248d84bc34d1445b76263ea4))
+
 ## [3.6.2](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.6.1...uloop-project-runner-v3.6.2) (2026-10-04)
 
 
