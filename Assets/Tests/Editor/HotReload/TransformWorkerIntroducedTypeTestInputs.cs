@@ -20,11 +20,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         internal const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
         // Builds a planning input for two edited sources. assemblySourcePaths stands in for the
-        // other files of the assembly, whose global usings the worker collects; null means none.
+        // other files of the assembly, whose global usings the worker collects, and
+        // changedSiblingSourcePaths for the other edited files the run does not transform; null
+        // means none.
         internal static TransformWorkerInputDto CreateInput(
             string firstSourcePath,
             string secondSourcePath,
-            string[] assemblySourcePaths = null)
+            string[] assemblySourcePaths = null,
+            string[] changedSiblingSourcePaths = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -56,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetAssemblyName = TestAssemblyName,
                 targetAssemblyMvid = typeof(TransformWorkerIntroducedTypeTests).Assembly.ManifestModule.ModuleVersionId.ToString(),
                 assemblySourcePaths = assemblySourcePaths ?? Array.Empty<string>(),
-                changedSiblingSourcePaths = Array.Empty<string>()
+                changedSiblingSourcePaths = changedSiblingSourcePaths ?? Array.Empty<string>()
             };
         }
 

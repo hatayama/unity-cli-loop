@@ -392,6 +392,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that an introduced type reading a const of a changed sibling, whose type the
+        /// sibling names only through another assembly file's global using, is refused because the
+        /// value changed, not because the value could not be read.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_ChangedSiblingConstOfGlobalUsingEnumType_IsRefusedAsChanged()
+        {
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("ChangedSiblingConstOfGlobalUsingEnumType");
+            string sourcePath = Path.Combine(directory, "Introduced.cs");
+            string emptyPath = Path.Combine(directory, "Empty.cs");
+            string siblingPath = Path.Combine(directory, "Sibling.cs");
+            File.WriteAllText(
+                sourcePath,
+                "namespace GlobalUsingConstFixture { public class Introduced { public int Read() { return (int)io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingMode; } } }");
+            File.WriteAllText(emptyPath, string.Empty);
+            File.WriteAllText(
+                siblingPath,
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload { public static class HotReloadSiblingConstDefinitions { public const HotReloadGlobalUsingMode SiblingMode = HotReloadGlobalUsingMode.Second; } }");
+            string globalUsingsPath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadGlobalUsings.cs"));
+            Assert.That(File.Exists(globalUsingsPath), Is.True, "Global usings fixture missing: " + globalUsingsPath);
+
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(
+                sourcePath,
+                emptyPath,
+                new[] { globalUsingsPath },
+                new[] { siblingPath });
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto output = result.Output.files[0];
+            Assert.That(output.parseErrors, Is.Empty);
+            Assert.That(output.introducedTypes, Is.Empty);
+            string[] diagnostics = HotReloadWorkerReasonTestText.RenderAll(output.introducedTypeDiagnostics);
+            Assert.That(
+                diagnostics,
+                Has.Some.Contains(
+                    "Changed const requires a compile: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingMode"),
+                string.Join("\n", diagnostics));
+            Assert.That(diagnostics, Has.None.Contains("Const value cannot be verified"), string.Join("\n", diagnostics));
+        }
+
+        /// <summary>
         /// Verifies that root imports remain in compilation-unit scope when a namespace contains
         /// a relative namespace with the same name as the imported global namespace.
         /// </summary>
