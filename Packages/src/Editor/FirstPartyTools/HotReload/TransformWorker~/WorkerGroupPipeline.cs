@@ -147,6 +147,9 @@ internal static class WorkerGroupPipeline
         AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
         AddedPropertyCatalog addedPropertyCatalog = new AddedPropertyCatalog();
         ShimNameAllocator shimNames = new ShimNameAllocator();
+        // Why one set for the run: every file that declares a part of a partial type binds to the
+        // whole merged type, so a const of it would otherwise be reported once per passed part.
+        HashSet<string> constDriftSeenTypeMetadataNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             QueueUnit(
@@ -154,6 +157,7 @@ internal static class WorkerGroupPipeline
                 input,
                 parseOptions,
                 home,
+                constDriftSeenTypeMetadataNames,
                 assemblyGlobalUsings,
                 shimTypes,
                 addedMethodCatalog,
@@ -300,6 +304,7 @@ internal static class WorkerGroupPipeline
         WorkerInput input,
         CSharpParseOptions parseOptions,
         WorkerTypeHome home,
+        HashSet<string> constDriftSeenTypeMetadataNames,
         List<UsingDirectiveSyntax> assemblyGlobalUsings,
         List<ShimTypeBuilder> shimTypes,
         AddedMethodCatalog addedMethodCatalog,
@@ -313,7 +318,8 @@ internal static class WorkerGroupPipeline
             ConstDriftCollector.CollectConstDriftWarnings(
                 unit.BindingRoot,
                 unit.SemanticModel,
-                home));
+                home,
+                constDriftSeenTypeMetadataNames));
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         unit.KindChangeSyntaxKeys =

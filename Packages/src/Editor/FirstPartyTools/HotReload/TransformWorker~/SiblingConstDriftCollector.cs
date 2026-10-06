@@ -56,7 +56,8 @@ internal static class SiblingConstDriftCollector
                 ConstDriftCollector.CollectConstDriftWarnings(
                     root,
                     semanticModel,
-                    home));
+                    home,
+                    new HashSet<string>(StringComparer.Ordinal)));
         }
 
         return warnings;
