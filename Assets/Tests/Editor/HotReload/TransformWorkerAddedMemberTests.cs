@@ -657,6 +657,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a property pattern that names a compiled member of the target type keeps the
+        /// bare member name in the shim, since a pattern's member name cannot take a receiver.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_PropertyPatternNamingCompiledMember_KeepsTheBareName()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return Inner is { PublicSeed: 3 } ? 1 : value;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("PropertyPatternCompiledMember.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("PublicSeed:"));
+            Assert.That(slice, Does.Not.Contain("__uloopInstance.PublicSeed"));
+        }
+
+        /// <summary>
         /// What: added virtual, override, generic, and method-group-capturing methods are skipped
         /// with the documented reasons; the captured added instance method itself still emits.
         /// </summary>
