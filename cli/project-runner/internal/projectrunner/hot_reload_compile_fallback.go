@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -27,6 +29,8 @@ const (
 	hotReloadOutcomeField                  = "Outcome"
 	hotReloadAutoRefreshHeldField          = "AutoRefreshHeld"
 	hotReloadAutoRefreshHoldMessageField   = "AutoRefreshHoldMessage"
+	hotReloadTimingField                   = "Timing"
+	hotReloadFallbackCompileMsField        = "FallbackCompileMs"
 )
 
 // Raw JSON values, because the response fields are edited as encoded JSON.
@@ -90,7 +94,9 @@ func runHotReloadWithCompileFallback(
 		return result.exitCode
 	}
 
+	compileStarted := time.Now()
 	compileResult := hotReloadFallbackCompile(ctx, connection, stderr)
+	compileElapsed := time.Since(compileStarted)
 	if len(compileResult.result) == 0 {
 		// The transport failure is already classified on stderr; the reload itself still happened.
 		clicore.WriteJSON(stdout, result.result)
@@ -98,6 +104,9 @@ func runHotReloadWithCompileFallback(
 	}
 
 	merged, err := injectHotReloadCompileFallback(result.result, compileResult.result)
+	if err == nil {
+		merged, err = addHotReloadFallbackCompileTiming(merged, compileElapsed)
+	}
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
@@ -168,6 +177,30 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 	if err := appendHotReloadCompileSucceededMessage(fields); err != nil {
 		return nil, err
 	}
+	return json.Marshal(fields)
+}
+
+// Adds the fallback compile's wall time to Timing. The phases the Editor reported stay as they were,
+// and a response from an older package, which sends no Timing, gets one holding only the compile.
+func addHotReloadFallbackCompileTiming(raw []byte, elapsed time.Duration) ([]byte, error) {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	timing := map[string]json.RawMessage{}
+	// Why only an object is decoded: JSON null would leave the map nil and any other value would
+	// fail the decode, while neither holds a phase worth keeping, so both count as absent.
+	if existing := fields[hotReloadTimingField]; len(existing) > 0 && existing[0] == '{' {
+		if err := json.Unmarshal(existing, &timing); err != nil {
+			return nil, err
+		}
+	}
+	timing[hotReloadFallbackCompileMsField] = json.RawMessage(strconv.FormatInt(elapsed.Milliseconds(), 10))
+	encoded, err := json.Marshal(timing)
+	if err != nil {
+		return nil, err
+	}
+	fields[hotReloadTimingField] = encoded
 	return json.Marshal(fields)
 }
 

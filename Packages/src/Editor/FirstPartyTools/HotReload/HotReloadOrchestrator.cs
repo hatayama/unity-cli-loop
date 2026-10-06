@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -74,6 +75,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(files.Count > 0, "files must not be empty.");
 
             string correlationId = VibeLogger.GenerateCorrelationId();
+            Stopwatch total = Stopwatch.StartNew();
+            HotReloadRunTiming timing = new HotReloadRunTiming();
 
             // CompilationPipeline / Application.dataPath require the Unity main thread, and the
             // groups cannot be planned before every file knows which assembly it compiles into.
@@ -156,6 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         inputIndexes,
                         slots,
                         correlationId,
+                        timing,
                         ct,
                         pathsInRun,
                         contentPathOverrideByFile,
@@ -193,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             run.ApplyOneShotCallerNotes(projectRoot);
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            return run.BuildResult(correlationId);
+            return run.BuildResult(correlationId, timing.Complete(total.ElapsedMilliseconds));
         }
 
         // Why on the inputs only: a re-applied sibling joins a group later and was never selected,
@@ -214,6 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<int> inputIndexes,
             HotReloadInputResolutionSlot[] slots,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct,
             HashSet<string> pathsInRun,
             IReadOnlyDictionary<string, string> contentPathOverrideByFile,
@@ -245,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // ProcessGroupAsync switches back via MainThreadSwitcher (EditorApplication.update
             // queue) before any main-thread-only editor API or Harmony patch.
             IReadOnlyList<HotReloadFileProcessResult> groupResults =
-                await _groupProcessor.ProcessGroupAsync(filesOfGroup, correlationId, ct)
+                await _groupProcessor.ProcessGroupAsync(filesOfGroup, correlationId, timing, ct)
                     .ConfigureAwait(false);
             Debug.Assert(
                 groupResults.Count == filesOfGroup.Count,

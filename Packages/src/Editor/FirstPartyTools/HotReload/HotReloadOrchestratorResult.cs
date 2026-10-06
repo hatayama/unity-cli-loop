@@ -35,6 +35,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The serialized added fields this run's warning named for the first time.
         public IReadOnlyList<string> SerializedAddedFieldsReported { get; }
 
+        // Milliseconds per phase of the run; null when the run was not measured.
+        public HotReloadTimingBreakdown Timing { get; }
+
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
             IReadOnlyList<string> warnings,
@@ -52,7 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool autoRefreshHoldNewlyArmed = false,
             int introducedTypeNoticeCount = 0,
             IReadOnlyList<string> serializedAddedFieldsReported = null,
-            IReadOnlyList<string> activePatchSiblingPaths = null)
+            IReadOnlyList<string> activePatchSiblingPaths = null,
+            HotReloadTimingBreakdown timing = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -77,6 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IntroducedTypeNoticeCount = introducedTypeNoticeCount;
             SerializedAddedFieldsReported = serializedAddedFieldsReported ?? Array.Empty<string>();
             ActivePatchSiblingPaths = activePatchSiblingPaths ?? Array.Empty<string>();
+            Timing = timing;
         }
     }
 }

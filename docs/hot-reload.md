@@ -72,6 +72,9 @@ The outside-method-body warning compares against the same snapshot, the source o
 compile, so a declaration edit made since then keeps the warning on every reload until
 `uloop compile`; comment-only differences do not count.
 
+The response's `Timing` object breaks the run down per phase (worker, shim compile, patch)
+and, after a fallback compile, adds the compile's time.
+
 ## Spike Findings
 
 ### S1 — access mechanics on the Editor Mono runtime (pivotal)

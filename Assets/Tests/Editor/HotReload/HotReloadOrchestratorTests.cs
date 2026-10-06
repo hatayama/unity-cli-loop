@@ -187,6 +187,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an apply run reports the time it spent per phase through the production path,
+        /// from the run down to each group. The worker and the shim compile always take time, and
+        /// the total covers every phase.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedMethod_ReportsPhaseTimings()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PhaseTimings.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = null;
+            try
+            {
+                result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { fixturePath },
+                    editedPath,
+                    CancellationToken.None);
+            }
+            catch (OperationCanceledException exception)
+            {
+                // Why fail here: the test framework records an async test that ends canceled as
+                // passed, which would hide a run that never finished.
+                Assert.Fail("The run was canceled: " + exception.Message);
+            }
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadTimingBreakdown timing = result.Timing;
+            Assert.That(timing, Is.Not.Null);
+            Assert.That(timing.AnalysisMs, Is.GreaterThan(0), "AnalysisMs");
+            Assert.That(timing.ShimCompileMs, Is.GreaterThan(0), "ShimCompileMs");
+            Assert.That(
+                timing.TotalMs,
+                Is.GreaterThanOrEqualTo(timing.AnalysisMs + timing.ShimCompileMs + timing.PatchMs),
+                "TotalMs");
+        }
+
+        /// <summary>
         /// What: a Patched-only apply arms the Auto Refresh hold so focus return cannot recompile.
         /// </summary>
         [Test]
