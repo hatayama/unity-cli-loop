@@ -228,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// StopServer() guards on _isRunning==true, but by the time this runs _isRunning may already
         /// be false or the normal shutdown path may race with the finally block.
         /// A separate cleanup path that skips the _isRunning guard is needed.
-        /// Lifecycle events are deferred to OnServerLoopExited → EditorApplication.delayCall
+        /// Lifecycle events are deferred to OnServerLoopExited → the main-thread dispatcher
         /// because this runs on the thread pool where Unity APIs are unsafe.
         /// </summary>
         private void CleanupAfterUnexpectedLoopExit()

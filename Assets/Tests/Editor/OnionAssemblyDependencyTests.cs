@@ -887,7 +887,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // A cold-start session that hits Unity's native "Scripts have compiler errors" dialog
             // never flushes EditorApplication.delayCall again for the rest of that process's
             // lifetime, so this startup check rides on a self-unsubscribing EditorApplication.update
-            // tick instead of delayCall.
+            // tick instead of delayCall, and the flow then shows the window directly from its
+            // main-thread continuation instead of through delayCall.
             string setupWizardSource = ReadProductionSource(
                 "Packages/src/Editor/Presentation/Setup/SetupWizardWindow.cs");
             string setupWizardStartupFlowSource = ReadProductionSource(
@@ -898,7 +899,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Does.Contain("EditorApplication.update += RunStartupCheckOnFirstUpdateTick;"));
             Assert.That(
                 setupWizardStartupFlowSource,
-                Does.Contain("EditorApplication.delayCall += () => _showWindowOnVersionChange();"));
+                Does.Not.Contain("EditorApplication.delayCall +="));
             Assert.That(setupWizardSource, Does.Not.Contain("\n            startupFlow.TryShowOnVersionChange();"));
         }
 

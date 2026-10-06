@@ -5,7 +5,6 @@ using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
-using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -146,9 +145,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _serverLifecycleRegistry.ServerLoopExited += OnServerLoopUnexpectedlyExited;
 
             // Recovery binds the project IPC endpoint and may touch config files, so keep it off the
-            // synchronous Editor startup path while preserving automatic startup.
+            // synchronous Editor startup path while preserving automatic startup. The dispatcher drains
+            // on update and tick, so this runs even in a session where delayCall stops flushing.
             _recoveryTrackingService.ScheduleStartupRecovery(
-                action => EditorApplication.delayCall += () => action(),
+                MainThreadSwitcher.AddContinuation,
                 RestoreServerStateIfNeeded);
         }
 
@@ -344,12 +344,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// OnServerLoopExited fires from the thread pool, but Unity APIs (EditorSettings,
         /// VibeLogger with SerializedObject, etc.) are main-thread-only.
-        /// EditorApplication.delayCall marshals the recovery to the next editor tick.
+        /// The main-thread dispatcher marshals the recovery to the next editor tick (update or tick),
+        /// which keeps working in sessions where delayCall stops flushing. Enqueueing also signals a
+        /// tick, so an unfocused idle Editor still runs the recovery.
         /// </summary>
         private void OnServerLoopUnexpectedlyExited()
         {
             // OnServerLoopExited fires from thread pool — marshal to main thread for Unity API safety
-            EditorApplication.delayCall += () =>
+            MainThreadSwitcher.AddContinuation(() =>
             {
                 // The server just crashed — startup protection blocks recovery if the crash happens
                 // within the 5-second protection window after a successful start
@@ -364,12 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Resources already cleaned up by CleanupAfterUnexpectedLoopExit — just clear the reference
                 _bridgeServer = null;
                 _recoveryTrackingService.ScheduleTrackedRecovery(() => StartRecoveryIfNeededAsync(false, CancellationToken.None));
-            };
-
-            // delayCall only runs on the next editor tick, and a backgrounded idle editor may never
-            // tick again on its own — the recovery would then wait forever. Signal one tick so the
-            // scheduled recovery actually executes even while the editor is unfocused.
-            EditorApplicationTickBridge.SignalTick();
+            });
         }
 
         /// <summary>
