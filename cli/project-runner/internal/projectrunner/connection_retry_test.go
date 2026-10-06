@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -1581,9 +1582,9 @@ func TestSendWithTransientConnectionRetrySurfacesAFinalResponseTimeoutAfterBusy(
 		if writeErr := unityipc.Write(conn, []byte(accepted)); writeErr != nil {
 			return
 		}
-		// Staying silent past the response timeout makes the client's own deadline end the wait,
-		// rather than the close that follows.
-		time.Sleep(200 * time.Millisecond)
+		// Staying silent until the client hangs up means the client's own deadline is always what
+		// ends the wait, never a close from this side.
+		_, _ = io.Copy(io.Discard, conn)
 	})
 
 	outcome, err := sendWithTransientConnectionRetryWithDeps(
@@ -1619,16 +1620,15 @@ func TestSendWithTransientConnectionRetrySurfacesAnUnansweredRequestAfterBusy(t 
 	}
 
 	deps := defaultConnectionRetryDeps()
-	retryWindow := 150 * time.Millisecond
-	deps.retryTimeout = retryWindow
+	deps.retryTimeout = 150 * time.Millisecond
 	deps.retryPoll = 5 * time.Millisecond
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
-	connection := busyFirstServerConnection(t, func(net.Conn) {
-		// Twice the window keeps the request unacknowledged until the attempt's own accept
-		// deadline has ended it.
-		time.Sleep(retryWindow * 2)
+	connection := busyFirstServerConnection(t, func(conn net.Conn) {
+		// Staying silent until the client hangs up means the client's own accept deadline is always
+		// what ends the wait, never a close from this side.
+		_, _ = io.Copy(io.Discard, conn)
 	})
 
 	outcome, err := sendWithTransientConnectionRetryWithDeps(
