@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
@@ -20,13 +21,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal delegate AssemblyDefinition HotReloadCompiledAssemblyLoader(string dllPath);
 
     /// <summary>
-    /// Resolves a hot-reload manifest entry (type metadata name + method name + parameter type
-    /// full names) to the matching MethodBase in the running AppDomain, using Cecil metadata
-    /// tokens and an Mvid guard against stale script assemblies.
+    /// Resolves hot-reload manifest entries (type metadata name + method name + parameter type
+    /// full names) to the matching MethodBase in the running AppDomain for one run, using Cecil
+    /// metadata tokens and an Mvid guard against stale script assemblies. Reads each compiled
+    /// image once and answers every later entry of the run from that read; the Mvid guard still
+    /// compares that read with the loaded assembly for every entry.
     /// </summary>
     internal sealed class HotReloadMethodMatcher : IDisposable
     {
         private readonly HotReloadCompiledAssemblyLoader _loadAssembly;
+        private readonly Dictionary<string, AssemblyDefinition> _assembliesByDllPath =
+            new Dictionary<string, AssemblyDefinition>(StringComparer.Ordinal);
+        private bool _disposed;
 
         /// <param name="loadAssembly">
         /// How a compiled image is read; production passes ReadCompiledAssembly, and tests count
@@ -62,6 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <paramref name="parameterTypeFullNames"/> and <paramref name="genericArity"/>
         /// exactly (Cecil FullName, no <c>this</c>).
         /// </summary>
+        /// <exception cref="ObjectDisposedException">The matcher was disposed: its run is over.</exception>
+        /// <exception cref="InvalidOperationException">The loader returned no image.</exception>
         public HotReloadMethodMatchResult Resolve(
             HotReloadTypeHome home,
             string typeMetadataName,
@@ -75,16 +83,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
             Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
 
-            string dllPath = home.DllPath;
-
-            if (!File.Exists(dllPath))
+            if (_disposed)
             {
-                return HotReloadMethodMatchResult.Failure(
-                    HotReloadMethodMatchFailureReason.CompiledAssemblyNotFound,
-                    $"Compiled assembly not found at '{dllPath}'. Compile the project first.");
+                throw new ObjectDisposedException(nameof(HotReloadMethodMatcher));
             }
 
-            using AssemblyDefinition assemblyDefinition = _loadAssembly(dllPath);
+            string dllPath = home.DllPath;
+            // Why a read answers the rest of the run even if the file changes on disk: the token
+            // and the Mvid below both come from that one read, and the Mvid guard still compares
+            // it with the loaded assembly for every entry, so no token is applied to an assembly
+            // it was not read from.
+            // Why only a read that succeeded is kept: an image that is missing or fails to read is
+            // looked for again by the next entry, as every entry did before, so one that appears
+            // or becomes readable later in the run is still found.
+            if (!_assembliesByDllPath.TryGetValue(dllPath, out AssemblyDefinition assemblyDefinition))
+            {
+                if (!File.Exists(dllPath))
+                {
+                    return HotReloadMethodMatchResult.Failure(
+                        HotReloadMethodMatchFailureReason.CompiledAssemblyNotFound,
+                        $"Compiled assembly not found at '{dllPath}'. Compile the project first.");
+                }
+
+                assemblyDefinition = _loadAssembly(dllPath);
+                if (assemblyDefinition == null)
+                {
+                    throw new InvalidOperationException(
+                        $"The compiled assembly loader returned no image for '{dllPath}'.");
+                }
+
+                _assembliesByDllPath.Add(dllPath, assemblyDefinition);
+            }
 
             TypeDefinition typeDefinition = assemblyDefinition.MainModule.GetType(typeMetadataName);
             if (typeDefinition == null)
@@ -111,8 +140,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ResolveLoadedMethod(home, compiledMvid, metadataToken);
         }
 
+        /// <summary>Releases every image this matcher read; a disposed matcher resolves nothing more.</summary>
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            foreach (AssemblyDefinition assemblyDefinition in _assembliesByDllPath.Values)
+            {
+                assemblyDefinition.Dispose();
+            }
+
+            _assembliesByDllPath.Clear();
         }
 
         private static MethodDefinition FindMatchingMethod(
