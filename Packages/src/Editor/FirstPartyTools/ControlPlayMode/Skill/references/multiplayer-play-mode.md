@@ -55,8 +55,11 @@ main Editor) do not block each other.
   active patch.
 - Hot reload cannot patch a Virtual Player yet: a player loads the main project's
   `Library/ScriptAssemblies` and has none under its own root. `hot-reload --files ...` sent
-  to a player reports the file as `Failed`, and the CLI then compiles in that player, which
-  brings the edit in (`Outcome` is `ReplacedByCompile`).
+  to a player reports the file as `Failed`. Whether the CLI then compiles in that player
+  follows `--compile-on-skip`, as for any unapplied edit: when it compiles, the edit comes in
+  (`Outcome` is `ReplacedByCompile`); when the compile is held (`CompileFallback` is
+  `HeldForPlayMode`: `auto`, the default, while that player is in Play Mode), the edit has not
+  reached the player.
 
 ## Known limitations
 
