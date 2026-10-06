@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -29,15 +30,76 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Keeps, per compiled assembly, the documents its sequence points refer to, so finding the
     /// document of one source file does not read the dll and the PDB and walk every sequence
-    /// point again on each hot reload run. The files only change on a compile.
+    /// point again on each hot reload run. The files only change on a compile. A list is read
+    /// again when the dll's length, write time or MVID, or the PDB's length or write time,
+    /// differs from the files it was read from. There is no capacity limit: an entry is a short
+    /// list of urls and checksums, and there is at most one entry per assembly of the project.
     /// </summary>
     internal sealed class HotReloadPdbDocumentIndex
     {
+        // Identity of the files a list was read from. Why all five: the length and the write time
+        // are the cheap check for each file, and the MVID catches a dll rewritten to the same size
+        // within one timestamp tick, as in HotReloadCompiledCallSiteCache.
+        private readonly struct FileStamp : IEquatable<FileStamp>
+        {
+            public readonly long DllLength;
+            public readonly long DllLastWriteTimeUtcTicks;
+            public readonly string ModuleVersionId;
+            public readonly long PdbLength;
+            public readonly long PdbLastWriteTimeUtcTicks;
+
+            public FileStamp(
+                long dllLength,
+                long dllLastWriteTimeUtcTicks,
+                string moduleVersionId,
+                long pdbLength,
+                long pdbLastWriteTimeUtcTicks)
+            {
+                DllLength = dllLength;
+                DllLastWriteTimeUtcTicks = dllLastWriteTimeUtcTicks;
+                ModuleVersionId = moduleVersionId;
+                PdbLength = pdbLength;
+                PdbLastWriteTimeUtcTicks = pdbLastWriteTimeUtcTicks;
+            }
+
+            public bool Equals(FileStamp other)
+            {
+                return DllLength == other.DllLength
+                    && DllLastWriteTimeUtcTicks == other.DllLastWriteTimeUtcTicks
+                    && string.Equals(ModuleVersionId, other.ModuleVersionId, StringComparison.Ordinal)
+                    && PdbLength == other.PdbLength
+                    && PdbLastWriteTimeUtcTicks == other.PdbLastWriteTimeUtcTicks;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is FileStamp other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                return StringComparer.Ordinal.GetHashCode(ModuleVersionId);
+            }
+        }
+
+        private sealed class Entry
+        {
+            public readonly FileStamp Stamp;
+            public readonly List<HotReloadPdbDocument> Documents;
+
+            public Entry(FileStamp stamp, List<HotReloadPdbDocument> documents)
+            {
+                Stamp = stamp;
+                Documents = documents;
+            }
+        }
+
         // Why a shared instance: the snapshot loader is static and has static callers in
         // several assemblies, like the compiled call-site cache this mirrors.
         public static HotReloadPdbDocumentIndex Shared { get; } = new HotReloadPdbDocumentIndex();
 
         private readonly object _gate = new object();
+        private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         private int _loadCount;
 
         /// <summary>
@@ -73,12 +135,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(moduleVersionId), "moduleVersionId must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be null or empty.");
 
+            string fullDllPath = Path.GetFullPath(dllPath);
+            FileStamp stamp = ReadStamp(fullDllPath, pdbPath, moduleVersionId);
             lock (_gate)
             {
-                List<HotReloadPdbDocument> documents = ReadDocuments(dllPath, pdbPath);
-                _loadCount++;
-                return TryFind(documents, projectRelativePath, out document);
+                if (!_entries.TryGetValue(fullDllPath, out Entry entry) || !entry.Stamp.Equals(stamp))
+                {
+                    // Why stored under the stamp read before the walk: if a file is replaced while
+                    // it is being read, the next lookup sees another stamp and reads again, so a
+                    // list is never served for files it was not read from.
+                    entry = new Entry(stamp, ReadDocuments(fullDllPath, pdbPath));
+                    _loadCount++;
+                    _entries[fullDllPath] = entry;
+                }
+
+                return TryFind(entry.Documents, projectRelativePath, out document);
             }
+        }
+
+        private static FileStamp ReadStamp(string fullDllPath, string pdbPath, string moduleVersionId)
+        {
+            FileInfo dll = new FileInfo(fullDllPath);
+            FileInfo pdb = new FileInfo(pdbPath);
+            return new FileStamp(
+                dll.Length,
+                dll.LastWriteTimeUtc.Ticks,
+                moduleVersionId,
+                pdb.Length,
+                pdb.LastWriteTimeUtc.Ticks);
         }
 
         // The first document, in the order the walk met them, whose url names the path: the same

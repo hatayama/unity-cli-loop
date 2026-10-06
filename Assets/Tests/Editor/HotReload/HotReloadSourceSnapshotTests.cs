@@ -207,7 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
                     fakeRoot,
                     FixtureProjectRelativePath,
-                    dllPath);
+                    dllPath,
+                    HotReloadPdbDocumentIndex.Shared);
                 Assert.That(loaded, Is.Null);
             }
             finally
@@ -231,7 +232,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                 projectRoot,
                 BodylessFixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot));
+                TestAssemblyDllPath(projectRoot),
+                HotReloadPdbDocumentIndex.Shared);
 
             Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
         }
@@ -248,7 +250,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                 emptyRoot,
                 FixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot));
+                TestAssemblyDllPath(projectRoot),
+                HotReloadPdbDocumentIndex.Shared);
 
             Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoSnapshotFile));
         }
@@ -268,7 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                     fakeRoot,
                     FixtureProjectRelativePath,
-                    dllPath);
+                    dllPath,
+                    HotReloadPdbDocumentIndex.Shared);
                 Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.HashMismatch));
             }
             finally
@@ -288,9 +292,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                 projectRoot,
                 FixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot));
+                TestAssemblyDllPath(projectRoot),
+                HotReloadPdbDocumentIndex.Shared);
 
             Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.None));
+        }
+
+        /// <summary>
+        /// What: loading the verified snapshots of two files of one assembly reads its dll and PDB once.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSourceAt_TwoFilesOfOneAssembly_ReadsThePdbOnce()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+
+            string first = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                FixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+            string second = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                CoreFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.Not.Null);
+            Assert.That(index.LoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: asking why a load found no document reuses the list that load read, so the PDB is read once.
+        /// </summary>
+        [Test]
+        public void DescribeSnapshotMissAt_AfterALoadThatFoundNoDocument_DoesNotReadThePdbAgain()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+
+            string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                BodylessFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                projectRoot,
+                BodylessFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+
+            Assert.That(loaded, Is.Null);
+            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
+            Assert.That(index.LoadCount, Is.EqualTo(1));
         }
 
         private static string TestAssemblyDllPath(string projectRoot)
