@@ -69,6 +69,7 @@ internal static class PropertyGetterClassifier
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog,
         PartialTypeParts partialTypeParts,
+        IAssemblySymbol targetAssembly,
         List<WorkerSkipped> skipped)
     {
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
@@ -93,7 +94,14 @@ internal static class PropertyGetterClassifier
             return (true, decision);
         }
 
-        WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(typeDeclaration, semanticModel, getterBodyNode);
+        WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(
+            typeDeclaration,
+            semanticModel,
+            getterBodyNode,
+            methodDeclarationOrNull: null,
+            decision,
+            typeSymbol,
+            targetAssembly);
         if (partialSkip != null)
         {
             skipped.Add(new WorkerSkipped

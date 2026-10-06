@@ -30,6 +30,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return PartialTuning - 1;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal int OtherPartInternalValue()
+        {
+            return 12;
+        }
+
         /// <summary>
         /// A type only this part declares, named in a method signature of the edited part.
         /// </summary>
