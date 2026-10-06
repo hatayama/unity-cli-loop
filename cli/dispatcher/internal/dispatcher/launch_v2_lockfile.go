@@ -91,12 +91,12 @@ func waitForV2ProjectOpened(
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
-	// Why: V2 server auto-start is scheduled on EditorApplication.delayCall. A CLI-spawned,
-	// backgrounded idle Editor may never tick on its own, so delayCall never runs
-	// (V3 documents this and uses EditorApplicationTickBridge.SignalTick —
-	// Packages/src/Editor/Infrastructure/Server/UnityCliLoopServerController.cs:369-372).
-	// V2 has no equivalent workaround, so focus once after the lockfile gate. Focus failure
-	// is non-fatal: log and continue into the readiness probe.
+	// V2 server auto-start is scheduled on EditorApplication.delayCall, which was observed not to
+	// run while the Editor window is unfocused (V3 moved its recovery onto the main-thread
+	// dispatcher, which drains on update and tick and signals a tick when work is enqueued; see
+	// UnityCliLoopServerController.OnServerLoopUnexpectedlyExited). V2 has no equivalent, so
+	// focus once after the lockfile gate. Focus failure is non-fatal: log and continue into the
+	// readiness probe.
 	logLaunchV2FocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
 	if err := deps.waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
