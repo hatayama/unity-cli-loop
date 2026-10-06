@@ -89,23 +89,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context, file, compileResult, prepared.Entries, prepared.Resolution);
         }
 
-        // Peels leftover Harmony patches when the source again matches the verified baseline.
-        // Resolve failures are silent: unchanged identities already matched compile-time IL.
-        // A method Harmony could not restore becomes that method's Failed outcome instead of
-        // aborting the peel, so the remaining unchanged methods still get reverted.
-        // Returns how many Revert calls actually removed a live patch.
+        /// <summary>
+        /// Peels leftover Harmony patches when the source again matches the verified baseline.
+        /// Resolve failures are silent: unchanged identities already matched compile-time IL.
+        /// A method Harmony could not restore becomes that method's Failed outcome instead of
+        /// aborting the peel, so the remaining unchanged methods still get reverted.
+        /// Rows whose method name no live patch carries are skipped without being resolved.
+        /// Returns how many Revert calls actually removed a live patch.
+        /// </summary>
+        /// <param name="resolveMethod">
+        /// How a row is resolved; production passes HotReloadMethodMatcher.Resolve, and tests
+        /// count the calls.
+        /// </param>
         internal int RevertUnchangedPatches(
             HotReloadTypeHome fileHome,
             HotReloadEntryHomeResolver homeResolver,
             TransformWorkerUnchangedMethodDto[] unchangedMethods,
             List<HotReloadMethodOutcome> outcomes,
-            string assemblyResolvePath)
+            string assemblyResolvePath,
+            HotReloadMethodResolver resolveMethod)
         {
             Debug.Assert(fileHome != null, "fileHome must not be null.");
             Debug.Assert(homeResolver != null, "homeResolver must not be null.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
+            Debug.Assert(resolveMethod != null, "resolveMethod must not be null.");
 
+            // Why once before the loop: the peel only removes patches, so the names collected here
+            // stay a superset of the methods that still hold one while the rows are walked.
+            HashSet<string> patchedMethodNames =
+                HotReloadUnchangedPeelFilter.CollectPatchedMethodNames(_domain.ListGenerations());
             int revertedCount = 0;
             for (int index = 0; index < unchangedMethods.Length; index++)
             {
@@ -118,13 +131,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // Why the row decides the home: a method of a type an artifact serves is patched
+                // on that artifact, so the leftover patch to peel is only findable there.
+                // Why before the name check: a row naming an assembly no artifact carries must stop
+                // the run whether or not a patch could be peeled, as it did when every row was
+                // resolved.
+                HotReloadTypeHome home = homeResolver.Resolve(fileHome, unchanged.homeAssemblyName);
+
+                // Why by name before resolving: resolving a row reads the whole compiled assembly,
+                // and a row can only be peeled when the method it resolves to holds a live patch.
+                // That method carries the row's name, so a name no live patch has cannot lead to a
+                // peel. The name is only a prefilter: a row that passes is still resolved exactly,
+                // type, parameters and arity included.
+                if (!patchedMethodNames.Contains(unchanged.methodName))
+                {
+                    continue;
+                }
+
                 // Why pass unchanged.genericArity: Caller(int) and Caller<T>(int) share name
                 // and parameters. Arity 0 would resolve the generic unchanged row to the
                 // non-generic sibling and peel its live patch.
-                // Why the row decides the home: a method of a type an artifact serves is patched
-                // on that artifact, so the leftover patch to peel is only findable there.
-                HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
-                    homeResolver.Resolve(fileHome, unchanged.homeAssemblyName),
+                HotReloadMethodMatchResult matchResult = resolveMethod(
+                    home,
                     unchanged.typeMetadataName,
                     unchanged.methodName,
                     unchanged.parameterTypeFullNames,
@@ -194,7 +222,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     homeResolver,
                     unchangedMethods,
                     file.Sinks.Outcomes,
-                    file.AssemblyResolvePath);
+                    file.AssemblyResolvePath,
+                    HotReloadMethodMatcher.Resolve);
             }
         }
         /// <summary>

@@ -7,6 +7,14 @@ using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
+    /// <summary>Resolves a compiled method to the live MethodBase; the shape of HotReloadMethodMatcher.Resolve.</summary>
+    internal delegate HotReloadMethodMatchResult HotReloadMethodResolver(
+        HotReloadTypeHome home,
+        string typeMetadataName,
+        string methodName,
+        string[] parameterTypeFullNames,
+        int genericArity);
+
     /// <summary>
     /// Resolves a hot-reload manifest entry (type metadata name + method name + parameter type
     /// full names) to the matching MethodBase in the running AppDomain, using Cecil metadata
