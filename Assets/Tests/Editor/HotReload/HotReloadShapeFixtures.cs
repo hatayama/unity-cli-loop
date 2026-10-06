@@ -157,17 +157,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// Method body that resolves <c>HotReloadGlobalAlias</c> only through a sibling-file
-    /// <c>global using</c>. Shim compile fails with CS0246 unless the worker collects that alias.
+    /// Members that resolve <c>HotReloadGlobalAlias</c> only through a sibling-file
+    /// <c>global using</c>. In a body, the shim compile fails with CS0246 unless the worker
+    /// collects that alias; in a parameter, return or field type, an existing method matches its
+    /// compiled signature only when the worker binds the edited file with that alias.
     /// </summary>
     internal class HotReloadGlobalUsingFixture
     {
+        private readonly HotReloadGlobalAlias _buffer = new HotReloadGlobalAlias("abc");
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public string BuildWithGlobalAlias()
         {
             HotReloadGlobalAlias builder = new HotReloadGlobalAlias();
             builder.Append("base");
             return builder.ToString();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int MeasureWithGlobalAliasParameter(HotReloadGlobalAlias builder)
+        {
+            return builder.Length;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public HotReloadGlobalAlias CreateWithGlobalAliasReturn()
+        {
+            HotReloadGlobalAlias builder = new HotReloadGlobalAlias();
+            builder.Append("return-base");
+            return builder;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int BufferLength()
+        {
+            return _buffer.Length;
+        }
+    }
+
+    /// <summary>
+    /// Existing method whose parameter type is an internal type of another file: the worker
+    /// binds it as an inaccessible error type, and a body edit must still match the compiled method.
+    /// </summary>
+    internal class HotReloadInternalSignatureFixture
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CountProbe(HotReloadInternalSignatureProbe probe)
+        {
+            return probe == null ? 1 : 2;
+        }
+    }
+
+    /// <summary>
+    /// Derives from a base type that only the test assembly's global using makes visible, so a
+    /// body that reads a base member binds only when the worker compilation carries that using.
+    /// </summary>
+    internal class HotReloadGlobalUsingDerivedFixture : HotReloadGlobalUsingBaseHost
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int OffsetPlus(int x)
+        {
+            return BaseOffset + x;
         }
     }
 }

@@ -113,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "HotReloadSiblingEnumDefinitions.cs",
             "HotReloadInternalMonoBehaviourBase.cs",
             "HotReloadIntroducedTypeStageProbe.cs",
+            "HotReloadInternalSignatureProbe.cs",
         };
 
         /// <summary>

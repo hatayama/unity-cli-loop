@@ -804,6 +804,165 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a body edit to an existing method whose parameter type comes only from a
+        /// sibling-file global using alias is patched instead of being classified as added.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithGlobalUsingAliasParameter_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return builder.Length;",
+                "return builder.Length + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias parameter body must differ.");
+
+            string editedPath = WriteEditedSource("MeasureWithGlobalAliasParameter.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.MeasureWithGlobalAliasParameter(new HotReloadGlobalAlias("ab")), Is.EqualTo(2));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.MeasureWithGlobalAliasParameter));
+            Assert.That(fixture.MeasureWithGlobalAliasParameter(new HotReloadGlobalAlias("ab")), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method whose return type comes only from a
+        /// sibling-file global using alias is patched instead of being classified as added.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithGlobalUsingAliasReturnType_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "builder.Append(\"return-base\");",
+                "builder.Append(\"return-patched\");",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias return body must differ.");
+
+            string editedPath = WriteEditedSource("CreateWithGlobalAliasReturn.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.CreateWithGlobalAliasReturn().ToString(), Is.EqualTo("return-base"));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.CreateWithGlobalAliasReturn));
+            Assert.That(fixture.CreateWithGlobalAliasReturn().ToString(), Is.EqualTo("return-patched"));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method that reads a field whose type comes only from a
+        /// sibling-file global using alias is patched.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodReadingFieldOfGlobalUsingAliasType_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return _buffer.Length;",
+                "return _buffer.Length + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias field reader body must differ.");
+
+            string editedPath = WriteEditedSource("BufferLength.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.BufferLength(), Is.EqualTo(3));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.BufferLength));
+            Assert.That(fixture.BufferLength(), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: a body edit that reads a member of a base class visible only through a
+        /// sibling-file global using of its namespace is patched.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodReadingBaseMemberFromGlobalUsingNamespace_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return BaseOffset + x;",
+                "return BaseOffset + x + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: base-member reader body must differ.");
+
+            string editedPath = WriteEditedSource("OffsetPlus.cs", editedSource);
+
+            HotReloadGlobalUsingDerivedFixture fixture = new HotReloadGlobalUsingDerivedFixture();
+            Assert.That(fixture.OffsetPlus(1), Is.EqualTo(11));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingDerivedFixture.OffsetPlus));
+            Assert.That(fixture.OffsetPlus(1), Is.EqualTo(12));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method whose parameter type is an internal type of
+        /// another file is patched, and the run reports no Skipped row. The worker binds that type
+        /// as an inaccessible error type, which must not count as an unresolved signature type.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithInternalParameterTypeFromAnotherFile_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return probe == null ? 1 : 2;",
+                "return probe == null ? 11 : 12;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: internal-signature body must differ.");
+
+            string editedPath = WriteEditedSource("CountProbe.cs", editedSource);
+
+            HotReloadInternalSignatureFixture fixture = new HotReloadInternalSignatureFixture();
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(1));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadInternalSignatureFixture.CountProbe));
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    "No method of the edited file may be skipped.\n" + FormatOutcomes(result));
+            }
+
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(11));
+        }
+
+        /// <summary>
         /// What: under Debug code optimization, size-only small methods do not emit the
         /// aggregated inline-risk warning (branch a); Patched Reason stays empty.
         /// </summary>
