@@ -86,9 +86,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadReappliedSiblingFiles.ForActivePatches(result, toProjectRelativeScriptPath)),
                 allRequestedSkipped,
                 reappliedSiblingCount);
+            HotReloadOutcomeTally tally = HotReloadOutcomeAggregation.CountMethodOutcomeKinds(result.Methods);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
+                Outcome = HotReloadApplyOutcome.Decide(
+                    result.Methods,
+                    result.IntroducedTypes,
+                    reappliedSiblingFiles,
+                    hasFailure).ToString(),
+                SkippedTotal = tally.SkippedCount,
+                AddedTotal = tally.AddedCount,
+                FailedTotal = tally.FailedCount,
+                AlreadyActiveTotal = tally.AlreadyActiveCount,
+                StaleTotal = tally.StaleCount,
                 Methods = methods,
                 Warnings = warnings.ToList(),
                 IntroducedTypes = HotReloadIntroducedTypeResponseSection.BuildRows(result.IntroducedTypes),
@@ -104,6 +115,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = HotReloadAutoRefreshHoldResponseEnricher.AppendNewlyArmedMessage(
                     message,
                     result.AutoRefreshHoldNewlyArmed),
+                AutoRefreshHoldMessage = result.AutoRefreshHoldNewlyArmed
+                    ? HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix
+                    : string.Empty,
                 RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
                     hasFailure,
                     result.PatchedTotal,

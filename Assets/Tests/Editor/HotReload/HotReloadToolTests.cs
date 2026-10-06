@@ -764,6 +764,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a run whose requested method was Patched reports Outcome Applied, zero for every
+        /// other per-kind total, and no hold sentence because it did not newly arm the hold.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenMethodsPatched_ReportsAppliedOutcomeAndTotals()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Outcome, Is.EqualTo("Applied"));
+            Assert.That(response.PatchedTotal, Is.EqualTo(1));
+            Assert.That(response.SkippedTotal, Is.EqualTo(0));
+            Assert.That(response.AddedTotal, Is.EqualTo(0));
+            Assert.That(response.FailedTotal, Is.EqualTo(0));
+            Assert.That(response.AlreadyActiveTotal, Is.EqualTo(0));
+            Assert.That(response.StaleTotal, Is.EqualTo(0));
+            Assert.That(response.AutoRefreshHoldMessage, Is.Empty);
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse does not emit pause-point warnings when no markers
         /// were retargeted or suppressed, even if PatchedTotal &gt; 0.
         /// </summary>
@@ -1011,6 +1039,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Does.EndWith(HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix));
+            Assert.That(
+                response.AutoRefreshHoldMessage,
+                Is.EqualTo(HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix));
+            Assert.That(response.Message, Does.EndWith(" " + response.AutoRefreshHoldMessage));
         }
 
         /// <summary>
@@ -1316,6 +1348,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Is.EqualTo("All 8 methods are unchanged since the last compile; nothing to patch."));
             Assert.That(response.UnchangedTotal, Is.EqualTo(8));
+            Assert.That(response.Outcome, Is.EqualTo("NothingToApply"));
         }
 
         /// <summary>
@@ -1619,6 +1652,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo("Hot reload finished with one or more Failed method outcomes. See Methods."));
+        }
+
+        /// <summary>
+        /// What: a run with a Failed method reports Outcome Failed and counts the row in
+        /// FailedTotal, alongside Success false.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenAMethodFailed_ReportsFailedOutcomeAndFailedTotal()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("T.M", "reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Outcome, Is.EqualTo("Failed"));
+            Assert.That(response.FailedTotal, Is.EqualTo(1));
+            Assert.That(response.Success, Is.False);
         }
 
         /// <summary>
@@ -2580,6 +2636,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the same run reports Outcome NothingApplied, because the sibling's Added row does
+        /// not make the requested file live, while the totals count every row, the sibling's too.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenRequestedFileAllSkippedWithSiblingAdded_ReportsNothingAppliedAndCountsEveryRow()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.M", "reason", "Assets/Requested.cs"),
+                        HotReloadMethodOutcome.Added("S.N", "Assets/Sibling.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    reappliedSiblingPaths: new[] { "Assets/Sibling.cs" }));
+
+            Assert.That(response.Outcome, Is.EqualTo("NothingApplied"));
+            Assert.That(response.AddedTotal, Is.EqualTo(1));
+            Assert.That(response.SkippedTotal, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: the same all-Skipped run without a sibling re-apply omits the sibling clause.
         /// </summary>
         [Test]
@@ -2907,6 +2987,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             JObject serialized = JObject.FromObject(response);
             Assert.That(serialized.ContainsKey("CompileFallback"), Is.True);
             Assert.That(serialized["CompileFallback"].ToString(), Is.EqualTo("NotNeeded"));
+        }
+
+        /// <summary>
+        /// What: --status omits Outcome, which answers only for an apply run.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_OmitsOutcome()
+        {
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+
+            JObject serialized = JObject.FromObject(response);
+            Assert.That(serialized.ContainsKey("Outcome"), Is.False);
         }
 
         /// <summary>
