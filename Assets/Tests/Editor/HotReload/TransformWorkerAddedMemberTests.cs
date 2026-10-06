@@ -2028,10 +2028,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// An added bodied property on a partial host is skipped before accessor shims are emitted.
+        /// What: an added bodied property on a partial host whose other part is unchanged is not
+        /// skipped for being on a partial type, and its getter is emitted as an added method the way
+        /// it is on a host that is not partial.
         /// </summary>
         [Test]
-        public async Task Skip_AddedBodiedPropertyOnPartialHost_SkipsAccessors()
+        public async Task Classify_AddedBodiedPropertyOnPartialHost_IsNotSkippedAsPartial()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -2047,10 +2049,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(FindEntry(result, "get_AddedPartial"), Is.Null);
-            Assert.That(FindEntry(result, "set_AddedPartial"), Is.Null);
-            Assert.That(FindSkipReason(result, "get_AddedPartial"), Does.Contain("Partial types are skipped"));
-            Assert.That(FindSkipReason(result, "set_AddedPartial"), Does.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "get_AddedPartial") ?? string.Empty, Does.Not.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial") ?? string.Empty, Does.Not.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "get_AddedPartial") ?? string.Empty, Does.Not.Contain("partial type"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial") ?? string.Empty, Does.Not.Contain("partial type"));
+
+            TransformWorkerEntryDto getter = FindEntry(result, "get_AddedPartial");
+            Assert.That(getter, Is.Not.Null, "Added property getter must be an entry.");
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(FindSkipReason(result, "get_AddedPartial"), Is.Null);
         }
 
         /// <summary>
