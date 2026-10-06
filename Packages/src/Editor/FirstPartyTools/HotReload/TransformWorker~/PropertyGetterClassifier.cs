@@ -68,6 +68,7 @@ internal static class PropertyGetterClassifier
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog,
+        PartialTypeParts partialTypeParts,
         List<WorkerSkipped> skipped)
     {
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
@@ -79,7 +80,8 @@ internal static class PropertyGetterClassifier
             semanticModel,
             compiledType,
             addedMemberAccess: null,
-            addedEvents);
+            addedEvents,
+            partialTypeParts);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped
@@ -89,6 +91,18 @@ internal static class PropertyGetterClassifier
                 Reason = decision.SkipReason
             });
             return (true, decision);
+        }
+
+        WorkerReason partialSkip = PartialTypeBodyGuard.DescribeSkipOrNull(typeDeclaration, semanticModel, getterBodyNode);
+        if (partialSkip != null)
+        {
+            skipped.Add(new WorkerSkipped
+            {
+                SourceProjectRelativePath = sourceProjectRelativePath,
+                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                Reason = partialSkip
+            });
+            return (true, MethodTransformDecision.Skip(partialSkip));
         }
 
         (WorkerReason addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(

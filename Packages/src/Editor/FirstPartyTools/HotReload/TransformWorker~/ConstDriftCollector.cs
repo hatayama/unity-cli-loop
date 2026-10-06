@@ -35,11 +35,14 @@ internal static class ConstDriftCollector
     /// C# inlines const values at compile time and shims compile against the already-compiled
     /// assembly, so value edits silently keep the old value at runtime; new consts fold into
     /// the bodies patched by this reload but fail shim compilation in files outside it.
+    /// A type whose metadata name is already in seenTypeMetadataNames is not compared again, and
+    /// every type compared is added to it.
     /// </summary>
     internal static List<string> CollectConstDriftWarnings(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
-        WorkerTypeHome home)
+        WorkerTypeHome home,
+        HashSet<string> seenTypeMetadataNames)
     {
         List<string> warnings = new List<string>();
         if (home.AssemblySymbol == null)
@@ -47,7 +50,6 @@ internal static class ConstDriftCollector
             return warnings;
         }
 
-        HashSet<string> seenTypeMetadataNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (BaseTypeDeclarationSyntax typeDeclaration
             in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
         {
@@ -57,8 +59,9 @@ internal static class ConstDriftCollector
                 continue;
             }
 
-            // Partial declarations in one file resolve to the same merged type symbol, and
-            // comparing its members once per declaration would duplicate every warning.
+            // Partial declarations resolve to the same merged type symbol, whether they sit in one
+            // file or in several files of one compilation, and comparing its members once per
+            // declaration would duplicate every warning.
             string typeMetadataName = ToReflectionMetadataName(sourceType);
             if (!seenTypeMetadataNames.Add(typeMetadataName))
             {

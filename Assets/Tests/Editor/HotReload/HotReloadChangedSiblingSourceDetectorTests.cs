@@ -229,6 +229,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: without a snapshot directory nothing was compared, so the empty list is reported as
+        /// incomplete rather than as "no sibling changed".
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenSnapshotDirectoryMissing_IsNotComplete()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string editedRelative = "Assets/Edited.cs";
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteProjectFile(projectRoot, editedRelative, "edited-disk");
+                WriteProjectFile(projectRoot, siblingRelative, "sibling-disk");
+
+                HotReloadChangedSiblingScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        new[] { editedRelative, siblingRelative },
+                        new[] { editedRelative });
+
+                Assert.That(result.IsComplete, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a list cut down to the scan limit is reported as incomplete, because a changed
+        /// sibling past the limit is missing from it.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenMoreThanLimitChanged_IsNotComplete()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                const int changedSiblingCount = 51;
+                string editedRelative = "Assets/Edited.cs";
+                WriteProjectFile(projectRoot, editedRelative, "edited-disk");
+                WriteSnapshot(projectRoot, "Asm-mvid", editedRelative, "edited-snapshot");
+
+                string[] sourceFiles = new string[changedSiblingCount + 1];
+                sourceFiles[0] = editedRelative;
+                for (int index = 0; index < changedSiblingCount; index++)
+                {
+                    string relative = "Assets/Sibling" + index.ToString(CultureInfo.InvariantCulture) + ".cs";
+                    sourceFiles[index + 1] = relative;
+                    WriteProjectFile(projectRoot, relative, "disk-" + index.ToString(CultureInfo.InvariantCulture));
+                    WriteSnapshot(projectRoot, "Asm-mvid", relative, "snap-" + index.ToString(CultureInfo.InvariantCulture));
+                }
+
+                HotReloadChangedSiblingScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        sourceFiles,
+                        new[] { editedRelative });
+
+                Assert.That(result.IsComplete, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: when every sibling was compared with its snapshot and the list stayed under the
+        /// limit, the list is reported as complete.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenEverySiblingWasCompared_IsComplete()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string editedRelative = "Assets/Edited.cs";
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteProjectFile(projectRoot, editedRelative, "edited-disk");
+                WriteProjectFile(projectRoot, siblingRelative, "sibling-disk");
+                WriteSnapshot(projectRoot, "Asm-mvid", editedRelative, "edited-snapshot");
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-snapshot");
+
+                HotReloadChangedSiblingScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        new[] { editedRelative, siblingRelative },
+                        new[] { editedRelative });
+
+                Assert.That(result.IsComplete, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
         /// What: sibling-derived warnings are ordinal-deduped among themselves and skipped
         /// when the own-file list already contains the exact string, without collapsing
         /// duplicates that were already in the own-file list.

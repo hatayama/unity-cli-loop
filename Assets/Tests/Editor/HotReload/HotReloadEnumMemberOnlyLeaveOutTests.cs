@@ -328,6 +328,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 excludedAddedMethodKeys = new[] { "excludedAdded" },
                 assemblySourcePaths = new[] { "/project/" + EnumPath },
                 changedSiblingSourcePaths = new[] { "/project/Assets/Scripts/Sibling.cs" },
+                changedSiblingScanComplete = true,
                 introducedTypeArtifacts = new[] { new TransformWorkerIntroducedTypeArtifactDto() },
                 activeMethodLabels = new[] { "Game.Caller.Run()" }
             };
@@ -346,6 +347,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(retry.excludedAddedMethodKeys, Is.SameAs(first.excludedAddedMethodKeys));
             Assert.That(retry.assemblySourcePaths, Is.SameAs(first.assemblySourcePaths));
             Assert.That(retry.changedSiblingSourcePaths, Is.SameAs(first.changedSiblingSourcePaths));
+            Assert.That(retry.changedSiblingScanComplete, Is.True);
             Assert.That(retry.introducedTypeArtifacts, Is.SameAs(first.introducedTypeArtifacts));
             Assert.That(retry.activeMethodLabels, Is.SameAs(first.activeMethodLabels));
         }

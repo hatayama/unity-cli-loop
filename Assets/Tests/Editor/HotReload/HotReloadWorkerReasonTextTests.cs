@@ -210,9 +210,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "(state-machine MoveNext JIT-compiles normally and fails accessibility checks)."
                 + " Accessor rewrite unavailable: " + GenericMethodFragment);
             yield return Case(
-                HotReloadWorkerReasonCode.MethodTransformPartialType,
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartChanged,
+                new[] { "Assets/Scripts/Presenter.Other.cs" },
+                "Another part of this partial type changed since the last compile "
+                + "(Assets/Scripts/Presenter.Other.cs), so hot reload cannot bind this method against the "
+                + "compiled type. Pass that file with --files too, or run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified,
                 NoArgs,
-                "Partial types are skipped because a single file cannot provide a complete semantic model.");
+                "The other parts of this partial type could not be checked against the last compile "
+                + "(no source snapshot for the assembly, or too many changed files to scan), so hot reload "
+                + "cannot bind this method against the compiled type. Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformPartialBodyUnbound,
+                new[] { "CS0103: The name '_generated' does not exist in the current context" },
+                "CS0103: The name '_generated' does not exist in the current context. None of this partial "
+                + "type's source files known to hot reload declares that name: a part generated at compile "
+                + "time is not visible to it, and a file added since the last compile must be passed with "
+                + "--files. Otherwise run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 NoArgs,

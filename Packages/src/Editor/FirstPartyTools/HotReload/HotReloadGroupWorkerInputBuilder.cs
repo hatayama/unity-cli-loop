@@ -45,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),
                 changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths,
+                changedSiblingScanComplete = siblingScan.IsComplete,
                 activeMethodLabels = CollectActiveMethodLabels(files, domain)
             };
         }
