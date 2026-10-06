@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -48,9 +49,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal async Task<IReadOnlyList<HotReloadFileProcessResult>> ProcessGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
             Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
+            Debug.Assert(timing != null, "timing must not be null.");
 
             HotReloadGroupFile firstFile = files[0];
             // Application.dataPath and the ledgers require the Unity main thread.
@@ -83,9 +86,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerInput.targetAssemblyName,
                 workerInput.targetAssemblyMvid,
                 FindFullyAppliedSourceHash).ToArray();
+            Stopwatch preparationWatch = Stopwatch.StartNew();
             HotReloadIntroducedTypePreparationResult preparation = await _dependencies
                 .PrepareIntroducedTypes(files, workerInput, ct)
                 .ConfigureAwait(false);
+            // The preparation runs the transform worker too, so its time counts as analysis.
+            timing.AddAnalysis(preparationWatch.ElapsedMilliseconds);
             // Why before the failure branch and only here: one preparation covers every
             // declaration of the group, so a declaration bound from a retained artifact and a
             // non-fatal notice are true whether or not another declaration was refused. A
@@ -121,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             if (preparation.Prepared == null)
             {
-                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, activePaths, correlationId, ct)
+                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, activePaths, correlationId, timing, ct)
                     .ConfigureAwait(false);
             }
 
@@ -132,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 refusedTypes,
                 activePaths,
                 correlationId,
+                timing,
                 ct).ConfigureAwait(false);
         }
 
@@ -156,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             HashSet<string> activePaths,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
             HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
@@ -185,6 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         refusedTypes,
                         activePaths,
                         correlationId,
+                        timing,
                         ct).ConfigureAwait(false);
                 }
                 finally
@@ -212,9 +221,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             HashSet<string> activePaths,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
-            TransformWorkerClientResult workerResult = await RunWorkerAsync(workerInput, correlationId, ct)
+            TransformWorkerClientResult workerResult = await RunWorkerAsync(workerInput, correlationId, timing, ct)
                 .ConfigureAwait(false);
             if (!workerResult.Success)
             {
@@ -231,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 activePaths);
             if (leftOutPaths.Count == 0)
             {
-                return await ApplyTransformedGroupAsync(files, workerInput, workerOutput, prepared, refusedTypes, correlationId, ct)
+                return await ApplyTransformedGroupAsync(files, workerInput, workerOutput, prepared, refusedTypes, correlationId, timing, ct)
                     .ConfigureAwait(false);
             }
 
@@ -240,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto retryInput = _leaveOut.BuildRetryInput(workerInput, leftOutPaths);
             HotReloadGroupLeaveOutSplit split = new HotReloadGroupLeaveOutSplit(files, leftOutPaths);
             List<HotReloadFileProcessResult> leftOutResults = BuildLeftOutResults(split, files, workerOutput);
-            TransformWorkerClientResult retryResult = await RunWorkerAsync(retryInput, correlationId, ct)
+            TransformWorkerClientResult retryResult = await RunWorkerAsync(retryInput, correlationId, timing, ct)
                 .ConfigureAwait(false);
             IReadOnlyList<HotReloadFileProcessResult> remainingResults = retryResult.Success
                 ? await ApplyTransformedGroupAsync(
@@ -250,6 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     prepared,
                     refusedTypes,
                     correlationId,
+                    timing,
                     ct).ConfigureAwait(false)
                 : FailGroup(split.RemainingFiles, retryResult.ErrorMessage);
             return split.Splice(leftOutResults, remainingResults);
@@ -258,11 +269,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private async Task<TransformWorkerClientResult> RunWorkerAsync(
             TransformWorkerInputDto workerInput,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
+            Stopwatch workerWatch = Stopwatch.StartNew();
             TransformWorkerClientResult workerResult = await _dependencies
                 .RunWorker(workerInput, ct)
                 .ConfigureAwait(false);
+            timing.AddAnalysis(workerWatch.ElapsedMilliseconds);
             HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
             return workerResult;
         }
@@ -319,6 +333,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPreparedIntroducedTypes prepared,
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
             HotReloadGroupFile firstFile = files[0];
@@ -366,19 +381,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 files,
                 prepared,
                 new HotReloadCompileFailureNoteSources(workerOutput.skipped, refusedTypes));
+            Stopwatch gateWatch = Stopwatch.StartNew();
             HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
+            // Why before the failure return: a gate or compile that failed still took its time,
+            // and the breakdown has to show where that time went.
+            timing.AddShimCompile(gateWatch.ElapsedMilliseconds);
             if (gateAndCompile.Outcome == HotReloadGroupGateAndCompileOutcome.Failed)
             {
                 return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
-            return await CompleteApplyAfterCoverageAsync(
+            Stopwatch patchWatch = Stopwatch.StartNew();
+            IReadOnlyList<HotReloadFileProcessResult> results = await CompleteApplyAfterCoverageAsync(
                 context,
                 gateAndCompile.Gate,
                 gateAndCompile.Compile,
                 ct).ConfigureAwait(false);
+            timing.AddPatch(patchWatch.ElapsedMilliseconds);
+            return results;
         }
 
         /// <summary>

@@ -292,6 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return await HotReloadCompositionRoot.Services.GroupProcessor.ProcessGroupAsync(
                     files,
                     "leave-out-test",
+                    new HotReloadRunTiming(),
                     CancellationToken.None);
             }
         }
