@@ -1066,6 +1066,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding only an XML documentation comment above an existing method emits neither
+        /// the file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithXmlDocCommentOnlyEditOnAMethod_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "XmlDocCommentOnMethodDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "        public int VisibleSibling()",
+                    "        /// <summary>Documentation added by the test.</summary>\n        public int VisibleSibling()"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: adding only a block comment inside a field initializer emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithBlockCommentOnlyEditInsideAFieldInitializer_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "BlockCommentInFieldInitializerDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "private int _secret = 10;",
+                    "private int _secret = /* comment added by the test */ 10;"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: adding only a line comment on its own line above a field emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithLineCommentOnlyEditAboveAField_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "LineCommentAboveFieldDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "        private int _secret = 10;",
+                    "        // comment added by the test\n        private int _secret = 10;"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: rewording only the XML documentation comment of the type emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithXmlDocCommentOnlyEditOnTheType_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "XmlDocCommentOnTypeDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "Compiled fixture whose on-disk source path",
+                    "Prebuilt fixture whose on-disk source path"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
         /// What: editing only a const value emits the dedicated const-drift warning and does not
         /// also emit the generic outside-method-body warning.
         /// </summary>
@@ -2712,6 +2788,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        // Why the uniqueness check: Replace edits every occurrence, and a comment that also landed
+        // somewhere else would reach a comparison other than the one the test is about.
+        private static string ReplaceUniqueFragment(string source, string fragment, string replacement)
+        {
+            int index = source.IndexOf(fragment, StringComparison.Ordinal);
+            Assert.That(index, Is.GreaterThanOrEqualTo(0), "Precondition: the fixture must hold " + fragment);
+            Assert.That(
+                source.LastIndexOf(fragment, StringComparison.Ordinal),
+                Is.EqualTo(index),
+                "Precondition: the fixture must hold " + fragment + " exactly once.");
+            return source.Replace(fragment, replacement, StringComparison.Ordinal);
         }
 
         private static void AssertPatchedComputeWithPrivate(TransformWorkerClientResult result)

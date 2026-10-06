@@ -1639,6 +1639,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when a duplicate field syntax key sends the drift check to the whole-tree
+        /// fail-open compare, an edit that only adds a comment still emits no warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_DuplicateFieldSyntaxKeyWithCommentOnlyEdit_DoesNotWarn()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            // Why the duplicate repeats a compiled field: a name the compiled type lacks counts as
+            // an added field of the edited source and is stripped from that tree only, so the
+            // compare would warn without any comment.
+            string snapshotSource = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 3;\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            string edited = snapshotSource.Replace(
+                "        public int PublicSeed = 3;\n        public int PublicSeed = 3;",
+                "        // comment added by the test\n        public int PublicSeed = 3;\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(snapshotSource), "Precondition: the edit must add the comment.");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DupFieldKeyCommentOnly.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Is.Empty,
+                string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
         /// What: a readonly added field can still be read through GetOrInit.
         /// </summary>
         [Test]
