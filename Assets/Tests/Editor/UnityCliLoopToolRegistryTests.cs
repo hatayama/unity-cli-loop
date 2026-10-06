@@ -414,6 +414,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public async Task ExecuteCommandAsync_WhenCommandIsGetEditorStatus_ReturnsEditorStatusPayloadWithoutWaiting()
+        {
+            // Tests that editor status routes as a CLI-only bridge command that answers without
+            // waiting for the Editor main thread, not as a public tool. Why the queueing dispatcher:
+            // this test runs on the main thread, where a switch to it completes at once, so only a
+            // dispatcher that reports a background thread and holds its queue makes a switch leave
+            // the task unfinished. The status is checked before the await because awaiting a held
+            // switch would never return, and a cancelled async test would be recorded as passed.
+            UnityCliLoopExecutionRouter executionRouter = CreateExecutionRouter();
+            MainThreadSwitcher.RegisterService(new QueueingDispatcher());
+
+            try
+            {
+                Task<UnityCliLoopToolResponse> execution = executionRouter.ExecuteAsync(
+                    UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                    new JObject(),
+                    CancellationToken.None);
+
+                Assert.That(execution.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+                Assert.That(await execution, Is.InstanceOf<GetEditorStatusResponse>());
+            }
+            finally
+            {
+                EditorMainThreadDispatcherRestorer.Restore();
+            }
+        }
+
+        [Test]
         public void Constructor_WhenLegacyDevelopmentToolsAreRemoved_DoesNotRegisterThem()
         {
             // Tests that legacy MCP-era development tools are not exposed through the runtime registry.

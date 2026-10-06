@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
@@ -38,6 +39,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             JToken paramsToken,
             CancellationToken ct)
         {
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS)
+            {
+                // Why before the main-thread switch below: uloop status must answer while the Editor
+                // main thread is blocked, and this command reads only thread-safe snapshots.
+                ct.ThrowIfCancellationRequested();
+                // Why wake the loop: an idle Editor's main loop can sleep until something signals it,
+                // so the stall counter grows while nothing is wrong. Waking it lets the CLI's second
+                // probe tell a sleeping loop from a blocked one.
+                EditorApplicationTickBridge.SignalTick();
+                return EditorStatusBridgeCommand.Execute(
+                    _toolRegistrarService,
+                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick());
+            }
+
             UnityCliLoopToolResponse response;
             if (InternalBridgeCommandRouter.IsInternalCommand(methodName))
             {

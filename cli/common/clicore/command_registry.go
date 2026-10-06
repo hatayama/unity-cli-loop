@@ -15,6 +15,7 @@ const (
 	PausePointAwaitCommandName      = "await-pause-point"
 	PausePointStatusUserCommandName = "pause-point-status"
 	SetCodeOptimizationCommandName  = "set-code-optimization"
+	StatusCommandName               = "status"
 	RunTestsCommandName             = "run-tests"
 )
 
@@ -45,6 +46,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: PausePointAwaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
 	{Name: PausePointStatusUserCommandName, Description: "Show one pause point marker's state, or list all registered markers when no target is given", Owner: RunnerOwned},
 	{Name: SetCodeOptimizationCommandName, Description: "Switch Unity's Code Optimization to Debug for this session or, with approval, as the machine-wide startup default", Owner: RunnerOwned},
+	{Name: StatusCommandName, Description: "Report whether the Unity Editor for this project can take a command now, without changing anything", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
 	{Name: PackageCommandName, Description: "Install or inspect the Unity CLI Loop package in a project", Owner: DispatcherOwned},
 	{Name: InstallCommandName, Description: "Configure the global uloop dispatcher binary", Owner: DispatcherOwned},

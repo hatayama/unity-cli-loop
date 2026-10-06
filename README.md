@@ -184,9 +184,10 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 20 Bundled Skills</summary>
+<summary>All 21 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
+- `/uloop-status` - Check whether Unity can take a command now
 - `/uloop-compile` - Execute compilation
 - `/uloop-verify-project` - Check .meta files, GUIDs, conflict markers, and the package manifest without Unity
 - `/uloop-get-logs` - Get console logs

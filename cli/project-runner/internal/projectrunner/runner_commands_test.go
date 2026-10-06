@@ -130,8 +130,8 @@ func writeFakeUnityProject(t *testing.T) string {
 // Verifies that native commands with their own parsers reject an unknown flag themselves,
 // naming the command, instead of falling through to the dynamic tool catalog.
 // Each input is one only the native parser rejects this way: the dynamic catalog path reports
-// await-pause-point and pause-point-status as unknown commands, and enable-pause-point's
-// --resume-play as an unknown option instead of requiring --await.
+// await-pause-point, pause-point-status, and status as unknown commands, and
+// enable-pause-point's --resume-play as an unknown option instead of requiring --await.
 func TestRunResolvedProjectCommandRoutesNativeCommandsToTheirOwnParsers(t *testing.T) {
 	cases := []struct {
 		command     string
@@ -141,6 +141,7 @@ func TestRunResolvedProjectCommandRoutesNativeCommandsToTheirOwnParsers(t *testi
 		{command: clicore.PausePointAwaitCommandName, args: []string{"--bogus-flag"}, wantMessage: `"Message": "--bogus-flag requires a value"`},
 		{command: clicore.PausePointStatusUserCommandName, args: []string{"--bogus-flag"}, wantMessage: `"Message": "--bogus-flag requires a value"`},
 		{command: pausePointEnableCommandName, args: []string{"--resume-play"}, wantMessage: "require --await"},
+		{command: clicore.StatusCommandName, args: []string{"--bogus-flag"}, wantMessage: `"Message": "status takes no options: --bogus-flag"`},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.command, func(t *testing.T) {

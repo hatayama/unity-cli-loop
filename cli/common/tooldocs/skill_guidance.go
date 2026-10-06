@@ -25,6 +25,7 @@ var commandSkillNames = map[string]string{
 	"hot-reload":           "uloop-hot-reload",
 
 	"launch": "uloop-launch",
+	"status": "uloop-status",
 
 	// One skill covers the four pause-point commands and the three watch commands: watch
 	// expressions are documented by the pause-point skill's references/watch-expressions.md.

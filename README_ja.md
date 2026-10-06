@@ -184,9 +184,10 @@ V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Dow
 
 
 <details>
-<summary>バンドルされている全20個のSkills一覧</summary>
+<summary>バンドルされている全21個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
+- `/uloop-status` - Unityが今コマンドを受け付けられるかを確認
 - `/uloop-compile` - コンパイルの実行
 - `/uloop-verify-project` - Unityを起動せずに.metaファイル・GUID・コンフリクトマーカー・パッケージmanifestを検査
 - `/uloop-get-logs` - Consoleログの取得
