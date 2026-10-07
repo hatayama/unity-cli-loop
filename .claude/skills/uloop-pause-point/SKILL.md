@@ -95,7 +95,7 @@ On a wait timeout, `PAUSE_POINT_EXPIRED`, or an enable failure, read `Error.Deta
 - Patches drop on every compile or domain reload (the compile / Play-entry responses warn). `--persist` re-arms automatically (`references/persist.md`).
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; enable warns where detectable.
 - An `--id` marker waits on your `UloopPausePoint.Pause(id)` call (`using io.github.hatayama.UnityCliLoop.Runtime;`); its hits record no `CapturedVariables`.
-- Every `--file` form resolves to the asset path (`Packages/<package-id>/...` for a package script), which the marker `Id` uses; pass that `Id` to status, await, and clear.
+- Every `--file` form resolves to the asset path (`Packages/<package-id>/...` for a package script), which the marker `Id` uses; status, await, and clear find it by any form.
 
 ## Reference Guides
 
