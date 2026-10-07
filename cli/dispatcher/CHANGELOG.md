@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.7.0...dispatcher-v3.8.0) (2026-10-07)
+
+
+### Features
+
+* Hot reload now applies edits on partial types and in global-using assemblies, and the response says whether an edit is live ([#3198](https://github.com/hatayama/unity-cli-loop/issues/3198)) ([fed634a](https://github.com/hatayama/unity-cli-loop/commit/fed634ac769f999ee53f6453491e9dd7e95214c5))
+
 ## [3.7.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.6.3...dispatcher-v3.7.0) (2026-10-06)
 
 
