@@ -80,7 +80,6 @@ func (scenario *compileRecoveryScenario) deps() compileWaitDeps {
 	deps := compileWaitTestDeps(scenario.query)
 	deps.sendCompile = scenario.send
 	deps.freshWaitPollInterval = time.Millisecond
-	deps.startStallFocusThreshold = time.Hour
 	return deps
 }
 
