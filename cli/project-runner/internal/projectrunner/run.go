@@ -221,18 +221,6 @@ func runCompileWithReattachPolicy(
 	return runFreshCompileRecoveringWithDeps(ctx, connection, params, stderr, compileWait)
 }
 
-func runFreshCompileWithDomainReloadWaitWithDeps(
-	ctx context.Context,
-	connection unityipc.Connection,
-	params map[string]any,
-	stdout io.Writer,
-	stderr io.Writer,
-	compileWait compileWaitDeps,
-) int {
-	result := runFreshCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
-	return writeCompileExecutionResult(stdout, result)
-}
-
 func runFreshCompileWithDomainReloadWaitResultWithDeps(
 	ctx context.Context,
 	connection unityipc.Connection,

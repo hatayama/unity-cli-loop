@@ -412,124 +412,6 @@ func TestRunEnablePausePointAndAwait_WhenReleaseError_RecoversAndListsSwitchWarn
 	}
 }
 
-// Verifies a COMPILE_ALREADY_IN_PROGRESS compile result is retried once, then recovery completes.
-func TestCompleteEnableWithReleaseRecovery_WhenCompileAlreadyInProgressOnce_RetriesAndCompletes(t *testing.T) {
-	originalSwitch := sendSetCodeOptimizationDebug
-	originalCompile := runFreshCompileForPausePointRecovery
-	originalAttempt := runOneFreshCompileForPausePointRecovery
-	originalWait := waitPausePointRecoveryBusyRetry
-	t.Cleanup(func() {
-		sendSetCodeOptimizationDebug = originalSwitch
-		runFreshCompileForPausePointRecovery = originalCompile
-		runOneFreshCompileForPausePointRecovery = originalAttempt
-		waitPausePointRecoveryBusyRetry = originalWait
-	})
-
-	sendSetCodeOptimizationDebug = func(ctx context.Context, connection unityipc.Connection) error {
-		return nil
-	}
-	waitPausePointRecoveryBusyRetry = func(ctx context.Context, duration time.Duration) error {
-		return nil
-	}
-	compileAttemptCount := 0
-	runOneFreshCompileForPausePointRecovery = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		params map[string]any,
-		stdout io.Writer,
-		stderr io.Writer,
-		budget time.Duration,
-	) int {
-		compileAttemptCount++
-		if compileAttemptCount == 1 {
-			_, _ = stdout.Write([]byte(`{"Success":false,"ErrorCode":"COMPILE_ALREADY_IN_PROGRESS"}`))
-			return 1
-		}
-		return 0
-	}
-	runFreshCompileForPausePointRecovery = runFreshCompileWithBusyRetryForPausePointRecovery
-
-	sendCount := 0
-	var stdout bytes.Buffer
-	code := completeEnableWithReleaseRecovery(
-		context.Background(),
-		unityipc.Connection{ProjectRoot: t.TempDir()},
-		&stdout,
-		io.Discard,
-		func(writer io.Writer) int {
-			sendCount++
-			if sendCount == 1 {
-				_, _ = writer.Write([]byte(releaseCodeOptimizationEnableFailureJSON))
-				return 1
-			}
-			_, _ = writer.Write([]byte(successfulEnableJSON))
-			return 0
-		},
-	)
-	if code != 0 {
-		t.Fatalf("expected success, got %d with stdout %s", code, stdout.String())
-	}
-	if compileAttemptCount != 2 {
-		t.Fatalf("compile attempt count mismatch: %d", compileAttemptCount)
-	}
-	if sendCount != 2 {
-		t.Fatalf("enable send count mismatch: %d", sendCount)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout.String())
-	}
-	warning, _ := payload["Warning"].(string)
-	if warning != pausePointAutoDebugSwitchWarning {
-		t.Fatalf("Warning mismatch: %q", warning)
-	}
-}
-
-// Verifies a cancelled retry wait reports the cancel error instead of the busy compile JSON.
-func TestRunFreshCompileWithBusyRetry_WhenRetryWaitCancelled_ReportsCancelNotBusyResult(t *testing.T) {
-	originalAttempt := runOneFreshCompileForPausePointRecovery
-	originalWait := waitPausePointRecoveryBusyRetry
-	t.Cleanup(func() {
-		runOneFreshCompileForPausePointRecovery = originalAttempt
-		waitPausePointRecoveryBusyRetry = originalWait
-	})
-
-	busyResult := []byte(`{"Success":false,"ErrorCode":"COMPILE_ALREADY_IN_PROGRESS"}`)
-	runOneFreshCompileForPausePointRecovery = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		params map[string]any,
-		stdout io.Writer,
-		stderr io.Writer,
-		budget time.Duration,
-	) int {
-		_, _ = stdout.Write(busyResult)
-		return 1
-	}
-	waitPausePointRecoveryBusyRetry = func(ctx context.Context, duration time.Duration) error {
-		return context.Canceled
-	}
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := runFreshCompileWithBusyRetryForPausePointRecovery(
-		context.Background(),
-		unityipc.Connection{ProjectRoot: t.TempDir()},
-		map[string]any{},
-		&stdout,
-		&stderr,
-	)
-	if code != 1 {
-		t.Fatalf("expected cancel exit 1, got %d", code)
-	}
-	if bytes.Contains(stdout.Bytes(), []byte("COMPILE_ALREADY_IN_PROGRESS")) {
-		t.Fatalf("cancelled wait must not write busy compile JSON: %s", stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "context canceled") && !strings.Contains(stderr.String(), "canceled") {
-		t.Fatalf("expected classified cancel error on stderr, got %s", stderr.String())
-	}
-}
-
 // Verifies a failed recovery compile writes its stdout buffer and does not resend enable.
 func TestCompleteEnableWithReleaseRecovery_WhenCompileFails_WritesStdoutAndDoesNotResend(t *testing.T) {
 	originalSwitch := sendSetCodeOptimizationDebug
@@ -784,19 +666,15 @@ func serverBusyRPCError(t *testing.T) error {
 	return rpcErr
 }
 
-// stubFreshCompileSends replaces the compile sender with one that returns the given errors in
-// order, then succeeds, and records the retry waits requested in between.
-func stubFreshCompileSends(t *testing.T, errs []error, waitErr error) (*int, *[]time.Duration) {
+// stubFreshCompileSends returns a compile sender that returns the given errors in order, then
+// succeeds, and replaces the retry wait with one that records the waits requested in between.
+func stubFreshCompileSends(t *testing.T, errs []error, waitErr error) (compileSendFunc, *int, *[]time.Duration) {
 	t.Helper()
-	originalSend := sendFreshCompileRequest
 	originalWait := waitPausePointRecoveryBusyRetry
-	t.Cleanup(func() {
-		sendFreshCompileRequest = originalSend
-		waitPausePointRecoveryBusyRetry = originalWait
-	})
+	t.Cleanup(func() { waitPausePointRecoveryBusyRetry = originalWait })
 	sends := 0
 	waits := []time.Duration{}
-	sendFreshCompileRequest = func(context.Context, unityipc.Connection, string, map[string]any, unityipc.ProgressFunc, time.Duration) (unityipc.UnitySendOutcome, error) {
+	send := func(context.Context, unityipc.Connection, string, map[string]any, unityipc.ProgressFunc, time.Duration) (unityipc.UnitySendOutcome, error) {
 		sends++
 		if sends <= len(errs) {
 			return unityipc.UnitySendOutcome{}, errs[sends-1]
@@ -807,14 +685,14 @@ func stubFreshCompileSends(t *testing.T, errs []error, waitErr error) (*int, *[]
 		waits = append(waits, duration)
 		return waitErr
 	}
-	return &sends, &waits
+	return send, &sends, &waits
 }
 
 // Verifies busy compile sends are retried within the budget, with each wait capped by the time left.
 func TestSendCompileWithBusyRetryRetriesBusyUntilSuccess(t *testing.T) {
-	sends, waits := stubFreshCompileSends(t, []error{serverBusyRPCError(t)}, nil)
+	send, sends, waits := stubFreshCompileSends(t, []error{serverBusyRPCError(t)}, nil)
 
-	outcome, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, time.Second)
+	outcome, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, send, "compile", map[string]any{}, nil, 0, time.Second)
 
 	if err != nil || string(outcome.Result) != `{"Success":true}` {
 		t.Fatalf("unexpected result: outcome=%#v err=%v", outcome, err)
@@ -831,153 +709,263 @@ func TestSendCompileWithBusyRetryRetriesBusyUntilSuccess(t *testing.T) {
 func TestSendCompileWithBusyRetryStopsRetrying(t *testing.T) {
 	t.Run("budget exhausted", func(t *testing.T) {
 		busy := serverBusyRPCError(t)
-		sends, waits := stubFreshCompileSends(t, []error{busy, busy}, nil)
-		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, 0)
+		send, sends, waits := stubFreshCompileSends(t, []error{busy, busy}, nil)
+		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, send, "compile", map[string]any{}, nil, 0, 0)
 		if err != busy || *sends != 1 || len(*waits) != 0 {
 			t.Fatalf("err=%v sends=%d waits=%v", err, *sends, *waits)
 		}
 	})
 	t.Run("non-busy error", func(t *testing.T) {
 		failure := io.ErrUnexpectedEOF
-		sends, _ := stubFreshCompileSends(t, []error{failure}, nil)
-		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, time.Minute)
+		send, sends, _ := stubFreshCompileSends(t, []error{failure}, nil)
+		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, send, "compile", map[string]any{}, nil, 0, time.Minute)
 		if err != failure || *sends != 1 {
 			t.Fatalf("err=%v sends=%d", err, *sends)
 		}
 	})
 	t.Run("retry wait cancelled", func(t *testing.T) {
-		sends, _ := stubFreshCompileSends(t, []error{serverBusyRPCError(t)}, context.Canceled)
-		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, "compile", map[string]any{}, nil, 0, time.Minute)
+		send, sends, _ := stubFreshCompileSends(t, []error{serverBusyRPCError(t)}, context.Canceled)
+		_, err := sendCompileWithBusyRetry(context.Background(), unityipc.Connection{}, send, "compile", map[string]any{}, nil, 0, time.Minute)
 		if err != context.Canceled || *sends != 1 {
 			t.Fatalf("err=%v sends=%d", err, *sends)
 		}
 	})
 }
 
-// Verifies the default recovery compile sends through the busy-retry sender with its budget: a
-// busy answer is retried after one wait capped by that budget, and the following undispatched
-// send failure is reported without waiting on compile status.
-func TestRunOneFreshCompileForPausePointRecoveryUsesBusyRetrySender(t *testing.T) {
-	sends, waits := stubFreshCompileSends(t, []error{serverBusyRPCError(t), io.ErrUnexpectedEOF}, nil)
-	var stdout, stderr bytes.Buffer
-	budget := 500 * time.Millisecond
+// A successful compile result. It starts the post-compile warmup, which waits for a Unity project
+// these tests do not have, so a test that returns it cancels the command at that answer.
+const pausePointRecoveryCompileSuccess = `{"Success":true}`
 
-	code := runOneFreshCompileForPausePointRecoveryDefault(
-		context.Background(),
-		unityipc.Connection{ProjectRoot: t.TempDir()},
-		map[string]any{},
-		&stdout,
-		&stderr,
-		budget,
-	)
-
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
-	}
-	if *sends != 2 {
-		t.Fatalf("sends = %d, want 2", *sends)
-	}
-	if len(*waits) != 1 || (*waits)[0] > budget {
-		t.Fatalf("waits = %v, want one wait no longer than %v", *waits, budget)
-	}
-	if !strings.Contains(stderr.String(), "unexpected EOF") {
-		t.Fatalf("stderr must report the send failure:\n%s", stderr.String())
-	}
-}
-
-// Verifies the recovery compile loop rejects an invalid timeout before compiling.
-func TestRunFreshCompileWithBusyRetryRejectsInvalidTimeout(t *testing.T) {
-	originalAttempt := runOneFreshCompileForPausePointRecovery
-	t.Cleanup(func() { runOneFreshCompileForPausePointRecovery = originalAttempt })
-	runOneFreshCompileForPausePointRecovery = func(context.Context, unityipc.Connection, map[string]any, io.Writer, io.Writer, time.Duration) int {
-		t.Fatal("compile must not run")
-		return 0
-	}
-	var stdout, stderr bytes.Buffer
-
-	code := runFreshCompileWithBusyRetryForPausePointRecovery(
-		context.Background(),
-		unityipc.Connection{ProjectRoot: t.TempDir()},
-		map[string]any{compileWaitTimeoutParam: 0},
-		&stdout,
-		&stderr,
-	)
-
-	if code != 1 || !strings.Contains(stderr.String(), "Invalid positive integer value for --timeout-seconds") {
-		t.Fatalf("code=%d stderr=%s", code, stderr.String())
-	}
-}
-
-// stubRecoveryCompileAttempts makes each recovery compile attempt write the next result and
-// return its code, and records retry waits.
-func stubRecoveryCompileAttempts(t *testing.T, results []string, codes []int) (*int, *[]time.Duration) {
+// stubPausePointRecoveryBusyRetryWaits makes the wait between server_busy sends return at once and
+// records each wait it was asked for.
+func stubPausePointRecoveryBusyRetryWaits(t *testing.T) *[]time.Duration {
 	t.Helper()
-	originalAttempt := runOneFreshCompileForPausePointRecovery
 	originalWait := waitPausePointRecoveryBusyRetry
-	t.Cleanup(func() {
-		runOneFreshCompileForPausePointRecovery = originalAttempt
-		waitPausePointRecoveryBusyRetry = originalWait
-	})
-	attempts := 0
+	t.Cleanup(func() { waitPausePointRecoveryBusyRetry = originalWait })
 	waits := []time.Duration{}
-	runOneFreshCompileForPausePointRecovery = func(_ context.Context, _ unityipc.Connection, _ map[string]any, stdout io.Writer, _ io.Writer, _ time.Duration) int {
-		attempts++
-		_, _ = stdout.Write([]byte(results[attempts-1]))
-		return codes[attempts-1]
-	}
 	waitPausePointRecoveryBusyRetry = func(_ context.Context, duration time.Duration) error {
 		waits = append(waits, duration)
 		return nil
 	}
-	return &attempts, &waits
+	return &waits
 }
 
-// Verifies a compile result meaning Unity is still updating is retried, with the wait capped by
-// the time left, and a later success returns 0 without writing the busy result.
-func TestRunFreshCompileWithBusyRetryRetriesEditorUpdating(t *testing.T) {
-	attempts, waits := stubRecoveryCompileAttempts(t,
-		[]string{`{"Success":false,"ErrorCode":"COMPILE_EDITOR_UPDATING"}`, `{"Success":true}`},
-		[]int{1, 0})
-	var stdout bytes.Buffer
+// runPausePointRecoveryCompile runs the pause-point recovery compile with the given deps and returns
+// its exit code, stdout, and stderr.
+func runPausePointRecoveryCompile(
+	t *testing.T,
+	ctx context.Context,
+	params map[string]any,
+	deps compileWaitDeps,
+) (int, string, string) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code := runFreshCompileForPausePointRecoveryWithDeps(ctx, unreachableConnection(t.TempDir()), params, &stdout, &stderr, deps)
+	return code, stdout.String(), stderr.String()
+}
 
-	code := runFreshCompileWithBusyRetryForPausePointRecovery(
-		context.Background(),
-		unityipc.Connection{ProjectRoot: t.TempDir()},
-		map[string]any{compileWaitTimeoutParam: 1},
-		&stdout,
-		io.Discard,
+// Verifies the recovery compile sends a request Unity lost again under a new request ID instead of
+// waiting out the whole timeout, and that the successful compile leaves stdout empty.
+func TestPausePointRecoveryCompileResendsWhenUnityLostTheRequest(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	scenario := newCompileRecoveryScenario(t,
+		[]compileRecoverySend{recoverySendDisconnected(), recoverySendAnswered()},
+		[]compileRecoveryAnswer{recoveryMissing()},
+		[]compileRecoveryAnswer{recoveryDone(pausePointRecoveryCompileSuccess)},
 	)
+	scenario.cancelWhen(cancel, 1, 1)
 
-	if code != 0 || *attempts != 2 {
-		t.Fatalf("code=%d attempts=%d", code, *attempts)
+	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, scenario.deps())
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)
 	}
-	if len(*waits) != 1 || (*waits)[0] > time.Second {
-		t.Fatalf("retry wait must be capped by the 1s budget: %v", *waits)
+	if scenario.sendCount() != 2 {
+		t.Fatalf("compile sends = %d, want 2", scenario.sendCount())
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("busy result must not be written: %s", stdout.String())
+	if scenario.sentIDs[0] == scenario.sentIDs[1] {
+		t.Fatalf("the resent compile must carry a new request ID: %q", scenario.sentIDs[0])
+	}
+	if queries := scenario.queriesOf(0); queries != 3 {
+		t.Fatalf("queries for the lost request = %d, want 3", queries)
+	}
+	if stdout != "" {
+		t.Fatalf("a successful recovery compile must leave stdout to the enable response: %q", stdout)
+	}
+	if strings.Contains(stderr, "COMPILE_WAIT_TIMEOUT") {
+		t.Fatalf("a resent compile must not report a wait timeout:\n%s", stderr)
 	}
 }
 
-// Verifies a non-retryable compile failure is written to stdout once and returned without retrying.
-func TestRunFreshCompileWithBusyRetryReturnsNonRetryableFailure(t *testing.T) {
-	failure := `{"Success":false,"ErrorCount":3}`
-	attempts, waits := stubRecoveryCompileAttempts(t, []string{failure}, []int{1})
-	var stdout bytes.Buffer
+// Verifies the recovery compile sends a compile Unity rejected as busy again under a new request ID
+// once Unity is Ready, without the fixed wait it uses between server_busy sends.
+func TestPausePointRecoveryCompileResendsAfterABusyRejection(t *testing.T) {
+	for _, errorCode := range []string{"COMPILE_ALREADY_IN_PROGRESS", "COMPILE_EDITOR_UPDATING"} {
+		t.Run(errorCode, func(t *testing.T) {
+			waits := stubPausePointRecoveryBusyRetryWaits(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			scenario := newCompileRecoveryScenario(t,
+				[]compileRecoverySend{recoverySendAnswered(), recoverySendAnswered()},
+				compileRecoveryBusyRejectionAnswers(errorCode),
+				[]compileRecoveryAnswer{recoveryDone(pausePointRecoveryCompileSuccess)},
+			)
+			scenario.cancelWhen(cancel, 1, 1)
 
-	code := runFreshCompileWithBusyRetryForPausePointRecovery(
-		context.Background(),
-		unityipc.Connection{ProjectRoot: t.TempDir()},
-		map[string]any{},
-		&stdout,
-		io.Discard,
+			code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, scenario.deps())
+
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)
+			}
+			if scenario.sendCount() != 2 {
+				t.Fatalf("compile sends = %d, want 2", scenario.sendCount())
+			}
+			if scenario.sentIDs[0] == scenario.sentIDs[1] {
+				t.Fatalf("the resent compile must carry a new request ID: %q", scenario.sentIDs[0])
+			}
+			if stdout != "" {
+				t.Fatalf("a successful recovery compile must leave stdout to the enable response: %q", stdout)
+			}
+			if len(*waits) != 0 {
+				t.Fatalf("a busy rejection is sent again once Unity is Ready, not after a fixed wait: %v", *waits)
+			}
+		})
+	}
+}
+
+// Verifies a compile rejected as busy on every attempt is sent three times in all, and the last
+// rejection is written to stdout as the recovery's failure.
+func TestPausePointRecoveryCompileReturnsTheRejectionAfterTheAttemptLimit(t *testing.T) {
+	rejected := compileRecoveryBusyRejectionAnswers("COMPILE_ALREADY_IN_PROGRESS")
+	scenario := newCompileRecoveryScenario(t,
+		[]compileRecoverySend{recoverySendAnswered(), recoverySendAnswered(), recoverySendAnswered()},
+		rejected, rejected, rejected,
 	)
 
-	if code != 1 || *attempts != 1 || len(*waits) != 0 {
-		t.Fatalf("code=%d attempts=%d waits=%v", code, *attempts, *waits)
+	code, stdout, _ := runPausePointRecoveryCompile(t, context.Background(), map[string]any{}, scenario.deps())
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if stdout.String() != failure {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), failure)
+	if scenario.sendCount() != 3 {
+		t.Fatalf("compile sends = %d, want 3", scenario.sendCount())
+	}
+	assertCompactJSONEqual(t, stdout, compileRecoveryRejection("COMPILE_ALREADY_IN_PROGRESS"))
+}
+
+// Verifies a definitive compile failure is written to stdout once, as one JSON object, without a resend.
+func TestPausePointRecoveryCompileWritesADefinitiveFailureOnce(t *testing.T) {
+	scenario := newCompileRecoveryScenario(t,
+		[]compileRecoverySend{recoverySendAnswered()},
+		[]compileRecoveryAnswer{recoveryDone(compileRecoveryDefinitiveResult)},
+	)
+
+	code, stdout, _ := runPausePointRecoveryCompile(t, context.Background(), map[string]any{}, scenario.deps())
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if scenario.sendCount() != 1 {
+		t.Fatalf("compile sends = %d, want 1", scenario.sendCount())
+	}
+	fields := decodeSingleJSONObject(t, stdout)
+	if errorCount := string(fields["ErrorCount"]); errorCount != "1" {
+		t.Fatalf("ErrorCount = %s, want 1", errorCount)
+	}
+}
+
+// Verifies a send refused as server_busy, because another tool held Unity's execution slot, is sent
+// again after one wait no longer than the retry interval.
+func TestPausePointRecoveryCompileRetriesAServerBusySend(t *testing.T) {
+	waits := stubPausePointRecoveryBusyRetryWaits(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	scenario := newCompileRecoveryScenario(t,
+		[]compileRecoverySend{recoverySendAnswered()},
+		[]compileRecoveryAnswer{recoveryDone(pausePointRecoveryCompileSuccess)},
+	)
+	// The refused send never reaches the scenario, so the scenario's first send is the retry.
+	scenario.cancelWhen(cancel, 0, 1)
+	deps := scenario.deps()
+	scriptedSend := deps.sendCompile
+	busy := serverBusyRPCError(t)
+	sends := 0
+	deps.sendCompile = func(
+		sendCtx context.Context,
+		connection unityipc.Connection,
+		method string,
+		params map[string]any,
+		progress unityipc.ProgressFunc,
+		responseTimeout time.Duration,
+	) (unityipc.UnitySendOutcome, error) {
+		sends++
+		if sends == 1 {
+			return unityipc.UnitySendOutcome{}, busy
+		}
+		return scriptedSend(sendCtx, connection, method, params, progress, responseTimeout)
+	}
+
+	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, deps)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)
+	}
+	if sends != 2 {
+		t.Fatalf("sends = %d, want 2", sends)
+	}
+	if len(*waits) != 1 || (*waits)[0] <= 0 || (*waits)[0] > pausePointRecoveryCompileBusyRetryInterval {
+		t.Fatalf("waits = %v, want one wait no longer than %v", *waits, pausePointRecoveryCompileBusyRetryInterval)
+	}
+	if stdout != "" {
+		t.Fatalf("a successful recovery compile must leave stdout to the enable response: %q", stdout)
+	}
+}
+
+// Verifies an invalid --timeout-seconds is rejected before anything is sent.
+func TestPausePointRecoveryCompileRejectsInvalidTimeout(t *testing.T) {
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		t.Fatal("compile status must not be queried")
+		return compileStatusResponse{}, nil
+	})
+	deps.sendCompile = func(context.Context, unityipc.Connection, string, map[string]any, unityipc.ProgressFunc, time.Duration) (unityipc.UnitySendOutcome, error) {
+		t.Fatal("compile must not be sent")
+		return unityipc.UnitySendOutcome{}, nil
+	}
+
+	code, stdout, stderr := runPausePointRecoveryCompile(t, context.Background(), map[string]any{compileWaitTimeoutParam: 0}, deps)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "Invalid positive integer value for --timeout-seconds") {
+		t.Fatalf("stderr must reject the timeout:\n%s", stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout must stay empty: %q", stdout)
+	}
+}
+
+// Verifies a cancellation while waiting on compile status is reported on stderr and leaves stdout empty.
+func TestPausePointRecoveryCompileReportsCancellationWhileWaiting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	scenario := newCompileRecoveryScenario(t,
+		[]compileRecoverySend{recoverySendDisconnected()},
+		[]compileRecoveryAnswer{recoveryCompiling()},
+	)
+	scenario.cancelWhen(cancel, 0, 3)
+
+	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, scenario.deps())
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, context.Canceled.Error()) {
+		t.Fatalf("stderr must report the cancellation:\n%s", stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout must stay empty: %q", stdout)
 	}
 }
 
