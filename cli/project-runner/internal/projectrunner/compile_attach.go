@@ -90,7 +90,7 @@ func tryAttachToPendingCompile(
 			clearCompilePendingRecord(connection.ProjectRoot)
 			return false, compileExecutionResult{}
 		}
-		return true, returnAttachedStoredCompileResult(ctx, connection, record, status.Result, stderr)
+		return true, returnAttachedStoredCompileResult(connection, record, status.Result, stderr)
 	}
 
 	if !status.Ready {
@@ -219,7 +219,7 @@ func attachWaitForPendingCompile(
 			spinner.Stop()
 			return false, compileExecutionResult{}
 		}
-		return true, completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
+		return true, completeCompileResult(result, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
 	default:
 		spinner.Stop()
 		logCompileAttachResult(connection, record.RequestID, "error", false)
@@ -289,7 +289,6 @@ func waitForAttachedCompileCompletion(
 }
 
 func returnAttachedStoredCompileResult(
-	ctx context.Context,
 	connection unityipc.Connection,
 	record compilePendingRecord,
 	result json.RawMessage,
@@ -300,26 +299,20 @@ func returnAttachedStoredCompileResult(
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
 	clearCompilePendingRecord(connection.ProjectRoot)
 	logCompileAttachResult(connection, record.RequestID, "stored_result", true)
-	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
+	return completeCompileResult(result, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
 }
 
+// completeCompileResult turns the compile answer into the command's result.
+// Why nothing is sent after the answer: the answer came from the Editor that finished the compile,
+// and a readiness probe here would hold the Editor's single-flight slot for seconds that only the
+// next execute-dynamic-code would have gained.
 func completeCompileResult(
-	ctx context.Context,
-	connection unityipc.Connection,
 	result json.RawMessage,
 	stderr io.Writer,
 	spinner *ui.TerminalSpinner,
 	startedAt time.Time,
 	outcome unityipc.UnitySendOutcome,
 ) compileExecutionResult {
-	switch compileResultReadinessWaitMode(result) {
-	case compileReadinessWaitWarmup:
-		spinner.Update("Warming execute-dynamic-code after compile...")
-		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-			spinner.Stop()
-			writePostCompileWarmupWarning(stderr, err)
-		}
-	}
 	spinner.Stop()
 	writeDebugTiming(stderr, clicore.CompileCommandName, time.Since(startedAt), outcome)
 	return compileExecutionResult{result: result, exitCode: toolEnvelopeExitCode(result)}

@@ -14,8 +14,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-// Why Success:false in both: a successful result triggers the post-compile warmup, which waits for
-// a tool readiness that a temp project never reaches. The error counts tell the two results apart.
+// The error counts tell the two results apart.
 const (
 	earlierCompileResult = `{"Success":false,"ErrorCount":9}`
 	currentCompileResult = `{"Success":false,"ErrorCount":1}`
