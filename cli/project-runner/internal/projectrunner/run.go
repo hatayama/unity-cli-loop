@@ -112,33 +112,52 @@ type toolExecutionResult struct {
 }
 
 func runPlainTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stderr io.Writer) toolExecutionResult {
+	result, outcome, err := sendPlainTool(ctx, connection, command, params, stderr, defaultConnectionRetryDeps())
+	if err != nil {
+		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     command,
+		})
+	}
+	return result
+}
+
+// sendPlainTool sends one tool request and returns what came back. A failure is logged but not
+// written to stderr, so a caller that recovers from it (hot reload waiting out a busy Editor)
+// decides what the user sees. The failed result still carries the request's correlation ID.
+func sendPlainTool(
+	ctx context.Context,
+	connection unityipc.Connection,
+	command string,
+	params map[string]any,
+	stderr io.Writer,
+	deps connectionRetryDeps,
+) (toolExecutionResult, unityipc.UnitySendOutcome, error) {
 	applyDebugTimingParams(command, params)
 	correlationID := vibelog.NewCLIVibeCorrelationID()
 	logPlainToolRequestSent(connection, command, params, correlationID)
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, command)
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
 		ctx,
 		connection,
 		command,
 		params,
 		ui.NewSpinnerProgressFunc(spinner, fmt.Sprintf("Executing %s...", command)),
+		0,
+		deps,
 	)
 	spinner.Stop()
 	if err != nil {
 		writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 		logPlainToolRequestFailed(connection, command, correlationID, time.Since(startedAt), outcome, err)
-		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     command,
-		})
-		return toolExecutionResult{exitCode: 1, correlationID: correlationID}
+		return toolExecutionResult{exitCode: 1, correlationID: correlationID}, outcome, err
 	}
 	result := stripDebugTimingResult(command, outcome.Result)
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 	exitCode := toolEnvelopeExitCode(result)
 	logPlainToolResponseReceived(connection, command, correlationID, time.Since(startedAt), outcome, result, exitCode)
-	return toolExecutionResult{result: result, exitCode: exitCode, correlationID: correlationID}
+	return toolExecutionResult{result: result, exitCode: exitCode, correlationID: correlationID}, outcome, nil
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {

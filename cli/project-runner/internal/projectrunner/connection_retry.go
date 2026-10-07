@@ -27,6 +27,11 @@ type connectionRetryDeps struct {
 	retryTimeout            time.Duration
 	retryPoll               time.Duration
 	busyFocusStallThreshold time.Duration
+	// returnBusyWithoutRetry hands the first busy answer back instead of resending every
+	// retryPoll. Hot reload sets it because it waits for the busy slot to free on the Editor
+	// status: resending here would only delay that wait, and after busyFocusStallThreshold the
+	// busy-stall focus would bring the Editor to the front.
+	returnBusyWithoutRetry bool
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
@@ -264,6 +269,9 @@ func sendWithTransientConnectionRetryWithDeps(
 		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, attemptContext, method, params, progress)
 		cancelAttempt()
 		if isUnityServerBusyRPCError(err) {
+			if deps.returnBusyWithoutRetry {
+				return outcome, err
+			}
 			// Busy means the request was never executed, so a bounded retry is safe and
 			// usually absorbs back-to-back tool calls without bothering the caller.
 			if busySequenceStartedAt.IsZero() {
