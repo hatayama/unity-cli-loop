@@ -136,6 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<(string Path, HotReloadFileProcessResult Result)> extraResults =
                 new List<(string Path, HotReloadFileProcessResult Result)>();
+            int groupCount = 0;
             for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -160,6 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         inputIndexes);
                 }
 
+                groupCount++;
                 await ProcessPlannedGroupAsync(
                         inputIndexes,
                         slots,
@@ -202,7 +204,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             run.ApplyOneShotCallerNotes(projectRoot);
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            return run.BuildResult(correlationId, timing.Complete(total.ElapsedMilliseconds));
+            HotReloadTimingBreakdown breakdown = timing.Complete(total.ElapsedMilliseconds);
+            HotReloadOrchestratorLog.LogHotReloadTimingDetail(
+                HotReloadTimingDetailPayload.Build(breakdown, timing.Details, groupCount),
+                correlationId);
+            return run.BuildResult(correlationId, breakdown);
         }
 
         // Why on the inputs only: a re-applied sibling joins a group later and was never selected,
