@@ -1319,10 +1319,10 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	}
 }
 
-// TDD repro for B-7a: before busy_stall focus rescue, persistent server_busy never called
-// focusUnityProcess (focusCallCount stayed 0). This assertion was Red on pre-fix
-// connection_retry.go and turns Green after the busy stall threshold hook.
-func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testing.T) {
+// Verifies persistent server_busy answers never bring the Editor to the front: the request
+// never ran, and the running command holds the activity (ADR 0012), so there is nothing to
+// rescue.
+func TestSendWithTransientConnectionRetryNeverFocusesWhileBusy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
@@ -1390,11 +1390,11 @@ func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testi
 	if err == nil {
 		t.Fatal("expected busy error after retry window")
 	}
-	if focusCallCount != 1 {
-		t.Fatalf("expected one busy-stall focus attempt, got %d", focusCallCount)
+	if focusCallCount != 0 {
+		t.Fatalf("expected no focus attempt while Unity answered busy, got %d", focusCallCount)
 	}
-	if restoreCallCount != 1 {
-		t.Fatalf("expected focus restore after busy retry exit, got %d", restoreCallCount)
+	if restoreCallCount != 0 {
+		t.Fatalf("expected no focus restore while Unity answered busy, got %d", restoreCallCount)
 	}
 }
 
