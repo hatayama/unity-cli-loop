@@ -68,7 +68,9 @@ or `control-play-mode` that waits for a domain reload or a Play Mode change, and
 | `cli_tool_request_sent` | before the request is sent | `command`, `correlation_id`, `project_identity`, `cli_version`, `param_keys` (sorted), `array_lengths` (element count of each array parameter) |
 | `cli_tool_response_received` | when Unity answered | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `result_bytes`, `exit_code` |
 | `cli_tool_request_failed` (`ERROR`) | when no answer came, or Unity answered with an error | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `error_kind` (`rpc:<error data type>`, `final_response_timeout`, or `other`) |
-| `cli_hot_reload_compile_fallback_decided` | after every `hot-reload` answer | `correlation_id`, `requested`, `parse_error`, and the answer's `success`, `outcome`, `warnings_count`, and `timing` (numbers only) |
+| `cli_hot_reload_editor_ready_retry_decided` | after every `hot-reload` answer, before the fallback decision | `correlation_id` (the request's), `requested`, `parse_error` |
+| `cli_hot_reload_editor_ready_retry_complete` (`WARN` unless the Editor settled and the second apply answered) | after the wait and the second apply, when a retry was requested | `correlation_id` (the first request's), `second_correlation_id` (the second request's, or empty when none was sent), `waited_ms`, `ready`, `second_result`, and the second answer's `second_success` and `second_outcome` |
+| `cli_hot_reload_compile_fallback_decided` | after every `hot-reload` answer | `correlation_id` (the request's), `requested`, `parse_error`, and the answer's `success`, `outcome`, `warnings_count`, and `timing` (numbers only) |
 | `cli_hot_reload_compile_fallback_complete` (`ERROR` unless `succeeded`) | after the fallback compile, when one ran | `correlation_id`, `elapsed_ms`, `compile_exit_code`, `compile_result_bytes`, `merged`, `succeeded` |
 
 - These entries hold keys, counts, sizes, and flags, never a parameter value, a response body,
