@@ -4167,7 +4167,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return new TransformWorkerOutputInterpreter(
                 new TransformWorkerOutputValidator(),
-                new TransformWorkerCompiledTypeFileCompleter());
+                new TransformWorkerCompiledTypeFileCompleter(
+                    new FixedPackageRootCapture(Array.Empty<ScriptPackageRoot>())));
         }
 
         private static string CreateMatchingPreparationOutputJson(string assemblyName, string assemblyMvid)

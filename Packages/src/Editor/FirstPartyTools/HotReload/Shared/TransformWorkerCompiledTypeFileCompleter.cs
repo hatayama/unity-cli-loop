@@ -5,6 +5,8 @@ using System.IO;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
+using Debug = UnityEngine.Debug;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -15,6 +17,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     // reads its PDB, while the reader needs a file it can pass to the next reload.
     internal sealed class TransformWorkerCompiledTypeFileCompleter
     {
+        private readonly IHotReloadPackageRootCapture _packageRootCapture;
+
+        internal TransformWorkerCompiledTypeFileCompleter(IHotReloadPackageRootCapture packageRootCapture)
+        {
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
+            _packageRootCapture = packageRootCapture;
+        }
+
         internal void Complete(TransformWorkerInputDto input, TransformWorkerOutputDto output)
         {
             Dictionary<string, List<string>> filesByType = null;
@@ -38,7 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    filesByType ??= ReadDeclaringFiles(input.targetTypesAssemblyPath);
+                    // Why the roots are read here: the read below swallows InvalidOperationException,
+                    // which would hide a run that never captured them.
+                    filesByType ??= ReadDeclaringFiles(input.targetTypesAssemblyPath, _packageRootCapture.Current);
                     List<string> resolvedFiles = new List<string>();
                     List<string> targets = CollectPassTargets(reason.typeMetadataNames, filesByType, resolvedFiles);
                     reason.declaringFiles = resolvedFiles.ToArray();
@@ -101,7 +113,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Keyed by the metadata name Cecil reports, which is the form the worker sends, so a nested
         // type needs no conversion here. A type is missing when the assembly or its PDB is.
-        private static Dictionary<string, List<string>> ReadDeclaringFiles(string dllPath)
+        private static Dictionary<string, List<string>> ReadDeclaringFiles(
+            string dllPath,
+            IReadOnlyList<ScriptPackageRoot> packageRoots)
         {
             Dictionary<string, List<string>> filesByType = new Dictionary<string, List<string>>(StringComparer.Ordinal);
             string pdbPath = string.IsNullOrEmpty(dllPath) ? null : Path.ChangeExtension(dllPath, ".pdb");
@@ -114,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // types alone still tells the reader what to pass, so the reload must not fail on it.
             try
             {
-                ReadDocumentsInto(dllPath, pdbPath, filesByType);
+                ReadDocumentsInto(dllPath, pdbPath, packageRoots, filesByType);
             }
             // InvalidOperationException covers Cecil's SymbolsNotMatchingException, thrown when the
             // PDB beside the assembly belongs to another build of it.
@@ -128,7 +142,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return filesByType;
         }
 
-        private static void ReadDocumentsInto(string dllPath, string pdbPath, Dictionary<string, List<string>> filesByType)
+        private static void ReadDocumentsInto(
+            string dllPath,
+            string pdbPath,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
+            Dictionary<string, List<string>> filesByType)
         {
             using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -142,11 +160,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
             foreach (TypeDefinition type in assembly.MainModule.GetTypes())
             {
-                filesByType[type.FullName] = CollectDocumentPaths(type);
+                filesByType[type.FullName] = CollectDocumentPaths(type, packageRoots);
             }
         }
 
-        private static List<string> CollectDocumentPaths(TypeDefinition type)
+        private static List<string> CollectDocumentPaths(TypeDefinition type, IReadOnlyList<ScriptPackageRoot> packageRoots)
         {
             List<string> paths = new List<string>();
             foreach (MethodDefinition method in type.Methods)
@@ -163,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    string path = ToProjectRelativePath(sequencePoint.Document.Url);
+                    string path = ToProjectRelativePath(sequencePoint.Document.Url, packageRoots);
                     if (!paths.Contains(path))
                     {
                         paths.Add(path);
@@ -176,19 +194,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why the current directory: the Editor runs with the project root as its working
         // directory, and a rooted document path outside it is still worth showing as it is.
-        private static string ToProjectRelativePath(string documentUrl)
+        // Why the package roots: the PDB records a package script by the folder behind it, as
+        // ./Packages/<folder>/... for an embedded package, while a reload takes its asset path.
+        private static string ToProjectRelativePath(string documentUrl, IReadOnlyList<ScriptPackageRoot> packageRoots)
         {
-            string path = HotReloadSourcePathNormalizer.ToForwardSlashes(documentUrl);
-            if (!Path.IsPathRooted(path))
-            {
-                return path;
-            }
-
-            string root = HotReloadSourcePathNormalizer.ToForwardSlashes(Directory.GetCurrentDirectory()).TrimEnd('/') + "/";
-            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            return path.StartsWith(root, comparison) ? path.Substring(root.Length) : path;
+            return ScriptPathNormalizer.ToAssetPath(documentUrl, Directory.GetCurrentDirectory(), packageRoots);
         }
     }
 }

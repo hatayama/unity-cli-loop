@@ -99,7 +99,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileEntryApplier fileEntryApplier = new HotReloadFileEntryApplier(domain, patcher);
             HotReloadEntryApplier entryApplier =
                 new HotReloadEntryApplier(domain, patcher, fileEntryApplier);
-            TransformWorkerClient transformWorkerClient = new TransformWorkerClient(transformWorkerHost);
+            TransformWorkerClient transformWorkerClient =
+                new TransformWorkerClient(transformWorkerHost, packageRootCapture);
             HotReloadGroupStageCollaborators collaborators = new HotReloadGroupStageCollaborators(
                 domain,
                 patcher,

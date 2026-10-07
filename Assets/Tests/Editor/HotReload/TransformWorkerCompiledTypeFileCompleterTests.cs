@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Linq;
 
 using NUnit.Framework;
 
@@ -23,6 +25,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/HotReloadBindingSplitRegistry.cs";
         private const string MissingTypeMetadataName = "Example.Kinds";
         private const string WorkerPlacedPath = "Assets/Scripts/Kinds.cs";
+        // An embedded package whose folder name differs from its package name, so its PDB records
+        // the script under a path that is not the asset path.
+        private const string PackageFixtureAssemblyName = "UnityCLILoop.Tests.HotReloadPackageFixture";
+        private const string PackageFixtureTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.PackageFixture.HotReloadPackageFixture";
+        private const string PackageFixtureRootAssetPath = "Packages/io.github.hatayama.uloop.hotreload-package-fixture";
+        private const string PackageFixtureAssetPath =
+            "Packages/io.github.hatayama.uloop.hotreload-package-fixture/Runtime/HotReloadPackageFixture.cs";
+        private const string PackageFixturePhysicalPath =
+            "Packages/uloop-hotreload-package-fixture/Runtime/HotReloadPackageFixture.cs";
 
         /// <summary>
         /// What: a split reason carried as the detail of another reason, as when a member reads an
@@ -49,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            new TransformWorkerCompiledTypeFileCompleter().Complete(
+            CompleterWithNoPackageRoots().Complete(
                 new TransformWorkerInputDto { targetTypesAssemblyPath = TargetAssemblyPath() },
                 output);
 
@@ -77,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     skipped = new[] { new TransformWorkerSkippedDto { method = "Example.Host.Wire()", reason = split } }
                 };
 
-                new TransformWorkerCompiledTypeFileCompleter().Complete(
+                CompleterWithNoPackageRoots().Complete(
                     new TransformWorkerInputDto { targetTypesAssemblyPath = dllPath },
                     output);
 
@@ -140,25 +152,97 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(reason.args[3], Is.EqualTo("'" + WorkerPlacedPath + "'"));
         }
 
+        /// <summary>
+        /// What: a type declared in an embedded package's script is named by the script's asset
+        /// path, the form a reload takes, rather than by the folder path its PDB records.
+        /// </summary>
+        [Test]
+        public void Complete_TypeDeclaredInAPackageSource_NamesTheAssetPath()
+        {
+            TransformWorkerReasonDto split = SplitReasonNaming(PackageFixtureTypeMetadataName);
+            ScriptPackageRoot fixtureRoot = ScriptPackageRoots.ReadCurrent()
+                .FirstOrDefault(root => root.AssetPath == PackageFixtureRootAssetPath);
+            if (fixtureRoot == null)
+            {
+                Assert.Fail("The package fixture is not registered: " + PackageFixtureRootAssetPath);
+            }
+
+            CompleteFrom(
+                PackageFixtureAssemblyPath(),
+                new FixedPackageRootCapture(new[] { fixtureRoot }),
+                split);
+
+            Assert.That(split.declaringFiles, Is.EqualTo(new[] { PackageFixtureAssetPath }));
+            string text = HotReloadWorkerReasonText.Render(split);
+            Assert.That(text, Does.Contain("declared in '" + PackageFixtureAssetPath + "'"), text);
+        }
+
+        /// <summary>
+        /// What: with no package roots captured, the same type is named by its folder path relative
+        /// to the project, without the ./ the PDB records it with.
+        /// </summary>
+        [Test]
+        public void Complete_TypeDeclaredInAPackageSource_WithNoPackageRoots_NamesThePhysicalPathWithoutTheDotSlash()
+        {
+            TransformWorkerReasonDto split = SplitReasonNaming(PackageFixtureTypeMetadataName);
+
+            CompleteFrom(PackageFixtureAssemblyPath(), NoPackageRoots(), split);
+
+            Assert.That(split.declaringFiles, Is.EqualTo(new[] { PackageFixturePhysicalPath }));
+        }
+
         private static void Complete(TransformWorkerReasonDto reason)
+        {
+            CompleteFrom(TargetAssemblyPath(), NoPackageRoots(), reason);
+        }
+
+        private static void CompleteFrom(
+            string targetTypesAssemblyPath,
+            IHotReloadPackageRootCapture packageRootCapture,
+            TransformWorkerReasonDto reason)
         {
             TransformWorkerOutputDto output = new TransformWorkerOutputDto
             {
                 skipped = new[] { new TransformWorkerSkippedDto { method = "Example.Host.Wire()", reason = reason } }
             };
-            new TransformWorkerCompiledTypeFileCompleter().Complete(
-                new TransformWorkerInputDto { targetTypesAssemblyPath = TargetAssemblyPath() },
+            new TransformWorkerCompiledTypeFileCompleter(packageRootCapture).Complete(
+                new TransformWorkerInputDto { targetTypesAssemblyPath = targetTypesAssemblyPath },
                 output);
+        }
+
+        private static TransformWorkerCompiledTypeFileCompleter CompleterWithNoPackageRoots()
+        {
+            return new TransformWorkerCompiledTypeFileCompleter(NoPackageRoots());
+        }
+
+        // Enough for the tests reading this test assembly's own PDB: it records Assets scripts
+        // only, which no package root claims.
+        private static IHotReloadPackageRootCapture NoPackageRoots()
+        {
+            return new FixedPackageRootCapture(Array.Empty<ScriptPackageRoot>());
         }
 
         private static TransformWorkerReasonDto SplitReason()
         {
+            return SplitReasonNaming(RegistryTypeMetadataName);
+        }
+
+        private static TransformWorkerReasonDto SplitReasonNaming(string typeMetadataName)
+        {
             return new TransformWorkerReasonDto
             {
                 code = HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
-                args = new[] { "CS1503", "'Example.Payload'", "'" + RegistryTypeMetadataName + "'" },
-                typeMetadataNames = new[] { RegistryTypeMetadataName }
+                args = new[] { "CS1503", "'Example.Payload'", "'" + typeMetadataName + "'" },
+                typeMetadataNames = new[] { typeMetadataName }
             };
+        }
+
+        private static string PackageFixtureAssemblyPath()
+        {
+            string path = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", "Library", "ScriptAssemblies", PackageFixtureAssemblyName + ".dll"));
+            Assert.That(File.Exists(path), Is.True, "Package fixture dll missing: " + path);
+            return path;
         }
 
         private static string OtherAssemblyPdbPath()

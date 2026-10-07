@@ -90,6 +90,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string InternalMemberOfATypeOfAnotherAssembly =
             "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointCapturedVariable.FromSnapshot(null).Name.Length";
 
+        // The installed client names a type's file through the package roots a run captures, and
+        // these tests call it directly rather than through a run.
+        [SetUp]
+        public void SetUp()
+        {
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
+        }
+
         /// <summary>
         /// What: a body that reads a private field declared in another part of the type is emitted.
         /// </summary>
