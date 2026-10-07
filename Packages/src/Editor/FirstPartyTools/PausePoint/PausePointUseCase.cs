@@ -214,8 +214,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointConstants.ReleaseCodeOptimizationRecommendedNextAction);
             }
 
-            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File);
-            string id = BuildSourcePausePointId(parameters.File, parameters.Line);
+            // Normalized once, to the asset path every later step looks the file up by: the compiled
+            // assembly, the hot-reload ledger, and the source snapshot know a package script only by
+            // its Packages/<package-id>/... path, and CompilationPipeline places an absolute or
+            // ./-prefixed Assets path in the wrong assembly.
+            string normalizedFile = ScriptPathNormalizer.ToAssetPath(
+                parameters.File,
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                ScriptPackageRoots.ReadCurrent());
+            string id = BuildSourcePausePointId(normalizedFile, parameters.Line);
             SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
             PausePointHotReloadFileState fileState = PausePointHotReloadFileState.Read(normalizedFile);
@@ -267,6 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return FinishEnableBySourceLocation(
                 id,
+                normalizedFile,
                 parameters,
                 hitWhen,
                 hitWhenCondition,
@@ -332,6 +340,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // end line distinct from the hit line. Edited method span is passed separately.
                 return FinishEnableBySourceLocation(
                     id,
+                    normalizedFile,
                     parameters,
                     hitWhen,
                     hitWhenCondition,
@@ -436,6 +445,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static PausePointResponse FinishEnableBySourceLocation(
             string id,
+            string normalizedFile,
             EnablePausePointSchema parameters,
             string hitWhen,
             UloopPausePointHitWhenCondition hitWhenCondition,
@@ -474,7 +484,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // file shows whatever statement drifted onto it. The disk read spans
             // resolvedLine..resolvedEndLine so a rounded-forward multi-line statement keeps its full text.
             string resolvedLineText = lineBasis == "EditedFile"
-                ? PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine, resolvedEndLine)
+                ? PausePointLineTextReader.ReadResolvedLineText(normalizedFile, resolvedLine, resolvedEndLine)
                 : string.Empty;
             UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
             UloopPausePointRegistry.SetNotCapturableVariables(id, notCapturableVariables);
@@ -538,11 +548,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return response;
         }
 
-        // The derived id must use the originally requested file/line (not the resolved/rounded
-        // line) so repeated calls at the same requested location stay idempotent.
-        private static string BuildSourcePausePointId(string file, int line)
+        // The derived id must use the requested file in its asset path form and the requested line
+        // (not the resolved/rounded line), so repeated calls at the same requested location stay
+        // idempotent whichever path form names the file.
+        private static string BuildSourcePausePointId(string assetPath, int line)
         {
-            return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
+            return assetPath + ":" + line;
         }
     }
 }

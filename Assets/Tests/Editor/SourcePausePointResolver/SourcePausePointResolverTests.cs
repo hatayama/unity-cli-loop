@@ -15,6 +15,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class SourcePausePointResolverTests
     {
         private const string FixturesDirectory = "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/";
+        // A script in an embedded package whose folder name differs from its package name, so the
+        // asset path Unity reports for it and the path its PDB records differ.
+        private const string PackageFixtureAssetPath =
+            "Packages/io.github.hatayama.uloop.hotreload-package-fixture/Runtime/HotReloadPackageFixture.cs";
+        private const string PackageFixturePhysicalPath =
+            "Packages/uloop-hotreload-package-fixture/Runtime/HotReloadPackageFixture.cs";
+        private const int PackageFixtureSecondStatementLine = 16;
 
         [Test]
         public void Resolve_NormalMethod_ResolvesLineWithLocalsAndParameters()
@@ -550,6 +557,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "<CountUp>b__0",
                     "CoroutineMethodFixture"),
                 Is.False);
+        }
+
+        /// <summary>
+        /// What: a statement in an embedded package's script, named by its asset path, resolves
+        /// although the PDB records the script under the package's folder.
+        /// </summary>
+        [Test]
+        public void Resolve_PackageSourceGivenByItsAssetPath_FindsTheStatement()
+        {
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                PackageFixtureAssetPath, PackageFixtureSecondStatementLine);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Resolution.ResolvedLine, Is.EqualTo(PackageFixtureSecondStatementLine));
+            Assert.That(result.Resolution.MethodDisplayName, Does.Contain("Second"));
+        }
+
+        /// <summary>
+        /// What: locating an embedded package's script by its asset path reports the path under the
+        /// package's folder, which is what the PDB records and what reaches the file on disk.
+        /// </summary>
+        [Test]
+        public void Locate_PackageSourceGivenByItsAssetPath_ReportsThePhysicalPath()
+        {
+            SourcePausePointCompiledAssemblyLocation location =
+                SourcePausePointCompiledAssemblyLocator.Locate(PackageFixtureAssetPath);
+
+            Assert.That(location.Found, Is.True, location.FailureMessage);
+            Assert.That(location.PhysicalPath, Is.EqualTo(PackageFixturePhysicalPath));
+        }
+
+        /// <summary>
+        /// What: an Assets script has no folder behind a virtual path, so the physical path it
+        /// reports is the path it was located by.
+        /// </summary>
+        [Test]
+        public void Locate_AssetsSourcePath_ReportsItselfAsThePhysicalPath()
+        {
+            string assetsPath = FixturesDirectory + "NormalMethodFixture.cs";
+
+            SourcePausePointCompiledAssemblyLocation location =
+                SourcePausePointCompiledAssemblyLocator.Locate(assetsPath);
+
+            Assert.That(location.Found, Is.True, location.FailureMessage);
+            Assert.That(location.PhysicalPath, Is.EqualTo(assetsPath));
         }
     }
 }
