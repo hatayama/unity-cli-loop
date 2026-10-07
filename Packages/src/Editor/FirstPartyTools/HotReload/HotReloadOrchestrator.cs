@@ -83,23 +83,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using IDisposable callSiteCacheHold = HotReloadCompiledCallSiteCache.Shared.HoldEntriesForRun();
             HotReloadRunTiming timing = new HotReloadRunTiming();
 
-            HotReloadRunAccumulator run;
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
             {
                 // CompilationPipeline / Application.dataPath require the Unity main thread, and the
                 // groups cannot be planned before every file knows which assembly it compiles into.
                 await MainThreadSwitcher.SwitchToMainThread(ct);
+            }
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepPackageRoots))
+            {
                 // Why after the switch: PackageInfo is main-thread only, and script paths are
                 // normalized against these roots later on the background threads this run switches to.
                 _packageRootCapture.CaptureCurrent();
-                // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
-                // SessionState, which is a main-thread API.
-                run = new HotReloadRunAccumulator(
+            }
+
+            // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
+            // SessionState, which is a main-thread API.
+            HotReloadRunAccumulator run =
+                new HotReloadRunAccumulator(
                     _domain,
                     _patcher,
                     _unityMessageForwarding,
                     HotReloadAutoRefreshHold.IsHeld);
-            }
 
             HotReloadInputResolutionSlot[] slots = new HotReloadInputResolutionSlot[files.Count];
             for (int index = 0; index < slots.Length; index++)

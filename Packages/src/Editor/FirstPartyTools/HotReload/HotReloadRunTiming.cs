@@ -56,7 +56,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _details[index] = new KeyValuePair<string, long>(step, _details[index].Value + elapsed);
         }
 
-        // Measures the wall-clock time until the returned scope is disposed and adds it to the step.
+        /// <summary>
+        /// Measures the wall-clock time until the returned scope is disposed and adds it to the step.
+        /// </summary>
         public IDisposable MeasureDetail(string step)
         {
             return new DetailScope(this, step);

@@ -654,6 +654,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Steps of an apply run outside the response's Timing phases, as named in the
         // hot_reload_timing_detail vibe entry. Steps that run once per group add up.
         public const string TimingDetailStepMainThreadSwitch = "main_thread_switch";
+        public const string TimingDetailStepPackageRoots = "package_roots";
         public const string TimingDetailStepResolveInputs = "resolve_inputs";
         public const string TimingDetailStepPlan = "plan";
         public const string TimingDetailStepActiveSiblings = "active_siblings";
