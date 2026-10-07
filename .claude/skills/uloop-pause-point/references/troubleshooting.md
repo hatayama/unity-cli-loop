@@ -86,7 +86,7 @@ A "No method named '<name>' ..." failure means no method matching `--method` has
 
 ## File Path Forms
 
-`--file` takes the asset path Unity shows (`Assets/...` or `Packages/<package-id>/...`), the path under a package's folder (`Packages/<folder>/...` for an embedded package), or an absolute path. Every form resolves to the asset path, and a file:line marker's `Id` is `<asset path>:<line>`. `pause-point-status`, `await-pause-point`, and `clear-pause-point` look the marker up by that `Id`, so pass the `Id` the enable response returned, or `--file` in the asset path form; `--file` in another form names a different `Id` and finds no marker.
+`--file` takes the asset path Unity shows (`Assets/...` or `Packages/<package-id>/...`), the path under a package's folder (`Packages/<folder>/...` for an embedded package), or an absolute path. Every form resolves to the asset path, and a file:line marker's `Id` is `<asset path>:<line>`. `pause-point-status`, `await-pause-point`, and `clear-pause-point` resolve `--file` (or an `--id` of the form `<path>:<line>`) the same way, so every form finds the same marker. A named marker's `Id` is looked up as given.
 
 ## Debug-switch trade-offs
 
