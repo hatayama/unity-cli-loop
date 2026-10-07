@@ -31,6 +31,8 @@ const (
 type scriptedIPCStep struct {
 	method string
 	result string
+	// rpcError answers with this JSON-RPC error object instead of a result.
+	rpcError string
 	// drop closes the connection after reading the request, without an answer.
 	drop bool
 	// onServed runs after the answer was written, so a test can act at a known point of the run.
@@ -74,6 +76,9 @@ func serveScriptedIPCResponses(
 			continue
 		}
 		response := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","result":%s,"id":1}`, step.result))
+		if step.rpcError != "" {
+			response = []byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":%s,"id":1}`, step.rpcError))
+		}
 		writeErr := unityipc.Write(conn, response)
 		_ = conn.Close()
 		if writeErr != nil {
@@ -659,5 +664,44 @@ func TestInjectHotReloadEditorReadyNoteRejectsANonObject(t *testing.T) {
 func TestHotReloadSelectedFilesTreatsAnUnreadableListAsNone(t *testing.T) {
 	if files := hotReloadSelectedFiles([]byte(`{"SelectedFiles":"Assets/A.cs"}`)); files != nil {
 		t.Fatalf("hotReloadSelectedFiles = %#v, want nil", files)
+	}
+}
+
+// Verifies a wait is added to the EditorReadyWaitMs an earlier wait left, so the field covers every
+// wait in the command.
+func TestAddHotReloadEditorReadyWaitMsAddsToAnEarlierWait(t *testing.T) {
+	cases := map[string]struct {
+		prior string
+		want  float64
+	}{
+		"earlier wait": {prior: `{"Timing":{"EditorReadyWaitMs":1500}}`, want: 3500},
+		"no Timing":    {prior: `{}`, want: 2000},
+		"null Timing":  {prior: `{"Timing":null}`, want: 2000},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			merged, err := addHotReloadEditorReadyWaitMs([]byte(`{"Timing":{"TotalMs":1}}`), []byte(testCase.prior), 2*time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fields := map[string]any{}
+			if err := json.Unmarshal(merged, &fields); err != nil {
+				t.Fatal(err)
+			}
+			timing, _ := fields["Timing"].(map[string]any)
+			if timing["EditorReadyWaitMs"] != testCase.want {
+				t.Fatalf("EditorReadyWaitMs = %#v, want %v", timing["EditorReadyWaitMs"], testCase.want)
+			}
+		})
+	}
+}
+
+// Verifies a note is appended to the note an earlier wait left, in order.
+func TestComposeHotReloadEditorReadyNoteAppendsToAnEarlierNote(t *testing.T) {
+	if got := composeHotReloadEditorReadyNote([]byte(`{"EditorReadyRetryNote":"A."}`), "B."); got != "A. B." {
+		t.Fatalf("composeHotReloadEditorReadyNote = %q, want %q", got, "A. B.")
+	}
+	if got := composeHotReloadEditorReadyNote([]byte(`{}`), "B."); got != "B." {
+		t.Fatalf("composeHotReloadEditorReadyNote = %q, want %q", got, "B.")
 	}
 }
