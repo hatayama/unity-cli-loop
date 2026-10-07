@@ -35,6 +35,10 @@ command ran against:
   each step outside the response's `Timing` phases (`steps`), the phases themselves, and
   `unaccountedMs` — the part of `otherMs` no step covers. A negative `unaccountedMs` means a
   step overlaps a phase.
+  When the end of a run evicted entries from the call-site cache, it also writes one
+  `hot_reload_call_site_cache_evicted` with the evicted count and bytes, the bytes still cached,
+  and the budget — a sign that the assemblies one run scans do not fit the cache and are read
+  again on the next run.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.

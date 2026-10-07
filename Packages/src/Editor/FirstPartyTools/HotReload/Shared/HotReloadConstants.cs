@@ -650,6 +650,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogRevertFailed = "hot_reload_revert_failed";
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
         public const string VibeLogTimingDetail = "hot_reload_timing_detail";
+        public const string VibeLogCallSiteCacheEvicted = "hot_reload_call_site_cache_evicted";
 
         // Steps of an apply run outside the response's Timing phases, as named in the
         // hot_reload_timing_detail vibe entry. Steps that run once per group add up.
