@@ -8,7 +8,8 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Covers the pure normalization of an absolute path into a project-relative script path.
+    /// Covers the pure mapping between a script's physical path and the project-relative asset
+    /// path Unity's script APIs use, in both directions.
     /// </summary>
     public sealed class HotReloadScriptPathNormalizerTests
     {
@@ -125,6 +126,99 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
 
             Assert.That(relative, Is.EqualTo("/other/Assets/Scripts/Foo.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_AssetsPath_IsReturnedUnchanged()
+        {
+            // Verifies an Assets path, which has no virtual root, keeps the exact string the snapshot and the PDB already agree on.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Assets/Scripts/A.cs",
+                "/proj",
+                PackageRoots(("/proj/Packages/src", "Packages/io.example.pkg")),
+                StringComparison.Ordinal);
+
+            Assert.That(physical, Is.EqualTo("Assets/Scripts/A.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_EmbeddedPackage_MapsToTheFolderUnderPackages()
+        {
+            // Verifies an embedded package's virtual path maps to its folder, whose name differs from the package name.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Packages/io.example.pkg/Runtime/A.cs",
+                "/proj",
+                PackageRoots(("/proj/Packages/src", "Packages/io.example.pkg")),
+                StringComparison.Ordinal);
+
+            Assert.That(physical, Is.EqualTo("Packages/src/Runtime/A.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_LocalPackageInsideTheProject_MapsToTheProjectRelativeFolder()
+        {
+            // Verifies a file: package that lives in the project outside Packages maps to its project-relative folder.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Packages/io.example.pkg/Runtime/A.cs",
+                "/proj",
+                PackageRoots(("/proj/Modules/pkg", "Packages/io.example.pkg")),
+                StringComparison.Ordinal);
+
+            Assert.That(physical, Is.EqualTo("Modules/pkg/Runtime/A.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_LocalPackageOutsideTheProject_ReturnsTheAbsolutePath()
+        {
+            // Verifies a file: package outside the project root yields the absolute path, since no project-relative path names it.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Packages/io.example.pkg/Runtime/A.cs",
+                "/proj",
+                PackageRoots(("/elsewhere/pkg", "Packages/io.example.pkg")),
+                StringComparison.Ordinal);
+
+            Assert.That(physical, Is.EqualTo("/elsewhere/pkg/Runtime/A.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_PackageNameThatPrefixesAnother_DoesNotMatchTheLongerName()
+        {
+            // Verifies a package whose name prefixes another's is not taken for the longer one, even when it is listed first.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Packages/io.example.pkg.extra/Runtime/A.cs",
+                "/proj",
+                PackageRoots(
+                    ("/proj/Packages/short-folder", "Packages/io.example.pkg"),
+                    ("/proj/Packages/long-folder", "Packages/io.example.pkg.extra")),
+                StringComparison.Ordinal);
+
+            Assert.That(physical, Is.EqualTo("Packages/long-folder/Runtime/A.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_NoMatchingRoot_IsReturnedUnchanged()
+        {
+            // Verifies a package path that no registered package claims is left as is rather than guessed at.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Packages/io.example.unregistered/Runtime/A.cs",
+                "/proj",
+                PackageRoots(("/proj/Packages/src", "Packages/io.example.pkg")),
+                StringComparison.Ordinal);
+
+            Assert.That(physical, Is.EqualTo("Packages/io.example.unregistered/Runtime/A.cs"));
+        }
+
+        [Test]
+        public void ToPhysicalProjectRelative_OnWindowsSeparators_NormalizesToForwardSlashes()
+        {
+            // Verifies Windows separators in the path, the project root, and the package root all come out as forward slashes.
+            string physical = HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
+                "Packages\\io.example.pkg\\Runtime\\A.cs",
+                "C:\\proj",
+                PackageRoots(("C:\\proj\\Packages\\src", "Packages\\io.example.pkg")),
+                StringComparison.OrdinalIgnoreCase);
+
+            Assert.That(physical, Is.EqualTo("Packages/src/Runtime/A.cs"));
         }
     }
 }

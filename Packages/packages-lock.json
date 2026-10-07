@@ -221,6 +221,12 @@
         "com.unity.modules.imgui": "1.0.0"
       }
     },
+    "io.github.hatayama.uloop.hotreload-package-fixture": {
+      "version": "file:uloop-hotreload-package-fixture",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "io.github.hatayama.uloopmcp": {
       "version": "file:src",
       "depth": 0,

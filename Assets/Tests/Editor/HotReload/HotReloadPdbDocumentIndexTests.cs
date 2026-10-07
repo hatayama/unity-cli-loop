@@ -30,6 +30,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/RegressionHarness/AnnotatedScreenshotMismatch/Editor/AnnotatedScreenshotMismatchSceneBuilder.cs";
         private const string BodylessFixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadSnapshotBodylessFixture.cs";
+        private const string PausePointsRuntimeAssemblyName = "UnityCLILoop.PausePoints.Runtime";
+        // A file of this repository's embedded package, whose folder differs from its package name.
+        private const string PackageSourcePhysicalPath = "Packages/src/Runtime/PausePoints/UloopPausePoint.cs";
+        private const string PackageSourceAssetPath =
+            "Packages/io.github.hatayama.uloopmcp/Runtime/PausePoints/UloopPausePoint.cs";
 
         private HotReloadPdbDocumentIndex _index;
 
@@ -79,6 +84,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TryFindDocument_ForAFileWithoutMethodBodies_ReturnsFalse()
         {
             bool found = Find(_index, DllPath(TestAssemblyName), BodylessFixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(found, Is.False);
+        }
+
+        /// <summary>
+        /// What: a source of an embedded package is found by the path of the file in the package's
+        /// folder, which is the path the compiler was given.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_DocumentRecordedUnderThePackageFolder_IsFoundByThePhysicalPath()
+        {
+            // The PDB records this file as ./Packages/src/Runtime/PausePoints/UloopPausePoint.cs, so the
+            // physical path matches as the end of the url after a slash.
+            bool found = Find(_index, DllPath(PausePointsRuntimeAssemblyName), PackageSourcePhysicalPath, out HotReloadPdbDocument document);
+
+            Assert.That(found, Is.True);
+            Assert.That(document.Url.Replace('\\', '/'), Does.EndWith("/" + PackageSourcePhysicalPath));
+        }
+
+        /// <summary>
+        /// What: the same document is not found by the asset path Unity reports for the file, which
+        /// names the package rather than the folder the PDB recorded. This is why the snapshot loader
+        /// maps the asset path before it looks the document up.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_DocumentRecordedUnderThePackageFolder_IsNotFoundByTheAssetPath()
+        {
+            bool found = Find(_index, DllPath(PausePointsRuntimeAssemblyName), PackageSourceAssetPath, out HotReloadPdbDocument _);
 
             Assert.That(found, Is.False);
         }
