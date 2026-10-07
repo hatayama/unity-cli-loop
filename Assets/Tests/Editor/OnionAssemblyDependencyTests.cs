@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FirstPartyToolsAssemblyNamePrefix = "UnityCLILoop.FirstPartyTools.";
         private const string ClearConsoleAssemblyName = "UnityCLILoop.FirstPartyTools.ClearConsole.Editor";
         private const string CommonConsoleAssemblyName = "UnityCLILoop.FirstPartyTools.Common.Console.Editor";
+        private const string CommonScriptPathAssemblyName = "UnityCLILoop.FirstPartyTools.Common.ScriptPath.Editor";
         private const string CompileAssemblyName = "UnityCLILoop.FirstPartyTools.Compile.Editor";
         private const string ControlPlayModeAssemblyName = "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor";
         private const string ExecuteDynamicCodeAssemblyName = "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor";
@@ -498,7 +499,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void InfrastructureAsmdef_WhenLoaded_DependsOnApplicationRuntimeAndDoesNotReferencePresentation()
         {
-            // Tests that infrastructure can bridge public runtime APIs while presentation remains a sibling outer layer.
+            // Tests that infrastructure can bridge public runtime APIs, and map a pause point query's
+            // script path through the shared script path mapping, while presentation remains a sibling outer layer.
             string[] references = ReadResolvedReferences("Packages/src/Editor/Infrastructure/UnityCLILoop.Infrastructure.asmdef");
 
             Assert.That(references, Is.EquivalentTo(new[]
@@ -507,6 +509,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ApplicationAssemblyName,
                 DomainAssemblyName,
                 CommonConsoleAssemblyName,
+                CommonScriptPathAssemblyName,
                 PausePointsRuntimeAssemblyName,
                 ToolContractsAssemblyName
             }));
