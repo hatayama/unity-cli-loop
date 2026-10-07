@@ -91,10 +91,11 @@ func runHotReloadWithCompileFallback(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	result := runPlainTool(ctx, connection, hotReloadCommandName, params, stderr)
-	if len(result.result) == 0 {
-		return result.exitCode
+	sent := sendHotReloadWaitingForBusyEditor(ctx, connection, params, stderr)
+	if sent.finished {
+		return sent.exitCode
 	}
+	result := sent.result
 	retry := retryHotReloadAfterEditorReady(ctx, connection, params, stdout, stderr, result)
 	if retry.finished {
 		return retry.exitCode

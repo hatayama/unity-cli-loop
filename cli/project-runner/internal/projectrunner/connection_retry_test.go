@@ -1080,6 +1080,169 @@ func TestSendWithTransientConnectionRetryRetriesBusyResponses(t *testing.T) {
 	}
 }
 
+// Verifies that returnBusyWithoutRetry hands the first busy answer back at once: no resend
+// and no busy-stall focus, because hot reload waits for the Editor on its status instead.
+func TestSendWithTransientConnectionRetryReturnsTheFirstBusyAnswerWhenAsked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.returnBusyWithoutRetry = true
+	deps.retryPoll = 5 * time.Millisecond
+	deps.busyFocusStallThreshold = time.Nanosecond
+	processLookups := 0
+	focusCalls := 0
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		processLookups++
+		return &clicore.UnityProcess{Pid: 123}, nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+		focusCalls++
+		return func(context.Context) error { return nil }, nil
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'compile'.","data":{"type":"server_busy","runningToolName":"compile","requestedToolName":"hot-reload","message":"busy"}}}`
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+			_ = conn.Close()
+			return
+		}
+		_ = unityipc.Write(conn, []byte(busy))
+		_ = conn.Close()
+		extra, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		_ = extra.Close()
+		serverErr <- errors.New("a second request arrived after the busy answer")
+	}()
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	_, err = sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"hot-reload",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	if !isUnityServerBusyRPCError(err) {
+		t.Fatalf("expected the busy answer back, got %v", err)
+	}
+	_ = listener.Close()
+	select {
+	case extraErr := <-serverErr:
+		t.Fatal(extraErr)
+	default:
+	}
+	if focusCalls != 0 {
+		t.Fatalf("expected no focus attempt, got %d (process lookups %d)", focusCalls, processLookups)
+	}
+}
+
+// Verifies that returnBusyWithoutRetry leaves the undispatched-connection retry alone: a dial
+// that fails before the server is up is still retried until the request gets through.
+func TestSendWithTransientConnectionRetryStillRetriesAnUndispatchedFailureWhenBusyReturnsAtOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.returnBusyWithoutRetry = true
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return &clicore.UnityProcess{Pid: 123}, nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
+		return func(context.Context) error { return nil }, nil
+	}
+	deps.retryTimeout = 2 * time.Second
+	deps.retryPoll = 10 * time.Millisecond
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	address := listener.Addr().String()
+	// Nothing accepts until the server comes back at 100ms, so the first dials fail undispatched.
+	_ = listener.Close()
+
+	serverReady := make(chan net.Listener, 1)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		lateListener, listenErr := net.Listen("tcp", address)
+		if listenErr != nil {
+			serverReady <- nil
+			return
+		}
+		serverReady <- lateListener
+		success := `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`
+		for {
+			conn, acceptErr := lateListener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				_ = unityipc.Write(conn, []byte(success))
+			}()
+		}
+	}()
+	t.Cleanup(func() {
+		if lateListener := <-serverReady; lateListener != nil {
+			_ = lateListener.Close()
+		}
+	})
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: address,
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"hot-reload",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	if err != nil {
+		t.Fatalf("expected the undispatched dial to be retried to success, got %v", err)
+	}
+	if string(outcome.Result) != `{"ok":true}` {
+		t.Fatalf("final result mismatch: %s", outcome.Result)
+	}
+}
+
 // Verifies a persistently busy Unity still surfaces the busy error after the retry window.
 func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.T) {
 	if runtime.GOOS == "windows" {

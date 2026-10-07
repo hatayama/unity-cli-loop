@@ -39,6 +39,9 @@ type hotReloadEditorReadyWaitOptions struct {
 	pollInterval time.Duration
 	budget       time.Duration
 	probeTimeout time.Duration
+	// busyResendInterval is how often the busy wait sends the request again while a cancelled
+	// execute-dynamic-code request holds the Editor.
+	busyResendInterval time.Duration
 }
 
 // Why a package variable: the fallback tests already swap hotReloadFallbackCompile, so the tests
@@ -47,6 +50,8 @@ var hotReloadEditorReadyWaitDefaults = hotReloadEditorReadyWaitOptions{
 	pollInterval: time.Second,
 	budget:       compileWaitTimeout,
 	probeTimeout: 5 * time.Second,
+	// The Editor's grace period before it takes back a cancelled request's slot.
+	busyResendInterval: 5 * time.Second,
 }
 
 // hotReloadEditorReadyRetryOutcome is what the retry leaves for the fallback decision.
@@ -106,7 +111,11 @@ func finishHotReloadEditorNeverReady(
 	logHotReloadEditorReadyRetryComplete(connection, first.correlationID, waited, false, nil)
 	merged, err := injectHotReloadEditorReadyNote(
 		first.result,
-		fmt.Sprintf(hotReloadEditorReadyGaveUpNoteFormat, wholeSeconds(waited)))
+		composeHotReloadEditorReadyNote(first.result, fmt.Sprintf(hotReloadEditorReadyGaveUpNoteFormat, wholeSeconds(waited))))
+	if err == nil && hasHotReloadTiming(merged) {
+		// The note says how long the command waited, so Timing carries that wait too.
+		merged, err = addHotReloadEditorReadyWaitMs(merged, first.result, waited)
+	}
 	if err != nil {
 		writeHotReloadClassifiedError(stderr, connection, err)
 		return hotReloadEditorReadyRetryOutcome{finished: true, exitCode: 1}
@@ -140,9 +149,9 @@ func applyHotReloadAgain(
 
 	merged, err := injectHotReloadEditorReadyNote(
 		second.result,
-		fmt.Sprintf(hotReloadEditorReadyRetryNoteFormat, wholeSeconds(waited)))
+		composeHotReloadEditorReadyNote(first.result, fmt.Sprintf(hotReloadEditorReadyRetryNoteFormat, wholeSeconds(waited))))
 	if err == nil {
-		merged, err = addHotReloadTimingMs(merged, hotReloadEditorReadyWaitMsField, waited)
+		merged, err = addHotReloadEditorReadyWaitMs(merged, first.result, waited)
 	}
 	if err != nil {
 		writeHotReloadClassifiedError(stderr, connection, err)
@@ -217,6 +226,17 @@ func waitForEditorReady(
 }
 
 func probeEditorReady(ctx context.Context, connection unityipc.Connection, probeTimeout time.Duration) bool {
+	status, answered := probeHotReloadEditorStatus(ctx, connection, probeTimeout)
+	return answered && classifyEditorState(status) == statusStateReady
+}
+
+// probeHotReloadEditorStatus asks the Editor for its status once; answered is false when it did not answer
+// or the answer was not readable.
+func probeHotReloadEditorStatus(
+	ctx context.Context,
+	connection unityipc.Connection,
+	probeTimeout time.Duration,
+) (editorStatusResponse, bool) {
 	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	raw, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
@@ -224,13 +244,42 @@ func probeEditorReady(ctx context.Context, connection unityipc.Connection, probe
 		editorStatusBridgeCommandName,
 		map[string]any{})
 	if err != nil {
-		return false
+		return editorStatusResponse{}, false
 	}
 	var response editorStatusResponse
 	if err := json.Unmarshal(raw, &response); err != nil {
-		return false
+		return editorStatusResponse{}, false
 	}
-	return classifyEditorState(response) == statusStateReady
+	return response, true
+}
+
+// composeHotReloadEditorReadyNote appends sentence to the note an earlier wait in this command left
+// on prior, so the note tells every wait in order.
+func composeHotReloadEditorReadyNote(prior []byte, sentence string) string {
+	answer := struct {
+		EditorReadyRetryNote string `json:"EditorReadyRetryNote"`
+	}{}
+	if json.Unmarshal(prior, &answer) != nil || answer.EditorReadyRetryNote == "" {
+		return sentence
+	}
+	return answer.EditorReadyRetryNote + " " + sentence
+}
+
+// addHotReloadEditorReadyWaitMs sets EditorReadyWaitMs on raw to the wait an earlier wait left on
+// prior plus waited, so the field covers every wait in this command.
+func addHotReloadEditorReadyWaitMs(raw []byte, prior []byte, waited time.Duration) ([]byte, error) {
+	answer := struct {
+		Timing json.RawMessage `json:"Timing"`
+	}{}
+	earlier := struct {
+		EditorReadyWaitMs int64 `json:"EditorReadyWaitMs"`
+	}{}
+	// Why errors are ignored: a Timing that is not an object, or a value that is not a number,
+	// holds no earlier wait, so it counts as zero.
+	if json.Unmarshal(prior, &answer) == nil && len(answer.Timing) > 0 && answer.Timing[0] == '{' {
+		_ = json.Unmarshal(answer.Timing, &earlier)
+	}
+	return addHotReloadTimingMs(raw, hotReloadEditorReadyWaitMsField, waited+time.Duration(earlier.EditorReadyWaitMs)*time.Millisecond)
 }
 
 func injectHotReloadEditorReadyNote(raw []byte, note string) ([]byte, error) {
