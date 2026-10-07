@@ -246,8 +246,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // not to correct the path or the line syntax as RESOLVE_FAILED asks.
         public const string ErrorCodePausePointLineNotCompiled = "PAUSE_POINT_LINE_NOT_COMPILED";
 
-        // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
-        // recovery steps must remind callers to re-switch after restart rather than only once.
+        // Why: Debug mode goes back to the 'Code Optimization On Startup' preference on every
+        // Editor restart (including uloop launch -r), so the recovery steps must remind callers
+        // to re-switch after restart rather than only once.
         public const string ReleaseCodeOptimizationRecommendedNextAction =
             "Automatic Debug switch and recompile did not succeed. Confirm Code Optimization is Debug "
             + "(the bug icon in the main toolbar), run uloop compile, then retry enable-pause-point. "
