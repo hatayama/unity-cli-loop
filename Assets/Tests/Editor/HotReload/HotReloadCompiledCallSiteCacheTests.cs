@@ -15,7 +15,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Invalidation, capacity, run hold, and call-site index contract of the compiled call-site
+    /// Invalidation, byte budget, run hold, and call-site index contract of the compiled call-site
     /// cache. Each test works on copies of this test assembly's dll in a private temp directory so
     /// that mutating the file never touches ScriptAssemblies.
     /// </summary>
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Path.GetTempPath(),
                 "uloop-call-site-cache-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDirectory);
-            _cache = new HotReloadCompiledCallSiteCache(2);
+            _cache = new HotReloadCompiledCallSiteCache(BudgetForEntries(2));
         }
 
         [TearDown]
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     File.SetLastWriteTimeUtc(dllPath, originalWriteTime);
                 }
             };
-            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(BudgetForEntries(2), probes);
             try
             {
                 HotReloadCompiledCallSiteCache.Entry entry = cache.GetOrLoad(dllPath);
@@ -227,7 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     useOther = !useOther;
                 }
             };
-            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(BudgetForEntries(2), probes);
             try
             {
                 Assert.Throws<IOException>(() => cache.GetOrLoad(dllPath));
@@ -257,7 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     throw injected;
                 }
             };
-            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(BudgetForEntries(2), probes);
             try
             {
                 InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() => cache.GetOrLoad(dllPath));
@@ -295,11 +295,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: loading beyond the capacity evicts the least recently used entry, so the count
-        /// never exceeds the cap and the evicted dll is read again on its next lookup.
+        /// What: loading beyond the budget evicts the least recently used entry, so the cached bytes
+        /// never exceed the budget and the evicted dll is read again on its next lookup.
         /// </summary>
         [Test]
-        public void GetOrLoad_OverCapacity_EvictsLeastRecentlyUsed()
+        public void GetOrLoad_OverBudget_EvictsLeastRecentlyUsed()
         {
             string pathA = CopyTestAssembly("a.dll");
             string pathB = CopyTestAssembly("b.dll");
@@ -321,20 +321,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a non-positive capacity is rejected, because the cache could never hold an entry.
+        /// What: a non-positive budget is rejected, because the cache could never hold an entry.
         /// </summary>
         [Test]
-        public void Constructor_NonPositiveCapacity_Throws()
+        public void Constructor_NonPositiveBudget_Throws()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new HotReloadCompiledCallSiteCache(0));
         }
 
         /// <summary>
-        /// What: inside a hold each dll is read once even when a run touches more dlls than the
-        /// capacity, so a run never re-reads a dll it already read.
+        /// What: inside a hold each dll is read once even when a run touches more bytes than the
+        /// budget, so a run never re-reads a dll it already read.
         /// </summary>
         [Test]
-        public void GetOrLoad_InsideHold_ReadsEachDllOnce_EvenBeyondCapacity()
+        public void GetOrLoad_InsideHold_ReadsEachDllOnce_EvenBeyondBudget()
         {
             string pathA = CopyTestAssembly("a.dll");
             string pathB = CopyTestAssembly("b.dll");
@@ -358,11 +358,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: ending the hold evicts the least recently used entries down to the capacity, so
+        /// What: ending the hold evicts the least recently used entries down to the budget, so
         /// the dlls used last stay cached for the next run and the evicted one is read again.
         /// </summary>
         [Test]
-        public void HoldEntriesForRun_Dispose_EvictsDownToCapacity()
+        public void HoldEntriesForRun_Dispose_EvictsDownToBudget()
         {
             string pathA = CopyTestAssembly("a.dll");
             string pathB = CopyTestAssembly("b.dll");
@@ -389,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: ending an inner hold keeps every entry while the outer hold is open; only the end
-        /// of the outer hold evicts down to the capacity.
+        /// of the outer hold evicts down to the budget.
         /// </summary>
         [Test]
         public void HoldEntriesForRun_Nested_KeepsEntriesUntilTheOuterHoldEnds()
@@ -441,7 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: without a hold a miss still evicts the least recently used entry before it adds,
-        /// so lookups outside a run keep the cache within its capacity.
+        /// so lookups outside a run keep the cache within its budget.
         /// </summary>
         [Test]
         public void GetOrLoad_WithoutHold_StillEvictsBeforeAdding()
@@ -452,6 +452,110 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(_cache.Count, Is.EqualTo(2));
             Assert.That(_cache.LoadCount, Is.EqualTo(3));
+            Assert.That(_cache.CachedBytes, Is.EqualTo(BudgetForEntries(2)));
+        }
+
+        /// <summary>
+        /// What: when every dll a run touched fits the budget, ending the hold evicts nothing, so
+        /// the next run reads none of them again. A count cap smaller than the run evicted some.
+        /// </summary>
+        [Test]
+        public void HoldEntriesForRun_Dispose_KeepsEveryEntryWithinBudget()
+        {
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(BudgetForEntries(3));
+            try
+            {
+                string pathA = CopyTestAssembly("a.dll");
+                string pathB = CopyTestAssembly("b.dll");
+                string pathC = CopyTestAssembly("c.dll");
+                using (cache.HoldEntriesForRun())
+                {
+                    cache.GetOrLoad(pathA);
+                    cache.GetOrLoad(pathB);
+                    cache.GetOrLoad(pathC);
+                }
+
+                Assert.That(cache.Count, Is.EqualTo(3));
+                Assert.That(cache.CachedBytes, Is.EqualTo(BudgetForEntries(3)));
+                Assert.That(cache.LastHoldReleaseEvictedCount, Is.EqualTo(0));
+
+                cache.GetOrLoad(pathA);
+                cache.GetOrLoad(pathB);
+                cache.GetOrLoad(pathC);
+                Assert.That(cache.LoadCount, Is.EqualTo(3), "The next run reads none of the dlls again.");
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
+        /// What: ending a hold over the budget records how many entries and bytes it evicted.
+        /// </summary>
+        [Test]
+        public void HoldEntriesForRun_Dispose_RecordsWhatItEvicted()
+        {
+            using (_cache.HoldEntriesForRun())
+            {
+                _cache.GetOrLoad(CopyTestAssembly("a.dll"));
+                _cache.GetOrLoad(CopyTestAssembly("b.dll"));
+                _cache.GetOrLoad(CopyTestAssembly("c.dll"));
+            }
+
+            Assert.That(_cache.Count, Is.EqualTo(2));
+            Assert.That(_cache.CachedBytes, Is.EqualTo(BudgetForEntries(2)));
+            Assert.That(_cache.LastHoldReleaseEvictedCount, Is.EqualTo(1));
+            Assert.That(_cache.LastHoldReleaseEvictedBytes, Is.EqualTo(TestAssemblyLength()));
+        }
+
+        /// <summary>
+        /// What: a dll larger than the whole budget is still cached, alone, and the next dll
+        /// replaces it, so a large assembly never makes a lookup fail or loop.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_EntryLargerThanBudget_IsStillLoaded()
+        {
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(TestAssemblyLength() / 2);
+            try
+            {
+                cache.GetOrLoad(CopyTestAssembly("a.dll"));
+                Assert.That(cache.Count, Is.EqualTo(1));
+                Assert.That(cache.CachedBytes, Is.EqualTo(TestAssemblyLength()));
+
+                cache.GetOrLoad(CopyTestAssembly("b.dll"));
+                Assert.That(cache.Count, Is.EqualTo(1), "A was evicted to make room for B.");
+                Assert.That(cache.LoadCount, Is.EqualTo(2));
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
+        /// What: replacing a stale entry counts the new file's length instead of adding it to the
+        /// old one, so the cached bytes match what is actually held.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_ReplacedEntry_UpdatesCachedBytes()
+        {
+            string dllPath = CopyTestAssembly("a.dll");
+            DateTime originalWriteTime = File.GetLastWriteTimeUtc(dllPath);
+            _cache.GetOrLoad(dllPath);
+
+            // Why append: trailing bytes after the PE image keep the dll readable for Cecil while
+            // changing the length, as in GetOrLoad_SizeChanged_Reloads.
+            using (FileStream stream = new FileStream(dllPath, FileMode.Append))
+            {
+                stream.WriteByte(0);
+            }
+
+            File.SetLastWriteTimeUtc(dllPath, originalWriteTime);
+            _cache.GetOrLoad(dllPath);
+
+            Assert.That(_cache.CachedBytes, Is.EqualTo(new FileInfo(dllPath).Length));
+            Assert.That(_cache.Count, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -503,7 +607,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 AfterAssemblyRead = assembly => captured = assembly
             };
-            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(BudgetForEntries(2), probes);
             try
             {
                 HotReloadCompiledCallSiteCache.Entry entry = cache.GetOrLoad(CopyTestAssembly("a.dll"));
@@ -607,7 +711,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return padded;
         }
 
-        private string CopyTestAssembly(string fileName)
+        private static string TestAssemblySourcePath()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string sourceDllPath = Path.Combine(
@@ -616,6 +720,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ScriptAssemblies",
                 TestAssemblyName + ".dll");
             Assert.That(File.Exists(sourceDllPath), Is.True, "Test assembly dll missing: " + sourceDllPath);
+            return sourceDllPath;
+        }
+
+        // Every fixture dll is a copy of the test assembly, so all of them have this length.
+        private static long TestAssemblyLength()
+        {
+            return new FileInfo(TestAssemblySourcePath()).Length;
+        }
+
+        private static long BudgetForEntries(int count)
+        {
+            return count * TestAssemblyLength();
+        }
+
+        private string CopyTestAssembly(string fileName)
+        {
+            string sourceDllPath = TestAssemblySourcePath();
 
             string destinationPath = Path.Combine(_tempDirectory, fileName);
             File.Copy(sourceDllPath, destinationPath);
