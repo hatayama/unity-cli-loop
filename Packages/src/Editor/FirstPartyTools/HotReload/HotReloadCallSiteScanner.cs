@@ -226,10 +226,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why cache: the dll only changes on a compile, which also reloads the domain, so
             // across the runs in between the Cecil read and the instruction walk are pure repeat work.
             HotReloadCompiledCallSiteCache.Entry compiled = HotReloadCompiledCallSiteCache.Shared.GetOrLoad(dllPath);
-            foreach (HotReloadCompiledCallSiteCache.CompiledCallSite callSite in compiled.CallSites)
+            foreach (int position in CollectCandidatePositions(compiled, targets))
             {
-                CollectHitFromCallSite(assemblyName, compiled, callSite, targets, hits);
+                CollectHitFromCallSite(assemblyName, compiled, compiled.CallSites[position], targets, hits);
             }
+        }
+
+        // Narrows the walk to the call sites filed under a target's type and method name; the
+        // full identity match still decides each of them.
+        private static List<int> CollectCandidatePositions(
+            HotReloadCompiledCallSiteCache.Entry compiled,
+            CompiledMethodIdentity[] targets)
+        {
+            // Why skip a repeated key: targets that share a type and a name (overloads, arities)
+            // share one bucket, and visiting it twice would report its call sites twice.
+            HashSet<(string TypeName, string MethodName)> visitedKeys = new HashSet<(string TypeName, string MethodName)>();
+            List<int> positions = new List<int>();
+            foreach (CompiledMethodIdentity target in targets)
+            {
+                string typeName = target.TypeMetadataName.Value;
+                if (!visitedKeys.Add((typeName, target.MethodName)))
+                {
+                    continue;
+                }
+
+                positions.AddRange(compiled.LookupCallSiteIndices(typeName, target.MethodName));
+            }
+
+            // Why sort: buckets arrive in target order; ascending positions keep the hits in the
+            // order of the call sites in the dll, as the walk over every call site reported them.
+            positions.Sort();
+            return positions;
         }
 
         private static void CollectHitFromCallSite(
@@ -314,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            TypeReference openDeclaringType = GetOpenDeclaringType(openMethod.DeclaringType);
+            TypeReference openDeclaringType = HotReloadCompiledCallSiteIndex.GetOpenDeclaringType(openMethod.DeclaringType);
             if (!DeclaringTypeScopeMatchesTarget(
                     openDeclaringType,
                     target.AssemblyName,
@@ -345,17 +372,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return ParametersMatch(openMethod, target.ParameterTypeFullNames);
-        }
-
-        private static TypeReference GetOpenDeclaringType(TypeReference declaringType)
-        {
-            GenericInstanceType genericInstance = declaringType as GenericInstanceType;
-            if (genericInstance != null)
-            {
-                return genericInstance.GetElementType();
-            }
-
-            return declaringType;
         }
 
         private static bool DeclaringTypeScopeMatchesTarget(

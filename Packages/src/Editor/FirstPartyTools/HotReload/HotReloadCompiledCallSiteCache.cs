@@ -11,8 +11,9 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Keeps the Cecil view of a compiled assembly (module, state-machine owner index, and the
-    /// call / ldftn instructions) alive across hot reload runs while the dll on disk is unchanged.
+    /// Keeps the Cecil view of a compiled assembly (module, state-machine owner index, the call /
+    /// ldftn instructions, and an index of them by the method they reference) alive across hot
+    /// reload runs while the dll on disk is unchanged.
     /// Why: every hot reload run re-read and re-walked the whole ScriptAssemblies dll to find
     /// callers (~0.24 s on a large test assembly), although the dll only changes on a compile,
     /// which also reloads the domain and therefore empties this cache.
@@ -60,13 +61,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public long LastAccess;
 
             private readonly AssemblyDefinition _assembly;
+            private readonly HotReloadCompiledCallSiteIndex _callSiteIndex;
 
             public Entry(
                 string dllPath,
                 DllFingerprint fingerprint,
                 AssemblyDefinition assembly,
                 Dictionary<string, MethodDefinition> logicalOwners,
-                List<CompiledCallSite> callSites)
+                List<CompiledCallSite> callSites,
+                HotReloadCompiledCallSiteIndex callSiteIndex)
             {
                 DllPath = dllPath;
                 Fingerprint = fingerprint;
@@ -74,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Module = assembly.MainModule;
                 LogicalOwners = logicalOwners;
                 CallSites = callSites;
+                _callSiteIndex = callSiteIndex;
             }
 
             /// <summary>
@@ -83,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             /// </summary>
             public IReadOnlyList<int> LookupCallSiteIndices(string openDeclaringTypeFullName, string methodName)
             {
-                return Array.Empty<int>();
+                return _callSiteIndex.Lookup(openDeclaringTypeFullName, methodName);
             }
 
             public void Dispose()
@@ -428,7 +432,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                 }
 
-                Entry entry = new Entry(fullPath, fingerprint, assembly, logicalOwners, callSites);
+                HotReloadCompiledCallSiteIndex callSiteIndex = HotReloadCompiledCallSiteIndex.Build(callSites);
+                Entry entry = new Entry(fullPath, fingerprint, assembly, logicalOwners, callSites, callSiteIndex);
                 ownershipTransferred = true;
                 return entry;
             }
