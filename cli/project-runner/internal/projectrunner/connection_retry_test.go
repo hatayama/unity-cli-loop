@@ -24,19 +24,6 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
-// Verifies the default busy-stall focus threshold fires before the bounded busy retry window ends.
-func TestDefaultBusyFocusStallThresholdFitsWithinBusyRetryWindow(t *testing.T) {
-	deps := defaultConnectionRetryDeps()
-	threshold := busyFocusStallThresholdFor(deps)
-	if threshold >= deps.retryTimeout {
-		t.Fatalf(
-			"busy focus stall threshold must stay below the busy retry window: threshold=%s window=%s",
-			threshold,
-			deps.retryTimeout,
-		)
-	}
-}
-
 // Verifies connection-retry focus rescue bounds the focus external command with a deadline.
 func TestConnectionRetryFocusControllerBoundsFocusContext(t *testing.T) {
 	var receivedContext context.Context
@@ -50,7 +37,7 @@ func TestConnectionRetryFocusControllerBoundsFocusContext(t *testing.T) {
 		"get-logs",
 		deps,
 	)
-	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("busy"))
 
 	if receivedContext == nil {
 		t.Fatal("expected focus attempt context")
@@ -228,7 +215,7 @@ func TestConnectionRetryFocusControllerLogsRestoreSuccessWithAttemptCorrelation(
 		deps,
 	)
 
-	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("busy"))
 	controller.restore(context.Background())
 
 	if restoreCallCount != 1 {
@@ -253,7 +240,7 @@ func TestConnectionRetryFocusControllerLogsRestoreSuccessWithAttemptCorrelation(
 	for _, expected := range []string{
 		`"command":"get-logs"`,
 		`"pid":123`,
-		`"reason":"busy_stall"`,
+		`"reason":"pre_accept_timeout"`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
@@ -360,7 +347,7 @@ func TestConnectionRetryFocusControllerLogsMissingRestorerAtFocusTime(t *testing
 		deps,
 	)
 
-	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("busy"))
 	controller.restore(context.Background())
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
@@ -1080,8 +1067,8 @@ func TestSendWithTransientConnectionRetryRetriesBusyResponses(t *testing.T) {
 	}
 }
 
-// Verifies that returnBusyWithoutRetry hands the first busy answer back at once: no resend
-// and no busy-stall focus, because hot reload waits for the Editor on its status instead.
+// Verifies that returnBusyWithoutRetry hands the first busy answer back at once without a
+// resend, because hot reload waits for the Editor on its status instead.
 func TestSendWithTransientConnectionRetryReturnsTheFirstBusyAnswerWhenAsked(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
@@ -1090,7 +1077,6 @@ func TestSendWithTransientConnectionRetryReturnsTheFirstBusyAnswerWhenAsked(t *t
 	deps := defaultConnectionRetryDeps()
 	deps.returnBusyWithoutRetry = true
 	deps.retryPoll = 5 * time.Millisecond
-	deps.busyFocusStallThreshold = time.Nanosecond
 	processLookups := 0
 	focusCalls := 0
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
@@ -1330,7 +1316,6 @@ func TestSendWithTransientConnectionRetryNeverFocusesWhileBusy(t *testing.T) {
 	deps := defaultConnectionRetryDeps()
 	deps.retryTimeout = 500 * time.Millisecond
 	deps.retryPoll = 5 * time.Millisecond
-	deps.busyFocusStallThreshold = 30 * time.Millisecond
 	focusCallCount := 0
 	restoreCallCount := 0
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {

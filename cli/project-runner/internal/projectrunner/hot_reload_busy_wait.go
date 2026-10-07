@@ -28,8 +28,7 @@ const (
 )
 
 // hotReloadBusyWaitSendDeps sends without the bounded busy retry. Why: hot reload waits for the
-// Editor on its status instead of resending every second, which would also bring the Editor to the
-// front after the busy-stall threshold.
+// Editor on its status instead of resending every second.
 func hotReloadBusyWaitSendDeps() connectionRetryDeps {
 	deps := defaultConnectionRetryDeps()
 	deps.returnBusyWithoutRetry = true
