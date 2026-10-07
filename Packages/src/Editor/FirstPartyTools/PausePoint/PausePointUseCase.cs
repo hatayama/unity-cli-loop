@@ -169,7 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string id = SourcePausePointId.ToMarkerId(
                 parameters.Id,
                 UnityCliLoopPathResolver.GetProjectRoot(),
-                UloopPausePointRegistry.Contains);
+                UloopPausePointRegistry.Contains,
+                ScriptPackageRoots.ReadCurrent);
             (UloopPausePointSnapshot snapshot, bool resumedFromPause, int clearedCount) =
                 UloopPausePointRegistry.Clear(id);
             PausePointUseCaseLogger.LogCleared(snapshot.Id, snapshot.StatusBeforeClear);

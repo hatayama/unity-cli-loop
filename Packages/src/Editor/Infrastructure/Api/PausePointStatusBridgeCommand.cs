@@ -128,7 +128,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return SourcePausePointId.ToMarkerId(
                 ReadId(paramsToken),
                 UnityCliLoopPathResolver.GetProjectRoot(),
-                UloopPausePointRegistry.Contains);
+                UloopPausePointRegistry.Contains,
+                ScriptPackageRoots.ReadCurrent);
         }
 
         private static string ReadId(JToken paramsToken)
