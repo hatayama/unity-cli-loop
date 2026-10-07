@@ -79,8 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// of an edit in the assembly named <paramref name="shimTargetAssemblyName"/>, writing it
         /// on first use. When the image grants that assembly its internals, this is the publicized
         /// copy of <see cref="GetOrCreatePublicizedCopy"/>. Otherwise the image's internal top-level
-        /// types and its internal and private protected members stay as they are, because the
-        /// edited assembly's own compile never saw them. The same preconditions on
+        /// types and its private, internal and private protected members stay as they are, because
+        /// the edited assembly's own compile never saw them. The same preconditions on
         /// <paramref name="home"/> apply.
         /// </summary>
         public static string GetOrCreateShimReferenceCopy(
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : WriteOrReuseRewrittenCopy(
                         assemblyDefinition,
                         HotReloadConstants.PublicizedExternalRefsRelativeDirectory,
-                        PublicizeTypeKeepingInternalsHidden));
+                        PublicizeTypeKeepingHiddenMembers));
         }
 
         /// <summary>
@@ -386,15 +386,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void PublicizeType(TypeDefinition type)
         {
             PublicizeTypeVisibility(type);
-            PublicizeMembers(type, keepInternalMembers: false);
+            PublicizeMembers(type, keepHiddenMembers: false);
         }
 
-        // Why internal top-level types and internal members stay as they are: the edited assembly's
-        // own compile never saw them, and a shim compile that does can bind a call to one of them or
-        // find the call ambiguous, as when an internal type declares an extension method with the
-        // signature of a public one elsewhere. Nested types are still publicized: they are reached
-        // only through their enclosing type and cannot declare extension methods.
-        private static void PublicizeTypeKeepingInternalsHidden(TypeDefinition type)
+        // Why top-level internal types and hidden members stay as they are: the edited assembly's own
+        // compile never saw them, and a shim compile that does can find a call ambiguous, as when an
+        // internal type declares an extension method with the signature of a public one elsewhere,
+        // or bind it to a more specific private overload the compiled method never called. Nested
+        // types are still publicized: they are reached only through their enclosing type and cannot
+        // declare extension methods.
+        private static void PublicizeTypeKeepingHiddenMembers(TypeDefinition type)
         {
             if (!type.IsNested
                 && (type.Attributes & CecilTypeAttributes.VisibilityMask) == CecilTypeAttributes.NotPublic)
@@ -403,7 +404,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             PublicizeTypeVisibility(type);
-            PublicizeMembers(type, keepInternalMembers: true);
+            PublicizeMembers(type, keepHiddenMembers: true);
         }
 
         private static void PublicizeTypeVisibility(TypeDefinition type)
@@ -420,10 +421,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // keepInternalMembers leaves internal and private protected members as they are. Private and
-        // protected members are publicized either way: a shim calls a base type's protected members
+        // keepHiddenMembers leaves private, internal and private protected members as they are.
+        // Protected members are publicized either way: a shim calls a base type's protected members
         // from outside the type hierarchy.
-        private static void PublicizeMembers(TypeDefinition type, bool keepInternalMembers)
+        private static void PublicizeMembers(TypeDefinition type, bool keepHiddenMembers)
         {
             foreach (FieldDefinition field in type.Fields)
             {
@@ -438,7 +439,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 CecilFieldAttributes access = field.Attributes & CecilFieldAttributes.FieldAccessMask;
-                if (keepInternalMembers && FieldAccessNeedsInternalsGrant(access))
+                if (keepHiddenMembers && FieldAccessIsHiddenFromOtherAssemblies(access))
                 {
                     continue;
                 }
@@ -450,7 +451,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (MethodDefinition method in type.Methods)
             {
                 CecilMethodAttributes access = method.Attributes & CecilMethodAttributes.MemberAccessMask;
-                if (keepInternalMembers && MethodAccessNeedsInternalsGrant(access))
+                if (keepHiddenMembers && MethodAccessIsHiddenFromOtherAssemblies(access))
                 {
                     continue;
                 }
@@ -459,16 +460,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Another assembly reaches an internal or private protected member only through an
-        // InternalsVisibleTo grant.
-        private static bool FieldAccessNeedsInternalsGrant(CecilFieldAttributes access)
+        // Another assembly never reaches a private member, and reaches an internal or private
+        // protected member only through an InternalsVisibleTo grant.
+        private static bool FieldAccessIsHiddenFromOtherAssemblies(CecilFieldAttributes access)
         {
-            return access == CecilFieldAttributes.Assembly || access == CecilFieldAttributes.FamANDAssem;
+            return access == CecilFieldAttributes.Private
+                || access == CecilFieldAttributes.Assembly
+                || access == CecilFieldAttributes.FamANDAssem;
         }
 
-        private static bool MethodAccessNeedsInternalsGrant(CecilMethodAttributes access)
+        private static bool MethodAccessIsHiddenFromOtherAssemblies(CecilMethodAttributes access)
         {
-            return access == CecilMethodAttributes.Assembly || access == CecilMethodAttributes.FamANDAssem;
+            return access == CecilMethodAttributes.Private
+                || access == CecilMethodAttributes.Assembly
+                || access == CecilMethodAttributes.FamANDAssem;
         }
 
         // Why ignore case: the compiler matches assembly simple names without case when it honors
