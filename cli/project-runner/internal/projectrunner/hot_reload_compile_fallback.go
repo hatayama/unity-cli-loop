@@ -13,6 +13,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
 
 // Named here rather than in cli/common because only this dispatch branch needs the name.
@@ -31,6 +32,11 @@ const (
 	hotReloadAutoRefreshHoldMessageField   = "AutoRefreshHoldMessage"
 	hotReloadTimingField                   = "Timing"
 	hotReloadFallbackCompileMsField        = "FallbackCompileMs"
+)
+
+const (
+	hotReloadCompileFallbackDecidedOperation  = "hot_reload_compile_fallback_decided"
+	hotReloadCompileFallbackCompleteOperation = "hot_reload_compile_fallback_complete"
 )
 
 // Raw JSON values, because the response fields are edited as encoded JSON.
@@ -89,7 +95,12 @@ func runHotReloadWithCompileFallback(
 	if len(result.result) == 0 {
 		return result.exitCode
 	}
-	if !isHotReloadCompileFallbackRequested(result.result) {
+	// Why an ID of its own: the reload request's ID stays inside runPlainTool, so the fallback entries
+	// share this one and line up with the request entries by time.
+	correlationID := vibelog.NewCLIVibeCorrelationID()
+	requested := isHotReloadCompileFallbackRequested(result.result)
+	logHotReloadCompileFallbackDecided(connection, correlationID, requested, result.result)
+	if !requested {
 		clicore.WriteJSON(stdout, result.result)
 		return result.exitCode
 	}
@@ -98,6 +109,7 @@ func runHotReloadWithCompileFallback(
 	compileResult := hotReloadFallbackCompile(ctx, connection, stderr)
 	compileElapsed := time.Since(compileStarted)
 	if len(compileResult.result) == 0 {
+		logHotReloadCompileFallbackComplete(connection, correlationID, compileElapsed, compileResult, false)
 		// The transport failure is already classified on stderr; the reload itself still happened.
 		clicore.WriteJSON(stdout, result.result)
 		return compileResult.exitCode
@@ -107,6 +119,7 @@ func runHotReloadWithCompileFallback(
 	if err == nil {
 		merged, err = addHotReloadFallbackCompileTiming(merged, compileElapsed)
 	}
+	logHotReloadCompileFallbackComplete(connection, correlationID, compileElapsed, compileResult, err == nil)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
@@ -128,6 +141,105 @@ func isHotReloadCompileFallbackRequested(raw []byte) bool {
 		return false
 	}
 	return answer.CompileFallback == hotReloadCompileFallbackRequestedValue
+}
+
+// Written whether or not the fallback was requested, so the log shows a fallback that did not run
+// as well as one that did.
+func logHotReloadCompileFallbackDecided(connection unityipc.Connection, correlationID string, requested bool, raw []byte) {
+	writePlainToolVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
+		return vibelog.CLIVibeLogEntry{
+			Level:         "INFO",
+			Operation:     hotReloadCompileFallbackDecidedOperation,
+			Message:       "Decided whether hot reload falls back to a compile.",
+			Context:       hotReloadCompileFallbackDecidedContext(correlationID, requested, raw),
+			CorrelationID: correlationID,
+		}
+	})
+}
+
+// Reads how the reload went as flags, counts and durations only: the warnings and the message are
+// text about the project's code, which the log never carries.
+func hotReloadCompileFallbackDecidedContext(correlationID string, requested bool, raw []byte) map[string]any {
+	entryContext := map[string]any{
+		"correlation_id": correlationID,
+		"requested":      requested,
+		"parse_error":    false,
+	}
+	var fields map[string]json.RawMessage
+	// Why a nil map is a parse error too: JSON null decodes without an error and leaves the map nil,
+	// and injectHotReloadCompileFallback rejects it as not an object.
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		entryContext["parse_error"] = true
+		return entryContext
+	}
+	// Only true and false count: JSON null would decode into a bool as false.
+	switch string(fields[hotReloadSuccessField]) {
+	case "true":
+		entryContext["success"] = true
+	case "false":
+		entryContext["success"] = false
+	}
+	outcome, _, _ := readHotReloadStringField(fields, hotReloadOutcomeField)
+	entryContext["outcome"] = outcome
+	entryContext["warnings_count"] = hotReloadWarningCount(fields)
+	if timing, isObject := readHotReloadTimingNumbers(fields); isObject {
+		entryContext["timing"] = timing
+	}
+	return entryContext
+}
+
+// Keeps only the numbers of a Timing object, which are the phase durations in milliseconds, and
+// reports false when Timing is missing or not an object.
+func readHotReloadTimingNumbers(fields map[string]json.RawMessage) (map[string]float64, bool) {
+	raw := fields[hotReloadTimingField]
+	if len(raw) == 0 || raw[0] != '{' {
+		return nil, false
+	}
+	timing := map[string]any{}
+	if err := json.Unmarshal(raw, &timing); err != nil {
+		return nil, false
+	}
+	numbers := map[string]float64{}
+	for phase, value := range timing {
+		if milliseconds, isNumber := value.(float64); isNumber {
+			numbers[phase] = milliseconds
+		}
+	}
+	return numbers, true
+}
+
+// Written once on every way out of a fallback that ran, after the merge, so the entry agrees with
+// what the command reported.
+func logHotReloadCompileFallbackComplete(
+	connection unityipc.Connection,
+	correlationID string,
+	elapsed time.Duration,
+	compileResult compileExecutionResult,
+	merged bool,
+) {
+	writePlainToolVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
+		// Why merged counts: a compile that exits 0 with a result that cannot be merged still fails
+		// the command.
+		succeeded := compileResult.exitCode == 0 && len(compileResult.result) > 0 && merged
+		level := "INFO"
+		if !succeeded {
+			level = "ERROR"
+		}
+		return vibelog.CLIVibeLogEntry{
+			Level:     level,
+			Operation: hotReloadCompileFallbackCompleteOperation,
+			Message:   "Finished the compile hot reload fell back to.",
+			Context: map[string]any{
+				"correlation_id":       correlationID,
+				"elapsed_ms":           elapsed.Milliseconds(),
+				"compile_exit_code":    compileResult.exitCode,
+				"compile_result_bytes": len(compileResult.result),
+				"merged":               merged,
+				"succeeded":            succeeded,
+			},
+			CorrelationID: correlationID,
+		}
+	})
 }
 
 func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMessage) ([]byte, error) {
@@ -275,11 +387,20 @@ func readHotReloadStringField(fields map[string]json.RawMessage, name string) (s
 // hotReloadUnappliedPointer names the response field that explains the unapplied edits, so the
 // note never sends the reader to an empty Warnings array.
 func hotReloadUnappliedPointer(fields map[string]json.RawMessage) string {
-	var warnings []json.RawMessage
-	if err := json.Unmarshal(fields[hotReloadWarningsField], &warnings); err != nil || len(warnings) == 0 {
+	if hotReloadWarningCount(fields) == 0 {
 		return hotReloadUnappliedInMethodReasons
 	}
 	return hotReloadUnappliedInWarnings
+}
+
+// Counts the Warnings array, and counts a Warnings field that is missing, null or not an array as
+// none.
+func hotReloadWarningCount(fields map[string]json.RawMessage) int {
+	var warnings []json.RawMessage
+	if err := json.Unmarshal(fields[hotReloadWarningsField], &warnings); err != nil {
+		return 0
+	}
+	return len(warnings)
 }
 
 func hotReloadCompileFallbackAdvice(
