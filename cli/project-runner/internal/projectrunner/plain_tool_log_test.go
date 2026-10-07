@@ -281,3 +281,35 @@ func assertCliVibeLogOmitsTheSentinel(t *testing.T, logContent string) {
 		t.Fatalf("the vibe log must not contain a parameter value or an error message:\n%s", logContent)
 	}
 }
+
+// Verifies the failure entry names the tool that held the Editor only for a busy answer that
+// carries the name.
+func TestLogPlainToolRequestFailedNamesTheRunningToolOnlyForABusyAnswer(t *testing.T) {
+	cases := []struct {
+		name     string
+		data     string
+		wantName bool
+	}{
+		{name: "busy with a name", data: `{"type":"server_busy","runningToolName":"compile"}`, wantName: true},
+		{name: "busy without a name", data: `{"type":"server_busy"}`},
+		{name: "not busy", data: `{"type":"invalid_params","runningToolName":"compile"}`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			enableCliVibeLog(t)
+			projectRoot := t.TempDir()
+			err := &unityipc.RPCError{Code: -32603, Message: "failed", Data: []byte(testCase.data)}
+
+			logPlainToolRequestFailed(unityipc.Connection{ProjectRoot: projectRoot}, "get-logs", "corr-1", 0,
+				unityipc.UnitySendOutcome{}, err)
+
+			failedContext := cliVibeEntryContext(t,
+				singleCliVibeEntry(t, readOnlyCliVibeLog(t, projectRoot), "cli_tool_request_failed"))
+			if testCase.wantName {
+				assertCliVibeContextValues(t, failedContext, map[string]any{"running_tool_name": "compile"})
+				return
+			}
+			assertCliVibeContextOmits(t, failedContext, "running_tool_name")
+		})
+	}
+}

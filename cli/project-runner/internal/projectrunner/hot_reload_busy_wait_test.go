@@ -332,7 +332,10 @@ func TestRunHotReloadWritesBusyWaitVibeLogs(t *testing.T) {
 	if len(failed) == 0 {
 		t.Fatalf("cli_tool_request_failed entries = 0, want the busy answer\n%s", logContent)
 	}
-	assertCliVibeContextValues(t, cliVibeEntryContext(t, failed[0]), map[string]any{"error_kind": "rpc:server_busy"})
+	assertCliVibeContextValues(t, cliVibeEntryContext(t, failed[0]), map[string]any{
+		"error_kind":        "rpc:server_busy",
+		"running_tool_name": "compile",
+	})
 
 	decided := singleCliVibeEntry(t, logContent, hotReloadBusyWaitDecidedOperation)
 	assertSharedCliVibeCorrelationID(t, sent[0], decided)
@@ -357,6 +360,9 @@ func TestRunHotReloadWritesBusyWaitVibeLogs(t *testing.T) {
 		"second_success":        true,
 		"second_outcome":        "Applied",
 	})
+	if resent := completeContext["resend_correlation_ids"]; !reflect.DeepEqual(resent, []any{}) {
+		t.Fatalf("resend_correlation_ids = %#v, want an empty array", resent)
+	}
 	if _, isNumber := completeContext["waited_ms"].(float64); !isNumber {
 		t.Fatalf("waited_ms = %#v, want a number", completeContext["waited_ms"])
 	}
@@ -562,6 +568,13 @@ func TestRunHotReloadSendsAgainWhileACancelledExecuteDynamicCodeHoldsTheEditor(t
 		"ready":                 true,
 		"second_correlation_id": vibeLogContextString(t, sent[2], "correlation_id"),
 	})
+	wantResent := []any{
+		vibeLogContextString(t, sent[1], "correlation_id"),
+		vibeLogContextString(t, sent[2], "correlation_id"),
+	}
+	if resent := complete["resend_correlation_ids"]; !reflect.DeepEqual(resent, wantResent) {
+		t.Fatalf("resend_correlation_ids = %#v, want %#v", resent, wantResent)
+	}
 }
 
 // Verifies no request is sent again before the resend interval has passed, even while
