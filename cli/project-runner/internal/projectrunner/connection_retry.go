@@ -18,7 +18,6 @@ const (
 	focusRestoreTimeout                 = 2 * time.Second
 	serverConnectionRetryDefaultTimeout = 10 * time.Second
 	serverConnectionRetryDefaultPoll    = 1 * time.Second
-	defaultBusyFocusStallThreshold      = 5 * time.Second
 )
 
 type connectionRetryDeps struct {
@@ -26,11 +25,9 @@ type connectionRetryDeps struct {
 	focusUnityProcess       func(context.Context, int) (unityprocess.RestoreFocusFunc, error)
 	retryTimeout            time.Duration
 	retryPoll               time.Duration
-	busyFocusStallThreshold time.Duration
 	// returnBusyWithoutRetry hands the first busy answer back instead of resending every
 	// retryPoll. Hot reload sets it because it waits for the busy slot to free on the Editor
-	// status: resending here would only delay that wait, and after busyFocusStallThreshold the
-	// busy-stall focus would bring the Editor to the front.
+	// status: resending here would only delay that wait.
 	returnBusyWithoutRetry bool
 }
 
@@ -51,7 +48,6 @@ const (
 	focusReasonMainThreadStall               connectionRetryFocusReason = "main_thread_stall"
 	focusReasonHeartbeatSilenceTimeout       connectionRetryFocusReason = "heartbeat_silence_timeout"
 	focusReasonFinalResponseTimeout          connectionRetryFocusReason = "final_response_timeout"
-	focusReasonBusyStall                     connectionRetryFocusReason = "busy_stall"
 )
 
 // Why: domain reload on large projects can keep the IPC endpoint down well past the
@@ -64,13 +60,6 @@ const serverConnectionRetryUnityAliveFactor = 6
 
 func unityAliveRetryWindow(deps connectionRetryDeps) time.Duration {
 	return deps.retryTimeout * serverConnectionRetryUnityAliveFactor
-}
-
-func busyFocusStallThresholdFor(deps connectionRetryDeps) time.Duration {
-	if deps.busyFocusStallThreshold > 0 {
-		return deps.busyFocusStallThreshold
-	}
-	return defaultBusyFocusStallThreshold
 }
 
 type connectionRetryFocusController struct {
@@ -247,7 +236,6 @@ func sendWithTransientConnectionRetryWithDeps(
 
 	var lastOutcome unityipc.UnitySendOutcome
 	var lastErr error
-	busySequenceStartedAt := time.Time{}
 	focusController := newConnectionRetryFocusController(connection, method, deps)
 	defer func() {
 		restoreContext, cancel := context.WithTimeout(context.Background(), focusRestoreTimeout)
@@ -273,11 +261,6 @@ func sendWithTransientConnectionRetryWithDeps(
 			}
 			// Busy means the request was never executed, so a bounded retry is safe and
 			// usually absorbs back-to-back tool calls without bothering the caller.
-			if busySequenceStartedAt.IsZero() {
-				busySequenceStartedAt = time.Now()
-			} else if time.Since(busySequenceStartedAt) >= busyFocusStallThresholdFor(deps) {
-				focusController.tryFocus(ctx, focusReasonBusyStall, err)
-			}
 			lastOutcome = outcome
 			lastErr = err
 			if finished, finalOutcome, finalErr := finishBusyRetry(
