@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -76,6 +77,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string correlationId = VibeLogger.GenerateCorrelationId();
             Stopwatch total = Stopwatch.StartNew();
+            // Why the whole run: the signature-change gate during analysis and the caller notes at
+            // the end both scan callers through the shared cache, once per method they check, so
+            // one hold keeps every dll they read until the run ends.
+            using IDisposable callSiteCacheHold = HotReloadCompiledCallSiteCache.Shared.HoldEntriesForRun();
             HotReloadRunTiming timing = new HotReloadRunTiming();
 
             // CompilationPipeline / Application.dataPath require the Unity main thread, and the

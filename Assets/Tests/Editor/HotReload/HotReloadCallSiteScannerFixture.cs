@@ -31,8 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// A nested caller, so a scan can observe a caller type name that only a metadata
-        /// separator spells correctly.
+        /// A nested type that both calls and is called, so a scan can observe caller and target
+        /// type names that only a metadata separator spells correctly.
         /// </summary>
         public static class NestedCallerHost
         {
@@ -40,6 +40,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 return CalledFromNestedType();
             }
+
+            public static int CalledFromOuterType()
+            {
+                return 10;
+            }
+        }
+
+        public static int CallNestedTarget()
+        {
+            return NestedCallerHost.CalledFromOuterType();
         }
 
         public static int CalledOnlyViaDelegate()
@@ -84,6 +94,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Func<int> captured = GenericMethodTarget<int>;
             return captured;
+        }
+
+        /// <summary>
+        /// A parameter typed by a type parameter, which a scan matches against any parameter type
+        /// name, so one call site can match two targets that differ only in that name.
+        /// </summary>
+        public static int GenericParameterTarget<T>(T value)
+        {
+            return 8;
+        }
+
+        public static int CallGenericParameterTarget()
+        {
+            return GenericParameterTarget(1);
         }
 
         public static int SelfRecursive(int remaining)
