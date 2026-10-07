@@ -38,7 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     path,
                     firstFile.ProjectRoot,
                     contentPathOverrideByFile),
-                (path, workerSourcePath) => false);
+                (path, workerSourcePath) => HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshot(
+                    firstFile.ProjectRoot,
+                    firstFile.AssemblyName,
+                    firstFile.TargetDllPath,
+                    path,
+                    workerSourcePath));
             IReadOnlyList<HotReloadSiblingInclusion> filesToInclude = rebind.FilesToInclude;
             for (int index = 0; index < filesToInclude.Count; index++)
             {
@@ -62,6 +67,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < changedCompanionPaths.Count; index++)
             {
                 run.NoteChangedCompanion(changedCompanionPaths[index]);
+            }
+
+            // Why no warning for these: a file back at its compiled source has no edit to pass, so
+            // telling the reader to pass it would send them after nothing.
+            IReadOnlyList<string> revertedSinceSkipPaths = rebind.RevertedSinceSkipPaths;
+            for (int index = 0; index < revertedSinceSkipPaths.Count; index++)
+            {
+                run.NoteRevertedRetry(revertedSinceSkipPaths[index]);
             }
 
             AddChangedSinceApplyWarnings(firstFile, rebind);
