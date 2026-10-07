@@ -28,9 +28,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Resolved against the project root rather than the current directory: the two are the
             // same in the Editor, and the root keeps the result independent of where the caller runs.
-            // Path.Combine keeps a rooted path as is, and GetFullPath folds ./ and ../ away. A virtual
-            // Packages/<pkg-id>/... path names no real folder, so it resolves under the project root
-            // and comes back unchanged once the root is stripped.
+            // Path.Combine keeps a rooted path as is, and GetFullPath folds ./ and ../ away. In the
+            // Editor, GetFullPath also turns the virtual Packages/<pkg-id>/... path of a registered
+            // package into the folder behind it, which the package roots map back to the virtual path.
+            // A name no package registers stays under the project root and comes back unchanged once
+            // the root is stripped.
             string fullPath = Path.GetFullPath(Path.Combine(projectRoot, path.Replace('\\', '/')));
             StringComparison comparison = Path.DirectorySeparatorChar == '\\'
                 ? StringComparison.OrdinalIgnoreCase
