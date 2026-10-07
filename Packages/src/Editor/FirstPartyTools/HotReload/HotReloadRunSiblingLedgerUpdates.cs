@@ -8,7 +8,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Collects, over one run, why each sibling came back and what the run changes in the domain's
     /// sibling records: the companion files it was given, the files that left the companion ledger
-    /// by applying a change, and the retried files that lose their applied-source record.
+    /// by applying a change, the retried files that lose their applied-source record, and the files
+    /// back at their compiled source that lose both records.
     /// </summary>
     internal sealed class HotReloadRunSiblingLedgerUpdates
     {
@@ -22,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<string> _appliedPaths = new List<string>();
         private readonly List<string> _unappliedRetryPaths = new List<string>();
         private readonly List<string> _changedCompanionPaths = new List<string>();
+        private readonly List<string> _revertedRetryPaths = new List<string>();
         private readonly Dictionary<string, string> _observedHashByPath;
         private bool _appliedToDomain;
 
@@ -44,6 +46,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             _changedCompanionPaths.Add(projectRelativePath);
+        }
+
+        /// <summary>
+        /// Takes in a file left Skipped or Failed that the run did not retry because its source went
+        /// back to the compiled source.
+        /// </summary>
+        internal void NoteRevertedRetry(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            _revertedRetryPaths.Add(projectRelativePath);
         }
 
         /// <summary>Why a sibling came back; a file the run was passed reads as active changes.</summary>
@@ -108,6 +120,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < _changedCompanionPaths.Count; index++)
             {
                 domain.CompanionSources.Remove(_changedCompanionPaths[index]);
+            }
+
+            // Why a reverted file loses both records: its source is the compiled source itself, so
+            // there is no edit to bring back. The applied-source record only makes it a retry
+            // candidate and the companion record only brings back the edited source, so neither has
+            // a use left.
+            for (int index = 0; index < _revertedRetryPaths.Count; index++)
+            {
+                domain.AppliedSources.ClearAppliedSource(_revertedRetryPaths[index]);
+                domain.CompanionSources.Remove(_revertedRetryPaths[index]);
             }
 
             RecordCompanions(domain);

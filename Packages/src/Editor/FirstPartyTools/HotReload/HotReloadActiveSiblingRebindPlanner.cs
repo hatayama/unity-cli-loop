@@ -43,7 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     /// <summary>
     /// Files of one assembly that should be pulled into this reload so their patches bind
-    /// to the newest shim, and the files that would have been but changed since.
+    /// to the newest shim, the files that would have been but changed since, and the files left
+    /// Skipped or Failed that went back to their compiled source.
     /// </summary>
     /// <remarks>
     /// Added methods are emitted into a per-run shim assembly. Callers patched against the
@@ -55,12 +56,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadSiblingInclusion> filesToInclude,
             IReadOnlyList<string> changedSinceApplyPaths,
             IReadOnlyList<string> changedSinceSkipPaths,
-            IReadOnlyList<string> changedCompanionPaths)
+            IReadOnlyList<string> changedCompanionPaths,
+            IReadOnlyList<string> revertedSinceSkipPaths)
         {
             FilesToInclude = filesToInclude;
             ChangedSinceApplyPaths = changedSinceApplyPaths;
             ChangedSinceSkipPaths = changedSinceSkipPaths;
             ChangedCompanionPaths = changedCompanionPaths;
+            RevertedSinceSkipPaths = revertedSinceSkipPaths;
         }
 
         internal IReadOnlyList<HotReloadSiblingInclusion> FilesToInclude { get; }
@@ -70,6 +73,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal IReadOnlyList<string> ChangedSinceSkipPaths { get; }
 
         internal IReadOnlyList<string> ChangedCompanionPaths { get; }
+
+        /// <summary>
+        /// Files left Skipped or Failed whose source holds the compile snapshot bytes again, so they
+        /// have nothing left to apply.
+        /// </summary>
+        internal IReadOnlyList<string> RevertedSinceSkipPaths { get; }
     }
 
     /// <summary>
@@ -78,18 +87,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadActiveSiblingRebindPlanner
     {
+        // matchesVerifiedBaseline answers whether the worker source of a project-relative path holds
+        // the compile snapshot bytes. Why a delegate: the snapshot is named by the assembly's DLL,
+        // which the caller holds, and the planner itself reads only the domain and the sources.
         internal static HotReloadActiveSiblingRebindPlan Plan(
             HotReloadDomain domain,
             string assemblyName,
             string[] assemblySourceFiles,
             IReadOnlyCollection<string> pathsAlreadyInRun,
-            Func<string, string> resolveWorkerSourcePath)
+            Func<string, string> resolveWorkerSourcePath,
+            Func<string, string, bool> matchesVerifiedBaseline)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
             Debug.Assert(assemblySourceFiles != null, "assemblySourceFiles must not be null.");
             Debug.Assert(pathsAlreadyInRun != null, "pathsAlreadyInRun must not be null.");
             Debug.Assert(resolveWorkerSourcePath != null, "resolveWorkerSourcePath must not be null.");
+            Debug.Assert(matchesVerifiedBaseline != null, "matchesVerifiedBaseline must not be null.");
 
             StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
             // Why every reason is kept rather than the first: each reason carries its own recorded
@@ -126,6 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     [HotReloadSiblingInclusionReason.RetryAfterSkip] = new List<string>(),
                     [HotReloadSiblingInclusionReason.Companion] = new List<string>()
                 };
+            List<string> revertedSinceSkipPaths = new List<string>();
             foreach (KeyValuePair<string, List<HotReloadSiblingInclusionReason>> candidate in candidates)
             {
                 if (!BelongsToAssembly(
@@ -144,8 +159,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     candidate.Key,
                     evidence,
                     resolveWorkerSourcePath,
+                    matchesVerifiedBaseline,
                     filesToInclude,
-                    changedByReason);
+                    changedByReason,
+                    revertedSinceSkipPaths);
             }
 
             filesToInclude.Sort(
@@ -155,11 +172,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 changed.Sort(string.CompareOrdinal);
             }
 
+            revertedSinceSkipPaths.Sort(string.CompareOrdinal);
+
             return new HotReloadActiveSiblingRebindPlan(
                 filesToInclude,
                 changedByReason[HotReloadSiblingInclusionReason.ActiveChanges],
                 changedByReason[HotReloadSiblingInclusionReason.RetryAfterSkip],
-                changedByReason[HotReloadSiblingInclusionReason.Companion]);
+                changedByReason[HotReloadSiblingInclusionReason.Companion],
+                revertedSinceSkipPaths);
         }
 
         // Why the sources are added strongest first: ClassifyCandidate takes the first reason
@@ -270,8 +290,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string path,
             HotReloadNewSourceMembershipEvidence evidence,
             Func<string, string> resolveWorkerSourcePath,
+            Func<string, string, bool> matchesVerifiedBaseline,
             List<HotReloadSiblingInclusion> filesToInclude,
-            Dictionary<HotReloadSiblingInclusionReason, List<string>> changedByReason)
+            Dictionary<HotReloadSiblingInclusionReason, List<string>> changedByReason,
+            List<string> revertedSinceSkipPaths)
         {
             if (expectedHashes.Count == 0)
             {
@@ -299,7 +321,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            changedByReason[expectedHashes[0].Reason].Add(path);
+            HotReloadSiblingInclusionReason strongest = expectedHashes[0].Reason;
+            // Why only a retry candidate: a file with live patches that went back to its compiled
+            // source still differs from what runs, so that warning stays. A skipped file that went
+            // back has nothing left to apply, and its record only exists to bring the edit back.
+            if (strongest == HotReloadSiblingInclusionReason.RetryAfterSkip
+                && matchesVerifiedBaseline(path, workerSourcePath))
+            {
+                revertedSinceSkipPaths.Add(path);
+                return;
+            }
+
+            changedByReason[strongest].Add(path);
         }
 
         private static bool ContainsPath(IReadOnlyCollection<string> pathsAlreadyInRun, string path)

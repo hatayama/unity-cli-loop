@@ -74,6 +74,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a file left Skipped or Failed whose source went back to its compiled source loses
+        /// its applied-source record, so later reloads stop taking it for a file to retry.
+        /// </summary>
+        [Test]
+        public void ApplyTo_RevertedRetry_ClearsTheAppliedSourceRecord()
+        {
+            using (HotReloadDomain domain = HotReloadCompositionRoot.CreateProductionDomain())
+            {
+                domain.AppliedSources.RecordAppliedSource(EnumPath, CurrentHash, false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+                HotReloadRunSiblingLedgerUpdates updates = new HotReloadRunSiblingLedgerUpdates(domain);
+                updates.NoteRevertedRetry(EnumPath);
+                updates.ApplyTo(domain);
+
+                Assert.That(domain.AppliedSources.TryGetAppliedSource(EnumPath), Is.Null);
+            }
+        }
+
+        /// <summary>
+        /// What: such a file loses its companion record too, because the edited source that record
+        /// would bring back is gone.
+        /// </summary>
+        [Test]
+        public void ApplyTo_RevertedRetry_ForgetsTheCompanionRecordToo()
+        {
+            using (HotReloadDomain domain = HotReloadCompositionRoot.CreateProductionDomain())
+            {
+                domain.AppliedSources.RecordAppliedSource(EnumPath, CurrentHash, false, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
+                domain.CompanionSources.Record(EnumPath, OlderHash);
+                HotReloadRunSiblingLedgerUpdates updates = new HotReloadRunSiblingLedgerUpdates(domain);
+                updates.NoteRevertedRetry(EnumPath);
+                updates.ApplyTo(domain);
+
+                Assert.That(domain.CompanionSources.TryGetHash(EnumPath), Is.Null);
+            }
+        }
+
+        /// <summary>
         /// What: a file that applied nothing now but holds changes of an earlier reload reads as
         /// active from an earlier run.
         /// </summary>
