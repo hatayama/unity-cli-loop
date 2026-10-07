@@ -16,6 +16,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
 
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
@@ -109,6 +110,8 @@ type toolExecutionResult struct {
 
 func runPlainTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stderr io.Writer) toolExecutionResult {
 	applyDebugTimingParams(command, params)
+	correlationID := vibelog.NewCLIVibeCorrelationID()
+	logPlainToolRequestSent(connection, command, params, correlationID)
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, command)
 	outcome, err := sendWithTransientConnectionRetry(
@@ -121,6 +124,7 @@ func runPlainTool(ctx context.Context, connection unityipc.Connection, command s
 	spinner.Stop()
 	if err != nil {
 		writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
+		logPlainToolRequestFailed(connection, command, correlationID, time.Since(startedAt), outcome, err)
 		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
@@ -129,7 +133,9 @@ func runPlainTool(ctx context.Context, connection unityipc.Connection, command s
 	}
 	result := stripDebugTimingResult(command, outcome.Result)
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
-	return toolExecutionResult{result: result, exitCode: toolEnvelopeExitCode(result)}
+	exitCode := toolEnvelopeExitCode(result)
+	logPlainToolResponseReceived(connection, command, correlationID, time.Since(startedAt), outcome, result, exitCode)
+	return toolExecutionResult{result: result, exitCode: exitCode}
 }
 
 func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
