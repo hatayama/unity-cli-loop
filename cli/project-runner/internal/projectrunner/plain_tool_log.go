@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	plainToolRequestSentOperation      = "tool_request_sent"
-	plainToolResponseReceivedOperation = "tool_response_received"
-	plainToolRequestFailedOperation    = "tool_request_failed"
+	plainToolRequestSentOperation      = "cli_tool_request_sent"
+	plainToolResponseReceivedOperation = "cli_tool_response_received"
+	plainToolRequestFailedOperation    = "cli_tool_request_failed"
 )
 
 // writePlainToolVibeLog mirrors writeCompileVibeLog: the entry is built only when the log is on,

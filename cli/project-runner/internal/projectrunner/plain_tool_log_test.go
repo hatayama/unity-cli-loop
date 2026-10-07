@@ -40,8 +40,8 @@ func TestRunPlainToolWritesRequestAndResponseVibeLogs(t *testing.T) {
 				t.Fatalf("exit code = %d, want 0", result.exitCode)
 			}
 			logContent := readOnlyCliVibeLog(t, projectRoot)
-			sent := singleCliVibeEntry(t, logContent, "tool_request_sent")
-			received := singleCliVibeEntry(t, logContent, "tool_response_received")
+			sent := singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+			received := singleCliVibeEntry(t, logContent, "cli_tool_response_received")
 			assertCliVibeEntryLevel(t, sent, "INFO")
 			assertCliVibeEntryLevel(t, received, "INFO")
 			sentContext := cliVibeEntryContext(t, sent)
@@ -87,13 +87,13 @@ func TestRunPlainToolLogsTheEnvelopeExitCodeOfAFailedTool(t *testing.T) {
 		t.Fatalf("exit code = %d, want 1", result.exitCode)
 	}
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	received := singleCliVibeEntry(t, logContent, "tool_response_received")
+	received := singleCliVibeEntry(t, logContent, "cli_tool_response_received")
 	assertCliVibeEntryLevel(t, received, "INFO")
 	if exitCode := cliVibeEntryContext(t, received)["exit_code"]; exitCode != float64(1) {
 		t.Fatalf("exit_code = %#v, want 1", exitCode)
 	}
-	if failed := cliVibeEntriesForOperation(t, logContent, "tool_request_failed"); len(failed) != 0 {
-		t.Fatalf("tool_request_failed entries = %d, want 0", len(failed))
+	if failed := cliVibeEntriesForOperation(t, logContent, "cli_tool_request_failed"); len(failed) != 0 {
+		t.Fatalf("cli_tool_request_failed entries = %d, want 0", len(failed))
 	}
 }
 
@@ -110,15 +110,15 @@ func TestRunPlainToolWritesFailureVibeLog(t *testing.T) {
 		t.Fatalf("exit code = %d, want 1", result.exitCode)
 	}
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	sent := singleCliVibeEntry(t, logContent, "tool_request_sent")
-	failed := singleCliVibeEntry(t, logContent, "tool_request_failed")
+	sent := singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+	failed := singleCliVibeEntry(t, logContent, "cli_tool_request_failed")
 	assertCliVibeEntryLevel(t, failed, "ERROR")
 	if errorKind, _ := cliVibeEntryContext(t, failed)["error_kind"].(string); !strings.HasPrefix(errorKind, "rpc:") {
 		t.Fatalf("error_kind = %q, want an rpc: kind", errorKind)
 	}
 	assertSharedCliVibeCorrelationID(t, sent, failed)
-	if received := cliVibeEntriesForOperation(t, logContent, "tool_response_received"); len(received) != 0 {
-		t.Fatalf("tool_response_received entries = %d, want 0", len(received))
+	if received := cliVibeEntriesForOperation(t, logContent, "cli_tool_response_received"); len(received) != 0 {
+		t.Fatalf("cli_tool_response_received entries = %d, want 0", len(received))
 	}
 	assertCliVibeLogOmitsTheSentinel(t, logContent)
 }
@@ -137,7 +137,7 @@ func TestRunPlainToolDoesNotCopyTheUnityErrorMessage(t *testing.T) {
 	runPlainToolAgainstFakeUnity(t, projectRoot, map[string]any{}, response)
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	singleCliVibeEntry(t, logContent, "tool_request_failed")
+	singleCliVibeEntry(t, logContent, "cli_tool_request_failed")
 	assertCliVibeLogOmitsTheSentinel(t, logContent)
 }
 

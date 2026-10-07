@@ -665,10 +665,10 @@ func TestRunHotReloadWritesFallbackDecidedAndCompleteVibeLogs(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	singleCliVibeEntry(t, logContent, "tool_request_sent")
-	singleCliVibeEntry(t, logContent, "tool_response_received")
-	decided := singleCliVibeEntry(t, logContent, "hot_reload_compile_fallback_decided")
-	complete := singleCliVibeEntry(t, logContent, "hot_reload_compile_fallback_complete")
+	singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+	singleCliVibeEntry(t, logContent, "cli_tool_response_received")
+	decided := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided")
+	complete := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
 	assertCliVibeEntryLevel(t, decided, "INFO")
 	assertCliVibeEntryLevel(t, complete, "INFO")
 	decidedContext := cliVibeEntryContext(t, decided)
@@ -712,7 +712,7 @@ func TestRunHotReloadWritesFallbackDecidedWhenNotRequested(t *testing.T) {
 		0)
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "hot_reload_compile_fallback_decided"))
+	decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided"))
 	assertCliVibeContextValues(t, decidedContext, map[string]any{
 		"requested":      false,
 		"parse_error":    false,
@@ -721,7 +721,7 @@ func TestRunHotReloadWritesFallbackDecidedWhenNotRequested(t *testing.T) {
 		"warnings_count": float64(0),
 	})
 	assertCliVibeContextOmits(t, decidedContext, "timing")
-	assertNoCliVibeEntry(t, logContent, "hot_reload_compile_fallback_complete")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
 }
 
 // Verifies a reload response that is not an object is logged as a parse error that requested
@@ -738,13 +738,13 @@ func TestRunHotReloadWritesFallbackDecidedWithParseErrorForANullResponse(t *test
 		0)
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "hot_reload_compile_fallback_decided"))
+	decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided"))
 	assertCliVibeContextValues(t, decidedContext, map[string]any{
 		"requested":   false,
 		"parse_error": true,
 	})
 	assertCliVibeContextOmits(t, decidedContext, "success", "outcome", "warnings_count", "timing")
-	assertNoCliVibeEntry(t, logContent, "hot_reload_compile_fallback_complete")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
 }
 
 // Verifies a fallback compile that failed is logged as an error, though its result was merged into
@@ -814,7 +814,7 @@ func runHotReloadFallbackAndReadTheCompleteEntry(t *testing.T, compileResult com
 	if compileCalls != 1 {
 		t.Fatalf("compile call count = %d, want 1", compileCalls)
 	}
-	return singleCliVibeEntry(t, readOnlyCliVibeLog(t, projectRoot), "hot_reload_compile_fallback_complete"), code
+	return singleCliVibeEntry(t, readOnlyCliVibeLog(t, projectRoot), "cli_hot_reload_compile_fallback_complete"), code
 }
 
 func assertCliVibeContextValues(t *testing.T, contextMap map[string]any, want map[string]any) {

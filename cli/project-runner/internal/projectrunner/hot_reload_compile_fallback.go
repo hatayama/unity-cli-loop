@@ -35,8 +35,8 @@ const (
 )
 
 const (
-	hotReloadCompileFallbackDecidedOperation  = "hot_reload_compile_fallback_decided"
-	hotReloadCompileFallbackCompleteOperation = "hot_reload_compile_fallback_complete"
+	hotReloadCompileFallbackDecidedOperation  = "cli_hot_reload_compile_fallback_decided"
+	hotReloadCompileFallbackCompleteOperation = "cli_hot_reload_compile_fallback_complete"
 )
 
 // Raw JSON values, because the response fields are edited as encoded JSON.
