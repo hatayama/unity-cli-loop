@@ -37,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 path => inputFileResolver.ResolveSiblingWorkerSourcePath(
                     path,
                     firstFile.ProjectRoot,
-                    contentPathOverrideByFile));
+                    contentPathOverrideByFile),
+                (path, workerSourcePath) => false);
             IReadOnlyList<HotReloadSiblingInclusion> filesToInclude = rebind.FilesToInclude;
             for (int index = 0; index < filesToInclude.Count; index++)
             {
