@@ -42,10 +42,10 @@ func TestCompileWaitInterimReportsProgressLineAtSixtySeconds(t *testing.T) {
 }
 
 func TestCompileWaitInterimSwitchesToSilentLineAfterThirtySecondsWithoutSuccess(t *testing.T) {
-	// Verifies a successful poll followed by 30s of silence switches to the silent line.
+	// Verifies an idle successful poll followed by 30s of silence switches to the dialog-first silent line.
 	start := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
 	state := newCompileWaitInterimState(start)
-	state.noteSuccessfulPoll(start, compileStatusResponse{IsCompiling: true})
+	state.noteSuccessfulPoll(start, compileStatusResponse{Ready: true})
 
 	line, due := state.lineIfDue(start.Add(29*time.Second), compileWaitInterimIntervalDefault)
 	if due {
@@ -79,6 +79,96 @@ func TestCompileWaitInterimReportsSilentLineWhenNoSuccessfulPolls(t *testing.T) 
 	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Ask the user to answer the dialog in the Unity window. Restarting with 'uloop launch -r' helps only when no dialog is shown: the dialog reappears on every compile until the obsolete-API code is fixed or a person answers it."
 	if line != expected {
 		t.Fatalf("silent line mismatch:\n got: %q\nwant: %q", line, expected)
+	}
+}
+
+func TestCompileWaitInterimSilentLineSaysCompilingWhenTheLastAnswerWasCompiling(t *testing.T) {
+	// Verifies silence right after an answer that saw a compile or a domain reload leads with the compile and keeps the dialog hint for last.
+	testCases := []struct {
+		name       string
+		status     compileStatusResponse
+		lastStatus string
+	}{
+		{
+			name:       "compiling",
+			status:     compileStatusResponse{IsCompiling: true},
+			lastStatus: "(last status: is_compiling=true, is_domain_reload_in_progress=false)",
+		},
+		{
+			name:       "domain reload",
+			status:     compileStatusResponse{IsDomainReloadInProgress: true},
+			lastStatus: "(last status: is_compiling=false, is_domain_reload_in_progress=true)",
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			start := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+			state := newCompileWaitInterimState(start)
+			lastAnswerAt := start.Add(time.Second)
+			state.noteSuccessfulPoll(lastAnswerAt, testCase.status)
+
+			line, due := state.lineIfDue(lastAnswerAt.Add(31*time.Second), compileWaitInterimIntervalDefault)
+			if !due {
+				t.Fatal("expected a silent line after 31s without a successful poll")
+			}
+			if !strings.HasPrefix(line, "compile: Unity has not answered status polls for 31s") {
+				t.Fatalf("silent line must keep the headline: %q", line)
+			}
+			if !strings.Contains(line, "while compiling") {
+				t.Fatalf("silent line must say the Editor was compiling: %q", line)
+			}
+			if !strings.Contains(line, testCase.lastStatus) {
+				t.Fatalf("silent line must report the last status it saw, %s: %q", testCase.lastStatus, line)
+			}
+			firstSentenceEnd := strings.Index(line, ".")
+			if firstSentenceEnd < 0 {
+				t.Fatalf("silent line has no sentence end: %q", line)
+			}
+			if strings.Contains(line[:firstSentenceEnd+1], "modal dialog") {
+				t.Fatalf("the first sentence must not lead with the dialog: %q", line)
+			}
+			if !strings.Contains(line, "modal dialog") {
+				t.Fatalf("silent line must still point at a possible dialog: %q", line)
+			}
+		})
+	}
+}
+
+func TestCompileWaitInterimSilentLineKeepsTheDialogHintWhenNothingWasObserved(t *testing.T) {
+	// Verifies silence with no answered poll at all still leads with the dialog hint.
+	start := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	state := newCompileWaitInterimState(start)
+
+	line, due := state.lineIfDue(start.Add(31*time.Second), compileWaitInterimIntervalDefault)
+	if !due {
+		t.Fatal("expected a silent line after 31s with zero successful polls")
+	}
+	dialogFirst := "compile: Unity has not answered status polls for 31s. The Editor may be blocked by a modal dialog"
+	if !strings.HasPrefix(line, dialogFirst) {
+		t.Fatalf("silent line must lead with the dialog hint:\n got: %q\nwant prefix: %q", line, dialogFirst)
+	}
+	if strings.Contains(line, "while compiling") {
+		t.Fatalf("silent line must not claim a compile it never saw: %q", line)
+	}
+}
+
+func TestCompileWaitInterimSilentLineKeepsTheDialogHintWhenTheLastAnswerWasIdle(t *testing.T) {
+	// Verifies silence after an answer that saw neither a compile nor a domain reload still leads with the dialog hint.
+	start := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	state := newCompileWaitInterimState(start)
+	lastAnswerAt := start.Add(time.Second)
+	state.noteSuccessfulPoll(lastAnswerAt, compileStatusResponse{Ready: true})
+
+	line, due := state.lineIfDue(lastAnswerAt.Add(31*time.Second), compileWaitInterimIntervalDefault)
+	if !due {
+		t.Fatal("expected a silent line after 31s without a successful poll")
+	}
+	dialogFirst := "compile: Unity has not answered status polls for 31s. The Editor may be blocked by a modal dialog"
+	if !strings.HasPrefix(line, dialogFirst) {
+		t.Fatalf("silent line must lead with the dialog hint:\n got: %q\nwant prefix: %q", line, dialogFirst)
+	}
+	if strings.Contains(line, "while compiling") {
+		t.Fatalf("silent line must not claim a compile it never saw: %q", line)
 	}
 }
 
