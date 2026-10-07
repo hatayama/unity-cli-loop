@@ -167,6 +167,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a file with no snapshot for the current build is told the capture may not have
+        /// finished yet, so the reader knows a moment's wait can be enough.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenSnapshotIsMissingForTheCurrentBuild_SaysTheCaptureHadNotFinished()
+        {
+            string warning = AppendTheOnlyBaselineWarning(HotReloadSnapshotMissReason.NoSnapshotFile);
+
+            AssertIsAMissingSnapshotWarning(warning);
+            Assert.That(warning, Does.Contain("matches the current build"));
+            Assert.That(warning, Does.Contain("the capture had not finished"));
+        }
+
+        /// <summary>
+        /// What: a snapshot whose hash does not match the compiled file is named as such, rather
+        /// than reported as if no snapshot had been captured.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenSnapshotHashMismatches_SaysTheSnapshotDoesNotMatchTheCompiledFile()
+        {
+            string warning = AppendTheOnlyBaselineWarning(HotReloadSnapshotMissReason.HashMismatch);
+
+            AssertIsAMissingSnapshotWarning(warning);
+            Assert.That(warning, Does.Contain("the snapshot does not match the compiled file"));
+        }
+
+        /// <summary>
+        /// What: a file whose compiled assembly or PDB is missing is told so, because that is what
+        /// the compile it is asked to run has to produce.
+        /// </summary>
+        [Test]
+        public void AppendWorkerNotices_WhenCompiledAssemblyIsMissing_SaysSo()
+        {
+            string warning = AppendTheOnlyBaselineWarning(HotReloadSnapshotMissReason.NoCompiledAssembly);
+
+            AssertIsAMissingSnapshotWarning(warning);
+            Assert.That(warning, Does.Contain("the compiled assembly or its PDB is missing"));
+        }
+
+        /// <summary>
         /// What: a file the PDB lists no document for is told no compile gives it a baseline,
         /// instead of being asked to run uloop compile, which would change nothing for it.
         /// </summary>
@@ -332,6 +372,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<string> summary = new List<string>();
             siblingBaselineNotices.AppendTo(summary);
             Assert.That(summary, Is.Empty, "A re-applied sibling that declares one is left out of the summary too.");
+        }
+
+        // The one warning a file with a patch candidate and no introduced type gets for a snapshot
+        // that is unusable for the given reason.
+        private static string AppendTheOnlyBaselineWarning(HotReloadSnapshotMissReason snapshotMissReason)
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            List<string> warnings = new List<string>();
+
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
+                CreateFileOutput(Array.Empty<string>()),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                1,
+                snapshotMissReason,
+                false,
+                false,
+                ProjectRelativePath,
+                AssemblyName,
+                AssemblyResolvePath,
+                outcomes,
+                warnings,
+                null);
+
+            Assert.That(warnings.Count, Is.EqualTo(1), string.Join(" | ", warnings));
+            return warnings[0];
+        }
+
+        // Why these three phrases: readers and tests look for the warning by its opening words,
+        // and every reason still patches all methods and is cleared by a compile.
+        private static void AssertIsAMissingSnapshotWarning(string warning)
+        {
+            Assert.That(warning, Does.StartWith("No verified source snapshot for Broken.cs (assembly Some.Assembly)"));
+            Assert.That(warning, Does.Contain("patching all methods"));
+            Assert.That(warning, Does.Contain("uloop compile"));
         }
 
         private static TransformWorkerFileOutputDto CreateFileOutput(string[] parseErrors)

@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     warnings.Add(
                         string.Format(
-                            ChooseMissingBaselineWarningFormat(kind),
+                            ChooseMissingBaselineWarningFormat(kind, snapshotMissReason),
                             Path.GetFileName(projectRelativePath),
                             assemblyName));
                 }
@@ -139,7 +139,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : HotReloadMissingBaselineKind.NoVerifiedSourceSnapshot;
         }
 
-        private static string ChooseMissingBaselineWarningFormat(HotReloadMissingBaselineKind kind)
+        private static string ChooseMissingBaselineWarningFormat(
+            HotReloadMissingBaselineKind kind,
+            HotReloadSnapshotMissReason snapshotMissReason)
         {
             if (kind == HotReloadMissingBaselineKind.IntroducedType)
             {
@@ -148,7 +150,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return kind == HotReloadMissingBaselineKind.NoCompiledMethodBody
                 ? HotReloadConstants.NoCompiledMethodBodyBaselineWarningFormat
-                : HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat;
+                : ChooseNoVerifiedSourceSnapshotWarningFormat(snapshotMissReason);
+        }
+
+        // Why the reason picks only this file's wording: the kind, and the summary a re-applied
+        // sibling gets, stay one per kind. A file warned about on its own can say why its snapshot
+        // is unusable, which tells the reader whether a moment's wait or a compile clears it.
+        private static string ChooseNoVerifiedSourceSnapshotWarningFormat(
+            HotReloadSnapshotMissReason snapshotMissReason)
+        {
+            if (snapshotMissReason == HotReloadSnapshotMissReason.HashMismatch)
+            {
+                return HotReloadConstants.NoVerifiedSourceSnapshotMismatchWarningFormat;
+            }
+
+            if (snapshotMissReason == HotReloadSnapshotMissReason.NoCompiledAssembly)
+            {
+                return HotReloadConstants.NoVerifiedSourceSnapshotNoCompiledAssemblyWarningFormat;
+            }
+
+            // Why no other reason comes here: a file with a verified snapshot gets no warning, and
+            // one the PDB lists no document for gets the no-method-body kind.
+            Debug.Assert(
+                snapshotMissReason == HotReloadSnapshotMissReason.NoSnapshotFile,
+                "Only NoSnapshotFile, HashMismatch, or NoCompiledAssembly may reach the no-verified-snapshot wording.");
+            return HotReloadConstants.NoVerifiedSourceSnapshotForCurrentBuildWarningFormat;
         }
 
         private static void AppendSkippedOutcomes(

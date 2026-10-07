@@ -414,7 +414,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The target assembly is not currently loaded in this AppDomain. Ensure the code path "
             + "that loads it has run, then retry.";
 
-        // Format: file name, assembly name. Used instead of the warning below when the file
+        // Format: file name, assembly name. Used instead of the warnings below when the file
         // declares a type hot reload introduced: such a type is only in a byte-loaded artifact,
         // never in a compiled assembly, so no compile of this project could have produced the
         // baseline the other wording asks the reader to establish. Why the last sentence: the
@@ -425,12 +425,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "type from its own recorded declaration. Any other type in this file has no baseline "
             + "either and is patched in full.";
 
-        // Format: file name, assembly name. Emitted per file when PDB-validated snapshot is absent.
-        public const string NoVerifiedSourceSnapshotWarningFormat =
-            "No verified source snapshot for {0} (assembly {1}); patching all methods. "
-            + "Run uloop compile to establish a baseline for edited-method detection.";
+        // Format: file name, assembly name. Emitted per file when no snapshot was written for the
+        // assembly generation the file was compiled into. Why both causes: the capture runs once
+        // after each compile, so a reload that arrives before it finds none, and so does a file
+        // created since the compile. A moment's wait clears the first, and a compile clears both.
+        public const string NoVerifiedSourceSnapshotForCurrentBuildWarningFormat =
+            "No verified source snapshot for {0} (assembly {1}) matches the current build; patching "
+            + "all methods. Hot reload captures the snapshot after each compile, so either the capture "
+            + "had not finished when this reload arrived or the file is new: run 'uloop compile', or "
+            + "rerun in a moment.";
 
-        // Format: file name, assembly name. Used instead of the warning above when the compiled
+        // Format: file name, assembly name. Used instead of the warning above when the snapshot's
+        // bytes do not match the checksum the compiled PDB recorded. Why "most often": a PDB
+        // document with no checksum, or with an algorithm the check does not support, reports the
+        // same reason, but a file saved between the compile and the capture is the usual cause.
+        public const string NoVerifiedSourceSnapshotMismatchWarningFormat =
+            "No verified source snapshot for {0} (assembly {1}): the snapshot does not match the "
+            + "compiled file (most often the file changed between the compile and the snapshot "
+            + "capture); patching all methods. Run 'uloop compile' to re-establish the baseline.";
+
+        // Format: file name, assembly name. Used instead of the warnings above when the compiled
+        // assembly or its PDB is not on disk, so there is nothing to verify a snapshot against.
+        public const string NoVerifiedSourceSnapshotNoCompiledAssemblyWarningFormat =
+            "No verified source snapshot for {0} (assembly {1}): the compiled assembly or its PDB is "
+            + "missing; patching all methods. Run 'uloop compile'.";
+
+        // Format: file name, assembly name. Used instead of the warnings above when the compiled
         // PDB lists no document for the file: a file whose code compiles to no method body (an
         // enum, an interface, fields only) is never recorded there, so no compile can produce the
         // baseline the other wording asks the reader to establish.
@@ -440,7 +460,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "declare types without bodies.";
 
         // Format: file count, comma-separated project-relative paths. The per-kind summaries of the
-        // three warnings above for files a run only re-applied; see HotReloadSiblingBaselineNotices.
+        // warnings above for files a run only re-applied; see HotReloadSiblingBaselineNotices.
         public const string SiblingIntroducedTypeNoBaselineWarningFormat =
             "{0} re-applied sibling file(s) declare a type hot reload introduced, so they have no "
             + "compiled baseline until 'uloop compile': {1}. This is expected: hot reload tracks "
