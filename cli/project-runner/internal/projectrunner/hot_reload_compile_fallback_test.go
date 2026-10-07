@@ -747,6 +747,63 @@ func TestRunHotReloadWritesFallbackDecidedWithParseErrorForANullResponse(t *test
 	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
 }
 
+// Verifies the decision logs no success for an answer whose Success is missing or null, rather than
+// a false the Editor never sent.
+func TestRunHotReloadWritesFallbackDecidedWithoutSuccessWhenTheAnswerHasNone(t *testing.T) {
+	answers := map[string]string{
+		"missing": `{"CompileFallback":"NotNeeded"}`,
+		"null":    `{"Success":null,"CompileFallback":"NotNeeded"}`,
+	}
+	for name, answer := range answers {
+		t.Run(name, func(t *testing.T) {
+			enableCliVibeLog(t)
+			projectRoot := t.TempDir()
+
+			runHotReloadWithDelayedFakeCompileInProjectRoot(
+				t,
+				projectRoot,
+				answer,
+				compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0},
+				0)
+
+			logContent := readOnlyCliVibeLog(t, projectRoot)
+			decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided"))
+			assertCliVibeContextValues(t, decidedContext, map[string]any{
+				"requested":   false,
+				"parse_error": false,
+			})
+			assertCliVibeContextOmits(t, decidedContext, "success")
+		})
+	}
+}
+
+// Verifies a reload request that fails logs the request and its failure but no fallback decision:
+// no answer came back, so there was nothing to decide.
+func TestRunHotReloadWritesNoFallbackDecisionWhenTheReloadRequestFails(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	original := hotReloadFallbackCompile
+	t.Cleanup(func() { hotReloadFallbackCompile = original })
+	hotReloadFallbackCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
+		t.Fatal("the fallback compile must not run after a failed reload request")
+		return compileExecutionResult{}
+	}
+	server := startFakeUnityServer(t, projectRoot, hotReloadCommandName, testUnityRPCFailureResponse)
+	var stdout, stderr bytes.Buffer
+
+	code := runTool(context.Background(), server.connection, hotReloadCommandName, map[string]any{}, &stdout, &stderr)
+
+	server.receivedRequest(t)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+	singleCliVibeEntry(t, logContent, "cli_tool_request_failed")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
+}
+
 // Verifies a fallback compile that failed is logged as an error, though its result was merged into
 // the response.
 func TestRunHotReloadWritesFallbackCompleteAsErrorWhenTheCompileFails(t *testing.T) {
