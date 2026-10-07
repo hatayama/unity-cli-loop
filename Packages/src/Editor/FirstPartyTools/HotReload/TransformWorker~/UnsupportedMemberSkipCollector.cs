@@ -136,8 +136,40 @@ internal static class UnsupportedMemberSkipCollector
             return;
         }
 
+        bool emittedSkip = AppendChangedSetOrInitAccessorSkips(
+            propertyDeclaration.AccessorList,
+            propertySymbol,
+            skipped,
+            snapshotProperty,
+            plainCurrentProperty);
+
+        PropertyDeclarationSyntax namedProperty = propertyDeclaration as PropertyDeclarationSyntax;
+        if (!emittedSkip
+            || namedProperty == null
+            || snapshotPropertyMap == null
+            || addedMethodCatalog == null)
+        {
+            return;
+        }
+
+        string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, namedProperty);
+        if (!snapshotPropertyMap.ContainsKey(propertyKey))
+        {
+            addedMethodCatalog.AddAddedPropertySyntaxKey(propertyKey);
+        }
+    }
+
+    // Reports each set or init accessor that has a body and differs from the snapshot, and returns
+    // whether it reported any.
+    private static bool AppendChangedSetOrInitAccessorSkips(
+        AccessorListSyntax accessorList,
+        IPropertySymbol propertySymbol,
+        List<WorkerSkipped> skipped,
+        PropertyDeclarationSyntax snapshotProperty,
+        PropertyDeclarationSyntax plainCurrentProperty)
+    {
         bool emittedSkip = false;
-        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        foreach (AccessorDeclarationSyntax accessor in accessorList.Accessors)
         {
             if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
             {
@@ -173,20 +205,7 @@ internal static class UnsupportedMemberSkipCollector
             emittedSkip = true;
         }
 
-        PropertyDeclarationSyntax namedProperty = propertyDeclaration as PropertyDeclarationSyntax;
-        if (!emittedSkip
-            || namedProperty == null
-            || snapshotPropertyMap == null
-            || addedMethodCatalog == null)
-        {
-            return;
-        }
-
-        string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, namedProperty);
-        if (!snapshotPropertyMap.ContainsKey(propertyKey))
-        {
-            addedMethodCatalog.AddAddedPropertySyntaxKey(propertyKey);
-        }
+        return emittedSkip;
     }
 
     // Why match by kind: a set accessor that became init changed its declaration, so it finds no
