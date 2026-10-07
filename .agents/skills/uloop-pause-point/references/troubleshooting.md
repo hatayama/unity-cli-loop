@@ -84,6 +84,10 @@ If enable fails with a "No sequence point found" error (worded "No compiled stat
 
 A "No method named '<name>' ..." failure means no method matching `--method` has a statement on or after `--line`. The match is case-sensitive, on the simple name or `Type.Method`, and a name that matches no method in the file fails on every line and after every compile, so check `--method` (or drop it) before moving `--line`.
 
+## File Path Forms
+
+`--file` takes the asset path Unity shows (`Assets/...` or `Packages/<package-id>/...`), the path under a package's folder (`Packages/<folder>/...` for an embedded package), or an absolute path. Every form resolves to the asset path, and a file:line marker's `Id` is `<asset path>:<line>`. `pause-point-status`, `await-pause-point`, and `clear-pause-point` look the marker up by that `Id`, so pass the `Id` the enable response returned, or `--file` in the asset path form; `--file` in another form names a different `Id` and finds no marker.
+
 ## Debug-switch trade-offs
 
 The warning that the Debug switch happened means the pause point is already armed: do not
