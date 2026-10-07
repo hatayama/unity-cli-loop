@@ -6,8 +6,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Turns an absolute script path into the project-relative form that
-    /// CompilationPipeline.GetAssemblyNameFromScriptPath accepts.
+    /// Maps a script path between the file on disk and the project-relative form that
+    /// CompilationPipeline.GetAssemblyNameFromScriptPath accepts, in either direction.
     /// </summary>
     internal static class HotReloadScriptPathNormalizer
     {
@@ -61,6 +61,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Turns a project-relative asset path into the path of the file behind it: the
+        /// project-relative physical path, or the absolute one when the package lives outside
+        /// the project. A path under no package root comes back with forward slashes only.
+        /// </summary>
+        internal static string ToPhysicalProjectRelative(
+            string assetRelativePath,
+            string projectRoot,
+            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            StringComparison comparison)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assetRelativePath), "assetRelativePath must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
+            Debug.Assert(packageRoots != null, "packageRoots must not be null.");
+
+            string normalized = assetRelativePath.Replace('\\', '/');
+            foreach (HotReloadPackageRoot packageRoot in packageRoots)
+            {
+                // Matched with the trailing slash so Packages/io.example.pkg does not claim a file of
+                // Packages/io.example.pkg.extra.
+                string assetRoot = WithTrailingSlash(packageRoot.AssetPath.Replace('\\', '/'));
+                if (!normalized.StartsWith(assetRoot, comparison))
+                {
+                    continue;
+                }
+
+                string physical = WithTrailingSlash(packageRoot.ResolvedPath.Replace('\\', '/'))
+                    + normalized.Substring(assetRoot.Length);
+                string root = WithTrailingSlash(projectRoot.Replace('\\', '/'));
+                // A package outside the project has no project-relative path, so the absolute one stands.
+                return physical.StartsWith(root, comparison) ? physical.Substring(root.Length) : physical;
+            }
+
+            // Assets has no virtual root, so its asset path already names the file itself.
+            return normalized;
         }
 
         private static string WithTrailingSlash(string path)
