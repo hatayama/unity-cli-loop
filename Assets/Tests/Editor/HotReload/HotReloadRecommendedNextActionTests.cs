@@ -270,6 +270,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadConstants.EditorNotReadyRecommendedNextAction,
                 HotReloadConstants.CompiledAssemblyMissingRecommendedNextAction);
             yield return ComposedCase(
+                editorNotReady | missing,
+                OnePatched,
+                HotReloadConstants.EditorNotReadyAfterPartialApplyRecommendedNextAction,
+                HotReloadConstants.CompiledAssemblyMissingRecommendedNextAction);
+            yield return ComposedCase(
                 editorNotReady | virtualPlayer,
                 NothingApplied,
                 HotReloadConstants.EditorNotReadyRecommendedNextAction,
@@ -280,9 +285,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadConstants.EditorNotReadyAfterPartialApplyRecommendedNextAction,
                 HotReloadConstants.VirtualPlayerRecommendedNextAction);
             yield return ComposedCase(
+                declaration | editorNotReady | missing,
+                NothingApplied,
+                HotReloadConstants.FailedWithNoApplyRecommendedNextAction,
+                HotReloadConstants.EditorNotReadyAppendedRecommendedNextAction,
+                HotReloadConstants.CompiledAssemblyMissingRecommendedNextAction);
+            yield return ComposedCase(
+                declaration | editorNotReady | missing,
+                OnePatched,
+                HotReloadConstants.PartialApplyRecommendedNextAction,
+                HotReloadConstants.EditorNotReadyAppendedRecommendedNextAction,
+                HotReloadConstants.CompiledAssemblyMissingRecommendedNextAction);
+            yield return ComposedCase(
                 declaration | editorNotReady | virtualPlayer,
                 NothingApplied,
                 HotReloadConstants.FailedWithNoApplyRecommendedNextAction,
+                HotReloadConstants.EditorNotReadyAppendedRecommendedNextAction,
+                HotReloadConstants.VirtualPlayerRecommendedNextAction);
+            yield return ComposedCase(
+                declaration | editorNotReady | virtualPlayer,
+                OnePatched,
+                HotReloadConstants.PartialApplyRecommendedNextAction,
                 HotReloadConstants.EditorNotReadyAppendedRecommendedNextAction,
                 HotReloadConstants.VirtualPlayerRecommendedNextAction);
         }
