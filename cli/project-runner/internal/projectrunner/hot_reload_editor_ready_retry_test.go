@@ -513,8 +513,9 @@ func TestRunHotReloadKeepsTheFirstResponseWhenTheSecondRequestFails(t *testing.T
 	if run.code != 1 || run.compileCalls != 0 {
 		t.Fatalf("exit code = %d, compile calls = %d, want 1 and 0", run.code, run.compileCalls)
 	}
-	if strings.TrimSpace(run.stderr) == "" {
-		t.Fatal("stderr must carry the transport error")
+	// Why the error code and not any text: the waiting line is on stderr whenever the retry runs.
+	if !strings.Contains(run.stderr, "UNITY_DISCONNECTED_AFTER_DISPATCH") {
+		t.Fatalf("stderr must carry the transport error: %q", run.stderr)
 	}
 	fields := run.stdoutFields(t)
 	if fields["Message"] != "refused" {
@@ -559,9 +560,13 @@ func TestRunHotReloadWritesEditorReadyRetryVibeLogs(t *testing.T) {
 	}
 	assertSharedCliVibeCorrelationID(t, sent[0], decided)
 	assertSharedCliVibeCorrelationID(t, decided, complete)
-	if second := vibeLogContextString(t, sent[1], "correlation_id"); completeContext["second_correlation_id"] != second {
+	second := vibeLogContextString(t, sent[1], "correlation_id")
+	if completeContext["second_correlation_id"] != second {
 		t.Fatalf("second_correlation_id = %#v, want the second request's %q", completeContext["second_correlation_id"], second)
 	}
+	// The fallback decision reads the second answer, so its entry follows the second request.
+	fallbackDecided := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided")
+	assertSharedCliVibeCorrelationID(t, sent[1], fallbackDecided)
 }
 
 // Verifies a response that does not ask for the retry, or cannot be read, logs the decision and no
@@ -611,7 +616,7 @@ func TestRunHotReloadFailsWhenTheSecondResponseIsNotAnObject(t *testing.T) {
 	if run.code != 1 || run.compileCalls != 0 {
 		t.Fatalf("exit code = %d, compile calls = %d, want 1 and 0", run.code, run.compileCalls)
 	}
-	if run.stdout != "" || strings.TrimSpace(run.stderr) == "" {
+	if run.stdout != "" || !strings.Contains(run.stderr, "must be a JSON object") {
 		t.Fatalf("stdout must be empty and stderr must carry the error: stdout=%q stderr=%q", run.stdout, run.stderr)
 	}
 	complete := singleCliVibeEntry(t, readOnlyCliVibeLog(t, projectRoot), "cli_hot_reload_editor_ready_retry_complete")
