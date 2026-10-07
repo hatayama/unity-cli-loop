@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.13.0](https://github.com/hatayama/unity-cli-loop/compare/v3.12.0...v3.13.0) (2026-10-07)
+
+
+### Features
+
+* Hot reload now applies edits on partial types and in global-using assemblies, and the response says whether an edit is live ([#3198](https://github.com/hatayama/unity-cli-loop/issues/3198)) ([fed634a](https://github.com/hatayama/unity-cli-loop/commit/fed634ac769f999ee53f6453491e9dd7e95214c5))
+
+
+### Bug Fixes
+
+* Commands no longer run several times slower while the Unity Editor stays in the background on macOS ([#3200](https://github.com/hatayama/unity-cli-loop/issues/3200)) ([b96ca01](https://github.com/hatayama/unity-cli-loop/commit/b96ca0163987c0f222f0c7d7e8901b8adccad12b))
+
 ## [3.12.0](https://github.com/hatayama/unity-cli-loop/compare/v3.11.5...v3.12.0) (2026-10-06)
 
 
