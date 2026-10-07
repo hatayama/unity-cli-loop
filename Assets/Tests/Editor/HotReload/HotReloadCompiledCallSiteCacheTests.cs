@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 using Mono.Cecil;
 
@@ -13,13 +15,17 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Invalidation and capacity contract of the compiled call-site cache. Each test works on
-    /// copies of this test assembly's dll in a private temp directory so that mutating the file
-    /// never touches ScriptAssemblies.
+    /// Invalidation, capacity, run hold, and call-site index contract of the compiled call-site
+    /// cache. Each test works on copies of this test assembly's dll in a private temp directory so
+    /// that mutating the file never touches ScriptAssemblies.
     /// </summary>
     public class HotReloadCompiledCallSiteCacheTests
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
+        private const string ScannerFixtureTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerFixture";
+        private const string GenericHostTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.GenericHost`1";
         // Why this assembly: it is always compiled alongside the test assembly and is smaller, so
         // it can be zero-padded to the test assembly's length for the module identity test.
         private const string OtherAssemblyName = "UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly";
@@ -320,6 +326,233 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Constructor_NonPositiveCapacity_Throws()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new HotReloadCompiledCallSiteCache(0));
+        }
+
+        /// <summary>
+        /// What: inside a hold each dll is read once even when a run touches more dlls than the
+        /// capacity, so a run never re-reads a dll it already read.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_InsideHold_ReadsEachDllOnce_EvenBeyondCapacity()
+        {
+            string pathA = CopyTestAssembly("a.dll");
+            string pathB = CopyTestAssembly("b.dll");
+            string pathC = CopyTestAssembly("c.dll");
+
+            using (_cache.HoldEntriesForRun())
+            {
+                HotReloadCompiledCallSiteCache.Entry firstA = _cache.GetOrLoad(pathA);
+                HotReloadCompiledCallSiteCache.Entry firstB = _cache.GetOrLoad(pathB);
+                HotReloadCompiledCallSiteCache.Entry firstC = _cache.GetOrLoad(pathC);
+                HotReloadCompiledCallSiteCache.Entry secondA = _cache.GetOrLoad(pathA);
+                HotReloadCompiledCallSiteCache.Entry secondB = _cache.GetOrLoad(pathB);
+                HotReloadCompiledCallSiteCache.Entry secondC = _cache.GetOrLoad(pathC);
+
+                Assert.That(_cache.LoadCount, Is.EqualTo(3));
+                Assert.That(_cache.Count, Is.EqualTo(3));
+                Assert.That(secondA, Is.SameAs(firstA));
+                Assert.That(secondB, Is.SameAs(firstB));
+                Assert.That(secondC, Is.SameAs(firstC));
+            }
+        }
+
+        /// <summary>
+        /// What: ending the hold evicts the least recently used entries down to the capacity, so
+        /// the dlls used last stay cached for the next run and the evicted one is read again.
+        /// </summary>
+        [Test]
+        public void HoldEntriesForRun_Dispose_EvictsDownToCapacity()
+        {
+            string pathA = CopyTestAssembly("a.dll");
+            string pathB = CopyTestAssembly("b.dll");
+            string pathC = CopyTestAssembly("c.dll");
+            using (_cache.HoldEntriesForRun())
+            {
+                _cache.GetOrLoad(pathA);
+                _cache.GetOrLoad(pathB);
+                _cache.GetOrLoad(pathC);
+                _cache.GetOrLoad(pathA);
+                _cache.GetOrLoad(pathB);
+                _cache.GetOrLoad(pathC);
+            }
+
+            Assert.That(_cache.Count, Is.EqualTo(2));
+            // Why B and C before A: outside a hold a miss evicts one entry before it adds, so
+            // reading A first would evict B and hide whether B survived the end of the hold.
+            _cache.GetOrLoad(pathB);
+            _cache.GetOrLoad(pathC);
+            Assert.That(_cache.LoadCount, Is.EqualTo(3), "B and C were used last and stayed cached.");
+            _cache.GetOrLoad(pathA);
+            Assert.That(_cache.LoadCount, Is.EqualTo(4), "A was used least recently and was evicted when the hold ended.");
+        }
+
+        /// <summary>
+        /// What: ending an inner hold keeps every entry while the outer hold is open; only the end
+        /// of the outer hold evicts down to the capacity.
+        /// </summary>
+        [Test]
+        public void HoldEntriesForRun_Nested_KeepsEntriesUntilTheOuterHoldEnds()
+        {
+            string pathA = CopyTestAssembly("a.dll");
+            string pathB = CopyTestAssembly("b.dll");
+            string pathC = CopyTestAssembly("c.dll");
+
+            using (_cache.HoldEntriesForRun())
+            {
+                using (_cache.HoldEntriesForRun())
+                {
+                    _cache.GetOrLoad(pathA);
+                    _cache.GetOrLoad(pathB);
+                    _cache.GetOrLoad(pathC);
+                }
+
+                Assert.That(_cache.Count, Is.EqualTo(3), "The outer hold is still open.");
+            }
+
+            Assert.That(_cache.Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: disposing a hold twice releases it once, so a repeated Dispose cannot end the
+        /// outer hold early and let a run's entries be evicted.
+        /// </summary>
+        [Test]
+        public void HoldEntriesForRun_DisposeTwice_IsIgnored()
+        {
+            string pathA = CopyTestAssembly("a.dll");
+            string pathB = CopyTestAssembly("b.dll");
+            string pathC = CopyTestAssembly("c.dll");
+
+            using (_cache.HoldEntriesForRun())
+            {
+                IDisposable inner = _cache.HoldEntriesForRun();
+                inner.Dispose();
+                inner.Dispose();
+
+                _cache.GetOrLoad(pathA);
+                _cache.GetOrLoad(pathB);
+                _cache.GetOrLoad(pathC);
+                Assert.That(_cache.Count, Is.EqualTo(3), "The outer hold is still open.");
+            }
+
+            Assert.That(_cache.Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: without a hold a miss still evicts the least recently used entry before it adds,
+        /// so lookups outside a run keep the cache within its capacity.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_WithoutHold_StillEvictsBeforeAdding()
+        {
+            _cache.GetOrLoad(CopyTestAssembly("a.dll"));
+            _cache.GetOrLoad(CopyTestAssembly("b.dll"));
+            _cache.GetOrLoad(CopyTestAssembly("c.dll"));
+
+            Assert.That(_cache.Count, Is.EqualTo(2));
+            Assert.That(_cache.LoadCount, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: inside a hold a dll whose fingerprint changed is read again in place without
+        /// evicting another entry, and the other entries are still served without a read.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_InsideHold_StaleFingerprint_ReloadsWithoutEvicting()
+        {
+            string pathA = CopyTestAssembly("a.dll");
+            string pathB = CopyTestAssembly("b.dll");
+            string pathC = CopyTestAssembly("c.dll");
+
+            using (_cache.HoldEntriesForRun())
+            {
+                _cache.GetOrLoad(pathA);
+                _cache.GetOrLoad(pathB);
+                _cache.GetOrLoad(pathC);
+
+                File.SetLastWriteTimeUtc(pathA, File.GetLastWriteTimeUtc(pathA).AddSeconds(5));
+                _cache.GetOrLoad(pathA);
+                Assert.That(_cache.LoadCount, Is.EqualTo(4));
+                Assert.That(_cache.Count, Is.EqualTo(3));
+
+                _cache.GetOrLoad(pathB);
+                _cache.GetOrLoad(pathC);
+                Assert.That(_cache.LoadCount, Is.EqualTo(4), "Reading A again must not evict B or C.");
+            }
+        }
+
+        /// <summary>
+        /// What: once a dll is indexed, its cached view no longer holds the methods' instruction
+        /// lists, so an entry keeps only the dll bytes and the metadata.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_ReleasesMethodBodiesAfterIndexing()
+        {
+            // Why a private field: Cecil gives no public way to observe a released body. RVA and
+            // HasBody do not change, and reading Body reads it again from the image, so this peeks
+            // at the field name of the Cecil version the package pins (1.11.6).
+            FieldInfo bodyField = typeof(MethodDefinition).GetField("body", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (bodyField == null)
+            {
+                Assert.Fail("MethodDefinition has no private 'body' field: the Cecil version changed, so update this probe.");
+            }
+
+            AssemblyDefinition captured = null;
+            HotReloadCompiledCallSiteCache.LoadProbes probes = new HotReloadCompiledCallSiteCache.LoadProbes
+            {
+                AfterAssemblyRead = assembly => captured = assembly
+            };
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            try
+            {
+                HotReloadCompiledCallSiteCache.Entry entry = cache.GetOrLoad(CopyTestAssembly("a.dll"));
+
+                TypeDefinition fixtureType = captured.MainModule.GetType(ScannerFixtureTypeMetadataName);
+                MethodDefinition ordinaryCaller = fixtureType.Methods.Single(
+                    method => method.Name == nameof(HotReloadCallSiteScannerFixture.OrdinaryCaller));
+                // Why check the walk first: Cecil reads a body only when it is asked for, so a body
+                // that was never walked is also null and would pass for the wrong reason.
+                Assert.That(
+                    entry.CallSites.Any(callSite => callSite.Caller == ordinaryCaller),
+                    Is.True,
+                    "The caller's body must have been walked for its call sites.");
+                Assert.That(bodyField.GetValue(ordinaryCaller), Is.Null);
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
+        /// What: an entry looks up call sites by the open declaring type's full name and the method
+        /// name, so a call through GenericHost&lt;int&gt; is found under GenericHost`1, while the
+        /// closed type name or another method name finds nothing.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_IndexesCallSitesByOpenDeclaringTypeAndMethodName()
+        {
+            const string targetMethodName = nameof(GenericHost<int>.Target);
+            HotReloadCompiledCallSiteCache.Entry entry = _cache.GetOrLoad(CopyTestAssembly("a.dll"));
+
+            IReadOnlyList<int> indices = entry.LookupCallSiteIndices(GenericHostTypeMetadataName, targetMethodName);
+
+            Assert.That(indices, Is.Not.Empty);
+            foreach (int index in indices)
+            {
+                MethodReference openMethod = entry.CallSites[index].Operand.GetElementMethod();
+                Assert.That(openMethod.Name, Is.EqualTo(targetMethodName));
+                Assert.That(openMethod.DeclaringType.GetElementType().FullName, Is.EqualTo(GenericHostTypeMetadataName));
+            }
+
+            Assert.That(
+                entry.LookupCallSiteIndices(GenericHostTypeMetadataName + "<System.Int32>", targetMethodName),
+                Is.Empty,
+                "The index key is the open type name.");
+            Assert.That(
+                entry.LookupCallSiteIndices(GenericHostTypeMetadataName, targetMethodName + "Missing"),
+                Is.Empty,
+                "The index key includes the method name.");
         }
 
         private static void ReadFirstMethodBody(AssemblyDefinition assembly)

@@ -71,6 +71,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CallSites = callSites;
             }
 
+            /// <summary>
+            /// Positions in <see cref="CallSites"/>, in ascending order, of the call sites whose
+            /// operand's open declaring type is named <paramref name="openDeclaringTypeFullName"/>
+            /// and whose method is named <paramref name="methodName"/>; empty when there are none.
+            /// </summary>
+            public IReadOnlyList<int> LookupCallSiteIndices(string openDeclaringTypeFullName, string methodName)
+            {
+                return Array.Empty<int>();
+            }
+
             public void Dispose()
             {
                 _assembly.Dispose();
@@ -220,6 +230,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Keeps every entry until the returned hold is disposed, however many dlls are read in the
+        /// meantime; when the outermost hold ends, the least recently used entries are evicted down
+        /// to the capacity. Holds nest, and disposing one hold twice releases it once.
+        /// </summary>
+        public IDisposable HoldEntriesForRun()
+        {
+            return new Hold();
+        }
+
+        /// <summary>
         /// Drops every entry. Intended for tests and for callers that know the dlls changed.
         /// </summary>
         public void Clear()
@@ -232,6 +252,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 _entries.Clear();
+            }
+        }
+
+        private sealed class Hold : IDisposable
+        {
+            public void Dispose()
+            {
             }
         }
 

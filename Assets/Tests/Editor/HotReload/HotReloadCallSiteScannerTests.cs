@@ -370,6 +370,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(NestedCallerHostTypeMetadataName + "::NestedCaller()"));
         }
 
+        /// <summary>
+        /// What: a call site whose type-parameter argument matches two targets is reported once,
+        /// for whichever of them comes first in the given order, so one compiled call is never
+        /// counted twice.
+        /// </summary>
+        [Test]
+        public void FindCallSites_TwoTargetsMatchingOneCallSite_ReportsOneHitForTheFirstTarget()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
+                TestScriptProjectRelativePath);
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            HotReloadCallSiteScanner.CompiledMethodIdentity typeParameterTarget =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    new HotReloadMetadataTypeName(FixtureTypeMetadataName),
+                    nameof(HotReloadCallSiteScannerFixture.GenericParameterTarget),
+                    new[] { "T" },
+                    1);
+            HotReloadCallSiteScanner.CompiledMethodIdentity int32Target =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    new HotReloadMetadataTypeName(FixtureTypeMetadataName),
+                    nameof(HotReloadCallSiteScannerFixture.GenericParameterTarget),
+                    new[] { "System.Int32" },
+                    1);
+
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
+                projectRoot,
+                new[] { typeParameterTarget, int32Target }).Hits;
+            List<HotReloadCallSiteScanner.CallSiteHit> reversedHits = HotReloadCallSiteScanner.FindCallSites(
+                projectRoot,
+                new[] { int32Target, typeParameterTarget }).Hits;
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].TargetMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::GenericParameterTarget`1(T)"));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::CallGenericParameterTarget()"));
+            Assert.That(reversedHits.Count, Is.EqualTo(1));
+            Assert.That(
+                reversedHits[0].TargetMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::GenericParameterTarget`1(System.Int32)"));
+        }
+
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
             string typeMetadataName,
             string methodName,
