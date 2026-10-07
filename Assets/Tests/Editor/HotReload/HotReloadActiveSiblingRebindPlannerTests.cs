@@ -301,6 +301,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(PathsOf(plan), Is.Empty);
         }
 
+        /// <summary>
+        /// What: a companion recorded while edited whose source went back to the compile snapshot is
+        /// still reported as a changed companion, because only a file left Skipped or Failed is
+        /// forgotten that way.
+        /// </summary>
+        [Test]
+        public void Plan_CompanionBackAtItsCompiledSource_IsStillReportedAsAChangedCompanion()
+        {
+            string workerSourcePath = WriteWorkerSource(CompiledSiblingPath);
+            _access.Domain.CompanionSources.Record(
+                CompiledSiblingPath,
+                new HotReloadSourceContentHasher().ComputeContentHash(File.ReadAllBytes(workerSourcePath)));
+            File.WriteAllText(workerSourcePath, "// back at its compiled source\n");
+            _matchesVerifiedBaseline = (path, source) => true;
+
+            HotReloadActiveSiblingRebindPlan plan = Plan(new[] { CompiledSiblingPath });
+
+            Assert.That(plan.ChangedCompanionPaths, Is.EqualTo(new[] { CompiledSiblingPath }));
+            Assert.That(plan.RevertedSinceSkipPaths, Is.Empty);
+            Assert.That(PathsOf(plan), Is.Empty);
+        }
+
         private HotReloadActiveSiblingRebindPlan Plan(string[] assemblySourceFiles)
         {
             return HotReloadActiveSiblingRebindPlanner.Plan(
