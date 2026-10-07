@@ -218,6 +218,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadCompileFallbackDecision.NotNeeded.ToString();
 
         /// <summary>
+        /// True when every failure of this apply run is the Editor compiling or importing. The CLI
+        /// then waits for the Editor to settle and applies the same request again in the same
+        /// command; false on status and revert runs and on every other failure.
+        /// </summary>
+        public bool RetryAfterEditorReady { get; set; }
+
+        /// <summary>
+        /// The project-relative asset paths of the scripts this apply run selected, whether given
+        /// as Files or chosen as the changed files; the CLI sends them as Files when it applies the
+        /// same request again. Empty on status and revert runs.
+        /// </summary>
+        public string[] SelectedFiles { get; set; } = Array.Empty<string>();
+
+        /// <summary>
         /// Milliseconds the apply run spent per phase. Written on apply runs only; --status,
         /// --revert-all, and requests refused before the run leave it out.
         /// </summary>
@@ -364,7 +378,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 rewireFields,
                 unrestoredWiredValues,
                 isPlaying,
-                EditorApplication.isPaused);
+                EditorApplication.isPaused,
+                selection.Files);
             ApplyCompileFallbackDecision(
                 response,
                 result,
@@ -413,7 +428,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why this reads the services itself: the apply path above passes the services it read
         // at its own entry, and this shim exists only for callers that hold a result but not the
-        // run that produced it.
+        // run that produced it, so it has no selected files to name either.
         internal static HotReloadResponse BuildApplyResponse(
             HotReloadOrchestratorResult result,
             IReadOnlyList<string> additionalWarnings = null)
@@ -425,7 +440,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Array.Empty<string>(),
                 Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
-                isPaused: false);
+                isPaused: false,
+                selectedFiles: Array.Empty<string>());
         }
 
         // Records the compile-fallback decision on an apply response. isPlaying and

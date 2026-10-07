@@ -161,6 +161,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         projectRelativePath));
             }
 
+            HotReloadFailureDescription busyFailure = DescribeBusyRefusal(editorStateSnapshotCapture, unchangedDecision);
+            if (busyFailure != null)
+            {
+                outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", busyFailure, assemblyResolvePath));
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
+            }
+
             return HotReloadPatchTargetResolution.Resolved(
                 projectRelativePath,
                 assemblyName,
@@ -169,6 +177,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);
+        }
+
+        // Why last and not for a short-circuited file: every earlier exit (assembly resolution,
+        // missing DLL, MVID guard, new-source membership) keeps its own, more specific
+        // classification, and a file whose patches are already active and unchanged has nothing
+        // to apply, so a compile in flight does not stop it. Why before the transform: a compile
+        // that is already running ends in a domain reload that would discard this reload anyway.
+        private static HotReloadFailureDescription DescribeBusyRefusal(
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
+            HotReloadUnchangedSourceDecision unchangedDecision)
+        {
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+            {
+                return null;
+            }
+
+            return editorStateSnapshotCapture.CaptureCurrent().GetBusyFailure();
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)

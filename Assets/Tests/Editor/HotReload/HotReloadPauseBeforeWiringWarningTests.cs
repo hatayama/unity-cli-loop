@@ -154,7 +154,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 rewireFields,
                 unrestoredWiredValues ?? Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying,
-                isPaused: false);
+                isPaused: false,
+                selectedFiles: Array.Empty<string>());
         }
 
         private static int CountPauseWarnings(HotReloadResponse response)

@@ -20,11 +20,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> rewireFields,
             IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues,
             bool isPlaying,
-            bool isPaused)
+            bool isPaused,
+            IReadOnlyList<string> selectedFiles)
         {
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
             Debug.Assert(unrestoredWiredValues != null, "unrestoredWiredValues must not be null.");
+            Debug.Assert(selectedFiles != null, "selectedFiles must not be null.");
 
             Func<string, string> toProjectRelativeScriptPath =
                 path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
@@ -137,8 +139,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
                     allRequestedSkipped,
                     failureKinds),
-                Timing = ToTimingResponse(result.Timing)
+                Timing = ToTimingResponse(result.Timing),
+                RetryAfterEditorReady = HotReloadEditorReadyRetry.Decide(hasFailure, failureKinds),
+                SelectedFiles = ToProjectRelativePaths(selectedFiles, toProjectRelativeScriptPath)
             };
+        }
+
+        // Why normalized here: --files keeps each entry as the caller typed it, so the response
+        // names the scripts the same way whether they were given or chosen as the changed files.
+        private static string[] ToProjectRelativePaths(
+            IReadOnlyList<string> paths,
+            Func<string, string> toProjectRelativeScriptPath)
+        {
+            string[] projectRelativePaths = new string[paths.Count];
+            for (int index = 0; index < paths.Count; index++)
+            {
+                projectRelativePaths[index] = toProjectRelativeScriptPath(paths[index]);
+            }
+
+            return projectRelativePaths;
         }
 
         private static HotReloadTimingResponse ToTimingResponse(HotReloadTimingBreakdown timing)
