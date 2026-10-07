@@ -125,7 +125,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // carries the asset path. This runs on the main thread, after the router switches to it.
         private static string ReadMarkerId(JToken paramsToken)
         {
-            return SourcePausePointId.ToMarkerId(ReadId(paramsToken), UnityCliLoopPathResolver.GetProjectRoot());
+            return SourcePausePointId.ToMarkerId(
+                ReadId(paramsToken),
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                UloopPausePointRegistry.Contains);
         }
 
         private static string ReadId(JToken paramsToken)

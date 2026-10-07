@@ -19,14 +19,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Returns the id a query names its marker by. An id in the source form has its path
-        /// rewritten to the asset path; any other id, and a source id whose path is already the
-        /// asset path, comes back unchanged. Must be called on the Unity main thread.
+        /// Returns the id a query names its marker by. An id already registered, such as a named
+        /// marker, comes back as given. Otherwise an id in the source form has its path rewritten
+        /// to the asset path; any other id, and a source id whose path is already the asset path,
+        /// comes back unchanged. Must be called on the Unity main thread.
         /// </summary>
-        internal static string ToMarkerId(string id, string projectRoot)
+        internal static string ToMarkerId(string id, string projectRoot, Func<string, bool> isRegistered)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
+            Debug.Assert(isRegistered != null, "isRegistered must not be null.");
+
+            // Why first: a named marker may itself read like <path>:<line>, and the rewrite would
+            // send its query to an id nobody enabled.
+            if (isRegistered(id))
+            {
+                return id;
+            }
 
             int separator = id.LastIndexOf(':');
             if (separator <= 0 || !int.TryParse(id.Substring(separator + 1), out int line))
@@ -47,13 +56,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why Packages/ is not skipped: a package's folder path also starts with it, and only the
-        // package roots tell the two apart.
+        // package roots tell the two apart. Why . and .. segments are not skipped: enable folds them
+        // away, while the CLI sends them as typed.
         private static bool RewriteLeavesUnchanged(string path)
         {
             return !Path.IsPathRooted(path)
-                && !path.StartsWith("./", StringComparison.Ordinal)
                 && path.IndexOf('\\') < 0
-                && !path.StartsWith("Packages/", StringComparison.Ordinal);
+                && !path.StartsWith("Packages/", StringComparison.Ordinal)
+                && !HasDotSegment(path);
+        }
+
+        private static bool HasDotSegment(string path)
+        {
+            foreach (string segment in path.Split('/'))
+            {
+                if (segment == "." || segment == "..")
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

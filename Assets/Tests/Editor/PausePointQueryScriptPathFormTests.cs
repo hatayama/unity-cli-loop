@@ -48,6 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(PackageAssetPath, "./" + PackageAssetPath)]
         [TestCase(AssetsScriptPath, "./" + AssetsScriptPath)]
         [TestCase(AssetsScriptPath, ProjectRootToken + AssetsScriptPath)]
+        [TestCase(AssetsScriptPath, "Assets/Tests/../Tests/Editor/PausePointQueryScriptPathFormTests.cs")]
         public void Status_ByAnotherPathForm_FindsTheMarkerEnabledByTheAssetPath(string enabledPath, string queriedPath)
         {
             string markerId = enabledPath + Line;
@@ -105,13 +106,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a named marker whose id is not a file and line is looked up by the id as given, even
-        /// when the id reads like a path a rewrite would change.
+        /// What: a named marker is looked up by the id as given, even when the id reads like a path
+        /// and line that a rewrite would change.
         /// </summary>
-        [Test]
-        public void Status_NamedMarker_IsLookedUpByItsIdAsGiven()
+        [TestCase("./jump")]
+        [TestCase("./jump:1")]
+        [TestCase("Enemy\\Attack:2")]
+        public void Status_NamedMarker_IsLookedUpByItsIdAsGiven(string markerId)
         {
-            const string markerId = "./jump";
             UloopPausePointRegistry.Enable(markerId, 30);
 
             PausePointStatusResponse response = PausePointStatusBridgeCommand.Execute(IdParams(markerId));

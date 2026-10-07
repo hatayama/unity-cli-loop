@@ -192,6 +192,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 clearedIds.Count, now, editorState, clearedIds.ToArray(), resumedFromPause);
         }
 
+        public static bool Contains(string id)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
+            return Entries.ContainsKey(id);
+        }
+
         public static UloopPausePointSnapshot GetStatus(string id)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");

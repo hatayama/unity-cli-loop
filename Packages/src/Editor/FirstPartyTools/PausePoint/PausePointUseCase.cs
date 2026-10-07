@@ -166,7 +166,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // The CLI turns --file/--line into an id built from the path as typed.
-            string id = SourcePausePointId.ToMarkerId(parameters.Id, UnityCliLoopPathResolver.GetProjectRoot());
+            string id = SourcePausePointId.ToMarkerId(
+                parameters.Id,
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                UloopPausePointRegistry.Contains);
             (UloopPausePointSnapshot snapshot, bool resumedFromPause, int clearedCount) =
                 UloopPausePointRegistry.Clear(id);
             PausePointUseCaseLogger.LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
