@@ -19,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class ReferencePublicizer
     {
+        private const string InternalsVisibleToAttributeFullName =
+            "System.Runtime.CompilerServices.InternalsVisibleToAttribute";
+
         /// <summary>
         /// Collects distinct directory paths of existing DLL references for Cecil
         /// <see cref="DefaultAssemblyResolver"/> search. Null <paramref name="referencePaths"/>
@@ -65,21 +68,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return GetOrCreateRewrittenCopy(
                 home,
                 resolverSearchDirectories,
-                HotReloadConstants.PublicizedRefsRelativeDirectory,
-                PublicizeType);
+                assemblyDefinition => WriteOrReuseRewrittenCopy(
+                    assemblyDefinition,
+                    HotReloadConstants.PublicizedRefsRelativeDirectory,
+                    PublicizeType));
         }
 
+        /// <summary>
+        /// Returns the path of a cached copy of <paramref name="home"/>'s image for a shim compile
+        /// of an edit in the assembly named <paramref name="shimTargetAssemblyName"/>, writing it
+        /// on first use. When the image grants that assembly its internals, this is the publicized
+        /// copy of <see cref="GetOrCreatePublicizedCopy"/>. Otherwise the image's internal top-level
+        /// types and its internal and private protected members stay as they are, because the
+        /// edited assembly's own compile never saw them. The same preconditions on
+        /// <paramref name="home"/> apply.
+        /// </summary>
         public static string GetOrCreateShimReferenceCopy(
             HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories,
             string shimTargetAssemblyName)
         {
-            return GetOrCreatePublicizedCopy(home, resolverSearchDirectories);
+            Debug.Assert(
+                !string.IsNullOrEmpty(shimTargetAssemblyName),
+                "shimTargetAssemblyName must not be null or empty.");
+
+            return GetOrCreateRewrittenCopy(
+                home,
+                resolverSearchDirectories,
+                assemblyDefinition => GrantsInternalsTo(assemblyDefinition, shimTargetAssemblyName)
+                    ? WriteOrReuseRewrittenCopy(
+                        assemblyDefinition,
+                        HotReloadConstants.PublicizedRefsRelativeDirectory,
+                        PublicizeType)
+                    : WriteOrReuseRewrittenCopy(
+                        assemblyDefinition,
+                        HotReloadConstants.PublicizedExternalRefsRelativeDirectory,
+                        PublicizeTypeKeepingInternalsHidden));
         }
 
+        /// <summary>
+        /// Returns the assembly simple name an InternalsVisibleTo argument grants internals to:
+        /// the text before the first comma (which starts an optional public key), trimmed.
+        /// </summary>
         internal static string ParseFriendAssemblyName(string friendAssemblyName)
         {
-            return friendAssemblyName;
+            Debug.Assert(friendAssemblyName != null, "friendAssemblyName must not be null.");
+
+            int commaIndex = friendAssemblyName.IndexOf(',');
+            string simpleName = commaIndex < 0
+                ? friendAssemblyName
+                : friendAssemblyName.Substring(0, commaIndex);
+            return simpleName.Trim();
         }
 
         internal static string GetOrCreateInternalsExposedCopy(
@@ -89,15 +128,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return GetOrCreateRewrittenCopy(
                 home,
                 resolverSearchDirectories,
-                HotReloadConstants.InternalsExposedRefsRelativeDirectory,
-                ExposeInternalsOfType);
+                assemblyDefinition => WriteOrReuseRewrittenCopy(
+                    assemblyDefinition,
+                    HotReloadConstants.InternalsExposedRefsRelativeDirectory,
+                    ExposeInternalsOfType));
         }
 
+        // Reads home's image and lets writeOrReuseCopy pick and return the copy. Why the variant is
+        // picked after reading: the cache path needs the image's Mvid, so the image is read before
+        // any cache lookup anyway, and its own attributes decide the variant at no extra read.
         private static string GetOrCreateRewrittenCopy(
             HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories,
-            string outputRelativeDirectory,
-            Action<TypeDefinition> rewriteType)
+            Func<AssemblyDefinition, string> writeOrReuseCopy)
         {
             Debug.Assert(home != null, "home must not be null.");
             Debug.Assert(home.IsPublicizable, "home must be publicizable.");
@@ -119,7 +162,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AssemblyResolver = assemblyResolver
             };
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(fullSourceDllPath, readerParameters);
+            return writeOrReuseCopy(assemblyDefinition);
+        }
 
+        private static string WriteOrReuseRewrittenCopy(
+            AssemblyDefinition assemblyDefinition,
+            string outputRelativeDirectory,
+            Action<TypeDefinition> rewriteType)
+        {
             string assemblyName = assemblyDefinition.Name.Name;
             string mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
             string outputDirectory = ResolveOutputDirectory(outputRelativeDirectory);
@@ -335,6 +385,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void PublicizeType(TypeDefinition type)
         {
+            PublicizeTypeVisibility(type);
+            PublicizeMembers(type, keepInternalMembers: false);
+        }
+
+        // Why internal top-level types and internal members stay as they are: the edited assembly's
+        // own compile never saw them, and a shim compile that does can bind a call to one of them or
+        // find the call ambiguous, as when an internal type declares an extension method with the
+        // signature of a public one elsewhere. Nested types are still publicized: they are reached
+        // only through their enclosing type and cannot declare extension methods.
+        private static void PublicizeTypeKeepingInternalsHidden(TypeDefinition type)
+        {
+            if (!type.IsNested
+                && (type.Attributes & CecilTypeAttributes.VisibilityMask) == CecilTypeAttributes.NotPublic)
+            {
+                return;
+            }
+
+            PublicizeTypeVisibility(type);
+            PublicizeMembers(type, keepInternalMembers: true);
+        }
+
+        private static void PublicizeTypeVisibility(TypeDefinition type)
+        {
             // Preserve non-visibility flags (abstract, sealed, interface, …); only swap the
             // visibility bits so the rewrite stays a pure accessibility change.
             if (type.IsNested)
@@ -345,7 +418,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 type.Attributes = (type.Attributes & ~CecilTypeAttributes.VisibilityMask) | CecilTypeAttributes.Public;
             }
+        }
 
+        // keepInternalMembers leaves internal and private protected members as they are. Private and
+        // protected members are publicized either way: a shim calls a base type's protected members
+        // from outside the type hierarchy.
+        private static void PublicizeMembers(TypeDefinition type, bool keepInternalMembers)
+        {
             foreach (FieldDefinition field in type.Fields)
             {
                 // A field-like event's compiler-generated backing field shares the event's name.
@@ -358,14 +437,63 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                CecilFieldAttributes access = field.Attributes & CecilFieldAttributes.FieldAccessMask;
+                if (keepInternalMembers && FieldAccessNeedsInternalsGrant(access))
+                {
+                    continue;
+                }
+
                 field.Attributes = (field.Attributes & ~CecilFieldAttributes.FieldAccessMask) | CecilFieldAttributes.Public;
             }
 
             // Property/event accessors are MethodDefinitions on the type, so this loop covers them.
             foreach (MethodDefinition method in type.Methods)
             {
+                CecilMethodAttributes access = method.Attributes & CecilMethodAttributes.MemberAccessMask;
+                if (keepInternalMembers && MethodAccessNeedsInternalsGrant(access))
+                {
+                    continue;
+                }
+
                 method.Attributes = (method.Attributes & ~CecilMethodAttributes.MemberAccessMask) | CecilMethodAttributes.Public;
             }
+        }
+
+        // Another assembly reaches an internal or private protected member only through an
+        // InternalsVisibleTo grant.
+        private static bool FieldAccessNeedsInternalsGrant(CecilFieldAttributes access)
+        {
+            return access == CecilFieldAttributes.Assembly || access == CecilFieldAttributes.FamANDAssem;
+        }
+
+        private static bool MethodAccessNeedsInternalsGrant(CecilMethodAttributes access)
+        {
+            return access == CecilMethodAttributes.Assembly || access == CecilMethodAttributes.FamANDAssem;
+        }
+
+        // Why ignore case: the compiler matches assembly simple names without case when it honors
+        // InternalsVisibleTo.
+        private static bool GrantsInternalsTo(AssemblyDefinition assemblyDefinition, string targetAssemblyName)
+        {
+            foreach (CustomAttribute attribute in assemblyDefinition.CustomAttributes)
+            {
+                if (attribute.AttributeType.FullName != InternalsVisibleToAttributeFullName
+                    || attribute.ConstructorArguments.Count == 0
+                    || !(attribute.ConstructorArguments[0].Value is string friendAssemblyName))
+                {
+                    continue;
+                }
+
+                if (string.Equals(
+                        ParseFriendAssemblyName(friendAssemblyName),
+                        targetAssemblyName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool HasEventNamed(TypeDefinition type, string fieldName)

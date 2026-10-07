@@ -448,6 +448,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string fullTarget = Path.GetFullPath(targetHome.DllPath);
+            // The name another assembly's InternalsVisibleTo grant names the edited assembly by.
+            string shimTargetAssemblyName = Path.GetFileNameWithoutExtension(fullTarget);
             foreach (string reference in compilationAssembly.allReferences)
             {
                 if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
@@ -466,7 +468,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     PublicizeProjectReference(
                         fullReference,
                         scriptAssembliesDirectory,
-                        resolverSearchDirectories));
+                        resolverSearchDirectories,
+                        shimTargetAssemblyName));
             }
 
             return references;
@@ -475,12 +478,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Returns the reference a shim compile binds against for one of Unity's compile
         /// references: a publicized copy when the reference is a project assembly the shim may
-        /// need private members of, and the reference itself otherwise.
+        /// need private members of, and the reference itself otherwise. The copy keeps the
+        /// reference's internal types and members internal unless the reference grants its
+        /// internals to the edited assembly, so the shim compile sees what the edited assembly's
+        /// own compile saw.
         /// </summary>
         private static string PublicizeProjectReference(
             string fullReference,
             string scriptAssembliesDirectory,
-            IReadOnlyCollection<string> resolverSearchDirectories)
+            IReadOnlyCollection<string> resolverSearchDirectories,
+            string shimTargetAssemblyName)
         {
             string referenceFileName = Path.GetFileNameWithoutExtension(fullReference);
             if (!IsUnderDirectory(fullReference, scriptAssembliesDirectory)
@@ -489,9 +496,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return fullReference;
             }
 
-            return ReferencePublicizer.GetOrCreatePublicizedCopy(
+            return ReferencePublicizer.GetOrCreateShimReferenceCopy(
                 HotReloadTypeHome.ScriptAssemblies(referenceFileName, fullReference),
-                resolverSearchDirectories);
+                resolverSearchDirectories,
+                shimTargetAssemblyName);
         }
 
         private static bool IsUnderDirectory(string fullPath, string directoryPath)
