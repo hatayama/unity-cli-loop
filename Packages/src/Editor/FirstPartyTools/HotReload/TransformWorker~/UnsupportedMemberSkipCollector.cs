@@ -21,7 +21,9 @@ internal static class UnsupportedMemberSkipCollector
     // What: reports each property/indexer accessor that has an explicit body as Skipped.
     // Auto-properties ({ get; set; }) have no body and are not listed.
     // When a verified snapshot declares an equivalent property/indexer, skip rows are omitted
-    // (unchanged accessors must not appear as Skipped noise).
+    // (unchanged accessors must not appear as Skipped noise). A property is also compared one
+    // accessor at a time, so a set or init body equal to the snapshot's is omitted even when
+    // another part of the property changed.
     internal static void AppendExplicitAccessorSkips(
         string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
@@ -49,14 +51,12 @@ internal static class UnsupportedMemberSkipCollector
                 string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
                 // Why plainCurrentPropertyMap: annotated property nodes break AreEquivalent the
                 // same way annotated method bodies do; compare unannotated peers only.
+                PropertyDeclarationSyntax snapshotProperty = null;
+                PropertyDeclarationSyntax plainProperty = null;
                 if (snapshotPropertyMap != null
                     && plainCurrentPropertyMap != null
-                    && snapshotPropertyMap.TryGetValue(
-                        propertyKey,
-                        out PropertyDeclarationSyntax snapshotProperty)
-                    && plainCurrentPropertyMap.TryGetValue(
-                        propertyKey,
-                        out PropertyDeclarationSyntax plainProperty)
+                    && snapshotPropertyMap.TryGetValue(propertyKey, out snapshotProperty)
+                    && plainCurrentPropertyMap.TryGetValue(propertyKey, out plainProperty)
                     && SyntaxFactory.AreEquivalent(snapshotProperty, plainProperty, topLevel: false))
                 {
                     continue;
@@ -68,7 +68,9 @@ internal static class UnsupportedMemberSkipCollector
                     skipped,
                     typeMetadataNameFromSyntax,
                     snapshotPropertyMap,
-                    addedMethodCatalog);
+                    addedMethodCatalog,
+                    snapshotProperty,
+                    plainProperty);
                 continue;
             }
 
@@ -94,20 +96,27 @@ internal static class UnsupportedMemberSkipCollector
                     skipped,
                     typeMetadataNameFromSyntax,
                     snapshotPropertyMap,
-                    addedMethodCatalog);
+                    addedMethodCatalog,
+                    snapshotProperty: null,
+                    plainCurrentProperty: null);
             }
         }
 
         StampSourceProjectRelativePath(skipped, firstAppendedIndex, sourceProjectRelativePath);
     }
 
+    // snapshotProperty and plainCurrentProperty are the snapshot's and the unannotated current
+    // tree's declarations of this property, or null when either side has none; an accessor is
+    // compared against the snapshot only when both are present.
     internal static void AppendExplicitAccessorSkipsForProperty(
         BasePropertyDeclarationSyntax propertyDeclaration,
         IPropertySymbol propertySymbol,
         List<WorkerSkipped> skipped,
         string typeMetadataNameFromSyntax,
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        PropertyDeclarationSyntax snapshotProperty,
+        PropertyDeclarationSyntax plainCurrentProperty)
     {
         if (propertySymbol == null)
         {
@@ -141,6 +150,15 @@ internal static class UnsupportedMemberSkipCollector
                 continue;
             }
 
+            // Why per accessor: a getter-only edit used to skip the setter as well, because the
+            // caller compared the whole property declaration.
+            if (snapshotProperty != null
+                && plainCurrentProperty != null
+                && PropertyAccessorUnchanged(snapshotProperty, plainCurrentProperty, accessor.Kind()))
+            {
+                continue;
+            }
+
             IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(propertySymbol, accessor.Kind());
             if (accessorMethod == null)
             {
@@ -169,6 +187,40 @@ internal static class UnsupportedMemberSkipCollector
         {
             addedMethodCatalog.AddAddedPropertySyntaxKey(propertyKey);
         }
+    }
+
+    // Why match by kind: a set accessor that became init changed its declaration, so it finds no
+    // peer of its kind in the snapshot and stays Skipped.
+    private static bool PropertyAccessorUnchanged(
+        PropertyDeclarationSyntax snapshotProperty,
+        PropertyDeclarationSyntax currentProperty,
+        SyntaxKind accessorKind)
+    {
+        AccessorDeclarationSyntax snapshotAccessor = FindPropertyAccessor(snapshotProperty, accessorKind);
+        AccessorDeclarationSyntax currentAccessor = FindPropertyAccessor(currentProperty, accessorKind);
+        return snapshotAccessor != null
+            && currentAccessor != null
+            && SyntaxFactory.AreEquivalent(snapshotAccessor, currentAccessor, topLevel: false);
+    }
+
+    private static AccessorDeclarationSyntax FindPropertyAccessor(
+        PropertyDeclarationSyntax propertyDeclaration,
+        SyntaxKind accessorKind)
+    {
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return null;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            if (accessor.Kind() == accessorKind)
+            {
+                return accessor;
+            }
+        }
+
+        return null;
     }
 
     internal static void AppendIndexerExplicitAccessorSkips(
