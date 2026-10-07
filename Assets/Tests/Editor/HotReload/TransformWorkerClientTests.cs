@@ -1956,10 +1956,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: with an identical snapshot, property getters with bodies are listed in
-        /// unchangedMethods as get_&lt;Name&gt; (Skipped-only accessors would leave them out).
+        /// unchangedMethods as get_&lt;Name&gt; (Skipped-only accessors would leave them out), and
+        /// no set or init body is reported as Skipped.
         /// </summary>
         [Test]
-        public async Task Run_WithIdenticalSnapshotOnPropertyGetterFixture_ListsGettersUnchanged()
+        public async Task Run_WithIdenticalSnapshotOnPropertyGetterFixture_ListsGettersUnchangedAndSkipsNoSetter()
         {
             string sourcePath = ResolveShapeFixturePath();
             string onDisk = File.ReadAllText(sourcePath);
@@ -1993,6 +1994,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Contain("get_Score"),
                 "Unedited block getter must appear in unchangedMethods; got: "
                 + string.Join(", ", unchangedNames));
+            AssertSkippedDoesNotContain(result, "set_Value");
+            AssertSkippedDoesNotContain(result, "set_Initialized");
+            AssertSkippedDoesNotContain(result, "set_Mode");
         }
 
         /// <summary>
