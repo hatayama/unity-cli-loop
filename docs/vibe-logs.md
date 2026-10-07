@@ -31,6 +31,10 @@ command ran against:
 - Unity side: only when the `ULOOP_DEBUG` scripting define symbol is set in the project. Every
   log method is `[Conditional("ULOOP_DEBUG")]`, so without it nothing is written — not even
   errors. This repository's development project defines it for the Standalone build target.
+  Hot reload also writes one `hot_reload_timing_detail` per apply run, with the milliseconds of
+  each step outside the response's `Timing` phases (`steps`), the phases themselves, and
+  `unaccountedMs` — the part of `otherMs` no step covers. A negative `unaccountedMs` means a
+  step overlaps a phase.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.
