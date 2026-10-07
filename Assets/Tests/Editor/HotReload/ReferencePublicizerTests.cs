@@ -156,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(outputDirectory);
 
             // Force the write+prune path: remove existing exact-mvid caches for this assembly.
-            DeleteExactMvidCachesForAssembly(outputDirectory, TestAssemblyName);
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
 
             string siblingCachePath = Path.Combine(
                 outputDirectory,
@@ -181,24 +181,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(staleSameAssemblyPath),
                 Is.False,
                 "A true stale same-assembly cache (name-<mvid>.dll) must still be pruned.");
-        }
-
-        private static void DeleteExactMvidCachesForAssembly(string outputDirectory, string assemblyName)
-        {
-            foreach (string candidatePath in Directory.GetFiles(outputDirectory, assemblyName + "-*.dll"))
-            {
-                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(candidatePath);
-                if (fileNameWithoutExtension.Length <= assemblyName.Length + 1)
-                {
-                    continue;
-                }
-
-                string mvidCandidate = fileNameWithoutExtension.Substring(assemblyName.Length + 1);
-                if (Guid.TryParseExact(mvidCandidate, "N", out Guid _))
-                {
-                    File.Delete(candidatePath);
-                }
-            }
         }
 
         private static void AssertNoNonPublicTypesOrMembersRemain(AssemblyDefinition assemblyDefinition)
@@ -390,7 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void GetOrCreateShimReferenceCopy_WhenTheAssemblyDoesNotGrantInternalsToTheTarget_KeepsInternalTypesAndMembersHidden()
         {
-            DeleteExactMvidCopiesOfTestAssembly(HotReloadConstants.PublicizedExternalRefsRelativeDirectory);
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedExternalRefsRelativeDirectory);
 
             using AssemblyDefinition copy = ReadShimReferenceCopyOfTestAssembly(StrangerTargetAssemblyName);
 
@@ -527,20 +509,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             MethodDefinition method = type.Methods.First(candidate => candidate.Name == methodName);
             return method.Attributes & CecilMethodAttributes.MemberAccessMask;
-        }
-
-        // Why delete first: a copy is keyed by the image's name and Mvid only, so a copy cached
-        // before a rewrite rule changed would be returned without the rule running again.
-        private static void DeleteExactMvidCopiesOfTestAssembly(string relativeDirectory)
-        {
-            string projectRootPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string outputDirectory = Path.Combine(projectRootPath, relativeDirectory);
-            if (!Directory.Exists(outputDirectory))
-            {
-                return;
-            }
-
-            DeleteExactMvidCachesForAssembly(outputDirectory, TestAssemblyName);
         }
 
         private static string NormalizedDirectoryOf(string filePath)
