@@ -1,5 +1,5 @@
 using System;
-using System.IO;
+using System.Collections.Generic;
 
 using UnityEngine;
 
@@ -22,13 +22,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Returns the id a query names its marker by. An id already registered, such as a named
         /// marker, comes back as given. Otherwise an id in the source form has its path rewritten
         /// to the asset path; any other id, and a source id whose path is already the asset path,
-        /// comes back unchanged. Must be called on the Unity main thread.
+        /// comes back unchanged. The package roots are read only when the path needs them. Must be
+        /// called on the Unity main thread.
         /// </summary>
-        internal static string ToMarkerId(string id, string projectRoot, Func<string, bool> isRegistered)
+        internal static string ToMarkerId(
+            string id,
+            string projectRoot,
+            Func<string, bool> isRegistered,
+            Func<IReadOnlyList<ScriptPackageRoot>> readPackageRoots)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
             Debug.Assert(isRegistered != null, "isRegistered must not be null.");
+            Debug.Assert(readPackageRoots != null, "readPackageRoots must not be null.");
 
             // Why first: a named marker may itself read like <path>:<line>, and the rewrite would
             // send its query to an id nobody enabled.
@@ -46,23 +52,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string path = id.Substring(0, separator);
             // Why skip the Package Manager for an Assets path: await polls status every second, and
             // such a path is already its asset path.
-            if (RewriteLeavesUnchanged(path))
+            if (IsPlainAssetsPath(path))
             {
                 return id;
             }
 
-            string assetPath = ScriptPathNormalizer.ToAssetPath(path, projectRoot, ScriptPackageRoots.ReadCurrent());
+            string assetPath = ScriptPathNormalizer.ToAssetPath(path, projectRoot, readPackageRoots());
             return assetPath == path ? id : Build(assetPath, line);
         }
 
-        // Why Packages/ is not skipped: a package's folder path also starts with it, and only the
-        // package roots tell the two apart. Why . and .. segments are not skipped: enable folds them
-        // away, while the CLI sends them as typed.
-        private static bool RewriteLeavesUnchanged(string path)
+        // Why only Assets/: any other project-relative path may be the folder of a package, under
+        // Packages/ or elsewhere in the project, and only the package roots tell. Why . and ..
+        // segments are not skipped: enable folds them away, while the CLI sends them as typed.
+        private static bool IsPlainAssetsPath(string path)
         {
-            return !Path.IsPathRooted(path)
+            return path.StartsWith("Assets/", StringComparison.Ordinal)
                 && path.IndexOf('\\') < 0
-                && !path.StartsWith("Packages/", StringComparison.Ordinal)
                 && !HasDotSegment(path);
         }
 
