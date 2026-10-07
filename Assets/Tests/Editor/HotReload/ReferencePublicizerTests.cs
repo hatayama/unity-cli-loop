@@ -369,8 +369,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a shim reference copy built for a target the assembly grants no internals to keeps
-        /// a top-level internal type, and the internal and private protected members of public types,
-        /// as they are, while a private member and a nested type are publicized as before.
+        /// a top-level internal type, and the private, internal and private protected members of
+        /// public types, as they are, while a protected member and a nested type are publicized as
+        /// before.
         /// </summary>
         [Test]
         public void GetOrCreateShimReferenceCopy_WhenTheAssemblyDoesNotGrantInternalsToTheTarget_KeepsInternalTypesAndMembersHidden()
@@ -393,14 +394,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 publicHostType.Fields.First(field => field.Name == "HiddenField").Attributes & CecilFieldAttributes.FieldAccessMask,
                 Is.EqualTo(CecilFieldAttributes.Assembly),
                 "An internal field of a public type must stay internal: the target's own compile never saw it.");
+            TypeDefinition publicBaseType = FindType(copy, PublicBaseTypeFullName);
             Assert.That(
-                MethodAccessOf(FindType(copy, PublicBaseTypeFullName), "Guarded"),
+                MethodAccessOf(publicBaseType, "Guarded"),
                 Is.EqualTo(CecilMethodAttributes.FamANDAssem),
                 "A private protected member must stay as it is: another assembly reaches it only through a grant.");
             Assert.That(
                 MethodAccessOf(publicHostType, "Secret"),
+                Is.EqualTo(CecilMethodAttributes.Private),
+                "A private member must stay private: no other assembly's compile sees it.");
+            Assert.That(
+                publicHostType.Fields.First(field => field.Name == "SecretField").Attributes & CecilFieldAttributes.FieldAccessMask,
+                Is.EqualTo(CecilFieldAttributes.Private),
+                "A private field must stay private: no other assembly's compile sees it.");
+
+            Assert.That(
+                MethodAccessOf(publicBaseType, "Shielded"),
                 Is.EqualTo(CecilMethodAttributes.Public),
-                "A private member must still be publicized.");
+                "A protected member must still be publicized: a shim calls it from outside the type hierarchy.");
 
             TypeDefinition nestedInternalType = publicHostType.NestedTypes.First(type => type.Name == "NestedInternal");
             Assert.That(

@@ -27,6 +27,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceFo
         {
             return value * 4;
         }
+
+        public static int Quintupled(this int value)
+        {
+            return value * 5;
+        }
     }
 
     /// <summary>
@@ -38,6 +43,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceFo
         internal static int Quadrupled(this int value)
         {
             return value + value + value + value;
+        }
+    }
+
+    /// <summary>
+    /// A public type whose private extension method has the signature of a public one beside it,
+    /// so a referencing assembly never sees this member and binds the call to the public method.
+    /// </summary>
+    public static class ForeignHostWithPrivateExtension
+    {
+        private static int Quintupled(this int value)
+        {
+            return value + value + value + value + value;
         }
     }
 }

@@ -14,17 +14,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// A public type whose internal members a shim reference copy keeps internal for a target the
-    /// assembly grants no internals to, while its private member and nested type are publicized as
-    /// before.
+    /// A public type whose private and internal members a shim reference copy keeps as they are for
+    /// a target the assembly grants no internals to, while its nested type is publicized as before.
     /// </summary>
     public static class ShimReferencePublicHost
     {
         internal static int HiddenField = 1;
 
+        private static int SecretField = 1;
+
         private static int Secret()
         {
-            return 1;
+            return SecretField;
         }
 
         internal static int Hidden(this int value)
@@ -38,15 +39,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// A public type whose private protected member a shim reference copy keeps as it is for a
-    /// target the assembly grants no internals to: a derived type in another assembly reaches that
-    /// member only through such a grant.
+    /// A public base type for a target the assembly grants no internals to: a shim reference copy
+    /// keeps its private protected member as it is, because a derived type in another assembly
+    /// reaches that member only through such a grant, and still publicizes its protected member,
+    /// because a shim calls it from outside the type hierarchy.
     /// </summary>
     public class ShimReferencePublicBase
     {
         private protected int Guarded()
         {
             return 2;
+        }
+
+        protected int Shielded()
+        {
+            return 3;
         }
     }
 }
