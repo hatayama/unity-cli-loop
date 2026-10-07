@@ -8,7 +8,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Finds compilation-assembly sources whose on-disk bytes differ from the last compile snapshot.
+    /// Compares compilation-assembly sources with the last compile snapshot: finds the sources whose
+    /// on-disk bytes differ from it, and tells whether one source still holds its bytes.
     /// </summary>
     internal static class HotReloadChangedSiblingSourceDetector
     {
@@ -110,6 +111,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblySnapshotDirectoryName,
                 sourceFiles,
                 excludedProjectRelativePaths: null);
+        }
+
+        /// <summary>
+        /// Whether <paramref name="sourcePath"/> holds the bytes the last compile snapshot keeps for
+        /// <paramref name="projectRelativePath"/>. A missing DLL, PDB, snapshot or source answers
+        /// false, so a file is never taken to be back at its compiled source without its snapshot.
+        /// </summary>
+        internal static bool SourceMatchesSnapshot(
+            string projectRoot,
+            string assemblyName,
+            string targetDllPath,
+            string projectRelativePath,
+            string sourcePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+
+            // Why the same guards as Detect: without the DLL and its PDB there is no snapshot
+            // directory to name.
+            if (string.IsNullOrEmpty(targetDllPath) || !File.Exists(targetDllPath))
+            {
+                return false;
+            }
+
+            if (!File.Exists(Path.ChangeExtension(targetDllPath, ".pdb")))
+            {
+                return false;
+            }
+
+            return SourceMatchesSnapshotDirectory(
+                projectRoot,
+                assemblyName + "-" + HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                projectRelativePath,
+                sourcePath);
+        }
+
+        // Why a directory-name entry: EditMode tests plant a snapshot tree without a real DLL.
+        internal static bool SourceMatchesSnapshotDirectory(
+            string projectRoot,
+            string assemblySnapshotDirectoryName,
+            string projectRelativePath,
+            string sourcePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(
+                !string.IsNullOrEmpty(assemblySnapshotDirectoryName),
+                "assemblySnapshotDirectoryName must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be null or empty.");
+
+            if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+            {
+                return false;
+            }
+
+            string snapshotPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                assemblySnapshotDirectoryName,
+                HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/')) + ".cs");
+            if (!File.Exists(snapshotPath))
+            {
+                return false;
+            }
+
+            return BytesEqual(File.ReadAllBytes(sourcePath), File.ReadAllBytes(snapshotPath));
         }
 
         private static HotReloadChangedSourceScanResult DetectChangedFromSnapshotDirectory(
