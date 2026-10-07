@@ -20,11 +20,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> rewireFields,
             IReadOnlyList<HotReloadWiredValueRestoreFailure> unrestoredWiredValues,
             bool isPlaying,
-            bool isPaused)
+            bool isPaused,
+            IReadOnlyList<string> selectedFiles)
         {
             Debug.Assert(services != null, "services must not be null.");
             Debug.Assert(result != null, "result must not be null.");
             Debug.Assert(unrestoredWiredValues != null, "unrestoredWiredValues must not be null.");
+            Debug.Assert(selectedFiles != null, "selectedFiles must not be null.");
 
             Func<string, string> toProjectRelativeScriptPath =
                 path => HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
@@ -34,12 +36,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadReappliedSiblingFiles(result.ReappliedSiblingPaths, toProjectRelativeScriptPath);
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(result.Methods.Count);
             bool hasFailure = false;
+            HotReloadFailureKinds failureKinds = HotReloadFailureKinds.None;
             for (int index = 0; index < result.Methods.Count; index++)
             {
                 HotReloadMethodOutcome outcome = result.Methods[index];
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
                 {
                     hasFailure = true;
+                    failureKinds |= outcome.FailureKinds;
                 }
 
                 methods.Add(
@@ -60,8 +64,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasMethodFailure = hasFailure;
 
             // Why folded in here: the type rows are a failure section of their own, and a run
-            // whose only failure was a refused declaration would otherwise answer Success.
-            hasFailure = hasFailure || HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
+            // whose only failure was a refused declaration would otherwise answer Success. A
+            // refused declaration is one the reader changes in the source.
+            if (HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes))
+            {
+                hasFailure = true;
+                failureKinds |= HotReloadFailureKinds.Declaration;
+            }
 
             HotReloadResponseWarnings warnings = HotReloadApplyWarningsAssembler.Assemble(
                 result,
@@ -128,9 +137,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
                     HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
-                    allRequestedSkipped),
-                Timing = ToTimingResponse(result.Timing)
+                    allRequestedSkipped,
+                    failureKinds),
+                Timing = ToTimingResponse(result.Timing),
+                RetryAfterEditorReady = HotReloadEditorReadyRetry.Decide(failureKinds),
+                SelectedFiles = ToProjectRelativePaths(selectedFiles, toProjectRelativeScriptPath)
             };
+        }
+
+        // Why normalized here: --files keeps each entry as the caller typed it, so the response
+        // names the scripts the same way whether they were given or chosen as the changed files.
+        private static string[] ToProjectRelativePaths(
+            IReadOnlyList<string> paths,
+            Func<string, string> toProjectRelativeScriptPath)
+        {
+            string[] projectRelativePaths = new string[paths.Count];
+            for (int index = 0; index < paths.Count; index++)
+            {
+                projectRelativePaths[index] = toProjectRelativeScriptPath(paths[index]);
+            }
+
+            return projectRelativePaths;
         }
 
         private static HotReloadTimingResponse ToTimingResponse(HotReloadTimingBreakdown timing)

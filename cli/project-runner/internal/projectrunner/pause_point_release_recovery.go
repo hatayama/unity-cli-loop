@@ -26,13 +26,9 @@ const compileEditorUpdatingErrorCode = "COMPILE_EDITOR_UPDATING"
 
 var sendSetCodeOptimizationDebug = sendSetCodeOptimizationDebugFromUnity
 
-var sendFreshCompileRequest = sendWithTransientConnectionRetryAndResponseTimeout
-
 var waitPausePointRecoveryBusyRetry = waitContextDuration
 
-var runOneFreshCompileForPausePointRecovery = runOneFreshCompileForPausePointRecoveryDefault
-
-var runFreshCompileForPausePointRecovery = runFreshCompileWithBusyRetryForPausePointRecovery
+var runFreshCompileForPausePointRecovery = runFreshCompileForPausePointRecoveryDefault
 
 type pausePointEnableFailureProbe struct {
 	Success   bool   `json:"Success"`
@@ -163,6 +159,7 @@ func waitContextDuration(ctx context.Context, duration time.Duration) error {
 func sendCompileWithBusyRetry(
 	ctx context.Context,
 	connection unityipc.Connection,
+	send compileSendFunc,
 	method string,
 	params map[string]any,
 	progress unityipc.ProgressFunc,
@@ -171,7 +168,7 @@ func sendCompileWithBusyRetry(
 ) (unityipc.UnitySendOutcome, error) {
 	deadline := time.Now().Add(budget)
 	for {
-		outcome, err := sendFreshCompileRequest(ctx, connection, method, params, progress, responseTimeout)
+		outcome, err := send(ctx, connection, method, params, progress, responseTimeout)
 		if err == nil || !isUnityServerBusyRPCError(err) {
 			return outcome, err
 		}
@@ -189,15 +186,40 @@ func sendCompileWithBusyRetry(
 	}
 }
 
-func runOneFreshCompileForPausePointRecoveryDefault(
+func runFreshCompileForPausePointRecoveryDefault(
 	ctx context.Context,
 	connection unityipc.Connection,
 	params map[string]any,
 	stdout io.Writer,
 	stderr io.Writer,
-	budget time.Duration,
 ) int {
-	deps := defaultCompileWaitDeps()
+	return runFreshCompileForPausePointRecoveryWithDeps(ctx, connection, params, stdout, stderr, defaultCompileWaitDeps())
+}
+
+// runFreshCompileForPausePointRecoveryWithDeps compiles for pause-point recovery. The compile the
+// Debug switch scheduled keeps Unity busy, so a send rejected as server_busy is sent again for as
+// long as the wait allows; a request Unity lost or rejected as busy is sent again the way
+// 'uloop compile' sends it again, under a new request ID.
+func runFreshCompileForPausePointRecoveryWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stdout io.Writer,
+	stderr io.Writer,
+	deps compileWaitDeps,
+) int {
+	// Why read the wait first: it is also the budget for sending a server_busy send again.
+	waitTimeout, err := compileWaitTimeoutFromParams(params)
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
+		})
+		return 1
+	}
+	deadline := time.Now().Add(waitTimeout)
+	// Why take the send out first: reading it after deps.sendCompile is replaced would wrap the wrapper.
+	inner := compileSendOrDefault(deps)
 	deps.sendCompile = func(
 		sendCtx context.Context,
 		sendConnection unityipc.Connection,
@@ -207,62 +229,15 @@ func runOneFreshCompileForPausePointRecoveryDefault(
 		responseTimeout time.Duration,
 	) (unityipc.UnitySendOutcome, error) {
 		return sendCompileWithBusyRetry(
-			sendCtx, sendConnection, method, sendParams, progress, responseTimeout, budget)
+			sendCtx, sendConnection, inner, method, sendParams, progress, responseTimeout, time.Until(deadline))
 	}
-	return runFreshCompileWithDomainReloadWaitWithDeps(ctx, connection, params, stdout, stderr, deps)
-}
-
-// Issues a fresh compile for pause-point recovery, retrying server_busy sends and
-// compile results that only mean Unity is still compiling or updating.
-func runFreshCompileWithBusyRetryForPausePointRecovery(
-	ctx context.Context,
-	connection unityipc.Connection,
-	params map[string]any,
-	stdout io.Writer,
-	stderr io.Writer,
-) int {
-	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
-	if timeoutErr != nil {
-		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     clicore.CompileCommandName,
-		})
-		return 1
+	result := runFreshCompileRecoveringWithDeps(ctx, connection, params, stderr, deps)
+	// Why nothing on success: the enable response is the command's output, and the caller writes the
+	// compile result only when the compile failed.
+	if result.exitCode == 0 {
+		return 0
 	}
-
-	deadline := time.Now().Add(waitTimeout)
-	for {
-		var attemptOut bytes.Buffer
-		remaining := time.Until(deadline)
-		if remaining < 0 {
-			remaining = 0
-		}
-		code := runOneFreshCompileForPausePointRecovery(
-			ctx, connection, params, &attemptOut, stderr, remaining)
-		if code == 0 {
-			return 0
-		}
-		if !isCompileEditorBusyRejection(attemptOut.Bytes()) {
-			_, _ = stdout.Write(attemptOut.Bytes())
-			return code
-		}
-		remaining = time.Until(deadline)
-		if remaining <= 0 {
-			_, _ = stdout.Write(attemptOut.Bytes())
-			return code
-		}
-		wait := pausePointRecoveryCompileBusyRetryInterval
-		if wait > remaining {
-			wait = remaining
-		}
-		if waitErr := waitPausePointRecoveryBusyRetry(ctx, wait); waitErr != nil {
-			clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
-				ProjectRoot: connection.ProjectRoot,
-				Command:     pausePointEnableCommandName,
-			})
-			return 1
-		}
-	}
+	return writeCompileExecutionResult(stdout, result)
 }
 
 func recoverReleaseCodeOptimization(

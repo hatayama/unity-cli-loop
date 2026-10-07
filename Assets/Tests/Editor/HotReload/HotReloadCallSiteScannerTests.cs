@@ -370,28 +370,150 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(NestedCallerHostTypeMetadataName + "::NestedCaller()"));
         }
 
+        /// <summary>
+        /// What: a method of a nested type, named in the metadata spelling, is found through the
+        /// call-site index and reports its caller in the outer type.
+        /// </summary>
+        [Test]
+        public void FindCallSites_NestedTarget_ReportsTheCaller()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                NestedCallerHostTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.NestedCallerHost.CalledFromOuterType),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].TargetMethodKey,
+                Is.EqualTo(NestedCallerHostTypeMetadataName + "::CalledFromOuterType()"));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::CallNestedTarget()"));
+        }
+
+        /// <summary>
+        /// What: a scan compares only the call sites the index files under its target's type and
+        /// method name, not every call site of the scanned assemblies.
+        /// </summary>
+        [Test]
+        public void FindCallSites_ExaminesOnlyTheCallSitesFiledUnderTheTargets()
+        {
+            const string targetMethodName = nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod);
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = Scan(
+                FixtureTypeMetadataName,
+                targetMethodName,
+                Array.Empty<string>(),
+                0);
+
+            HotReloadCompiledCallSiteCache.Entry compiled =
+                HotReloadCompiledCallSiteCache.Shared.GetOrLoad(GetTestAssemblyDllPath());
+            int filedUnderTarget = compiled.LookupCallSiteIndices(FixtureTypeMetadataName, targetMethodName).Count;
+
+            Assert.That(result.Hits.Count, Is.EqualTo(1));
+            // Why the test assembly's bucket alone: the other scanned assembly never calls this
+            // fixture method, so its bucket under the same key is empty.
+            Assert.That(result.ExaminedCallSiteCount, Is.EqualTo(filedUnderTarget));
+            Assert.That(
+                result.ExaminedCallSiteCount,
+                Is.LessThan(compiled.CallSites.Count),
+                "A scan must not walk every call site of the assembly.");
+        }
+
+        /// <summary>
+        /// What: a call site whose type-parameter argument matches two targets is reported once,
+        /// for whichever of them comes first in the given order, so one compiled call is never
+        /// counted twice.
+        /// </summary>
+        [Test]
+        public void FindCallSites_TwoTargetsMatchingOneCallSite_ReportsOneHitForTheFirstTarget()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
+                TestScriptProjectRelativePath);
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            HotReloadCallSiteScanner.CompiledMethodIdentity typeParameterTarget =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    new HotReloadMetadataTypeName(FixtureTypeMetadataName),
+                    nameof(HotReloadCallSiteScannerFixture.GenericParameterTarget),
+                    new[] { "T" },
+                    1);
+            HotReloadCallSiteScanner.CompiledMethodIdentity int32Target =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    new HotReloadMetadataTypeName(FixtureTypeMetadataName),
+                    nameof(HotReloadCallSiteScannerFixture.GenericParameterTarget),
+                    new[] { "System.Int32" },
+                    1);
+
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
+                projectRoot,
+                new[] { typeParameterTarget, int32Target }).Hits;
+            List<HotReloadCallSiteScanner.CallSiteHit> reversedHits = HotReloadCallSiteScanner.FindCallSites(
+                projectRoot,
+                new[] { int32Target, typeParameterTarget }).Hits;
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].TargetMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::GenericParameterTarget`1(T)"));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::CallGenericParameterTarget()"));
+            Assert.That(reversedHits.Count, Is.EqualTo(1));
+            Assert.That(
+                reversedHits[0].TargetMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::GenericParameterTarget`1(System.Int32)"));
+        }
+
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
             string typeMetadataName,
             string methodName,
             string[] parameterTypeFullNames,
             int genericArity)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
-                TestScriptProjectRelativePath);
-            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            return Scan(typeMetadataName, methodName, parameterTypeFullNames, genericArity).Hits;
+        }
 
+        private static HotReloadCallSiteScanner.HotReloadCallSiteScanResult Scan(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames,
+            int genericArity)
+        {
             HotReloadCallSiteScanner.CompiledMethodIdentity target =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
-                    assemblyName,
+                    GetTestAssemblyName(),
                     new HotReloadMetadataTypeName(typeMetadataName),
                     methodName,
                     parameterTypeFullNames,
                     genericArity);
 
             return HotReloadCallSiteScanner.FindCallSites(
-                projectRoot,
-                new[] { target }).Hits;
+                GetProjectRoot(),
+                new[] { target });
+        }
+
+        // The same path FindCallSites reads, so the shared cache returns the entry the scan used.
+        private static string GetTestAssemblyDllPath()
+        {
+            return Path.Combine(
+                GetProjectRoot(),
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                GetTestAssemblyName() + HotReloadConstants.CompiledAssemblyExtension);
+        }
+
+        private static string GetProjectRoot()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        }
+
+        private static string GetTestAssemblyName()
+        {
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
+                TestScriptProjectRelativePath);
+            return Path.GetFileNameWithoutExtension(rawAssemblyName);
         }
     }
 }

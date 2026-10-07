@@ -232,25 +232,21 @@ func TestRunFreshCompileRejectsInvalidTimeout(t *testing.T) {
 		t.Fatal("compile must not be sent")
 		return unityipc.UnitySendOutcome{}, nil
 	}
-	var stdout, stderr bytes.Buffer
+	var stderr bytes.Buffer
 
-	code := runFreshCompileWithDomainReloadWaitWithDeps(
+	result := runFreshCompileWithDomainReloadWaitResultWithDeps(
 		context.Background(),
 		unreachableConnection(t.TempDir()),
 		map[string]any{compileWaitTimeoutParam: "soon"},
-		&stdout,
 		&stderr,
 		deps,
 	)
 
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
+	if result.exitCode != 1 || len(result.result) != 0 {
+		t.Fatalf("unexpected result: %#v", result)
 	}
 	if !strings.Contains(stderr.String(), "Invalid positive integer value for --timeout-seconds") {
 		t.Fatalf("stderr must reject the timeout:\n%s", stderr.String())
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout must stay empty: %s", stdout.String())
 	}
 }
 

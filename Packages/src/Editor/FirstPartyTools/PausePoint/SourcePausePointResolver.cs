@@ -26,8 +26,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
 
-            string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
-
             SourcePausePointCompiledAssemblyLocation location =
                 SourcePausePointCompiledAssemblyLocator.Locate(projectRelativeFilePath);
             if (!location.Found)
@@ -35,11 +33,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return SourcePausePointResolveResult.Failure(location.FailureReason, location.FailureMessage);
             }
 
+            // Matched by the path the PDB records, which for a package script is the file behind its
+            // asset path rather than the asset path itself.
             return ResolveFromCompiledAssembly(
                 location.AssemblyName,
                 location.AssemblyPath,
                 location.SymbolsPath,
-                normalizedInputPath,
+                location.PhysicalPath,
                 projectRelativeFilePath,
                 line,
                 methodFilter,
@@ -335,7 +335,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(read != null, "read must not be null.");
 
-            string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
             SourcePausePointCompiledAssemblyLocation location =
                 SourcePausePointCompiledAssemblyLocator.Locate(projectRelativeFilePath);
             if (!location.Found)
@@ -354,7 +353,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
             using AssemblyDefinition assemblyDefinition =
                 AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
-            return read(assemblyDefinition.MainModule, normalizedInputPath);
+            // The same PDB-recorded path as Resolve matches by.
+            return read(assemblyDefinition.MainModule, location.PhysicalPath);
         }
 
         // Why a separate walk from FindClosestSequencePointOnOrAfterLine: that search only

@@ -4,6 +4,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     internal static partial class HotReloadWorkerReasonText
     {
+        // Format: diagnostic, quoted type name, quoted member name. Why the member and its type lead:
+        // which member is out of reach is what the reader acts on, and the diagnostic follows as the
+        // evidence for it.
+        private const string UnpassedInternalMemberSentence =
+            "{2} is internal to {1}, whose source this reload was not given ({0}). Hot reload patches a use of "
+            + "such a member only where it is a field, a property or a method call written with its receiver "
+            + "('this.Name', 'Type.Name', 'value.Name') in the method's own statements: not a bare name, a "
+            + "method passed as a delegate, or a use inside a lambda, local function, query, iterator or async "
+            + "method, or in a body patched through a delegating shim. A lambda, local function or query that "
+            + "works with a value hot reload could not resolve, such as the member's result, keeps the whole "
+            + "body out as well.";
+
         /// <summary>
         /// Adds the reasons an existing method body could not be transformed.
         /// </summary>
@@ -55,18 +67,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "a part generated at compile time is not visible to it, and a file added since the "
                     + "last compile must be passed with --files. Otherwise run 'uloop compile'.",
                     1));
+            // Why the three share every sentence but the last: the member, its type and the rule are
+            // the same whatever the use, and only the change that brings the use within reach differs.
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
-                Plain(
-                    "{0}. That member is internal to {1}, whose source this reload was not given. Hot reload patches "
-                    + "a use of such a member only where it is a field, a property or a method call written with its "
-                    + "receiver ('this.Name', 'Type.Name', 'value.Name') in the method's own statements: not a bare "
-                    + "name, a method passed as a delegate, or a use inside a lambda, local function, query, iterator "
-                    + "or async method, or in a body patched through a delegating shim. A lambda, local function or "
-                    + "query that works with a value hot reload could not resolve, such as the member's result, keeps "
-                    + "the whole body out as well. Qualify a bare name with 'this.' or the type name, or run "
-                    + "'uloop compile'.",
-                    2));
+                Plain(UnpassedInternalMemberSentence, 3).EndingWith(CompileCallToAction));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberBareName,
+                Plain(UnpassedInternalMemberSentence, 3).EndingWith(
+                    "Qualify the bare name with 'this.' or the type name, or run 'uloop compile'."));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberInsideClosure,
+                Plain(UnpassedInternalMemberSentence, 3).EndingWith(
+                    "Move the use out of the lambda, local function or query, or run 'uloop compile'."));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 Plain(

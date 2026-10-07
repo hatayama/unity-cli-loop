@@ -1,0 +1,6 @@
+{
+  "name": "io.github.hatayama.uloop.hotreload-package-fixture",
+  "version": "0.0.1",
+  "displayName": "Unity CLI Loop Hot Reload Package Fixture",
+  "description": "Test-only embedded package. Its folder name differs from its package name, so hot reload tests see a script whose asset path and file path differ."
+}

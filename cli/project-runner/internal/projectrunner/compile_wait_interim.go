@@ -46,7 +46,7 @@ func (state *compileWaitInterimState) lineIfDue(now time.Time, interval time.Dur
 	state.hasReported = true
 	state.lastReportAt = now
 	if useSilent {
-		return formatCompileWaitSilentLine(silentFor), true
+		return formatCompileWaitSilentLine(silentFor, state.lastSuccessStatus), true
 	}
 	return formatCompileWaitProgressLine(now.Sub(state.waitStartedAt), state.lastSuccessStatus), true
 }
@@ -85,7 +85,18 @@ func formatCompileWaitProgressLine(elapsed time.Duration, status compileStatusRe
 	)
 }
 
-func formatCompileWaitSilentLine(silentFor time.Duration) string {
+func formatCompileWaitSilentLine(silentFor time.Duration, lastStatus compileStatusResponse) string {
+	// A large compile or domain reload on a loaded machine can keep the Editor from answering this long by itself,
+	// so leading with the dialog would send the reader looking for one that is not there. A wait with no answered
+	// poll has the zero status and keeps the dialog-first wording.
+	if lastStatus.IsCompiling || lastStatus.IsDomainReloadInProgress {
+		return fmt.Sprintf(
+			"compile: Unity has not answered status polls for %ds while compiling (last status: is_compiling=%t, is_domain_reload_in_progress=%t). A large compile or a loaded machine can keep the Editor from answering this long. If it stays silent after the compile should have finished, check the Editor for a modal dialog.",
+			int(silentFor/time.Second),
+			lastStatus.IsCompiling,
+			lastStatus.IsDomainReloadInProgress,
+		)
+	}
 	return fmt.Sprintf(
 		"compile: Unity has not answered status polls for %ds. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Ask the user to answer the dialog in the Unity window. Restarting with 'uloop launch -r' helps only when no dialog is shown: the dialog reappears on every compile until the obsolete-API code is fixed or a person answers it.",
 		int(silentFor/time.Second),

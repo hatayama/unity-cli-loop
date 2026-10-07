@@ -14,6 +14,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
+using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
 using ReflectionAssembly = System.Reflection.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -26,6 +27,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string FixtureTypeFullName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadSpike.SpikePrivateAccessFixture";
+
+        private const string HiddenExtensionsTypeFullName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceHiddenIntExtensions";
+
+        private const string PublicHostTypeFullName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferencePublicHost";
+
+        private const string PublicBaseTypeFullName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferencePublicBase";
+
+        // The test assembly grants internals to this name, and to no assembly named like the
+        // stranger target.
+        private const string FriendTargetAssemblyName = "UloopShimReferenceFriendTarget";
+
+        private const string StrangerTargetAssemblyName = "UloopShimReferenceStrangerTarget";
 
         private const string ArtifactAssemblyName = "UloopIntroducedTypes_PublicizerFixture";
 
@@ -143,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(outputDirectory);
 
             // Force the write+prune path: remove existing exact-mvid caches for this assembly.
-            DeleteExactMvidCachesForAssembly(outputDirectory, TestAssemblyName);
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
 
             string siblingCachePath = Path.Combine(
                 outputDirectory,
@@ -168,24 +184,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(staleSameAssemblyPath),
                 Is.False,
                 "A true stale same-assembly cache (name-<mvid>.dll) must still be pruned.");
-        }
-
-        private static void DeleteExactMvidCachesForAssembly(string outputDirectory, string assemblyName)
-        {
-            foreach (string candidatePath in Directory.GetFiles(outputDirectory, assemblyName + "-*.dll"))
-            {
-                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(candidatePath);
-                if (fileNameWithoutExtension.Length <= assemblyName.Length + 1)
-                {
-                    continue;
-                }
-
-                string mvidCandidate = fileNameWithoutExtension.Substring(assemblyName.Length + 1);
-                if (Guid.TryParseExact(mvidCandidate, "N", out Guid _))
-                {
-                    File.Delete(candidatePath);
-                }
-            }
         }
 
         private static void AssertNoNonPublicTypesOrMembersRemain(AssemblyDefinition assemblyDefinition)
@@ -367,6 +365,187 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(errors, Is.Empty, "Artifact compilation failed:\n" + string.Join("\n", errors));
+        }
+
+        /// <summary>
+        /// What: a shim reference copy built for a target the assembly grants no internals to keeps
+        /// a top-level internal type, and the private, internal and private protected members of
+        /// public types, as they are, while a protected member and a nested type are publicized as
+        /// before.
+        /// </summary>
+        [Test]
+        public void GetOrCreateShimReferenceCopy_WhenTheAssemblyDoesNotGrantInternalsToTheTarget_KeepsInternalTypesAndMembersHidden()
+        {
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly(StrangerTargetAssemblyName);
+
+            Assert.That(
+                FindType(copy, HiddenExtensionsTypeFullName).Attributes & CecilTypeAttributes.VisibilityMask,
+                Is.EqualTo(CecilTypeAttributes.NotPublic),
+                "A top-level internal type must stay internal: the target's own compile never saw it.");
+
+            TypeDefinition publicHostType = FindType(copy, PublicHostTypeFullName);
+            Assert.That(
+                MethodAccessOf(publicHostType, "Hidden"),
+                Is.EqualTo(CecilMethodAttributes.Assembly),
+                "An internal member of a public type must stay internal: the target's own compile never saw it.");
+            Assert.That(
+                publicHostType.Fields.First(field => field.Name == "HiddenField").Attributes & CecilFieldAttributes.FieldAccessMask,
+                Is.EqualTo(CecilFieldAttributes.Assembly),
+                "An internal field of a public type must stay internal: the target's own compile never saw it.");
+            TypeDefinition publicBaseType = FindType(copy, PublicBaseTypeFullName);
+            Assert.That(
+                MethodAccessOf(publicBaseType, "Guarded"),
+                Is.EqualTo(CecilMethodAttributes.FamANDAssem),
+                "A private protected member must stay as it is: another assembly reaches it only through a grant.");
+            Assert.That(
+                MethodAccessOf(publicHostType, "Secret"),
+                Is.EqualTo(CecilMethodAttributes.Private),
+                "A private member must stay private: no other assembly's compile sees it.");
+            Assert.That(
+                publicHostType.Fields.First(field => field.Name == "SecretField").Attributes & CecilFieldAttributes.FieldAccessMask,
+                Is.EqualTo(CecilFieldAttributes.Private),
+                "A private field must stay private: no other assembly's compile sees it.");
+
+            Assert.That(
+                MethodAccessOf(publicBaseType, "Shielded"),
+                Is.EqualTo(CecilMethodAttributes.Public),
+                "A protected member must still be publicized: a shim calls it from outside the type hierarchy.");
+
+            TypeDefinition nestedInternalType = publicHostType.NestedTypes.First(type => type.Name == "NestedInternal");
+            Assert.That(
+                nestedInternalType.Attributes & CecilTypeAttributes.VisibilityMask,
+                Is.EqualTo(CecilTypeAttributes.NestedPublic),
+                "A nested type must still be publicized.");
+        }
+
+        /// <summary>
+        /// What: a shim reference copy built for a target the assembly grants internals to
+        /// publicizes an internal member of a public type, as every shim reference copy did before.
+        /// </summary>
+        [Test]
+        public void GetOrCreateShimReferenceCopy_WhenTheAssemblyGrantsInternalsToTheTarget_PublicizesInternalMembers()
+        {
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly(FriendTargetAssemblyName);
+
+            Assert.That(
+                MethodAccessOf(FindType(copy, PublicHostTypeFullName), "Hidden"),
+                Is.EqualTo(CecilMethodAttributes.Public),
+                "An internal member must be publicized for a target the assembly grants internals to.");
+        }
+
+        /// <summary>
+        /// What: a shim reference copy built for a target the assembly grants internals to
+        /// publicizes a top-level internal type, as every shim reference copy did before.
+        /// </summary>
+        [Test]
+        public void GetOrCreateShimReferenceCopy_WhenTheAssemblyGrantsInternalsToTheTarget_PublicizesInternalTopLevelTypes()
+        {
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly(FriendTargetAssemblyName);
+
+            Assert.That(
+                FindType(copy, HiddenExtensionsTypeFullName).Attributes & CecilTypeAttributes.VisibilityMask,
+                Is.EqualTo(CecilTypeAttributes.Public),
+                "A top-level internal type must be publicized for a target the assembly grants internals to.");
+        }
+
+        /// <summary>
+        /// What: the copy that keeps internals hidden and the fully publicized copy of the same image
+        /// are cached in different directories, so neither is returned in place of the other.
+        /// </summary>
+        [Test]
+        public void GetOrCreateShimReferenceCopy_WritesTheTwoVariantsToDifferentDirectories()
+        {
+            HotReloadTypeHome home = ResolveTestAssemblyHome();
+            IReadOnlyCollection<string> searchDirectories = PublicizerTestSearchDirectories.ForHotReloadTestAssembly();
+
+            string strangerCopyPath = ReferencePublicizer.GetOrCreateShimReferenceCopy(
+                home,
+                searchDirectories,
+                StrangerTargetAssemblyName);
+            string friendCopyPath = ReferencePublicizer.GetOrCreateShimReferenceCopy(
+                home,
+                searchDirectories,
+                FriendTargetAssemblyName);
+
+            Assert.That(strangerCopyPath, Is.Not.EqualTo(friendCopyPath), "The two variants must not share a path.");
+            Assert.That(File.Exists(strangerCopyPath), Is.True, "The copy that keeps internals hidden must exist.");
+            Assert.That(File.Exists(friendCopyPath), Is.True, "The fully publicized copy must exist.");
+            Assert.That(
+                NormalizedDirectoryOf(strangerCopyPath),
+                Is.EqualTo(NormalizedProjectDirectory(HotReloadConstants.PublicizedExternalRefsRelativeDirectory)),
+                "The copy that keeps internals hidden must be cached under PublicizedExternalRefs.");
+            Assert.That(
+                NormalizedDirectoryOf(friendCopyPath),
+                Is.EqualTo(NormalizedProjectDirectory(HotReloadConstants.PublicizedRefsRelativeDirectory)),
+                "The fully publicized copy must be cached under PublicizedRefs.");
+        }
+
+        /// <summary>
+        /// What: the friend name of an InternalsVisibleTo argument is the text before the first
+        /// comma without surrounding spaces, so a grant with a public key still names its assembly.
+        /// </summary>
+        [Test]
+        public void ParseFriendAssemblyName_StripsThePublicKeySuffix()
+        {
+            Assert.That(
+                ReferencePublicizer.ParseFriendAssemblyName("Friend, PublicKey=0024000004800000"),
+                Is.EqualTo("Friend"));
+            Assert.That(ReferencePublicizer.ParseFriendAssemblyName(" Friend "), Is.EqualTo("Friend"));
+            Assert.That(ReferencePublicizer.ParseFriendAssemblyName("Friend"), Is.EqualTo("Friend"));
+        }
+
+        /// <summary>
+        /// What: a grant matches the target assembly name regardless of case, the way the compiler
+        /// matches assembly simple names.
+        /// </summary>
+        [Test]
+        public void GetOrCreateShimReferenceCopy_MatchesTheTargetNameIgnoringCase()
+        {
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly("uloopshimreferencefriendtarget");
+
+            Assert.That(
+                FindType(copy, HiddenExtensionsTypeFullName).Attributes & CecilTypeAttributes.VisibilityMask,
+                Is.EqualTo(CecilTypeAttributes.Public),
+                "A grant whose name differs only in case must still publicize internal types.");
+        }
+
+        // Why delete the cached copies of both variants first: a copy is reused by assembly name and
+        // Mvid alone, so one that an earlier test or run left behind would pass without the rewrite
+        // under test running.
+        private static AssemblyDefinition ReadFreshShimReferenceCopyOfTestAssembly(string shimTargetAssemblyName)
+        {
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedExternalRefsRelativeDirectory);
+
+            string copyPath = ReferencePublicizer.GetOrCreateShimReferenceCopy(
+                ResolveTestAssemblyHome(),
+                PublicizerTestSearchDirectories.ForHotReloadTestAssembly(),
+                shimTargetAssemblyName);
+            return AssemblyDefinition.ReadAssembly(copyPath);
+        }
+
+        private static TypeDefinition FindType(AssemblyDefinition assemblyDefinition, string fullName)
+        {
+            TypeDefinition type = assemblyDefinition.MainModule.GetType(fullName);
+            Assert.That(type, Is.Not.Null, $"Type not found: {fullName}");
+            return type;
+        }
+
+        private static CecilMethodAttributes MethodAccessOf(TypeDefinition type, string methodName)
+        {
+            MethodDefinition method = type.Methods.First(candidate => candidate.Name == methodName);
+            return method.Attributes & CecilMethodAttributes.MemberAccessMask;
+        }
+
+        private static string NormalizedDirectoryOf(string filePath)
+        {
+            return Path.GetDirectoryName(Path.GetFullPath(filePath)).Replace('\\', '/');
+        }
+
+        private static string NormalizedProjectDirectory(string relativeDirectory)
+        {
+            string projectRootPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            return Path.GetFullPath(Path.Combine(projectRootPath, relativeDirectory)).Replace('\\', '/');
         }
 
         private static HotReloadTypeHome ResolveTestAssemblyHome()

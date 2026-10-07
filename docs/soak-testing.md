@@ -98,7 +98,8 @@ pinned runner the request is logged and ignored. Values above 1200 exceed
 Unity's 20-minute result retention, which weakens the post-timeout recovery.
 
 uloop is single-flight, so a command issued while Unity still runs an earlier
-one is refused at dispatch with `UNITY_SERVER_BUSY`. That is back-pressure from
+one is refused at dispatch with `UNITY_SERVER_BUSY` (`hot-reload` instead waits for the running
+command; see the hot-reload skill's scope-and-limits). That is back-pressure from
 the harness's own previous command, not a defect: the PowerShell variant waits
 (up to 20 tries, 30s apart) and records only the decisive attempt, so one slow
 compile no longer fails every command behind it.

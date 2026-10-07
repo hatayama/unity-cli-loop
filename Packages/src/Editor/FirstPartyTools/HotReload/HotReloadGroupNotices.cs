@@ -33,9 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
                     context.Files,
                     "(signature-change-gate)",
-                    string.Format(
-                        HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
-                        string.Join(", ", lostReplacementKeys)));
+                    HotReloadFailureDescription.Declaration(
+                        string.Format(
+                            HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
+                            string.Join(", ", lostReplacementKeys))));
                 return false;
             }
 

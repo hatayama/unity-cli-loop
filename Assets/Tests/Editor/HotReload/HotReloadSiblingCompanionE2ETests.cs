@@ -184,6 +184,106 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Run_FailedFile_IsRetriedOnceAndTheUnrelatedFileStillApplies()
         {
+            Dictionary<string, string> overrides = await FailHostAsync();
+
+            HotReloadOrchestratorResult retried = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
+            Assert.That(retried.ReappliedSiblingPaths, Does.Contain(ProjectRelativePath(HostFileName)), FormatOutcomes(retried));
+            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(1), FormatOutcomes(retried));
+
+            HotReloadOrchestratorResult next = await RunAsync(UnrelatedEdit(overrides, "return 2;"), overrides);
+            Assert.That(next.ReappliedSiblingPaths, Does.Not.Contain(ProjectRelativePath(HostFileName)), FormatOutcomes(next));
+            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(2), FormatOutcomes(next));
+        }
+
+        /// <summary>
+        /// What: a file whose edited body Failed and that was then reverted to the source the assembly
+        /// was compiled from is forgotten by the next reload of the assembly: no warning that its source
+        /// changed since, no retry, and no record left, while the unrelated file still applies. The
+        /// reload after that does not warn either.
+        /// </summary>
+        [Test]
+        public async Task Run_FailedFileRevertedToItsCompiledSource_IsForgottenWithoutAWarning()
+        {
+            string hostRelative = ProjectRelativePath(HostFileName);
+            Dictionary<string, string> overrides = await FailHostAsync();
+            overrides.Remove(FixturePath(HostFileName));
+
+            HotReloadOrchestratorResult reverted = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
+            Assert.That(ChangedSinceWarnings(reverted), Is.Empty, FormatOutcomes(reverted));
+            Assert.That(reverted.ReappliedSiblingPaths, Does.Not.Contain(hostRelative), FormatOutcomes(reverted));
+            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(1), FormatOutcomes(reverted));
+            Assert.That(Domain.AppliedSources.TryGetAppliedSource(hostRelative), Is.Null, FormatOutcomes(reverted));
+
+            HotReloadOrchestratorResult next = await RunAsync(UnrelatedEdit(overrides, "return 2;"), overrides);
+            Assert.That(ChangedSinceWarnings(next), Is.Empty, FormatOutcomes(next));
+            Assert.That(next.ReappliedSiblingPaths, Does.Not.Contain(hostRelative), FormatOutcomes(next));
+            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(2), FormatOutcomes(next));
+        }
+
+        /// <summary>
+        /// What: a file whose edited body Failed and that was then edited into something other than
+        /// its compiled source is still reported as changed since, and its record is kept.
+        /// </summary>
+        [Test]
+        public async Task Run_FailedFileEditedAgain_IsStillReportedAsChanged()
+        {
+            string hostPath = FixturePath(HostFileName);
+            string hostRelative = ProjectRelativePath(HostFileName);
+            Dictionary<string, string> overrides = await FailHostAsync();
+            overrides[hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "SiblingCompanionE2EEditedHost.cs",
+                ReplaceOnce(File.ReadAllText(hostPath), HandleBody, "_handled += payload.Value + 1;"));
+
+            HotReloadOrchestratorResult edited = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
+
+            Assert.That(
+                edited.Warnings,
+                Does.Contain(string.Format(HotReloadConstants.RetrySiblingChangedSinceSkipWarningFormat, hostRelative)),
+                FormatOutcomes(edited));
+            Assert.That(Domain.AppliedSources.TryGetAppliedSource(hostRelative), Is.Not.Null, FormatOutcomes(edited));
+        }
+
+        /// <summary>
+        /// What: a companion recorded while edited, whose explicit reload then Failed and whose source
+        /// was then reverted to its compiled source, is forgotten by the next reload of the assembly:
+        /// no changed-since warning of any kind, and neither its applied-source record nor its
+        /// companion record left. The reload after that does not warn either.
+        /// </summary>
+        [Test]
+        public async Task Run_FailedCompanionRevertedToItsCompiledSource_IsForgottenWithoutAWarning()
+        {
+            Dictionary<string, string> overrides = PayloadAndHostOverrides(WireMethod);
+            string registryPath = FixturePath(RegistryFileName);
+            string registryRelative = ProjectRelativePath(RegistryFileName);
+            overrides[registryPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "SiblingCompanionE2ECommentedRegistry.cs",
+                ReplaceOnce(File.ReadAllText(registryPath), RegistryAssignment, "// edited\n            " + RegistryAssignment));
+            await RunWireWithRegistryAsync(overrides);
+            Assert.That(Domain.CompanionSources.TryGetHash(registryRelative), Is.Not.Null, "Precondition: the edited registry must be recorded as a companion.");
+            overrides[registryPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                "SiblingCompanionE2EBrokenRegistry.cs",
+                ReplaceOnce(File.ReadAllText(registryPath), RegistryAssignment, "_handler = 42;"));
+            HotReloadOrchestratorResult broken = await RunAsync(new[] { registryPath }, overrides);
+            Assert.That(CountKind(broken, HotReloadMethodOutcomeKind.Failed), Is.GreaterThan(0), "Precondition: Register must fail.\n" + FormatOutcomes(broken));
+            Assert.That(Domain.AppliedSources.ListNotFullyAppliedSourcePaths(), Does.Contain(registryRelative), "Precondition: the Failed reload must leave the registry to retry.");
+            Assert.That(Domain.CompanionSources.TryGetHash(registryRelative), Is.Not.Null, "Precondition: the Failed reload must keep the companion record.");
+            overrides.Remove(registryPath);
+
+            HotReloadOrchestratorResult reverted = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
+            Assert.That(ChangedSinceWarnings(reverted), Is.Empty, FormatOutcomes(reverted));
+            Assert.That(Domain.AppliedSources.TryGetAppliedSource(registryRelative), Is.Null, FormatOutcomes(reverted));
+            Assert.That(Domain.CompanionSources.TryGetHash(registryRelative), Is.Null, FormatOutcomes(reverted));
+
+            HotReloadOrchestratorResult next = await RunAsync(UnrelatedEdit(overrides, "return 2;"), overrides);
+            Assert.That(ChangedSinceWarnings(next), Is.Empty, FormatOutcomes(next));
+        }
+
+        private static HotReloadDomain Domain => HotReloadCompositionRoot.Services.Domain;
+
+        // Passes the host with a Handle body that does not compile, and returns the overrides that
+        // still hold that broken host.
+        private static async Task<Dictionary<string, string>> FailHostAsync()
+        {
             string hostPath = FixturePath(HostFileName);
             Dictionary<string, string> overrides = new Dictionary<string, string>
             {
@@ -193,14 +293,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             HotReloadOrchestratorResult first = await RunAsync(new[] { hostPath }, overrides);
             Assert.That(CountKind(first, HotReloadMethodOutcomeKind.Failed), Is.GreaterThan(0), "Precondition: Handle must fail.\n" + FormatOutcomes(first));
-
-            HotReloadOrchestratorResult retried = await RunAsync(UnrelatedEdit(overrides, "return 1;"), overrides);
-            Assert.That(retried.ReappliedSiblingPaths, Does.Contain(ProjectRelativePath(HostFileName)), FormatOutcomes(retried));
-            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(1), FormatOutcomes(retried));
-
-            HotReloadOrchestratorResult next = await RunAsync(UnrelatedEdit(overrides, "return 2;"), overrides);
-            Assert.That(next.ReappliedSiblingPaths, Does.Not.Contain(ProjectRelativePath(HostFileName)), FormatOutcomes(next));
-            Assert.That(new HotReloadAddedFieldApplyFixture().ReadAdded(), Is.EqualTo(2), FormatOutcomes(next));
+            Assert.That(Domain.AppliedSources.ListNotFullyAppliedSourcePaths(), Does.Contain(ProjectRelativePath(HostFileName)), "Precondition: the Failed reload must leave the host to retry.");
+            return overrides;
         }
 
         private static async Task RunWireWithRegistryAsync(Dictionary<string, string> overrides)
@@ -296,6 +390,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return count;
+        }
+
+        // Every changed-source warning a reload gives about a sibling holds this phrase, whether the
+        // sibling had active patches, was left Skipped or Failed, or was a companion.
+        private static List<string> ChangedSinceWarnings(HotReloadOrchestratorResult result)
+        {
+            List<string> warnings = new List<string>();
+            foreach (string warning in result.Warnings ?? new List<string>())
+            {
+                if (warning.Contains("its source changed since"))
+                {
+                    warnings.Add(warning);
+                }
+            }
+
+            return warnings;
         }
 
         private static string ReplaceOnce(string source, string anchor, string replacement)

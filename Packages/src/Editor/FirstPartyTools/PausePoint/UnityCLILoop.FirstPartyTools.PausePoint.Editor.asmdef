@@ -3,7 +3,8 @@
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
         "GUID:fc3fd32eddbee40e39c2d76dc184957b",
-        "GUID:527f26a36b5043c2bd4d4036d04cd76d"
+        "GUID:527f26a36b5043c2bd4d4036d04cd76d",
+        "GUID:24d448abf7c10486d9578018b3a3c54b"
     ],
     "includePlatforms": [
         "Editor"

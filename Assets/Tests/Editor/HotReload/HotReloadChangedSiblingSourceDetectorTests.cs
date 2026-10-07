@@ -12,7 +12,8 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// EditMode coverage for snapshot-vs-disk sibling change detection used by const-drift scanning.
+    /// EditMode coverage for snapshot-vs-disk sibling change detection used by const-drift scanning,
+    /// and for the check that one source still holds its snapshot bytes.
     /// </summary>
     public class HotReloadChangedSiblingSourceDetectorTests
     {
@@ -323,6 +324,179 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         new[] { editedRelative });
 
                 Assert.That(result.IsComplete, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a source holding the bytes of its snapshot matches it, read from the path given
+        /// rather than from the project file.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshotDirectory_SameBytes_IsTrue()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string revertedRelative = "Assets/Reverted.cs";
+                string workerCopyRelative = "Temp/WorkerCopy/Reverted.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", revertedRelative, "compiled-bytes");
+                WriteProjectFile(projectRoot, workerCopyRelative, "compiled-bytes");
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshotDirectory(
+                    projectRoot,
+                    "Asm-mvid",
+                    revertedRelative,
+                    AbsoluteProjectPath(projectRoot, workerCopyRelative));
+
+                Assert.That(matches, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a source whose bytes differ from its snapshot does not match, even while the project
+        /// file at the same path still holds the snapshot bytes, because the given source is what the
+        /// worker reads.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshotDirectory_DifferentBytes_IsFalse()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string revertedRelative = "Assets/Reverted.cs";
+                string workerCopyRelative = "Temp/WorkerCopy/Reverted.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", revertedRelative, "compiled-bytes");
+                WriteProjectFile(projectRoot, revertedRelative, "compiled-bytes");
+                WriteProjectFile(projectRoot, workerCopyRelative, "edited-bytes");
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshotDirectory(
+                    projectRoot,
+                    "Asm-mvid",
+                    revertedRelative,
+                    AbsoluteProjectPath(projectRoot, workerCopyRelative));
+
+                Assert.That(matches, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a file the snapshot directory holds no copy of does not match, so a missing
+        /// snapshot is never read as "back at its compiled source".
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshotDirectory_NoSnapshotFile_IsFalse()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string revertedRelative = "Assets/Reverted.cs";
+                string workerCopyRelative = "Temp/WorkerCopy/Reverted.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", "Assets/Other.cs", "compiled-bytes");
+                WriteProjectFile(projectRoot, workerCopyRelative, "compiled-bytes");
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshotDirectory(
+                    projectRoot,
+                    "Asm-mvid",
+                    revertedRelative,
+                    AbsoluteProjectPath(projectRoot, workerCopyRelative));
+
+                Assert.That(matches, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a source path with no file behind it does not match, instead of throwing.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshotDirectory_NoSourceFile_IsFalse()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string revertedRelative = "Assets/Reverted.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", revertedRelative, "compiled-bytes");
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshotDirectory(
+                    projectRoot,
+                    "Asm-mvid",
+                    revertedRelative,
+                    AbsoluteProjectPath(projectRoot, "Temp/WorkerCopy/Reverted.cs"));
+
+                Assert.That(matches, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: without the compiled DLL the snapshot directory cannot be named, so the source does
+        /// not match.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshot_NoDll_IsFalse()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string workerCopyRelative = "Temp/WorkerCopy/Reverted.cs";
+                WriteProjectFile(projectRoot, workerCopyRelative, "compiled-bytes");
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshot(
+                    projectRoot,
+                    "Asm",
+                    Path.Combine(projectRoot, "missing.dll"),
+                    "Assets/Reverted.cs",
+                    AbsoluteProjectPath(projectRoot, workerCopyRelative));
+
+                Assert.That(matches, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a DLL without its PDB has no snapshot to compare with, so the source does not match
+        /// and the DLL is not read.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshot_NoPdb_IsFalse()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string workerCopyRelative = "Temp/WorkerCopy/Reverted.cs";
+                string dllPath = Path.Combine(projectRoot, "Fixture.dll");
+                File.WriteAllBytes(dllPath, Array.Empty<byte>());
+                WriteProjectFile(projectRoot, workerCopyRelative, "compiled-bytes");
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshot(
+                    projectRoot,
+                    "Asm",
+                    dllPath,
+                    "Assets/Reverted.cs",
+                    AbsoluteProjectPath(projectRoot, workerCopyRelative));
+
+                Assert.That(matches, Is.False);
             }
             finally
             {

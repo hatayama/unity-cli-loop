@@ -144,6 +144,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         IntroducedTypeArtifactUnusable,
         IntroducedTypeInputsUnreadable,
         IntroducedTypeIdentityMismatch,
-        EditorIsolatedAddedMethodCaller
+        EditorIsolatedAddedMethodCaller,
+        MethodTransformUnpassedInternalMemberBareName,
+        MethodTransformUnpassedInternalMemberInsideClosure
     }
 }

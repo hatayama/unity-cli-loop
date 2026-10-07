@@ -116,6 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "HotReloadInternalSignatureProbe.cs",
             "HotReloadGlobalUsingBehaviourBase.cs",
             "HotReloadGlobalUsingMode.cs",
+            "IsExternalInit.cs",
         };
 
         /// <summary>
@@ -1555,35 +1556,138 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing only the getter of an existing getter+setter property still emits the
-        /// setter skip row and does not emit outside-body drift. Pins the snapshot ContainsKey
-        /// guard so an existing property is not stripped from the current tree alone.
+        /// What: editing only the getter of an existing getter+setter property patches the getter
+        /// and leaves the setter it did not touch off the Skipped list, without outside-body drift.
         /// </summary>
         [Test]
-        public async Task Run_ExistingGetterAndSetterProperty_GetterBodyEdit_SkipsSetterWithoutOutsideBodyWarning()
+        public async Task Run_ExistingGetterAndSetterProperty_GetterBodyEdit_PatchesTheGetterAndLeavesTheUnchangedSetterOut()
         {
             const string fileName = "ExistingGetterAndSetterPropertyGetterEdit.cs";
-            string onDisk = File.ReadAllText(ResolveShapeFixturePath());
-            string editedSource = onDisk.Replace(
-                "get { return _value; }",
-                "get { return _value + 1; }",
-                StringComparison.Ordinal);
-            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: getter body must differ.");
+            TransformWorkerClientResult result = await RunWorkerOnEditedShapeCopyAsync(
+                fileName,
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "get { return _value; }",
+                    "get { return _value + 1; }"));
 
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
-            Directory.CreateDirectory(directory);
-            string sourcePath = Path.Combine(directory, fileName);
-            File.WriteAllText(sourcePath, editedSource);
+            AssertEmittedWithoutSkip(result, "get_Value");
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            AssertSkippedDoesNotContain(result, "set_Value");
+        }
+
+        /// <summary>
+        /// What: editing both accessor bodies of an existing getter+setter property patches the
+        /// getter and still skips the setter, because the setter is the one that changed.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingGetterAndSetterProperty_BothBodiesEdited_PatchesTheGetterAndSkipsTheSetter()
+        {
+            const string fileName = "ExistingGetterAndSetterPropertyBothEdited.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedShapeCopyAsync(
+                fileName,
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "get { return _value; }", "get { return _value + 1; }"),
+                    "set { _value = value; }",
+                    "set { _value = value + 1; }"));
+
+            AssertEmittedWithoutSkip(result, "get_Value");
+            AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: editing only the getter of an existing getter+init property leaves the init
+        /// accessor it did not touch off the Skipped list. init is reported through set_.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingGetterAndInitProperty_GetterBodyEdit_LeavesTheUnchangedInitOut()
+        {
+            const string fileName = "ExistingGetterAndInitPropertyGetterEdit.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedShapeCopyAsync(
+                fileName,
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "get { return _initialized; }",
+                    "get { return _initialized + 1; }"));
+
+            AssertEmittedWithoutSkip(result, "get_Initialized");
+            AssertSkippedDoesNotContain(result, "set_Initialized");
+        }
+
+        /// <summary>
+        /// What: a getter-only edit leaves an unchanged setter whose switch the worker annotates off
+        /// the Skipped list. The annotated setter no longer equals its own snapshot text, so only a
+        /// compare against the unannotated tree recognizes it as unchanged.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingPropertyWithASwitchSetter_GetterBodyEdit_LeavesTheUnchangedSetterOut()
+        {
+            const string fileName = "ExistingSwitchSetterPropertyGetterEdit.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedShapeCopyAsync(
+                fileName,
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "get { return _mode; }",
+                    "get { return _mode + 1; }"));
+
+            AssertEmittedWithoutSkip(result, "get_Mode");
+            AssertSkippedDoesNotContain(result, "set_Mode");
+        }
+
+        /// <summary>
+        /// What: an attribute added to an existing property, with both accessor bodies untouched,
+        /// patches the getter (its compare covers the declaration), leaves the setter off the
+        /// Skipped list, and names the property in the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingProperty_DeclarationOnlyEdit_LeavesTheUnchangedSetterOutAndWarnsDrift()
+        {
+            const string fileName = "ExistingPropertyDeclarationOnlyEdit.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedShapeCopyAsync(
+                fileName,
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "        public int Value\n",
+                    "        [System.Obsolete]\n        public int Value\n"));
+
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Does.Contain(
+                    "Edits outside method bodies in ExistingPropertyDeclarationOnlyEdit.cs (property: Value) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
+            AssertEmittedWithoutSkip(result, "get_Value");
+            AssertSkippedDoesNotContain(result, "set_Value");
+        }
+
+        /// <summary>
+        /// What: a property the snapshot does not declare still reports its setter as Skipped, and
+        /// the property is not read as an edit outside method bodies because the setter row marks it
+        /// as added to the current tree.
+        /// </summary>
+        [Test]
+        public async Task Run_PropertyAbsentFromSnapshot_SetterBodyIsStillSkipped()
+        {
+            string sourcePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(sourcePath);
+            string snapshotSource = ReplaceUniqueFragment(
+                onDisk,
+                "        public int Value\n"
+                + "        {\n"
+                + "            get { return _value; }\n"
+                + "            set { _value = value; }\n"
+                + "        }\n",
+                string.Empty);
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                 sourcePath,
                 ResolveShapeFixtureProjectRelativePath(),
-                snapshotSource: onDisk);
+                snapshotSource: snapshotSource);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
-            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "A property the snapshot lacks must be stripped from the current tree before the compare.");
         }
 
         /// <summary>
@@ -1852,10 +1956,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: with an identical snapshot, property getters with bodies are listed in
-        /// unchangedMethods as get_&lt;Name&gt; (Skipped-only accessors would leave them out).
+        /// unchangedMethods as get_&lt;Name&gt; (Skipped-only accessors would leave them out), and
+        /// no set or init body is reported as Skipped.
         /// </summary>
         [Test]
-        public async Task Run_WithIdenticalSnapshotOnPropertyGetterFixture_ListsGettersUnchanged()
+        public async Task Run_WithIdenticalSnapshotOnPropertyGetterFixture_ListsGettersUnchangedAndSkipsNoSetter()
         {
             string sourcePath = ResolveShapeFixturePath();
             string onDisk = File.ReadAllText(sourcePath);
@@ -1889,6 +1994,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Contain("get_Score"),
                 "Unedited block getter must appear in unchangedMethods; got: "
                 + string.Join(", ", unchangedNames));
+            AssertSkippedDoesNotContain(result, "set_Value");
+            AssertSkippedDoesNotContain(result, "set_Initialized");
+            AssertSkippedDoesNotContain(result, "set_Mode");
         }
 
         /// <summary>
@@ -2033,11 +2141,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: when only a property setter body differs from the snapshot, the unchanged getter
-        /// stays out of entries (baseline compare is getter-scoped, not whole-property).
+        /// What: when only a property setter body differs from the snapshot, the setter is Skipped
+        /// and the unchanged getter stays out of entries (both compares are per accessor, not
+        /// whole-property).
         /// </summary>
         [Test]
-        public async Task Run_WithSnapshotDifferingOnlyInSetter_DoesNotEmitUnchangedGetter()
+        public async Task Run_WithSnapshotDifferingOnlyInSetter_SkipsTheSetterAndDoesNotEmitUnchangedGetter()
         {
             string sourcePath = ResolveShapeFixturePath();
             string onDisk = File.ReadAllText(sourcePath);
@@ -2053,6 +2162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: snapshotSource);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
             if (result.Output.entries != null)
             {
                 foreach (TransformWorkerEntryDto entry in result.Output.entries)
@@ -2806,6 +2916,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                 sourcePath,
                 ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            return result;
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnEditedShapeCopyAsync(
+            string fileName,
+            Func<string, string> edit)
+        {
+            string onDisk = File.ReadAllText(ResolveShapeFixturePath());
+            string editedSource = edit(onDisk);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
@@ -4035,7 +4167,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return new TransformWorkerOutputInterpreter(
                 new TransformWorkerOutputValidator(),
-                new TransformWorkerCompiledTypeFileCompleter());
+                new TransformWorkerCompiledTypeFileCompleter(
+                    new FixedPackageRootCapture(Array.Empty<ScriptPackageRoot>())));
         }
 
         private static string CreateMatchingPreparationOutputJson(string assemblyName, string assemblyMvid)

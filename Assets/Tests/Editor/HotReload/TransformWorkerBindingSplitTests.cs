@@ -55,6 +55,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "\n\n        public void Wire()\n        {\n"
             + "            new HotReloadBindingSplitNestedRegistry.Inner().Register(p => Handle(p));\n        }";
 
+        // The installed client names a type's file through the package roots a run captures, and
+        // these tests call it directly rather than through a run.
+        [SetUp]
+        public void SetUp()
+        {
+            HotReloadCompositionRoot.Services.PackageRootCapture.CaptureCurrent();
+        }
+
         /// <summary>
         /// What: with the host alone in the run, the lambda binds against the compiled payload and
         /// the added method is applied through the accessor rewrite, so the guard added for the

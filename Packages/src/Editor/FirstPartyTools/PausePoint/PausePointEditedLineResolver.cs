@@ -221,6 +221,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
+            // Read by the asset path even for a package script: the Editor resolves a registered package's
+            // Packages/<package-id>/... path to its folder in file IO, as the source snapshot capture does.
             string editedFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
             if (!File.Exists(editedFilePath))
             {

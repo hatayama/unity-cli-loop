@@ -372,7 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "A reload that declares an already introduced type must not fail.");
                     AssertCallerIsPatched(second);
 
-                    HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, second, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
+                    HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, second, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false, selectedFiles: new[] { hostPath, callerPath });
                     Assert.That(
                         response.IntroducedTypes.Count,
                         Is.EqualTo(1),
@@ -629,7 +629,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CancellationToken.None);
             }
 
-            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false);
+            HotReloadResponse response = HotReloadApplyResponseBuilder.Build(HotReloadCompositionRoot.Services, result, null, Array.Empty<string>(), Array.Empty<HotReloadWiredValueRestoreFailure>(), isPlaying: false, isPaused: false, selectedFiles: new[] { hostPath });
             Assert.That(response.Success, Is.False, "A refused declaration must fail the run.");
             string ownerProjectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(
                 HotReloadCompositionRoot.Services.PackageRootCapture,
@@ -1606,7 +1606,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadGroupOutcomeRouter.AppendGroupFailure(
                         files,
                         "(file)",
-                        "The compiled assembly changed while the group was being processed.");
+                        HotReloadFailureDescription.Declaration(
+                            "The compiled assembly changed while the group was being processed."));
                     return false;
                 },
                 (files, input, ct) =>

@@ -1,0 +1,16 @@
+{
+    "name": "UnityCLILoop.Tests.Editor.HotReload.ShimReferenceForeignInternal",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceForeignInternal",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

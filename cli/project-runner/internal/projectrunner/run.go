@@ -16,6 +16,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
 
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
@@ -105,83 +106,58 @@ func runToolExecution(
 type toolExecutionResult struct {
 	result   json.RawMessage
 	exitCode int
+	// correlationID is the vibe log ID of the request that produced this result, so entries
+	// written after it can be joined to that request.
+	correlationID string
 }
 
 func runPlainTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stderr io.Writer) toolExecutionResult {
+	result, outcome, err := sendPlainTool(ctx, connection, command, params, stderr, defaultConnectionRetryDeps())
+	if err != nil {
+		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     command,
+		})
+	}
+	return result
+}
+
+// sendPlainTool sends one tool request and returns what came back. A failure is logged but not
+// written to stderr, so a caller that recovers from it (hot reload waiting out a busy Editor)
+// decides what the user sees. The failed result still carries the request's correlation ID.
+func sendPlainTool(
+	ctx context.Context,
+	connection unityipc.Connection,
+	command string,
+	params map[string]any,
+	stderr io.Writer,
+	deps connectionRetryDeps,
+) (toolExecutionResult, unityipc.UnitySendOutcome, error) {
 	applyDebugTimingParams(command, params)
+	correlationID := vibelog.NewCLIVibeCorrelationID()
+	logPlainToolRequestSent(connection, command, params, correlationID)
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, command)
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
 		ctx,
 		connection,
 		command,
 		params,
 		ui.NewSpinnerProgressFunc(spinner, fmt.Sprintf("Executing %s...", command)),
+		0,
+		deps,
 	)
 	spinner.Stop()
 	if err != nil {
 		writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
-		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     command,
-		})
-		return toolExecutionResult{exitCode: 1}
+		logPlainToolRequestFailed(connection, command, correlationID, time.Since(startedAt), outcome, err)
+		return toolExecutionResult{exitCode: 1, correlationID: correlationID}, outcome, err
 	}
 	result := stripDebugTimingResult(command, outcome.Result)
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
-	return toolExecutionResult{result: result, exitCode: toolEnvelopeExitCode(result)}
-}
-
-func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
-	applyDebugTimingParams(clicore.ExecuteDynamicCodeCommandName, params)
-	startedAt := time.Now()
-	spinner := clicore.NewToolSpinner(stderr, clicore.ExecuteDynamicCodeCommandName)
-	outcome, err := sendWithTransientConnectionRetry(
-		ctx,
-		connection,
-		clicore.ExecuteDynamicCodeCommandName,
-		params,
-		ui.NewSpinnerProgressFunc(spinner, "Executing execute-dynamic-code..."),
-	)
-	if err != nil {
-		if shouldWaitForExecuteDynamicCodeDisconnect(err, outcome) {
-			spinner.Update("Connection lost during execute-dynamic-code. Waiting for domain reload to complete...")
-			if waitErr := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
-				spinner.Stop()
-				clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
-					ProjectRoot: connection.ProjectRoot,
-					Command:     clicore.ExecuteDynamicCodeCommandName,
-				})
-				return 1
-			}
-		}
-		spinner.Stop()
-		writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
-		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     clicore.ExecuteDynamicCodeCommandName,
-		})
-		return 1
-	}
-
-	if executeDynamicCodeDomainReloadWaitRequired(outcome.Result) {
-		spinner.Update("Waiting for domain reload to complete...")
-		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-			spinner.Stop()
-			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
-				ProjectRoot: connection.ProjectRoot,
-				Command:     clicore.ExecuteDynamicCodeCommandName,
-			})
-			return 1
-		}
-	}
-
-	spinner.Stop()
-	result := stripExecuteDynamicCodeControlResult(outcome.Result)
-	result = stripDebugTimingResult(clicore.ExecuteDynamicCodeCommandName, result)
-	clicore.WriteJSON(stdout, result)
-	writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
-	return toolEnvelopeExitCode(result)
+	exitCode := toolEnvelopeExitCode(result)
+	logPlainToolResponseReceived(connection, command, correlationID, time.Since(startedAt), outcome, result, exitCode)
+	return toolExecutionResult{result: result, exitCode: exitCode, correlationID: correlationID}, outcome, nil
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -265,18 +241,6 @@ func runCompileWithReattachPolicy(
 	}
 
 	return runFreshCompileRecoveringWithDeps(ctx, connection, params, stderr, compileWait)
-}
-
-func runFreshCompileWithDomainReloadWaitWithDeps(
-	ctx context.Context,
-	connection unityipc.Connection,
-	params map[string]any,
-	stdout io.Writer,
-	stderr io.Writer,
-	compileWait compileWaitDeps,
-) int {
-	result := runFreshCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
-	return writeCompileExecutionResult(stdout, result)
 }
 
 func runFreshCompileWithDomainReloadWaitResultWithDeps(

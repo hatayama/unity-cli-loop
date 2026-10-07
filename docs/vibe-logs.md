@@ -36,7 +36,8 @@ command ran against:
 - A missing line is evidence only when the define was set and the code path logs at all.
   Coverage is per call site, not per command: for example, `execute-dynamic-code`,
   `simulate-keyboard`, `screenshot`, compile, domain reload, server binding, and hot reload log
-  start and completion, while the CLI side currently logs compile requests and window focus only.
+  start and completion, while the CLI side logs compile requests, window focus, and the tool
+  requests described under "CLI entries for tool commands" below.
   Check that the operation you expect is logged somewhere (`git grep` the operation name) before
   reading its absence as "it never ran".
 
@@ -53,6 +54,35 @@ Each line is one JSON object:
   `execute-dynamic-code` it is `context.correlationId`), not by the top-level `correlation_id`,
   which is generated per log call.
 - `environment.domain_reload_state` tells whether an entry was written during a domain reload.
+
+## CLI entries for tool commands
+
+A tool command that sends one request and prints Unity's answer, such as `hot-reload` or
+`get-logs`, writes these entries. A command that runs a wait or a flow of its own writes none of
+them: `compile` (it has its own `cli_compile_*` entries), an `execute-dynamic-code`, `run-tests`,
+or `control-play-mode` that waits for a domain reload or a Play Mode change, and commands such as
+`enable-pause-point`, `await-pause-point`, and `status`.
+
+| `operation` | Written | `context` |
+|---|---|---|
+| `cli_tool_request_sent` | before the request is sent | `command`, `correlation_id`, `project_identity`, `cli_version`, `param_keys` (sorted), `array_lengths` (element count of each array parameter) |
+| `cli_tool_response_received` | when Unity answered | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `result_bytes`, `exit_code` |
+| `cli_tool_request_failed` (`ERROR`) | when no answer came, or Unity answered with an error | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `error_kind` (`rpc:<error data type>`, `final_response_timeout`, or `other`) |
+| `cli_hot_reload_busy_wait_decided` | when the first `hot-reload` answer is `server_busy` (another uloop command holds the Editor; the preceding `cli_tool_request_failed` has `error_kind` `rpc:server_busy`) | `correlation_id` (the first request's), `running_tool_name`, `running_tool_phase`, `running_tool_elapsed_seconds`, `budget_ms`, `resend_interval_ms` |
+| `cli_hot_reload_busy_wait_complete` (`WARN` unless the Editor became ready and the request sent after the wait answered) | after the wait and the one request sent after it, on every way out of a wait that started (a cancel, a failed send, and a bad answer included) | `correlation_id` (the first request's), `second_correlation_id` (the request sent after the wait, or empty when none was sent), `waited_ms`, `ready`, `resends` (requests sent again during the wait while a cancelled `execute-dynamic-code` held the Editor; each also has its own `cli_tool_request_sent`), `second_result`, and that answer's `second_success` and `second_outcome` |
+| `cli_hot_reload_editor_ready_retry_decided` | after every `hot-reload` answer (the one after a busy wait, when one ran), before the fallback decision | `correlation_id` (the request's), `requested`, `parse_error` |
+| `cli_hot_reload_editor_ready_retry_complete` (`WARN` unless the Editor settled and the second apply answered) | after the wait and the second apply, when a retry was requested | `correlation_id` (the first request's), `second_correlation_id` (the second request's, or empty when none was sent), `waited_ms`, `ready`, `second_result`, and the second answer's `second_success` and `second_outcome` |
+| `cli_hot_reload_compile_fallback_decided` | after every `hot-reload` answer the fallback decision sees: the second one after an editor-ready retry, and none when that retry ended the command (see `cli_hot_reload_editor_ready_retry_complete`) | `correlation_id` (the request's), `requested`, `parse_error`, and the answer's `success`, `outcome`, `warnings_count`, and `timing` (numbers only) |
+| `cli_hot_reload_compile_fallback_complete` (`ERROR` unless `succeeded`) | after the fallback compile, when one ran | `correlation_id`, `elapsed_ms`, `compile_exit_code`, `compile_result_bytes`, `merged`, `succeeded` |
+
+- These entries hold keys, counts, sizes, and flags, never a parameter value, a response body,
+  or an error message: a parameter can name the project's files or carry code, and Unity's
+  parameter-validation error quotes the values it rejected. Read the values from the command's
+  own output.
+- `cli_tool_response_received` with `exit_code` 1 is a tool that answered with a failure; the
+  request itself got through.
+- The `cli_tool_*` entries of one command share one `correlation_id`, and the two
+  `cli_hot_reload_*` entries share another. Pair the two groups by time.
 
 ## How to use them in an investigation
 

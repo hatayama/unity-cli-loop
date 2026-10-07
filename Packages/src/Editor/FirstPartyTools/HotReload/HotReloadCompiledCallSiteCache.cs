@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -10,17 +11,21 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Keeps the Cecil view of a compiled assembly (module, state-machine owner index, and the
-    /// call / ldftn instructions) alive across hot reload runs while the dll on disk is unchanged.
+    /// Keeps the Cecil view of a compiled assembly (module, state-machine owner index, the call /
+    /// ldftn instructions, and an index of them by the method they reference) alive across hot
+    /// reload runs while the dll on disk is unchanged.
     /// Why: every hot reload run re-read and re-walked the whole ScriptAssemblies dll to find
     /// callers (~0.24 s on a large test assembly), although the dll only changes on a compile,
     /// which also reloads the domain and therefore empties this cache.
     /// </summary>
     internal sealed class HotReloadCompiledCallSiteCache
     {
-        // Why a small cap: each entry holds a full Cecil module in memory. A hot reload run
-        // scans the target assembly plus the assemblies that reference it, which is a handful.
-        internal const int DefaultCapacity = 8;
+        // Why 64: an entry keeps the dll's bytes (InMemory) and its metadata only, because the
+        // methods' instruction lists are released once the call sites are collected. In a large
+        // project one run scanned the target assembly plus the 20 assemblies that reference it,
+        // and a cap of 8 made every scan read all 21 again. Within a run nothing is evicted
+        // whatever the cap (HoldEntriesForRun); the cap bounds what stays cached between runs.
+        internal const int DefaultCapacity = 64;
 
         /// <summary>
         /// One compiled instruction that may reference a target method.
@@ -41,9 +46,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// The reusable Cecil view of one dll file, valid while <see cref="Fingerprint"/> matches the file.
-        /// An entry is returned outside the cache lock and may be disposed by a later lookup that
-        /// replaces or evicts it, so its lifetime relies on hot reload runs being single-flight:
-        /// a caller must finish with an entry before the next run starts.
+        /// An entry is returned outside the cache lock. While a hold from
+        /// <see cref="HoldEntriesForRun"/> is open no entry is evicted, so an entry is disposed only
+        /// when a later lookup finds its file changed and replaces it. An entry kept after the hold
+        /// ends, or used without one, may also be disposed by a later lookup that evicts it.
         /// </summary>
         internal sealed class Entry : IDisposable
         {
@@ -55,13 +61,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public long LastAccess;
 
             private readonly AssemblyDefinition _assembly;
+            private readonly HotReloadCompiledCallSiteIndex _callSiteIndex;
 
             public Entry(
                 string dllPath,
                 DllFingerprint fingerprint,
                 AssemblyDefinition assembly,
                 Dictionary<string, MethodDefinition> logicalOwners,
-                List<CompiledCallSite> callSites)
+                List<CompiledCallSite> callSites,
+                HotReloadCompiledCallSiteIndex callSiteIndex)
             {
                 DllPath = dllPath;
                 Fingerprint = fingerprint;
@@ -69,6 +77,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Module = assembly.MainModule;
                 LogicalOwners = logicalOwners;
                 CallSites = callSites;
+                _callSiteIndex = callSiteIndex;
+            }
+
+            /// <summary>
+            /// Positions in <see cref="CallSites"/>, in ascending order, of the call sites whose
+            /// operand's open declaring type is named <paramref name="openDeclaringTypeFullName"/>
+            /// and whose method is named <paramref name="methodName"/>; empty when there are none.
+            /// </summary>
+            public IReadOnlyList<int> LookupCallSiteIndices(string openDeclaringTypeFullName, string methodName)
+            {
+                return _callSiteIndex.Lookup(openDeclaringTypeFullName, methodName);
             }
 
             public void Dispose()
@@ -140,6 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         private long _accessSequence;
         private int _loadCount;
+        // Number of open holds; touched only under _gate.
+        private int _holdDepth;
 
         public HotReloadCompiledCallSiteCache(int capacity, LoadProbes probes = null)
         {
@@ -213,10 +234,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 Entry loaded = LoadConsistent(fullPath, fingerprint);
                 loaded.LastAccess = _accessSequence;
-                EvictLeastRecentlyUsedWhileOverCapacity();
+                // Why not while held: a run scans the same dlls once per caller it looks up, so an
+                // eviction inside the run turns one read per dll into one read per scan.
+                if (_holdDepth == 0)
+                {
+                    EvictLeastRecentlyUsedWhileOverCapacity();
+                }
+
                 _entries[fullPath] = loaded;
                 return loaded;
             }
+        }
+
+        /// <summary>
+        /// Keeps every entry until the returned hold is disposed, however many dlls are read in the
+        /// meantime; when the outermost hold ends, the least recently used entries are evicted down
+        /// to the capacity. Holds nest, and disposing one hold twice releases it once.
+        /// </summary>
+        public IDisposable HoldEntriesForRun()
+        {
+            lock (_gate)
+            {
+                _holdDepth++;
+            }
+
+            return new Hold(this);
         }
 
         /// <summary>
@@ -235,26 +277,85 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // One open hold. Not tied to a thread: a run's using block may end on another thread
+        // after an await, so the state it changes lives in the cache, under _gate.
+        private sealed class Hold : IDisposable
+        {
+            private HotReloadCompiledCallSiteCache _owner;
+
+            public Hold(HotReloadCompiledCallSiteCache owner)
+            {
+                _owner = owner;
+            }
+
+            public void Dispose()
+            {
+                // Why Exchange: a second Dispose, even a concurrent one, must find no owner, or it
+                // would end an outer hold that is still open.
+                HotReloadCompiledCallSiteCache owner = Interlocked.Exchange(ref _owner, null);
+                if (owner == null)
+                {
+                    return;
+                }
+
+                owner.ReleaseHold();
+            }
+        }
+
+        private void ReleaseHold()
+        {
+            lock (_gate)
+            {
+                Debug.Assert(_holdDepth > 0, "ReleaseHold without a matching hold.");
+                _holdDepth--;
+                if (_holdDepth > 0)
+                {
+                    return;
+                }
+
+                EvictLeastRecentlyUsedDownToCapacity();
+            }
+        }
+
         private void EvictLeastRecentlyUsedWhileOverCapacity()
         {
             // The new entry is added after this call, so make room for it.
             while (_entries.Count >= _capacity)
             {
-                string leastRecentPath = null;
-                long leastRecentAccess = long.MaxValue;
-                foreach (KeyValuePair<string, Entry> pair in _entries)
-                {
-                    if (pair.Value.LastAccess < leastRecentAccess)
-                    {
-                        leastRecentAccess = pair.Value.LastAccess;
-                        leastRecentPath = pair.Key;
-                    }
-                }
-
-                Entry evicted = _entries[leastRecentPath];
-                _entries.Remove(leastRecentPath);
-                evicted.Dispose();
+                EvictEntry(FindLeastRecentlyUsedPath());
             }
+        }
+
+        private void EvictLeastRecentlyUsedDownToCapacity()
+        {
+            // Nothing is added after this call, so keep entries up to the capacity itself.
+            while (_entries.Count > _capacity)
+            {
+                EvictEntry(FindLeastRecentlyUsedPath());
+            }
+        }
+
+        private string FindLeastRecentlyUsedPath()
+        {
+            string leastRecentPath = null;
+            long leastRecentAccess = long.MaxValue;
+            foreach (KeyValuePair<string, Entry> pair in _entries)
+            {
+                if (pair.Value.LastAccess < leastRecentAccess)
+                {
+                    leastRecentAccess = pair.Value.LastAccess;
+                    leastRecentPath = pair.Key;
+                }
+            }
+
+            return leastRecentPath;
+        }
+
+        private void EvictEntry(string path)
+        {
+            Entry evicted = _entries[path];
+            _entries.Remove(path);
+            evicted.Dispose();
         }
 
         private static DllFingerprint ReadFingerprint(string fullPath)
@@ -327,10 +428,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         TryIndexStateMachineOwner(method, logicalOwners);
                         CollectCallSites(method, callSites);
+                        ReleaseMethodBody(method);
                     }
                 }
 
-                Entry entry = new Entry(fullPath, fingerprint, assembly, logicalOwners, callSites);
+                HotReloadCompiledCallSiteIndex callSiteIndex = HotReloadCompiledCallSiteIndex.Build(callSites);
+                Entry entry = new Entry(fullPath, fingerprint, assembly, logicalOwners, callSites, callSiteIndex);
                 ownershipTransferred = true;
                 return entry;
             }
@@ -365,6 +468,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 callSites.Add(new CompiledCallSite(method, operand, IsFunctionPointerLoadOpcode(instruction.OpCode)));
             }
+        }
+
+        // Why release: the walk above is the only reader of instruction lists, and an entry that
+        // kept them would hold every method body of every cached dll. The call sites keep only
+        // the caller and operand references, which are metadata. Why only after the walk: Cecil
+        // reads a body when it is first asked for, so releasing before the walk frees nothing.
+        private static void ReleaseMethodBody(MethodDefinition method)
+        {
+            if (!method.HasBody)
+            {
+                return;
+            }
+
+            method.Body = null;
         }
 
         private static void TryIndexStateMachineOwner(

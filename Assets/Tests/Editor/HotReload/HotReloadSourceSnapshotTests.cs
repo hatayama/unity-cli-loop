@@ -37,6 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/RegressionHarness/AnnotatedScreenshotMismatch/Editor/AnnotatedScreenshotMismatchSceneBuilder.cs";
         private const string BodylessFixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadSnapshotBodylessFixture.cs";
+        private const string PausePointsRuntimeAssemblyName = "UnityCLILoop.PausePoints.Runtime";
+        // A file of this repository's embedded package, whose folder differs from its package name.
+        private const string PackageSourceAssetPath =
+            "Packages/io.github.hatayama.uloopmcp/Runtime/PausePoints/UloopPausePoint.cs";
+        private const string PackageSourcePhysicalPath = "Packages/src/Runtime/PausePoints/UloopPausePoint.cs";
 
         /// <summary>
         /// What: the portable PDB next to a script assembly carries a per-document checksum that matches the hash of the source file bytes, which the snapshot baseline validation relies on.
@@ -153,6 +158,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(loaded, Is.Not.Null, "Predefined editor assembly snapshot must exist after compile.");
             Assert.That(loaded, Is.EqualTo(File.ReadAllText(fixtureAbsolutePath)));
+        }
+
+        /// <summary>
+        /// What: a source of an embedded package, given by the asset path Unity reports for it, loads
+        /// its verified snapshot, and the miss description agrees that nothing is missing.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSource_PackageSourceGivenByItsAssetPath_ReturnsTheVerifiedSource()
+        {
+            HotReloadSourceSnapshotter.CaptureAfterDomainReload();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string dllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                PausePointsRuntimeAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+
+            string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(PackageSourceAssetPath, dllPath);
+            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMiss(PackageSourceAssetPath, dllPath);
+
+            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.None));
+            Assert.That(loaded, Is.EqualTo(File.ReadAllText(Path.Combine(projectRoot, PackageSourcePhysicalPath))));
         }
 
         /// <summary>

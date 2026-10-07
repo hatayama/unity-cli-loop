@@ -100,6 +100,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// <summary>
     /// Property getters for hot-reload property-patch coverage: static expression-bodied and
     /// instance block get. Auto-properties are intentionally absent (not patch candidates).
+    /// Value, Initialized and Mode pair a getter with a set or init body, so a getter-only edit
+    /// shows whether the accessor left alone stays off the Skipped list. Mode's switch is a shape
+    /// the worker's annotations make unequal to itself, so only an unannotated compare sees it unchanged.
     /// </summary>
     internal class HotReloadPropertyGetterFixture
     {
@@ -121,6 +124,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             get { return _value; }
             set { _value = value; }
+        }
+
+        private int _initialized;
+
+        public int Initialized
+        {
+            get { return _initialized; }
+            init { _initialized = value; }
+        }
+
+        private int _mode;
+
+        public int Mode
+        {
+            get { return _mode; }
+            set
+            {
+                switch (value)
+                {
+                    case 0:
+                        _mode = 0;
+                        break;
+                    default:
+                        _mode = value;
+                        break;
+                }
+            }
         }
     }
 

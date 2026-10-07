@@ -16,11 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class TransformWorkerClient
     {
         private readonly TransformWorkerHost _host;
+        private readonly IHotReloadPackageRootCapture _packageRootCapture;
 
-        internal TransformWorkerClient(TransformWorkerHost host)
+        internal TransformWorkerClient(TransformWorkerHost host, IHotReloadPackageRootCapture packageRootCapture)
         {
             Debug.Assert(host != null, "host must not be null.");
+            Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
             _host = host;
+            _packageRootCapture = packageRootCapture;
         }
 
         /// <summary>
@@ -152,11 +155,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static TransformWorkerOutputInterpreter CreateOutputInterpreter()
+        private TransformWorkerOutputInterpreter CreateOutputInterpreter()
         {
             return new TransformWorkerOutputInterpreter(
                 new TransformWorkerOutputValidator(),
-                new TransformWorkerCompiledTypeFileCompleter());
+                new TransformWorkerCompiledTypeFileCompleter(_packageRootCapture));
         }
     }
 

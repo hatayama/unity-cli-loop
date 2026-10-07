@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -259,7 +260,7 @@ func runHotReloadWithFakeCompile(
 	compileResult compileExecutionResult,
 ) (string, string, int, int) {
 	t.Helper()
-	return runHotReloadWithDelayedFakeCompile(t, hotReloadResponse, compileResult, 0)
+	return runHotReloadWithDelayedFakeCompileInProjectRoot(t, t.TempDir(), hotReloadResponse, compileResult, 0)
 }
 
 // Same as runHotReloadWithFakeCompile, but the fake compile answers only after delay, so a test can
@@ -271,7 +272,19 @@ func runHotReloadWithDelayedFakeCompile(
 	delay time.Duration,
 ) (string, string, int, int) {
 	t.Helper()
-	projectRoot := t.TempDir()
+	return runHotReloadWithDelayedFakeCompileInProjectRoot(t, t.TempDir(), hotReloadResponse, compileResult, delay)
+}
+
+// Same as runHotReloadWithDelayedFakeCompile, in the given project root, so a test can read the
+// vibe log the command wrote there.
+func runHotReloadWithDelayedFakeCompileInProjectRoot(
+	t *testing.T,
+	projectRoot string,
+	hotReloadResponse string,
+	compileResult compileExecutionResult,
+	delay time.Duration,
+) (string, string, int, int) {
+	t.Helper()
 	listener := newLoopbackIpcListener(t)
 	requests := make(chan map[string]any, 1)
 	serverErr := make(chan error, 1)
@@ -625,5 +638,265 @@ func assertJSONStringField(t *testing.T, fields map[string]json.RawMessage, name
 	}
 	if got != want {
 		t.Fatalf("%s mismatch:\nwant %q\ngot  %q", name, want, got)
+	}
+}
+
+// A reload response that asks for the fallback, carrying text no log entry may copy: the warnings,
+// the message, and a Timing field that is not a number.
+const hotReloadVibeLogRequestedResponse = `{"Success":false,"Outcome":"Failed","CompileFallback":"Requested",` +
+	`"Warnings":["` + plainToolLogSentinel + ` first","` + plainToolLogSentinel + ` second"],` +
+	`"Timing":{"AnalysisMs":7,"TotalMs":12,"Note":"` + plainToolLogSentinel + `"},` +
+	`"Message":"` + plainToolLogSentinel + `"}`
+
+// Verifies a run that asks for the fallback logs the decision and the compile's completion under
+// one correlation ID, besides the reload's own request and response, and copies no response text.
+func TestRunHotReloadWritesFallbackDecidedAndCompleteVibeLogs(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+
+	_, _, _, code := runHotReloadWithDelayedFakeCompileInProjectRoot(
+		t,
+		projectRoot,
+		hotReloadVibeLogRequestedResponse,
+		compileExecutionResult{result: json.RawMessage(`{"Success":true,"Message":"ok"}`), exitCode: 0},
+		0)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	requestSent := singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+	singleCliVibeEntry(t, logContent, "cli_tool_response_received")
+	decided := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided")
+	// The reader joins the fallback entries to the request they follow by this ID.
+	assertSharedCliVibeCorrelationID(t, requestSent, decided)
+	complete := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
+	assertCliVibeEntryLevel(t, decided, "INFO")
+	assertCliVibeEntryLevel(t, complete, "INFO")
+	decidedContext := cliVibeEntryContext(t, decided)
+	assertCliVibeContextValues(t, decidedContext, map[string]any{
+		"requested":      true,
+		"parse_error":    false,
+		"success":        false,
+		"outcome":        "Failed",
+		"warnings_count": float64(2),
+	})
+	if timing := fmt.Sprint(decidedContext["timing"]); timing != "map[AnalysisMs:7 TotalMs:12]" {
+		t.Fatalf("timing = %s, want only the numeric phases", timing)
+	}
+	completeContext := cliVibeEntryContext(t, complete)
+	assertCliVibeContextValues(t, completeContext, map[string]any{
+		"merged":            true,
+		"succeeded":         true,
+		"compile_exit_code": float64(0),
+	})
+	if resultBytes, _ := completeContext["compile_result_bytes"].(float64); resultBytes <= 0 {
+		t.Fatalf("compile_result_bytes = %#v, want a positive number", completeContext["compile_result_bytes"])
+	}
+	if _, ok := completeContext["elapsed_ms"].(float64); !ok {
+		t.Fatalf("elapsed_ms = %#v, want a number", completeContext["elapsed_ms"])
+	}
+	assertSharedCliVibeCorrelationID(t, decided, complete)
+	assertCliVibeLogOmitsTheSentinel(t, logContent)
+}
+
+// Verifies a run that needs no fallback still logs the decision, so the log shows the fallback was
+// weighed and not run, and logs each field the response lacks as absent.
+func TestRunHotReloadWritesFallbackDecidedWhenNotRequested(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+
+	runHotReloadWithDelayedFakeCompileInProjectRoot(
+		t,
+		projectRoot,
+		`{"Success":true,"CompileFallback":"NotNeeded"}`,
+		compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0},
+		0)
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided"))
+	assertCliVibeContextValues(t, decidedContext, map[string]any{
+		"requested":      false,
+		"parse_error":    false,
+		"success":        true,
+		"outcome":        "",
+		"warnings_count": float64(0),
+	})
+	assertCliVibeContextOmits(t, decidedContext, "timing")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
+}
+
+// Verifies a reload response that is not an object is logged as a parse error that requested
+// nothing, with no field read from it.
+func TestRunHotReloadWritesFallbackDecidedWithParseErrorForANullResponse(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+
+	runHotReloadWithDelayedFakeCompileInProjectRoot(
+		t,
+		projectRoot,
+		`null`,
+		compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0},
+		0)
+
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided"))
+	assertCliVibeContextValues(t, decidedContext, map[string]any{
+		"requested":   false,
+		"parse_error": true,
+	})
+	assertCliVibeContextOmits(t, decidedContext, "success", "outcome", "warnings_count", "timing")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
+}
+
+// Verifies the decision logs no success for an answer whose Success is missing or null, rather than
+// a false the Editor never sent.
+func TestRunHotReloadWritesFallbackDecidedWithoutSuccessWhenTheAnswerHasNone(t *testing.T) {
+	answers := map[string]string{
+		"missing": `{"CompileFallback":"NotNeeded"}`,
+		"null":    `{"Success":null,"CompileFallback":"NotNeeded"}`,
+	}
+	for name, answer := range answers {
+		t.Run(name, func(t *testing.T) {
+			enableCliVibeLog(t)
+			projectRoot := t.TempDir()
+
+			runHotReloadWithDelayedFakeCompileInProjectRoot(
+				t,
+				projectRoot,
+				answer,
+				compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0},
+				0)
+
+			logContent := readOnlyCliVibeLog(t, projectRoot)
+			decidedContext := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided"))
+			assertCliVibeContextValues(t, decidedContext, map[string]any{
+				"requested":   false,
+				"parse_error": false,
+			})
+			assertCliVibeContextOmits(t, decidedContext, "success")
+		})
+	}
+}
+
+// Verifies a reload request that fails logs the request and its failure but no fallback decision:
+// no answer came back, so there was nothing to decide.
+func TestRunHotReloadWritesNoFallbackDecisionWhenTheReloadRequestFails(t *testing.T) {
+	enableCliVibeLog(t)
+	projectRoot := t.TempDir()
+	original := hotReloadFallbackCompile
+	t.Cleanup(func() { hotReloadFallbackCompile = original })
+	hotReloadFallbackCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
+		t.Fatal("the fallback compile must not run after a failed reload request")
+		return compileExecutionResult{}
+	}
+	server := startFakeUnityServer(t, projectRoot, hotReloadCommandName, testUnityRPCFailureResponse)
+	var stdout, stderr bytes.Buffer
+
+	code := runTool(context.Background(), server.connection, hotReloadCommandName, map[string]any{}, &stdout, &stderr)
+
+	server.receivedRequest(t)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+	singleCliVibeEntry(t, logContent, "cli_tool_request_failed")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided")
+	assertNoCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
+}
+
+// Verifies a fallback compile that failed is logged as an error, though its result was merged into
+// the response.
+func TestRunHotReloadWritesFallbackCompleteAsErrorWhenTheCompileFails(t *testing.T) {
+	enableCliVibeLog(t)
+
+	complete, _ := runHotReloadFallbackAndReadTheCompleteEntry(
+		t,
+		compileExecutionResult{result: json.RawMessage(`{"Success":false,"Errors":[]}`), exitCode: 1})
+
+	assertCliVibeEntryLevel(t, complete, "ERROR")
+	assertCliVibeContextValues(t, cliVibeEntryContext(t, complete), map[string]any{
+		"merged":            true,
+		"succeeded":         false,
+		"compile_exit_code": float64(1),
+	})
+}
+
+// Verifies a fallback compile that returned nothing is logged as an error that merged nothing,
+// even with exit code 0.
+func TestRunHotReloadWritesFallbackCompleteAsErrorWhenTheCompileReturnsNothing(t *testing.T) {
+	enableCliVibeLog(t)
+
+	complete, _ := runHotReloadFallbackAndReadTheCompleteEntry(t, compileExecutionResult{})
+
+	assertCliVibeEntryLevel(t, complete, "ERROR")
+	assertCliVibeContextValues(t, cliVibeEntryContext(t, complete), map[string]any{
+		"merged":               false,
+		"succeeded":            false,
+		"compile_exit_code":    float64(0),
+		"compile_result_bytes": float64(0),
+	})
+}
+
+// Verifies a fallback compile whose result cannot be merged is logged as an error, matching the
+// command's exit code 1, although the compile itself exited 0.
+func TestRunHotReloadWritesFallbackCompleteAsErrorWhenTheCompileResultIsUndecodable(t *testing.T) {
+	enableCliVibeLog(t)
+
+	complete, code := runHotReloadFallbackAndReadTheCompleteEntry(
+		t,
+		compileExecutionResult{result: json.RawMessage(`[1]`), exitCode: 0})
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	assertCliVibeEntryLevel(t, complete, "ERROR")
+	assertCliVibeContextValues(t, cliVibeEntryContext(t, complete), map[string]any{
+		"merged":            false,
+		"succeeded":         false,
+		"compile_exit_code": float64(0),
+	})
+}
+
+// Runs a reload that asks for the fallback against the given compile result, and returns the one
+// completion entry it logged with the command's exit code.
+func runHotReloadFallbackAndReadTheCompleteEntry(t *testing.T, compileResult compileExecutionResult) (map[string]any, int) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	_, _, compileCalls, code := runHotReloadWithDelayedFakeCompileInProjectRoot(
+		t,
+		projectRoot,
+		hotReloadVibeLogRequestedResponse,
+		compileResult,
+		0)
+	if compileCalls != 1 {
+		t.Fatalf("compile call count = %d, want 1", compileCalls)
+	}
+	return singleCliVibeEntry(t, readOnlyCliVibeLog(t, projectRoot), "cli_hot_reload_compile_fallback_complete"), code
+}
+
+func assertCliVibeContextValues(t *testing.T, contextMap map[string]any, want map[string]any) {
+	t.Helper()
+	for key, value := range want {
+		if contextMap[key] != value {
+			t.Fatalf("context %s = %#v, want %#v\n%#v", key, contextMap[key], value, contextMap)
+		}
+	}
+}
+
+func assertCliVibeContextOmits(t *testing.T, contextMap map[string]any, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		if value, present := contextMap[key]; present {
+			t.Fatalf("context %s must be absent, got %#v", key, value)
+		}
+	}
+}
+
+func assertNoCliVibeEntry(t *testing.T, logContent string, operation string) {
+	t.Helper()
+	if entries := cliVibeEntriesForOperation(t, logContent, operation); len(entries) != 0 {
+		t.Fatalf("%s entries = %d, want 0", operation, len(entries))
 	}
 }

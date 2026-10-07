@@ -109,6 +109,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _siblingLedgerUpdates.NoteChangedCompanion(projectRelativePath);
         }
 
+        /// <summary>Remembers a skipped file left out because it went back to its compiled source, so the ledgers forget it.</summary>
+        public void NoteRevertedRetry(string projectRelativePath)
+        {
+            _siblingLedgerUpdates.NoteRevertedRetry(projectRelativePath);
+        }
+
         public HotReloadSiblingInclusionReason SiblingInclusionReasonOf(string projectRelativePath)
         {
             return _siblingLedgerUpdates.ReasonOf(projectRelativePath);

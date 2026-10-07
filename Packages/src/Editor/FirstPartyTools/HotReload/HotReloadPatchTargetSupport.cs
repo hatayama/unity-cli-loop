@@ -87,11 +87,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (isNewSource)
             {
-                string notReadyReason =
-                    editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
-                if (notReadyReason != null)
+                HotReloadFailureDescription notReadyFailure =
+                    editorStateSnapshotCapture.CaptureCurrent().GetNotReadyFailure();
+                if (notReadyFailure != null)
                 {
-                    outcomes.Add(HotReloadMethodOutcome.Failed("(file)", notReadyReason, assemblyResolvePath));
+                    outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", notReadyFailure, assemblyResolvePath));
                     return HotReloadPatchTargetResolution.EarlyExit(
                         new HotReloadFileProcessResult(outcomes, warnings, 0));
                 }
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!File.Exists(home.DllPath))
             {
                 outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
+                    HotReloadMethodOutcome.FailedBecause(
                         "(file)",
                         HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(projectRoot, home.DllPath),
                         assemblyResolvePath));
@@ -111,10 +111,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
-            string mvidGuardError = CheckMvidGuard(home);
-            if (mvidGuardError != null)
+            HotReloadFailureDescription mvidGuardFailure = CheckMvidGuard(home);
+            if (mvidGuardFailure != null)
             {
-                outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
+                outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", mvidGuardFailure, assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null;
             if (isNewSource)
             {
-                string membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
+                HotReloadFailureDescription membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
                     editorStateSnapshotCapture,
                     projectRoot,
                     projectRelativePath,
@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     out newSourceMembershipEvidence);
                 if (membershipFailure != null)
                 {
-                    outcomes.Add(HotReloadMethodOutcome.Failed("(file)", membershipFailure, assemblyResolvePath));
+                    outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", membershipFailure, assemblyResolvePath));
                     return HotReloadPatchTargetResolution.EarlyExit(
                         new HotReloadFileProcessResult(outcomes, warnings, 0));
                 }
@@ -161,6 +161,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         projectRelativePath));
             }
 
+            HotReloadFailureDescription busyFailure = DescribeBusyRefusal(editorStateSnapshotCapture, unchangedDecision);
+            if (busyFailure != null)
+            {
+                outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", busyFailure, assemblyResolvePath));
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
+            }
+
             return HotReloadPatchTargetResolution.Resolved(
                 projectRelativePath,
                 assemblyName,
@@ -169,6 +177,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);
+        }
+
+        // Why last and not for a short-circuited file: every earlier exit (assembly resolution,
+        // missing DLL, MVID guard, new-source membership) keeps its own, more specific
+        // classification, and a file whose patches are already active and unchanged has nothing
+        // to apply, so a compile in flight does not stop it. Why before the transform: a compile
+        // that is already running ends in a domain reload that would discard this reload anyway.
+        private static HotReloadFailureDescription DescribeBusyRefusal(
+            IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
+            HotReloadUnchangedSourceDecision unchangedDecision)
+        {
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+            {
+                return null;
+            }
+
+            return editorStateSnapshotCapture.CaptureCurrent().GetBusyFailure();
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
@@ -207,7 +232,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
-        internal static string CheckMvidGuard(HotReloadTypeHome home)
+        // Why a stale assembly is EditorNotReady: a compile or a domain reload replaced it during
+        // the run, so nothing in the source needs a change. An assembly that is not loaded stays a
+        // Declaration: what loads it is the reader's code path, which waiting does not run.
+        internal static HotReloadFailureDescription CheckMvidGuard(HotReloadTypeHome home)
         {
             Debug.Assert(home != null, "home must not be null.");
 
@@ -219,12 +247,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadLoadedAssemblyState state = home.ResolveLoadedAssembly(compiledMvid).State;
             if (state == HotReloadLoadedAssemblyState.Stale)
             {
-                return HotReloadConstants.StaleAssemblyHint;
+                return HotReloadFailureDescription.EditorNotReady(HotReloadConstants.StaleAssemblyHint);
             }
 
             if (state == HotReloadLoadedAssemblyState.NotLoaded)
             {
-                return HotReloadConstants.AssemblyNotLoadedHint;
+                return HotReloadFailureDescription.Declaration(HotReloadConstants.AssemblyNotLoadedHint);
             }
 
             return null;
@@ -238,19 +266,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            // Path.GetFullPath resolves a relative path against the current directory (the project
-            // root in the Editor) and turns a virtual Packages/<pkg-id>/... path into the physical
-            // folder behind it, which resolves to the wrong assembly. The captured package roots
-            // map that physical folder back to the virtual path Unity's script APIs expect.
-            string fullPath = Path.GetFullPath(path.Replace('\\', '/'));
-            StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            return HotReloadScriptPathNormalizer.ToProjectRelative(
-                fullPath,
-                projectRoot,
-                packageRootCapture.Current,
-                comparison);
+            // The captured package roots map a package's physical folder back to the virtual path
+            // Unity's script APIs expect; the physical path would resolve to the wrong assembly.
+            return ScriptPathNormalizer.ToAssetPath(path, projectRoot, packageRootCapture.Current);
         }
     }
 }

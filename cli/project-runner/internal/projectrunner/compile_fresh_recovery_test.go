@@ -506,8 +506,8 @@ func TestFreshCompileRecoveryStopsDetectingOnTheLastAttempt(t *testing.T) {
 	}
 }
 
-// Verifies the entry that never resends, used by pause-point recovery, keeps waiting for a lost
-// request until the command ends instead of resending it or returning without a result.
+// Verifies the single-attempt entry that never resends keeps waiting for a lost request until the
+// command ends instead of resending it or returning without a result.
 func TestFreshCompileWithoutRecoveryDoesNotResend(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
