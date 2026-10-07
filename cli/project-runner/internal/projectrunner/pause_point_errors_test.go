@@ -169,6 +169,59 @@ func TestPausePointStateError_DetailsIncludeSuppressedByHotReload(t *testing.T) 
 	}
 }
 
+// Verifies a failed await reports its own --timeout-seconds as TimeoutSeconds, the
+// marker's window as MarkerTimeoutSeconds, and the Editor's normalized marker id.
+func TestPausePointStateErrorDetailsCarryTheWaitTimeoutAndTheMarkerId(t *testing.T) {
+	options := waitForPausePointOptions{id: "./Assets/Foo.cs:42", timeoutSeconds: 5}
+	response := pausePointStatusResponse{
+		Id:             "Assets/Foo.cs:42",
+		Status:         pausePointStatusEnabled,
+		TimeoutSeconds: 30,
+	}
+
+	err := pausePointStateError(
+		"PAUSE_POINT_WAIT_TIMEOUT",
+		"Pause point was not hit within 5s.",
+		"/tmp/project",
+		options,
+		response,
+		true)
+
+	if got := err.Details["TimeoutSeconds"]; got != 5 {
+		t.Fatalf("TimeoutSeconds = %v, want 5", got)
+	}
+	if got := err.Details["MarkerTimeoutSeconds"]; got != 30 {
+		t.Fatalf("MarkerTimeoutSeconds = %v, want 30", got)
+	}
+	if got := err.Details["Id"]; got != "Assets/Foo.cs:42" {
+		t.Fatalf("Id = %v, want Assets/Foo.cs:42", got)
+	}
+}
+
+// Verifies a failed await with no status answer keeps the typed id and omits the
+// marker window instead of reporting 0.
+func TestPausePointStateErrorDetailsFallBackToTheTypedIdWithoutAStatus(t *testing.T) {
+	options := waitForPausePointOptions{id: "./Assets/Foo.cs:42", timeoutSeconds: 5}
+
+	err := pausePointStateError(
+		"PAUSE_POINT_WAIT_TIMEOUT",
+		"Pause point was not hit within 5s.",
+		"/tmp/project",
+		options,
+		pausePointStatusResponse{},
+		true)
+
+	if got := err.Details["Id"]; got != "./Assets/Foo.cs:42" {
+		t.Fatalf("Id = %v, want ./Assets/Foo.cs:42", got)
+	}
+	if got := err.Details["TimeoutSeconds"]; got != 5 {
+		t.Fatalf("TimeoutSeconds = %v, want 5", got)
+	}
+	if got, ok := err.Details["MarkerTimeoutSeconds"]; ok {
+		t.Fatalf("MarkerTimeoutSeconds = %v, want the key omitted", got)
+	}
+}
+
 // Verifies await failures expose the hit-when state that distinguishes skipped
 // conditional captures from a line that never ran.
 func TestPausePointStateErrorDetailsIncludeHitWhenDiagnostics(t *testing.T) {

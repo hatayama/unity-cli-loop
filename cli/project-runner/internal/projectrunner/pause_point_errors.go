@@ -405,15 +405,16 @@ func pausePointStateErrorDetails(
 	response pausePointStatusResponse,
 ) map[string]any {
 	details := map[string]any{
-		"Id":                              options.id,
-		"Status":                          response.Status,
-		"Expired":                         response.Expired,
-		"HitCount":                        response.HitCount,
-		"MethodEntryCount":                response.MethodEntryCount,
-		"HitWhen":                         response.HitWhen,
-		"HitWhenSkippedCount":             response.HitWhenSkippedCount,
-		"HitWhenErrorNote":                response.HitWhenErrorNote,
-		"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
+		"Id":                  pausePointDetailsID(options, response),
+		"Status":              response.Status,
+		"Expired":             response.Expired,
+		"HitCount":            response.HitCount,
+		"MethodEntryCount":    response.MethodEntryCount,
+		"HitWhen":             response.HitWhen,
+		"HitWhenSkippedCount": response.HitWhenSkippedCount,
+		"HitWhenErrorNote":    response.HitWhenErrorNote,
+		// Why the wait's value: it is what the Message quotes ("not hit within Ns").
+		"TimeoutSeconds":                  options.timeoutSeconds,
 		"EnabledAtUtc":                    response.EnabledAtUtc,
 		"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
 		"Generation":                      response.Generation,
@@ -422,6 +423,9 @@ func pausePointStateErrorDetails(
 		"MarkerMessage":                   response.Message,
 		"RecommendedNextAction":           response.RecommendedNextAction,
 		"SuppressedByHotReload":           response.SuppressedByHotReload,
+	}
+	if response.TimeoutSeconds > 0 {
+		details["MarkerTimeoutSeconds"] = response.TimeoutSeconds
 	}
 	if response.ClearedReason != "" {
 		details["ClearedReason"] = response.ClearedReason
@@ -435,11 +439,13 @@ func pausePointStateErrorDetails(
 	return details
 }
 
-func pausePointMarkerTimeoutSeconds(options waitForPausePointOptions, response pausePointStatusResponse) int {
-	if response.TimeoutSeconds > 0 {
-		return response.TimeoutSeconds
+// pausePointDetailsID prefers the status answer's marker id, because the Editor
+// normalizes it and it then matches the Id that the status command reports.
+func pausePointDetailsID(options waitForPausePointOptions, response pausePointStatusResponse) string {
+	if response.Id != "" {
+		return response.Id
 	}
-	return options.timeoutSeconds
+	return options.id
 }
 
 func pausePointRemainingMilliseconds(options waitForPausePointOptions, response pausePointStatusResponse) int64 {

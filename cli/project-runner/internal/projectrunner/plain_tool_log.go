@@ -5,6 +5,7 @@ package projectrunner
 // never a parameter value or a response body, which can name files of the project or carry code.
 
 import (
+	"encoding/json"
 	"errors"
 	"sort"
 	"time"
@@ -90,7 +91,7 @@ func logPlainToolRequestFailed(
 	writePlainToolVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
 		// Why no err.Error(): a Unity parameter-validation RPC error quotes the raw parameter values
 		// in its message, and this log must never carry parameter values.
-		return vibelog.CLIVibeLogEntry{
+		entry := vibelog.CLIVibeLogEntry{
 			Level:     "ERROR",
 			Operation: plainToolRequestFailedOperation,
 			Message:   "The tool request to Unity failed.",
@@ -103,7 +104,27 @@ func logPlainToolRequestFailed(
 			},
 			CorrelationID: correlationID,
 		}
+		if name, ok := serverBusyRunningToolName(err); ok {
+			entry.Context["running_tool_name"] = name
+		}
+		return entry
 	})
+}
+
+// serverBusyRunningToolName reads the name of the tool that held the Editor from a busy answer's
+// data. It reports false for any other error, and for a busy answer that names no tool.
+func serverBusyRunningToolName(err error) (string, bool) {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) || clierrors.RPCDataType(rpcErr.Data) != "server_busy" {
+		return "", false
+	}
+	data := struct {
+		RunningToolName string `json:"runningToolName"`
+	}{}
+	if json.Unmarshal(rpcErr.Data, &data) != nil || data.RunningToolName == "" {
+		return "", false
+	}
+	return data.RunningToolName, true
 }
 
 // classifyPlainToolError names what failed without any of the error's text: "rpc:" followed by the
