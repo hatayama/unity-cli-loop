@@ -656,12 +656,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string TimingDetailStepMainThreadSwitch = "main_thread_switch";
         public const string TimingDetailStepResolveInputs = "resolve_inputs";
         public const string TimingDetailStepPlan = "plan";
+        public const string TimingDetailStepActiveSiblings = "active_siblings";
         public const string TimingDetailStepMembershipValidate = "membership_validate";
         public const string TimingDetailStepSnapshotGroupState = "snapshot_group_state";
         public const string TimingDetailStepActivePaths = "active_paths";
         public const string TimingDetailStepSiblingDetect = "sibling_detect";
         public const string TimingDetailStepWorkerInput = "worker_input";
         public const string TimingDetailStepPreparationOutcome = "preparation_outcome";
+        public const string TimingDetailStepWorkerNotices = "worker_notices";
         public const string TimingDetailStepRevalidateBeforeRevert = "revalidate_before_revert";
         public const string TimingDetailStepApplyContext = "apply_context";
         public const string TimingDetailStepIsolationSplit = "isolation_split";
