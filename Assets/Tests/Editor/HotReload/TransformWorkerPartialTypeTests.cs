@@ -78,6 +78,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CallerPlainValueBody = "return 1;";
         private const string PlainDerivedValueBody = "return 10;";
         private const string PartialDerivedValueBody = "return 9;";
+
+        // The next steps an internal-member reason ends with, each after the sentence before it.
+        private const string QualifyTheBareNameAdvice =
+            " Qualify the bare name with 'this.' or the type name, or run 'uloop compile'.";
+
+        private const string MoveTheUseOutAdvice =
+            " Move the use out of the lambda, local function or query, or run 'uloop compile'.";
+
+        private const string CompileOnlyAdvice = " Run 'uloop compile'.";
         private const string InternalMemberOfATypeOfAnotherAssembly =
             "global::io.github.hatayama.UnityCliLoop.FirstPartyTools.PausePointCapturedVariable.FromSnapshot(null).Name.Length";
 
@@ -777,6 +786,138 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an internal member named bare in the method's own statements ends its reason with the
+        /// advice to qualify the name, on a partial and a plain type, because the qualified name is a
+        /// use the patched method can reach.
+        /// </summary>
+        [TestCase("Partial", PartialDerivedFileName, PartialDerivedValueBody)]
+        [TestCase("Plain", PlainDerivedFileName, PlainDerivedValueBody)]
+        public async Task Skip_BareInternalName_EndsWithTheQualifyAdvice(string typeKind, string fileName, string fragment)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                fileName,
+                "ReasonEndingBareName" + typeKind + ".cs",
+                "DerivedValue",
+                fragment,
+                "return InternalInstanceValue();");
+
+            Assert.That(reason, Does.EndWith(QualifyTheBareNameAdvice));
+        }
+
+        /// <summary>
+        /// What: an internal member used inside a lambda or a query, or a lambda that works with a value
+        /// such a member gave, ends its reason with the advice to move the use out of the closure,
+        /// because the closure runs outside the patched method whatever receiver the use has.
+        /// </summary>
+        [TestCase("PartialLambda", PartialDerivedFileName, PartialDerivedValueBody, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
+        [TestCase("PlainLambda", PlainDerivedFileName, PlainDerivedValueBody, "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
+        [TestCase("PlainLambdaCapturingTheResultAsAValue", PlainDerivedFileName, PlainDerivedValueBody, "var seed = new HotReloadInternalMemberHost().InternalField; System.Func<int> read = () => seed + 100; return read();")]
+        [TestCase("PlainQuerySourceExpression", PlainDerivedFileName, PlainDerivedValueBody, "return (from host in HotReloadInternalMemberHost.InternalHosts() select 1).Count();")]
+        public async Task Skip_InternalMemberUsedInsideALambda_EndsWithTheMoveOutAdvice(
+            string form,
+            string fileName,
+            string fragment,
+            string replacement)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                fileName,
+                "ReasonEndingInsideClosure" + form + ".cs",
+                "DerivedValue",
+                fragment,
+                replacement);
+
+            Assert.That(reason, Does.EndWith(MoveTheUseOutAdvice));
+        }
+
+        /// <summary>
+        /// What: an internal member used in an async or iterator method ends its reason with the compile
+        /// alone, even with its receiver or by a bare name, because the state machine runs outside the
+        /// patched method however the use is written.
+        /// </summary>
+        [TestCase("PartialAsyncThroughThis", PartialDerivedFileName, "AsyncValue", "return 50;", "return this.InternalInstanceValue();")]
+        [TestCase("PlainAsyncThroughThis", PlainDerivedFileName, "AsyncValue", "return 50;", "return this.InternalInstanceValue();")]
+        [TestCase("PlainIteratorThroughThis", PlainDerivedFileName, "IteratorValues", "yield return _seed;", "yield return this.InternalInstanceValue();")]
+        [TestCase("PlainAsyncBareName", PlainDerivedFileName, "AsyncValue", "return 50;", "return InternalInstanceValue();")]
+        public async Task Skip_InternalMemberUsedInAnAsyncOrIteratorMethod_EndsWithCompileOnly(
+            string form,
+            string fileName,
+            string methodName,
+            string fragment,
+            string replacement)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                fileName,
+                "ReasonEndingStateMachine" + form + ".cs",
+                methodName,
+                fragment,
+                replacement);
+
+            Assert.That(reason, Does.EndWith(CompileOnlyAdvice));
+        }
+
+        /// <summary>
+        /// What: a partial type's use of an internal member that has its receiver but is neither a
+        /// field, a property nor an invoked method (a method passed as a delegate, an event
+        /// subscription) ends its reason with the compile alone, because neither qualifying the use
+        /// nor moving it makes it one hot reload patches.
+        /// </summary>
+        [TestCase("MethodPassedAsDelegate", "System.Func<int> read = HotReloadInternalMemberHost.InternalStaticValue; return read();")]
+        [TestCase("EventSubscription", "HotReloadInternalMemberHost host = new HotReloadInternalMemberHost(); host.InternalEvent += HotReloadInternalMemberHost.NoOp; return host.RaiseInternalEvent();")]
+        public async Task Skip_PartialTypeUseThatCannotBePatchedInPlace_EndsWithCompileOnly(string form, string replacement)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                PartialDerivedFileName,
+                "ReasonEndingPartialNotInPlace" + form + ".cs",
+                "DerivedValue",
+                PartialDerivedValueBody,
+                replacement);
+
+            Assert.That(reason, Does.EndWith(CompileOnlyAdvice));
+        }
+
+        /// <summary>
+        /// What: an internal member named bare inside a lambda ends its reason with the advice to move
+        /// the use out of the lambda, not to qualify it, because a qualified name inside the lambda
+        /// still runs outside the patched method.
+        /// </summary>
+        [TestCase("Partial", PartialDerivedFileName, PartialDerivedValueBody)]
+        [TestCase("Plain", PlainDerivedFileName, PlainDerivedValueBody)]
+        public async Task Skip_BareInternalNameInsideALambda_PrefersTheMoveOutAdvice(string typeKind, string fileName, string fragment)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                fileName,
+                "ReasonEndingBareNameInsideALambda" + typeKind + ".cs",
+                "DerivedValue",
+                fragment,
+                "System.Func<int> read = () => InternalInstanceValue(); return read();");
+
+            Assert.That(reason, Does.EndWith(MoveTheUseOutAdvice));
+        }
+
+        /// <summary>
+        /// What: the internal-member reason opens with the member and the type that declares it, and
+        /// gives the compiler's diagnostic after them in parentheses, so the reader learns which member
+        /// is out of reach before reading the diagnostic.
+        /// </summary>
+        [Test]
+        public async Task Skip_InternalMemberReason_LeadsWithTheMemberAndTheType()
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                PlainDerivedFileName,
+                "ReasonLeadBareName.cs",
+                "DerivedValue",
+                PlainDerivedValueBody,
+                "return InternalInstanceValue();");
+
+            Assert.That(
+                reason,
+                Does.StartWith(
+                    "'InternalInstanceValue' is internal to 'HotReloadInternalMemberHost', whose source this "
+                    + "reload was not given (CS0103: "));
+            Assert.That(reason, Does.Contain("does not exist in the current context). Hot reload patches"));
+        }
+
+        /// <summary>
         /// What: a body of a plain type that uses an internal member of a type the run was not given
         /// where the patched method runs the use itself is emitted: a method passed as a delegate, an
         /// event subscription, or a member named in an object initializer or a property pattern, which
@@ -993,6 +1134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string reason = AssertSkipped(result, "get_CallerProperty");
             Assert.That(reason, Does.Contain("is internal to 'HotReloadInternalMemberHost'"), FormatSkipped(result));
             Assert.That(reason, Does.Not.Contain("brought back to re-bind"), FormatSkipped(result));
+            Assert.That(reason, Does.EndWith(MoveTheUseOutAdvice), FormatSkipped(result));
         }
 
         /// <summary>
@@ -1036,6 +1178,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "return HotReloadInternalMemberHost.InternalStaticValue() + NoSuchName;");
 
             Assert.That(AssertSkipped(result, "PlainValue"), Does.Contain("brought back to re-bind"), FormatSkipped(result));
+        }
+
+        // The internal-member skip reason of the one method an edit of a fixture file changes.
+        private static async Task<string> ReadTheInternalMemberSkipReasonAsync(
+            string fileName,
+            string editedFileName,
+            string methodName,
+            string fragment,
+            string replacement)
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(fileName, editedFileName, fragment, replacement)
+            });
+
+            string reason = AssertSkipped(result, methodName);
+            Assert.That(reason, Does.Contain("is internal to 'HotReloadInternalMemberHost'"), FormatSkipped(result));
+            return reason;
         }
 
         // A fixture file next to these tests, edited once and described as a passed run source whose

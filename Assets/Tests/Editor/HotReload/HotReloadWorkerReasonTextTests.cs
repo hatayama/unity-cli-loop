@@ -19,6 +19,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string GenericMethodFragment = "inaccessible generic method calls are not rewritten.";
 
+        // The sentences every internal-member reason has between its lead and its next step.
+        private const string UnpassedInternalMemberRule =
+            "Hot reload patches a use of such a member only where it is a field, a property or a method call "
+            + "written with its receiver ('this.Name', 'Type.Name', 'value.Name') in the method's own statements: "
+            + "not a bare name, a method passed as a delegate, or a use inside a lambda, local function, query, "
+            + "iterator or async method, or in a body patched through a delegating shim. A lambda, local function "
+            + "or query that works with a value hot reload could not resolve, such as the member's result, keeps "
+            + "the whole body out as well. ";
+
         /// <summary>
         /// What: every reason code has a byte-match case below, so a code added without a
         /// sentence - or a case left behind after a code was removed - fails here.
@@ -230,15 +239,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "--files. Otherwise run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
-                new[] { "CS0117: 'Host' does not contain a definition for 'Value'", "'Host'" },
-                "CS0117: 'Host' does not contain a definition for 'Value'. That member is internal to 'Host', "
-                + "whose source this reload was not given. Hot reload patches a use of such a member only where "
-                + "it is a field, a property or a method call written with its receiver ('this.Name', "
-                + "'Type.Name', 'value.Name') in the method's own statements: not a bare name, a method passed "
-                + "as a delegate, or a use inside a lambda, local function, query, iterator or async method, or "
-                + "in a body patched through a delegating shim. A lambda, local function or query that works "
-                + "with a value hot reload could not resolve, such as the member's result, keeps the whole body "
-                + "out as well. Qualify a bare name with 'this.' or the type name, or run 'uloop compile'.");
+                new[] { "CS0117: 'Host' does not contain a definition for 'Value'", "'Host'", "'Value'" },
+                "'Value' is internal to 'Host', whose source this reload was not given (CS0117: 'Host' does not "
+                + "contain a definition for 'Value'). " + UnpassedInternalMemberRule + "Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberBareName,
+                new[] { "CS0103: The name 'Value' does not exist in the current context", "'Host'", "'Value'" },
+                "'Value' is internal to 'Host', whose source this reload was not given (CS0103: The name 'Value' "
+                + "does not exist in the current context). " + UnpassedInternalMemberRule
+                + "Qualify the bare name with 'this.' or the type name, or run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberInsideClosure,
+                new[] { "CS0117: 'Host' does not contain a definition for 'Value'", "'Host'", "'Value'" },
+                "'Value' is internal to 'Host', whose source this reload was not given (CS0117: 'Host' does not "
+                + "contain a definition for 'Value'). " + UnpassedInternalMemberRule
+                + "Move the use out of the lambda, local function or query, or run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 NoArgs,

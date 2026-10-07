@@ -24,11 +24,16 @@ internal sealed class UnpassedInternalMemberUse
 
     private UnpassedInternalMemberUse(
         INamedTypeSymbol declaringType,
+        string memberName,
+        UnpassedInternalMemberUseForm form,
         bool canBePatchedInPlace,
         bool mayRunOutsideThePatchedMethod,
         bool isSimpleNameLookup)
     {
+        Debug.Assert(!string.IsNullOrEmpty(memberName), "memberName must not be null or empty.");
         DeclaringType = declaringType;
+        MemberName = memberName;
+        Form = form;
         CanBePatchedInPlace = canBePatchedInPlace;
         MayRunOutsideThePatchedMethod = mayRunOutsideThePatchedMethod;
         IsSimpleNameLookup = isSimpleNameLookup;
@@ -36,6 +41,12 @@ internal sealed class UnpassedInternalMemberUse
 
     /// <summary>The compiled type that declares the member, read with every member visible.</summary>
     internal INamedTypeSymbol DeclaringType { get; }
+
+    /// <summary>The name of the internal member the use names.</summary>
+    internal string MemberName { get; }
+
+    /// <summary>What keeps the use out of the patched method's reach when it is out of reach.</summary>
+    internal UnpassedInternalMemberUseForm Form { get; }
 
     /// <summary>True when the patched method itself runs the use, so a guard may let the body through.</summary>
     internal bool CanBePatchedInPlace { get; }
@@ -102,9 +113,9 @@ internal sealed class UnpassedInternalMemberUse
             return null;
         }
 
-        bool mayRunOutsideThePatchedMethod =
-            RunsOutsideThePatchedMethod(name, bodyNode, methodDeclarationOrNull, decision)
-            || HasAClosureOverAnUnresolvedValue(bodyNode, semanticModel);
+        UseRunPlace runPlace = FindWhereTheUseMayRun(name, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+        bool mayRunOutsideThePatchedMethod = runPlace != UseRunPlace.PatchedMethod;
+        bool isSimpleNameLookup = error.Id == SimpleNameLookupDiagnosticId;
 
         // Why a bare name is out of reach: the shim is a static method, and it qualifies a bare
         // member name only when the worker binds the name. This member never binds there, so the
@@ -114,9 +125,32 @@ internal sealed class UnpassedInternalMemberUse
             && !mayRunOutsideThePatchedMethod;
         return new UnpassedInternalMemberUse(
             member.ContainingType,
+            member.Name,
+            ChooseForm(runPlace, isSimpleNameLookup),
             canBePatchedInPlace,
             mayRunOutsideThePatchedMethod,
-            error.Id == SimpleNameLookupDiagnosticId);
+            isSimpleNameLookup);
+    }
+
+    // Why this order: in a state machine or a delegating shim, neither moving the use nor
+    // qualifying it brings it within reach. Inside a closure, a qualified name still runs outside
+    // the patched method, so moving the use out is the change that helps. Qualifying a bare name
+    // helps only when nothing else keeps the use out.
+    private static UnpassedInternalMemberUseForm ChooseForm(UseRunPlace runPlace, bool isSimpleNameLookup)
+    {
+        if (runPlace == UseRunPlace.StateMachineOrShim)
+        {
+            return UnpassedInternalMemberUseForm.OutOfReach;
+        }
+
+        if (runPlace == UseRunPlace.Closure)
+        {
+            return UnpassedInternalMemberUseForm.InsideClosure;
+        }
+
+        return isSimpleNameLookup
+            ? UnpassedInternalMemberUseForm.BareName
+            : UnpassedInternalMemberUseForm.OutOfReach;
     }
 
     private static SimpleNameSyntax FindReportedNameOrNull(Diagnostic error, SyntaxNode bodyNode)
@@ -267,23 +301,31 @@ internal sealed class UnpassedInternalMemberUse
     // Why these places are out of reach: a closure body, an async or iterator state machine, and a
     // delegating shim run as ordinary code of the shim assembly, which the runtime checks for
     // access, so a call to an internal member there throws MethodAccessException after the run
-    // reported success. Only the statements copied into the patched method skip that check.
-    private static bool RunsOutsideThePatchedMethod(
+    // reported success. Only the statements copied into the patched method skip that check. Why a
+    // state machine or a shim is answered first: it keeps every use in the body out, closure or
+    // not, and the scan for a closure over an unresolved value then has nothing left to decide.
+    private static UseRunPlace FindWhereTheUseMayRun(
         SyntaxNode name,
         SyntaxNode bodyNode,
         MethodDeclarationSyntax methodDeclarationOrNull,
-        MethodTransformDecision decision)
+        MethodTransformDecision decision,
+        SemanticModel semanticModel)
     {
-        if (decision.UsesDelegation)
+        if (decision.UsesDelegation || MethodTransformDecider.IsAsyncOrIterator(methodDeclarationOrNull, bodyNode))
         {
-            return true;
+            return UseRunPlace.StateMachineOrShim;
         }
 
-        if (MethodTransformDecider.IsAsyncOrIterator(methodDeclarationOrNull, bodyNode))
+        if (IsInsideAClosure(name, bodyNode) || HasAClosureOverAnUnresolvedValue(bodyNode, semanticModel))
         {
-            return true;
+            return UseRunPlace.Closure;
         }
 
+        return UseRunPlace.PatchedMethod;
+    }
+
+    private static bool IsInsideAClosure(SyntaxNode name, SyntaxNode bodyNode)
+    {
         foreach (SyntaxNode closureBody in MethodTransformDecider.FindClosureBodies(bodyNode))
         {
             if (closureBody.Span.Contains(name.Span))
@@ -316,5 +358,15 @@ internal sealed class UnpassedInternalMemberUse
         }
 
         return false;
+    }
+
+    // Where a use may run: in the patched method's own statements, in a state machine or a
+    // delegating shim, or in a closure, counting a closure that works with a value the worker could
+    // not resolve and so may reach the member through it.
+    private enum UseRunPlace
+    {
+        PatchedMethod,
+        StateMachineOrShim,
+        Closure
     }
 }

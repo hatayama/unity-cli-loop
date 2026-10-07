@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -87,12 +88,30 @@ internal static class UnresolvedBodyNameGuard
             }
 
             return WorkerReason.Of(
-                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
+                ChooseReasonCode(use.Form),
                 diagnosticText,
-                "'" + use.DeclaringType.Name + "'");
+                "'" + use.DeclaringType.Name + "'",
+                "'" + use.MemberName + "'");
         }
 
         return null;
+    }
+
+    // The reason whose last sentence names the change that brings this form of use within reach.
+    private static HotReloadWorkerReasonCode ChooseReasonCode(UnpassedInternalMemberUseForm form)
+    {
+        switch (form)
+        {
+            case UnpassedInternalMemberUseForm.BareName:
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberBareName;
+            case UnpassedInternalMemberUseForm.InsideClosure:
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberInsideClosure;
+            case UnpassedInternalMemberUseForm.OutOfReach:
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
+            default:
+                Debug.Assert(false, "Unknown internal-member use form: " + form);
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
+        }
     }
 
     // Why the two rules differ: a partial type skips a body whose names do not resolve, and lets
