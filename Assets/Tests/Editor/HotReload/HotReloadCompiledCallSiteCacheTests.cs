@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string ScannerFixtureTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerFixture";
+        private const string NestedCallerHostTypeMetadataName = ScannerFixtureTypeMetadataName + "/NestedCallerHost";
         private const string GenericHostTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.GenericHost`1";
         // Why this assembly: it is always compiled alongside the test assembly and is smaller, so
@@ -553,6 +554,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 entry.LookupCallSiteIndices(GenericHostTypeMetadataName, targetMethodName + "Missing"),
                 Is.Empty,
                 "The index key includes the method name.");
+        }
+
+        /// <summary>
+        /// What: a call into a nested type is indexed under the type's metadata name, which nests
+        /// with '/', so the reflection spelling with '+' finds nothing.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_IndexesCallSitesOfANestedDeclaringTypeUnderTheMetadataName()
+        {
+            const string targetMethodName = nameof(HotReloadCallSiteScannerFixture.NestedCallerHost.CalledFromOuterType);
+            HotReloadCompiledCallSiteCache.Entry entry = _cache.GetOrLoad(CopyTestAssembly("a.dll"));
+
+            IReadOnlyList<int> indices = entry.LookupCallSiteIndices(NestedCallerHostTypeMetadataName, targetMethodName);
+
+            Assert.That(indices, Is.Not.Empty);
+            foreach (int index in indices)
+            {
+                MethodReference operand = entry.CallSites[index].Operand;
+                Assert.That(operand.Name, Is.EqualTo(targetMethodName));
+                Assert.That(operand.DeclaringType.FullName, Is.EqualTo(NestedCallerHostTypeMetadataName));
+            }
+
+            Assert.That(
+                entry.LookupCallSiteIndices(ScannerFixtureTypeMetadataName + "+NestedCallerHost", targetMethodName),
+                Is.Empty,
+                "The index key nests with the metadata separator, not the reflection one.");
         }
 
         private static void ReadFirstMethodBody(AssemblyDefinition assembly)

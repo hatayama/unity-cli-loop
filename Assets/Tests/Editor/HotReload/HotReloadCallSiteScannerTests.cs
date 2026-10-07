@@ -371,6 +371,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a method of a nested type, named in the metadata spelling, is found through the
+        /// call-site index and reports its caller in the outer type.
+        /// </summary>
+        [Test]
+        public void FindCallSites_NestedTarget_ReportsTheCaller()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                NestedCallerHostTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.NestedCallerHost.CalledFromOuterType),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].TargetMethodKey,
+                Is.EqualTo(NestedCallerHostTypeMetadataName + "::CalledFromOuterType()"));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::CallNestedTarget()"));
+        }
+
+        /// <summary>
         /// What: a call site whose type-parameter argument matches two targets is reported once,
         /// for whichever of them comes first in the given order, so one compiled call is never
         /// counted twice.
