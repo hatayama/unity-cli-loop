@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.8.0...dispatcher-v3.8.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* IL2CPP player builds no longer crash intermittently in an Editor started by uloop launch on macOS ([#3210](https://github.com/hatayama/unity-cli-loop/issues/3210)) ([4532114](https://github.com/hatayama/unity-cli-loop/commit/4532114f87f224a649a71a1d1cd68e20563ccb42))
+
 ## [3.8.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.7.0...dispatcher-v3.8.0) (2026-10-07)
 
 
