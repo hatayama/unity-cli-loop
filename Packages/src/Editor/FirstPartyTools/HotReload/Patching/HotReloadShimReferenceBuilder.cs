@@ -478,10 +478,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Returns the reference a shim compile binds against for one of Unity's compile
         /// references: a publicized copy when the reference is a project assembly the shim may
-        /// need private members of, and the reference itself otherwise. The copy keeps the
-        /// reference's internal types and members internal unless the reference grants its
-        /// internals to the edited assembly, so the shim compile sees what the edited assembly's
-        /// own compile saw.
+        /// need non-public members of, and the reference itself otherwise. Unless the reference
+        /// grants its internals to the edited assembly, the copy keeps the reference's internal
+        /// types and its private and internal members as they are and publicizes its protected
+        /// ones, so the shim compile sees what the edited assembly's own compile saw.
         /// </summary>
         private static string PublicizeProjectReference(
             string fullReference,
