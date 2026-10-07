@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.AssemblyName,
                 firstFile.TargetDllPath,
                 firstFile.CompilationAssembly.sourceFiles,
-                CollectProjectRelativePaths(files));
+                HotReloadGroupFileLists.CollectProjectRelativePaths(files));
             if (!string.IsNullOrEmpty(siblingScan.ScanLimitWarning))
             {
                 firstFile.Sinks.SiblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
@@ -239,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput.files.Length == files.Count,
                 "A group worker run must return one per-file output per edited file.");
             IReadOnlyList<string> leftOutPaths = _leaveOut.FindLeftOutPaths(
-                DescribeLeaveOutFiles(files),
+                HotReloadGroupFileLists.DescribeLeaveOutFiles(files),
                 workerOutput,
                 activePaths);
             if (leftOutPaths.Count == 0)
@@ -293,22 +293,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _fileEntryApplier.BuildUnappliedGroupResults(files);
         }
 
-        // Why a file that declares a new type never counts as enum-only: its artifact is prepared
-        // against the whole group, and leaving its owner out would drop it from the commit.
-        private static List<HotReloadLeaveOutFile> DescribeLeaveOutFiles(IReadOnlyList<HotReloadGroupFile> files)
-        {
-            List<HotReloadLeaveOutFile> leaveOutFiles = new List<HotReloadLeaveOutFile>(files.Count);
-            foreach (HotReloadGroupFile file in files)
-            {
-                leaveOutFiles.Add(new HotReloadLeaveOutFile(
-                    file.ProjectRelativePath,
-                    file.IsDefaultSelected,
-                    file.DeclaresIntroducedType || file.DeclaresRefusedIntroducedType));
-            }
-
-            return leaveOutFiles;
-        }
-
         // Why the first run's rows: the left-out file gets the notices, hash and counts it would
         // have had in the run, so only the added members of the other files change.
         private List<HotReloadFileProcessResult> BuildLeftOutResults(
@@ -318,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadWorkerRowsByFile firstRows = HotReloadWorkerRowsByFile.Build(
                 firstOutput,
-                CollectProjectRelativePaths(files));
+                HotReloadGroupFileLists.CollectProjectRelativePaths(files));
             HotReloadGroupNotices.AppendPerFileWorkerNotices(split.LeftOutFiles, firstRows);
             List<HotReloadFileProcessResult> results = new List<HotReloadFileProcessResult>(split.LeftOutFiles.Count);
             foreach (HotReloadGroupFile file in split.LeftOutFiles)
@@ -348,7 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "A group worker run must return one per-file output per edited file.");
             HotReloadWorkerRowsByFile rows = HotReloadWorkerRowsByFile.Build(
                 workerOutput,
-                CollectProjectRelativePaths(files));
+                HotReloadGroupFileLists.CollectProjectRelativePaths(files));
             HotReloadGroupNotices.AppendPerFileWorkerNotices(files, rows);
             // Why once for the group: the worker scans the assembly's unedited siblings for const
             // drift as a whole, so flowing them per file would repeat the same texts.
@@ -594,17 +578,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : HotReloadSnapshotMissReason.None;
             }
         }
-
-        private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)
-        {
-            List<string> projectRelativePaths = new List<string>(files.Count);
-            foreach (HotReloadGroupFile file in files)
-            {
-                projectRelativePaths.Add(file.ProjectRelativePath);
-            }
-
-            return projectRelativePaths;
-        }
-
     }
 }
