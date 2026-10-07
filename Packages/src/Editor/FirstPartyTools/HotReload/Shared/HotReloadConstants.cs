@@ -29,6 +29,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly happens to recompile.
         public const string PublicizedRefsRelativeDirectory = "Library/UloopHotReload/PublicizedRefs/fmt2";
 
+        // Shim reference copies of an assembly that grants the edited assembly no internals. They
+        // keep the assembly's internal types and members internal, so they must not share a cache
+        // directory with the fully publicized copies of the same assembly name and Mvid.
+        // "fmt1" = generation of that rewrite rule, bumped the same way as PublicizedRefs.
+        public const string PublicizedExternalRefsRelativeDirectory = "Library/UloopHotReload/PublicizedExternalRefs/fmt1";
+
         // Artifact compilation must not inherit the shim cache's private-member visibility.
         public const string InternalsExposedRefsRelativeDirectory = "Library/UloopHotReload/InternalsExposedRefs/fmt1";
 

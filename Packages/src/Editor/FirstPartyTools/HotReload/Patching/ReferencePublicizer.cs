@@ -69,6 +69,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PublicizeType);
         }
 
+        public static string GetOrCreateShimReferenceCopy(
+            HotReloadTypeHome home,
+            IReadOnlyCollection<string> resolverSearchDirectories,
+            string shimTargetAssemblyName)
+        {
+            return GetOrCreatePublicizedCopy(home, resolverSearchDirectories);
+        }
+
+        internal static string ParseFriendAssemblyName(string friendAssemblyName)
+        {
+            return friendAssemblyName;
+        }
+
         internal static string GetOrCreateInternalsExposedCopy(
             HotReloadTypeHome home,
             IReadOnlyCollection<string> resolverSearchDirectories)
