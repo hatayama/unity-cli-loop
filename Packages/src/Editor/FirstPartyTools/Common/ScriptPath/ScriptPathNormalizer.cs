@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using UnityEngine;
 
@@ -11,6 +12,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class ScriptPathNormalizer
     {
+        /// <summary>
+        /// Turns a script path given in any form (relative to the project root or absolute, with
+        /// either separator, naming the package's folder or its virtual path) into the asset path
+        /// Unity's script APIs use. A path outside the project and every package comes back absolute.
+        /// </summary>
+        internal static string ToAssetPath(
+            string path,
+            string projectRoot,
+            IReadOnlyList<ScriptPackageRoot> packageRoots)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
+            Debug.Assert(packageRoots != null, "packageRoots must not be null.");
+
+            // Resolved against the project root rather than the current directory: the two are the
+            // same in the Editor, and the root keeps the result independent of where the caller runs.
+            // Path.Combine keeps a rooted path as is, and GetFullPath folds ./ and ../ away. A virtual
+            // Packages/<pkg-id>/... path names no real folder, so it resolves under the project root
+            // and comes back unchanged once the root is stripped.
+            string fullPath = Path.GetFullPath(Path.Combine(projectRoot, path.Replace('\\', '/')));
+            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return ToProjectRelative(fullPath, projectRoot, packageRoots, comparison);
+        }
+
         internal static string ToProjectRelative(
             string fullPath,
             string projectRoot,

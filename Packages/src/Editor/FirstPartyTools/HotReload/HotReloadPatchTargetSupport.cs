@@ -241,19 +241,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            // Path.GetFullPath resolves a relative path against the current directory (the project
-            // root in the Editor) and turns a virtual Packages/<pkg-id>/... path into the physical
-            // folder behind it, which resolves to the wrong assembly. The captured package roots
-            // map that physical folder back to the virtual path Unity's script APIs expect.
-            string fullPath = Path.GetFullPath(path.Replace('\\', '/'));
-            StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            return ScriptPathNormalizer.ToProjectRelative(
-                fullPath,
-                projectRoot,
-                packageRootCapture.Current,
-                comparison);
+            // The captured package roots map a package's physical folder back to the virtual path
+            // Unity's script APIs expect; the physical path would resolve to the wrong assembly.
+            return ScriptPathNormalizer.ToAssetPath(path, projectRoot, packageRootCapture.Current);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using NUnit.Framework;
 
@@ -9,10 +10,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// Covers the pure mapping between a script's physical path and the project-relative asset
-    /// path Unity's script APIs use, in both directions.
+    /// path Unity's script APIs use, in both directions, and the resolution of a path given in
+    /// any form to that asset path.
     /// </summary>
     public sealed class ScriptPathNormalizerTests
     {
+        // Why through GetFullPath: ToAssetPath resolves its input with GetFullPath, which qualifies a
+        // rooted path with the drive on Windows, so the root has to be in that form to be matched.
+        private static readonly string AssetPathProjectRoot = Path.GetFullPath("/proj");
+
         private static IReadOnlyList<ScriptPackageRoot> PackageRoots(params (string Resolved, string Asset)[] roots)
         {
             List<ScriptPackageRoot> mapped = new List<ScriptPackageRoot>(roots.Length);
@@ -219,6 +225,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.OrdinalIgnoreCase);
 
             Assert.That(physical, Is.EqualTo("Packages/src/Runtime/A.cs"));
+        }
+
+        [Test]
+        public void ToAssetPath_RelativePhysicalPackagePath_IsResolvedAgainstTheProjectRootAndMappedToTheAssetPath()
+        {
+            // Verifies a project-relative path into a package's folder comes back as the package's asset path.
+            string assetPath = ScriptPathNormalizer.ToAssetPath(
+                "Packages/folder/A.cs",
+                AssetPathProjectRoot,
+                PackageRoots((AssetPathProjectRoot + "/Packages/folder", "Packages/io.example.pkg")));
+
+            Assert.That(assetPath, Is.EqualTo("Packages/io.example.pkg/A.cs"));
+        }
+
+        [Test]
+        public void ToAssetPath_DotSlashPrefix_IsRemoved()
+        {
+            // Verifies a leading ./ is folded away, so the same file always yields the same asset path.
+            string assetPath = ScriptPathNormalizer.ToAssetPath(
+                "./Assets/A.cs",
+                AssetPathProjectRoot,
+                PackageRoots((AssetPathProjectRoot + "/Packages/folder", "Packages/io.example.pkg")));
+
+            Assert.That(assetPath, Is.EqualTo("Assets/A.cs"));
+        }
+
+        [Test]
+        public void ToAssetPath_BackslashesUnderAssets_AreNormalized()
+        {
+            // Verifies Windows separators in an Assets path come out as forward slashes.
+            string assetPath = ScriptPathNormalizer.ToAssetPath(
+                @"Assets\Sub\A.cs",
+                AssetPathProjectRoot,
+                PackageRoots((AssetPathProjectRoot + "/Packages/folder", "Packages/io.example.pkg")));
+
+            Assert.That(assetPath, Is.EqualTo("Assets/Sub/A.cs"));
+        }
+
+        [Test]
+        public void ToAssetPath_AssetPathOfAPackage_IsReturnedUnchanged()
+        {
+            // Verifies a path that is already a package's asset path is not mapped a second time.
+            string assetPath = ScriptPathNormalizer.ToAssetPath(
+                "Packages/io.example.pkg/A.cs",
+                AssetPathProjectRoot,
+                PackageRoots((AssetPathProjectRoot + "/Packages/folder", "Packages/io.example.pkg")));
+
+            Assert.That(assetPath, Is.EqualTo("Packages/io.example.pkg/A.cs"));
         }
     }
 }
