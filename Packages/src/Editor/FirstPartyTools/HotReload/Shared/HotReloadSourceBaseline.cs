@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -7,8 +6,6 @@ using System.Text;
 using Mono.Cecil.Cil;
 
 using UnityEngine;
-
-using PackageManagerPackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -123,7 +120,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why read once: the verified bytes must be the exact payload decoded for the worker —
             // a second read could race with another writer and diverge from the checksummed content.
             byte[] snapshotBytes = File.ReadAllBytes(snapshotPath);
-            string pdbLookupPath = ResolvePdbLookupPath(projectRoot, slashNormalizedRelativePath);
+            // Why the physical path here and the asset path for the snapshot file: the snapshot is keyed
+            // by the asset path Unity reports for the file, but the PDB records the path the compiler was
+            // given, which for an embedded or local package is the folder behind the virtual
+            // Packages/<name> path. Why the Package Manager is asked rather than the package roots a
+            // run captures: those live in the main hot-reload assembly, which this one cannot see, and
+            // every caller of the loader already runs on the Unity main thread the Package Manager
+            // requires: a run's group step, and the pause-point port, which the pause-point tools and a
+            // run's patch step call.
+            string pdbLookupPath = ScriptPackageRoots.ToPhysicalPath(projectRoot, slashNormalizedRelativePath);
             if (!documentIndex.TryFindDocument(
                     targetDllPath,
                     pdbPath,
@@ -151,33 +156,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using StreamReader reader = new StreamReader(memoryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             source = reader.ReadToEnd();
             return HotReloadSnapshotMissReason.None;
-        }
-
-        // Why the physical path here and the asset path for the snapshot file: the snapshot is keyed
-        // by the asset path Unity reports for the file, but the PDB records the path the compiler was
-        // given, which for an embedded or local package is the folder behind the virtual
-        // Packages/<name> path. Why the Package Manager is asked from this assembly: the package roots
-        // a run captures live in the main hot-reload assembly, which this one cannot see, and every
-        // caller of the loader already runs on the Unity main thread the Package Manager requires:
-        // a run's group step, and the pause-point port, which the pause-point tools and a run's
-        // patch step call.
-        private static string ResolvePdbLookupPath(string projectRoot, string slashNormalizedAssetPath)
-        {
-            PackageManagerPackageInfo package = PackageManagerPackageInfo.FindForAssetPath(slashNormalizedAssetPath);
-            if (package == null || string.IsNullOrEmpty(package.resolvedPath) || string.IsNullOrEmpty(package.assetPath))
-            {
-                return slashNormalizedAssetPath;
-            }
-
-            HotReloadPackageRoot root = new HotReloadPackageRoot(package.resolvedPath, package.assetPath);
-            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            return HotReloadScriptPathNormalizer.ToPhysicalProjectRelative(
-                slashNormalizedAssetPath,
-                projectRoot,
-                new[] { root },
-                comparison);
         }
 
         private static byte[] ComputeDocumentHash(DocumentHashAlgorithm algorithm, byte[] sourceBytes)

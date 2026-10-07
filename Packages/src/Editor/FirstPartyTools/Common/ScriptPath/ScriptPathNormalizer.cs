@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using UnityEngine;
 
@@ -9,12 +10,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Maps a script path between the file on disk and the project-relative form that
     /// CompilationPipeline.GetAssemblyNameFromScriptPath accepts, in either direction.
     /// </summary>
-    internal static class HotReloadScriptPathNormalizer
+    internal static class ScriptPathNormalizer
     {
+        /// <summary>
+        /// Turns a script path given in any form (relative to the project root or absolute, with
+        /// either separator, naming the package's folder or its virtual path) into the asset path
+        /// Unity's script APIs use. A path outside the project and every package comes back absolute.
+        /// </summary>
+        internal static string ToAssetPath(
+            string path,
+            string projectRoot,
+            IReadOnlyList<ScriptPackageRoot> packageRoots)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
+            Debug.Assert(packageRoots != null, "packageRoots must not be null.");
+
+            // Resolved against the project root rather than the current directory: the two are the
+            // same in the Editor, and the root keeps the result independent of where the caller runs.
+            // Path.Combine keeps a rooted path as is, and GetFullPath folds ./ and ../ away. In the
+            // Editor, GetFullPath also turns the virtual Packages/<pkg-id>/... path of a registered
+            // package into the folder behind it, which the package roots map back to the virtual path.
+            // A name no package registers stays under the project root and comes back unchanged once
+            // the root is stripped.
+            string fullPath = Path.GetFullPath(Path.Combine(projectRoot, path.Replace('\\', '/')));
+            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return ToProjectRelative(fullPath, projectRoot, packageRoots, comparison);
+        }
+
         internal static string ToProjectRelative(
             string fullPath,
             string projectRoot,
-            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
             StringComparison comparison)
         {
             Debug.Assert(!string.IsNullOrEmpty(fullPath), "fullPath must not be empty.");
@@ -45,10 +74,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string TryMapToPackagePath(
             string normalized,
-            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
             StringComparison comparison)
         {
-            foreach (HotReloadPackageRoot packageRoot in packageRoots)
+            foreach (ScriptPackageRoot packageRoot in packageRoots)
             {
                 string resolvedRoot = WithTrailingSlash(packageRoot.ResolvedPath.Replace('\\', '/'));
                 if (!normalized.StartsWith(resolvedRoot, comparison))
@@ -71,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string ToPhysicalProjectRelative(
             string assetRelativePath,
             string projectRoot,
-            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
             StringComparison comparison)
         {
             Debug.Assert(!string.IsNullOrEmpty(assetRelativePath), "assetRelativePath must not be empty.");
@@ -79,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(packageRoots != null, "packageRoots must not be null.");
 
             string normalized = assetRelativePath.Replace('\\', '/');
-            foreach (HotReloadPackageRoot packageRoot in packageRoots)
+            foreach (ScriptPackageRoot packageRoot in packageRoots)
             {
                 // Matched with the trailing slash so Packages/io.example.pkg does not claim a file of
                 // Packages/io.example.pkg.extra.
