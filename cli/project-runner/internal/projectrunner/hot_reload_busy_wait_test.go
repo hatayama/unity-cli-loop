@@ -267,10 +267,12 @@ func TestRunHotReloadKeepsBothNotesWhenTheApplyAfterTheBusyWaitIsRefusedForCompi
 // Verifies an apply after the busy wait that is refused for compiling, followed by a settle wait
 // that runs out, keeps both sentences in order and both waits in EditorReadyWaitMs.
 func TestRunHotReloadKeepsBothNotesWhenTheEditorDoesNotSettleAfterTheBusyWait(t *testing.T) {
+	enableCliVibeLog(t)
 	options := fastEditorReadyWaitOptions()
 	options.pollInterval = 20 * time.Millisecond
 	// Why the busy wait ends on Ready: the budget is shared, and only the settle wait may run it out.
-	options.budget = 200 * time.Millisecond
+	// It is large enough that a slow machine's busy wait still ends on Ready.
+	options.budget = 400 * time.Millisecond
 	useFastEditorReadyWait(t, options)
 	steps := []scriptedIPCStep{{method: hotReloadCommandName, rpcError: busyWaitRunningCompile}}
 	for range 4 {
@@ -282,7 +284,8 @@ func TestRunHotReloadKeepsBothNotesWhenTheEditorDoesNotSettleAfterTheBusyWait(t 
 	for range 50 {
 		steps = append(steps, scriptedIPCStep{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusCompiling})
 	}
-	run := runScriptedHotReload(t, context.Background(), t.TempDir(), busyWaitParams(), steps, editorReadyRetryNoCompile())
+	projectRoot := t.TempDir()
+	run := runScriptedHotReload(t, context.Background(), projectRoot, busyWaitParams(), steps, editorReadyRetryNoCompile())
 
 	assertHotReloadRequestsUnchanged(t, run, 2)
 	if run.code != 1 || run.compileCalls != 0 {
@@ -298,9 +301,13 @@ func TestRunHotReloadKeepsBothNotesWhenTheEditorDoesNotSettleAfterTheBusyWait(t 
 	if busyAt < 0 || gaveUpAt < busyAt {
 		t.Fatalf("EditorReadyRetryNote = %q, want the busy sentence followed by the gave-up sentence", note)
 	}
-	// At least 80 ms of busy wait (four polls) plus the 200 ms settle budget.
-	if waited := editorReadyWaitMs(t, fields); waited < 280 {
-		t.Fatalf("Timing.EditorReadyWaitMs = %v, want both waits (at least 280)", waited)
+	// Each wait logs the same whole milliseconds it adds to Timing, so the field is exactly their
+	// sum: keeping only one wait leaves out the other, and neither is zero.
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	busyWaited, _ := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, hotReloadBusyWaitCompleteOperation))["waited_ms"].(float64)
+	settleWaited, _ := cliVibeEntryContext(t, singleCliVibeEntry(t, logContent, hotReloadEditorReadyRetryCompleteOperation))["waited_ms"].(float64)
+	if waited := editorReadyWaitMs(t, fields); waited != busyWaited+settleWaited {
+		t.Fatalf("Timing.EditorReadyWaitMs = %v, want the busy wait %v plus the settle wait %v", waited, busyWaited, settleWaited)
 	}
 }
 
