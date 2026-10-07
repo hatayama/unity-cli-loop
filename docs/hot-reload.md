@@ -71,8 +71,18 @@ added on one side alone fails a test rather than silently serializing to nothing
 
 Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point's ID).
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
+`Library/UloopHotReload/PublicizedExternalRefs/fmt1/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`, and
 `Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`.
+The shim compile references a fully publicized copy of the edited assembly, and of every other
+project assembly that grants the edited one its internals through `InternalsVisibleTo`. Any other
+project assembly is referenced through a `PublicizedExternalRefs` copy that keeps its top-level
+internal types and its private, internal and private protected members as they are, so the shim
+compile binds calls the way the edited assembly's own compile does: a public extension method
+stays unambiguous next to an internal or private one of the same signature in another assembly.
+Protected members of that copy are still publicized, because a shim calls a base type's protected
+members from outside the type hierarchy, and so are nested types, which cannot declare extension
+methods.
 Cecil looks up the assemblies a publicized copy refers to in the directories of the group
 assembly's compile references first, then in those of every assembly it references transitively.
 When a verified snapshot marks a currently patched method as unchanged, the
