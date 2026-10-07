@@ -251,6 +251,10 @@ reports `RetargetedToHotReloadPatch: true`; one that cannot be re-targeted is su
 A Cecil-rewritten copy of a project assembly under `Library/UloopHotReload/PublicizedRefs/fmt2/`
 in which every type and member is public — except field-like event backing fields, which stay
 non-public so shim compilation does not see both the event and its same-named backing field
-(CS0229). Hot reload uses these copies only as compile-time
+(CS0229). A project assembly other than the edited one that grants the edited assembly no
+internals is copied under `Library/UloopHotReload/PublicizedExternalRefs/fmt1/` instead, where its
+top-level internal types and its private, internal and private protected members stay as they
+are, so shim compilation sees no more of it than the edited assembly's own compile did, apart from
+protected members and nested types. Hot reload uses these copies only as compile-time
 references for shim compilation so private/internal member access type-checks; they are
 never loaded into the Editor domain as the runtime identity of the target types.
