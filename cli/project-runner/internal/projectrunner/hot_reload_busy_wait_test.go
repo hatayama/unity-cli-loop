@@ -264,6 +264,46 @@ func TestRunHotReloadKeepsBothNotesWhenTheApplyAfterTheBusyWaitIsRefusedForCompi
 	}
 }
 
+// Verifies an apply after the busy wait that is refused for compiling, followed by a settle wait
+// that runs out, keeps both sentences in order and both waits in EditorReadyWaitMs.
+func TestRunHotReloadKeepsBothNotesWhenTheEditorDoesNotSettleAfterTheBusyWait(t *testing.T) {
+	options := fastEditorReadyWaitOptions()
+	options.pollInterval = 20 * time.Millisecond
+	// Why the busy wait ends on Ready: the budget is shared, and only the settle wait may run it out.
+	options.budget = 200 * time.Millisecond
+	useFastEditorReadyWait(t, options)
+	steps := []scriptedIPCStep{{method: hotReloadCommandName, rpcError: busyWaitRunningCompile}}
+	for range 4 {
+		steps = append(steps, scriptedIPCStep{method: editorStatusBridgeCommandName, result: busyWaitStatusBusyCompile})
+	}
+	steps = append(steps,
+		scriptedIPCStep{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusReady},
+		scriptedIPCStep{method: hotReloadCommandName, result: editorReadyRetryFirstRefused})
+	for range 50 {
+		steps = append(steps, scriptedIPCStep{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusCompiling})
+	}
+	run := runScriptedHotReload(t, context.Background(), t.TempDir(), busyWaitParams(), steps, editorReadyRetryNoCompile())
+
+	assertHotReloadRequestsUnchanged(t, run, 2)
+	if run.code != 1 || run.compileCalls != 0 {
+		t.Fatalf("exit code = %d, compile calls = %d, want 1 and 0\nstderr=%s", run.code, run.compileCalls, run.stderr)
+	}
+	fields := run.stdoutFields(t)
+	if fields["Outcome"] != "Failed" {
+		t.Fatalf("Outcome = %#v, want Failed", fields["Outcome"])
+	}
+	note, _ := fields["EditorReadyRetryNote"].(string)
+	busyAt := strings.Index(note, "'compile'")
+	gaveUpAt := strings.Index(note, "did not")
+	if busyAt < 0 || gaveUpAt < busyAt {
+		t.Fatalf("EditorReadyRetryNote = %q, want the busy sentence followed by the gave-up sentence", note)
+	}
+	// At least 80 ms of busy wait (four polls) plus the 200 ms settle budget.
+	if waited := editorReadyWaitMs(t, fields); waited < 280 {
+		t.Fatalf("Timing.EditorReadyWaitMs = %v, want both waits (at least 280)", waited)
+	}
+}
+
 // Verifies the busy wait writes its decision and end entries under the first request's ID, and the
 // later entries follow the request sent after the wait.
 func TestRunHotReloadWritesBusyWaitVibeLogs(t *testing.T) {

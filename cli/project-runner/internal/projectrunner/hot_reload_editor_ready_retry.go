@@ -112,6 +112,10 @@ func finishHotReloadEditorNeverReady(
 	merged, err := injectHotReloadEditorReadyNote(
 		first.result,
 		composeHotReloadEditorReadyNote(first.result, fmt.Sprintf(hotReloadEditorReadyGaveUpNoteFormat, wholeSeconds(waited))))
+	if err == nil && hasHotReloadTiming(merged) {
+		// The note says how long the command waited, so Timing carries that wait too.
+		merged, err = addHotReloadEditorReadyWaitMs(merged, first.result, waited)
+	}
 	if err != nil {
 		writeHotReloadClassifiedError(stderr, connection, err)
 		return hotReloadEditorReadyRetryOutcome{finished: true, exitCode: 1}

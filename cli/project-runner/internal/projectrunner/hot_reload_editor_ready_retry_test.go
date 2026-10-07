@@ -472,6 +472,11 @@ func TestRunHotReloadGivesUpWhenTheEditorDoesNotSettle(t *testing.T) {
 	if note, _ := fields["EditorReadyRetryNote"].(string); !strings.Contains(note, "did not") {
 		t.Fatalf("EditorReadyRetryNote = %#v, want the gave-up sentence", fields["EditorReadyRetryNote"])
 	}
+	// The note says how long the command waited, so Timing carries that wait too.
+	timing, _ := fields["Timing"].(map[string]any)
+	if waited, isNumber := timing["EditorReadyWaitMs"].(float64); !isNumber || waited < 30 {
+		t.Fatalf("Timing.EditorReadyWaitMs = %#v, want the wait of at least the 30 ms budget", timing["EditorReadyWaitMs"])
+	}
 }
 
 // Verifies a cancel during the wait reports the cancel and leaves the first response as it was.
