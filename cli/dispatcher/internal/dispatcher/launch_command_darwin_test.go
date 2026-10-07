@@ -12,14 +12,16 @@ import (
 	"testing"
 )
 
-// Prints every catchable signal whose disposition is not plain SIG_DFL with no flags, one per line.
-// SIGFPE is skipped because perl itself sets it to SIG_IGN during startup, before the script runs.
+// Prints every catchable signal that still carries SA_SIGINFO, one per line. A freshly exec'd
+// process has no handlers, so SA_SIGINFO there can only be the leaked flag. Other flags are allowed
+// because zsh, which a user can select as /bin/sh, leaves SA_RESTART behind, and no runtime treats
+// SA_RESTART as a handler. SIGFPE is skipped because perl itself sets it to SIG_IGN during startup.
 const reportUncleanSignalsPerlScript = `use POSIX;
 for my $signal (1 .. 31) {
 	next if $signal == SIGKILL || $signal == SIGSTOP || $signal == SIGFPE;
 	my $action = POSIX::SigAction->new;
 	sigaction($signal, undef, $action) or die "sigaction $signal: $!";
-	next if $action->handler eq 'DEFAULT' && $action->flags == 0;
+	next if !($action->flags & SA_SIGINFO);
 	printf "signal %d handler=%s flags=0x%x\n", $signal, $action->handler, $action->flags;
 }`
 
