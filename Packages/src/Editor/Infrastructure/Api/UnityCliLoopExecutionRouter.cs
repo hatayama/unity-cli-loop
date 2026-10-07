@@ -19,13 +19,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal sealed class UnityCliLoopExecutionRouter
     {
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
+        private readonly EditorExecutionActivity _executionActivity;
 
-        internal UnityCliLoopExecutionRouter(UnityCliLoopToolRegistrarService toolRegistrarService)
+        internal UnityCliLoopExecutionRouter(
+            UnityCliLoopToolRegistrarService toolRegistrarService,
+            EditorExecutionActivity executionActivity)
         {
             System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
+            System.Diagnostics.Debug.Assert(executionActivity != null, "executionActivity must not be null");
 
             _toolRegistrarService = toolRegistrarService
                 ?? throw new ArgumentNullException(nameof(toolRegistrarService));
+            _executionActivity = executionActivity
+                ?? throw new ArgumentNullException(nameof(executionActivity));
         }
 
         /// <summary>
@@ -53,6 +59,24 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick());
             }
 
+            // Why hold an activity for the length of the request: macOS throttles an Editor that is not
+            // frontmost, and a request that arrives while it is throttled is served several times slower.
+            // Why not around the status answer above: that path must stay free of anything that can block
+            // or fail, because it answers while the main thread is stuck.
+            using (_executionActivity.Hold())
+            {
+                return await ExecuteCommandOrToolAsync(methodName, paramsToken, ct);
+            }
+        }
+
+        /// <summary>
+        /// Runs one internal bridge command on the main thread, or hands one tool to the registrar.
+        /// </summary>
+        private async Task<UnityCliLoopToolResponse> ExecuteCommandOrToolAsync(
+            string methodName,
+            JToken paramsToken,
+            CancellationToken ct)
+        {
             UnityCliLoopToolResponse response;
             if (InternalBridgeCommandRouter.IsInternalCommand(methodName))
             {

@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new AllToolsEnabledSettingsPort(),
                 new UnityCliLoopToolExecutionService(new IdleEditorRuntimeStatePort()),
                 () => Array.Empty<IUnityCliLoopTool>());
-            return new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService));
+            return new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi())));
         }
 
         private sealed class AllToolsEnabledSettingsPort : IToolSettingsPort
