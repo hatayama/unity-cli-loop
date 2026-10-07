@@ -1,9 +1,13 @@
 package projectrunner
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/ui"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -14,6 +18,58 @@ const (
 	dynamicCodeDomainReloadWaitRequiredField       = "DomainReloadWaitRequired"
 	legacyDynamicCodeDomainReloadWaitRequiredField = "domainReloadWaitRequired"
 )
+
+func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
+	applyDebugTimingParams(clicore.ExecuteDynamicCodeCommandName, params)
+	startedAt := time.Now()
+	spinner := clicore.NewToolSpinner(stderr, clicore.ExecuteDynamicCodeCommandName)
+	outcome, err := sendWithTransientConnectionRetry(
+		ctx,
+		connection,
+		clicore.ExecuteDynamicCodeCommandName,
+		params,
+		ui.NewSpinnerProgressFunc(spinner, "Executing execute-dynamic-code..."),
+	)
+	if err != nil {
+		if shouldWaitForExecuteDynamicCodeDisconnect(err, outcome) {
+			spinner.Update("Connection lost during execute-dynamic-code. Waiting for domain reload to complete...")
+			if waitErr := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
+				spinner.Stop()
+				clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
+					ProjectRoot: connection.ProjectRoot,
+					Command:     clicore.ExecuteDynamicCodeCommandName,
+				})
+				return 1
+			}
+		}
+		spinner.Stop()
+		writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
+		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.ExecuteDynamicCodeCommandName,
+		})
+		return 1
+	}
+
+	if executeDynamicCodeDomainReloadWaitRequired(outcome.Result) {
+		spinner.Update("Waiting for domain reload to complete...")
+		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
+			spinner.Stop()
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+				ProjectRoot: connection.ProjectRoot,
+				Command:     clicore.ExecuteDynamicCodeCommandName,
+			})
+			return 1
+		}
+	}
+
+	spinner.Stop()
+	result := stripExecuteDynamicCodeControlResult(outcome.Result)
+	result = stripDebugTimingResult(clicore.ExecuteDynamicCodeCommandName, result)
+	clicore.WriteJSON(stdout, result)
+	writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
+	return toolEnvelopeExitCode(result)
+}
 
 func shouldWaitForExecuteDynamicCodeDomainReload(command string, params map[string]any) bool {
 	if command != clicore.ExecuteDynamicCodeCommandName {
