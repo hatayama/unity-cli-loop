@@ -141,6 +141,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that revalidation reports a compiled assembly rebuilt since the capture as the
+        /// Editor not being ready, because the compile that rebuilt it leaves nothing to fix.
+        /// </summary>
+        [Test]
+        public void TryRevalidate_WhenTheCompiledAssemblyWasRebuiltSinceTheCapture_ReportsTheEditorAsNotReady()
+        {
+            HotReloadFailureDescription captureFailure = HotReloadNewSourceMembershipValidator.TryCapture(
+                CreateReadyCapture(),
+                GetProjectRoot(),
+                MissingSourceInExistingDirectory,
+                HotReloadTestAssemblyName,
+                FindCompilationAssemblyByName(HotReloadTestAssemblyName),
+                BuildScriptAssemblyDllPath(HotReloadTestAssemblyName),
+                out HotReloadNewSourceMembershipEvidence captured);
+            Assert.That(captureFailure, Is.Null, "Precondition: the real capture must succeed.");
+            HotReloadNewSourceMembershipEvidence capturedBeforeARebuild = new HotReloadNewSourceMembershipEvidence(
+                captured.ProjectRelativePath,
+                captured.AssemblyName,
+                captured.TargetDllPath,
+                Guid.NewGuid().ToString(),
+                captured.ResolvedAssemblyDefinitionPath,
+                captured.Boundaries);
+
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryRevalidate(
+                CreateReadyCapture(),
+                capturedBeforeARebuild);
+
+            Assert.That(
+                failure?.Message,
+                Is.EqualTo("The compiled assembly changed while hot reload was preparing. Compile the project and retry hot reload."));
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
+        }
+
+        /// <summary>
         /// Verifies that resolution refuses when the compilation assembly passed in is not the assembly the caller named.
         /// </summary>
         [Test]
