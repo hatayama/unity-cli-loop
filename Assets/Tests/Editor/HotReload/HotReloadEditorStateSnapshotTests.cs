@@ -84,5 +84,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(failure, Is.Null);
         }
+
+        /// <summary>
+        /// What: a compile in progress refuses a request before the transform, with the reason that
+        /// the domain reload after the compile would discard the reload.
+        /// </summary>
+        [Test]
+        public void GetBusyFailure_WhenCompiling_IsEditorNotReady()
+        {
+            HotReloadFailureDescription failure =
+                new HotReloadEditorStateSnapshot(isCompiling: true, isUpdating: false, scriptCompilationFailed: false)
+                    .GetBusyFailure();
+
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
+            Assert.That(failure.Message, Is.EqualTo(HotReloadConstants.EditorCompilingBeforeTransformReason));
+        }
+
+        /// <summary>
+        /// What: an asset import in progress refuses a request before the transform.
+        /// </summary>
+        [Test]
+        public void GetBusyFailure_WhenImporting_IsEditorNotReady()
+        {
+            HotReloadFailureDescription failure =
+                new HotReloadEditorStateSnapshot(isCompiling: false, isUpdating: true, scriptCompilationFailed: false)
+                    .GetBusyFailure();
+
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
+            Assert.That(failure.Message, Is.EqualTo(HotReloadConstants.EditorImportingBeforeTransformReason));
+        }
+
+        /// <summary>
+        /// What: a failed last compile is not a busy Editor: the loaded assemblies are the last good
+        /// build, and waiting does not clear the errors.
+        /// </summary>
+        [Test]
+        public void GetBusyFailure_WhenOnlyTheLastCompileFailed_IsNull()
+        {
+            HotReloadFailureDescription failure =
+                new HotReloadEditorStateSnapshot(isCompiling: false, isUpdating: false, scriptCompilationFailed: true)
+                    .GetBusyFailure();
+
+            Assert.That(failure, Is.Null);
+        }
+
+        /// <summary>
+        /// What: an idle Editor refuses nothing before the transform.
+        /// </summary>
+        [Test]
+        public void GetBusyFailure_WhenReady_IsNull()
+        {
+            HotReloadFailureDescription failure =
+                new HotReloadEditorStateSnapshot(isCompiling: false, isUpdating: false, scriptCompilationFailed: false)
+                    .GetBusyFailure();
+
+            Assert.That(failure, Is.Null);
+        }
     }
 }

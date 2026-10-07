@@ -48,6 +48,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return null;
         }
+
+        /// <summary>
+        /// Why a request that arrives now is refused before the transform, or null when it is not.
+        /// Only a compile or an import in progress counts: both end on their own, so the CLI waits
+        /// and applies again. A failed last compile is not busy, because the loaded assemblies are
+        /// the last good build and waiting does not clear the errors.
+        /// </summary>
+        internal HotReloadFailureDescription GetBusyFailure()
+        {
+            if (IsCompiling)
+            {
+                return HotReloadFailureDescription.EditorNotReady(HotReloadConstants.EditorCompilingBeforeTransformReason);
+            }
+
+            if (IsUpdating)
+            {
+                return HotReloadFailureDescription.EditorNotReady(HotReloadConstants.EditorImportingBeforeTransformReason);
+            }
+
+            return null;
+        }
     }
 
     /// <summary>

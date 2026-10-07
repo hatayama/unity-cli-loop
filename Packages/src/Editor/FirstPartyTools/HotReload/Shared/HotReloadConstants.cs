@@ -697,6 +697,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string EditorNotReadyRecommendedNextAction =
             "The Editor compiled or imported while this reload ran, so there is nothing to fix in the source. Wait until 'uloop status' no longer reports compiling or importing, then rerun; or run 'uloop compile' to apply every edit.";
 
+        // Why a sentence apart from the new-source ones: this refusal happens for any file the
+        // moment the request arrives, before the transform, and the CLI retries once the Editor
+        // settles. The ending matches the other Editor-state reasons.
+        public const string EditorCompilingBeforeTransformReason =
+            "The Editor is compiling, so the domain reload that follows would discard this reload. Wait for the compile to finish, then retry hot reload.";
+
+        public const string EditorImportingBeforeTransformReason =
+            "The Editor is importing assets, so this reload cannot be applied until the import finishes. Wait for it, then retry hot reload.";
+
         public const string EditorNotReadyAfterPartialApplyRecommendedNextAction =
             "Partially applied. The remaining files were not patched because the Editor compiled or imported while this reload ran: wait until 'uloop status' no longer reports that, then rerun; or run 'uloop compile' to apply every edit; or run 'uloop hot-reload --revert-all' to discard the applied patches.";
 

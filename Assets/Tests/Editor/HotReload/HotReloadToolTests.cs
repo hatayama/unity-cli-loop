@@ -2161,7 +2161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Ns.Host.Speed" },
                 Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
-                isPaused: false);
+                isPaused: false,
+                selectedFiles: Array.Empty<string>());
 
             string warning = response.Warnings.FirstOrDefault(
                 entry => entry.Contains(RewireAfterDomainReloadWarningMarker));
@@ -2184,7 +2185,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<string>(),
                 Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
-                isPaused: false);
+                isPaused: false,
+                selectedFiles: Array.Empty<string>());
 
             Assert.That(
                 response.Warnings.Any(entry => entry.Contains(RewireAfterDomainReloadWarningMarker)),
@@ -2207,7 +2209,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { "Ns.Host.Speed" },
                 Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
-                isPaused: false);
+                isPaused: false,
+                selectedFiles: Array.Empty<string>());
             HotReloadResponse withoutRewire = HotReloadApplyResponseBuilder.Build(
                 HotReloadCompositionRoot.Services,
                 CreatePatchedResultWithTwoWarningsAndAddedField(),
@@ -2215,7 +2218,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Array.Empty<string>(),
                 Array.Empty<HotReloadWiredValueRestoreFailure>(),
                 isPlaying: false,
-                isPaused: false);
+                isPaused: false,
+                selectedFiles: Array.Empty<string>());
 
             Assert.That(
                 withRewire.Message,

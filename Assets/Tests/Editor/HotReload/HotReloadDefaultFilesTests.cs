@@ -51,8 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: omitting --files retains existing warnings, appends selection warnings, and prefixes
-        /// the exact selection message.
+        /// What: omitting --files retains existing warnings, appends selection warnings, prefixes
+        /// the exact selection message, and names the selected files in the response.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenFilesAreOmittedAndChangesExist_AppliesSelectedFilesAndPrefixesMessage()
@@ -92,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Warnings,
                 Is.EqualTo(new[] { "orchestrator warning", "scan limit warning" }));
+            Assert.That(response.SelectedFiles, Is.EqualTo(new[] { "Assets/Selected.cs" }));
         }
 
         /// <summary>
@@ -301,8 +302,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a script listed twice in --files reaches the run once, as the first raw entry, and
-        /// the response message starts with the sentence saying so.
+        /// What: a script listed twice in --files reaches the run once, as the first raw entry, the
+        /// response message starts with the sentence saying so, and the response names it once as a
+        /// project-relative path.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenFilesListAScriptTwice_RunsItOnceAndSaysSo()
@@ -320,6 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     "--files listed 'Assets/Explicit.cs' 2 times; it was processed once. "
                     + AppliedMessageTail));
+            Assert.That(response.SelectedFiles, Is.EqualTo(new[] { "Assets/Explicit.cs" }));
         }
 
         /// <summary>
