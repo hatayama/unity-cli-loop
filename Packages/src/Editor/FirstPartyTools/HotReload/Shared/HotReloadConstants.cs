@@ -649,6 +649,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";
         public const string VibeLogRevertFailed = "hot_reload_revert_failed";
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
+        public const string VibeLogTimingDetail = "hot_reload_timing_detail";
+
+        // Steps of an apply run outside the response's Timing phases, as named in the
+        // hot_reload_timing_detail vibe entry. Steps that run once per group add up.
+        public const string TimingDetailStepMainThreadSwitch = "main_thread_switch";
+        public const string TimingDetailStepPackageRoots = "package_roots";
+        public const string TimingDetailStepResolveInputs = "resolve_inputs";
+        public const string TimingDetailStepPlan = "plan";
+        public const string TimingDetailStepActiveSiblings = "active_siblings";
+        public const string TimingDetailStepMembershipValidate = "membership_validate";
+        public const string TimingDetailStepSnapshotGroupState = "snapshot_group_state";
+        public const string TimingDetailStepActivePaths = "active_paths";
+        public const string TimingDetailStepSiblingDetect = "sibling_detect";
+        public const string TimingDetailStepWorkerInput = "worker_input";
+        public const string TimingDetailStepPreparationOutcome = "preparation_outcome";
+        public const string TimingDetailStepWorkerNotices = "worker_notices";
+        public const string TimingDetailStepRevalidateBeforeRevert = "revalidate_before_revert";
+        public const string TimingDetailStepApplyContext = "apply_context";
+        public const string TimingDetailStepIsolationSplit = "isolation_split";
+        public const string TimingDetailStepRecordSourceHashes = "record_source_hashes";
+        public const string TimingDetailStepRemovedMembers = "removed_members";
+        public const string TimingDetailStepCallerNotes = "caller_notes";
         public const string VibeLogShimCompileStageFirstPass = "first_pass";
         public const string VibeLogShimCompileStageRetry = "retry";
         public const string VibeLogIsolationTriggerShimCompileFailure = "shim_compile_failure";

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using NUnit.Framework;
 
@@ -112,6 +113,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             timing.AddPatch(30);
 
             Assert.Throws<ArgumentOutOfRangeException>(() => timing.Complete(329));
+        }
+
+        /// <summary>
+        /// What: a step measured twice in one run, such as once per group, adds up under one entry,
+        /// and the steps keep the order they were first seen in.
+        /// </summary>
+        [Test]
+        public void AddDetail_SameStepTwice_SumsAndKeepsFirstSeenOrder()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+
+            timing.AddDetail("plan", 3);
+            timing.AddDetail("resolve_inputs", 5);
+            timing.AddDetail("plan", 4);
+
+            Assert.That(timing.Details, Is.EqualTo(new[]
+            {
+                new KeyValuePair<string, long>("plan", 7),
+                new KeyValuePair<string, long>("resolve_inputs", 5),
+            }));
+        }
+
+        /// <summary>
+        /// What: a negative step time is refused instead of shrinking the step's sum.
+        /// </summary>
+        [Test]
+        public void AddDetail_NegativeMilliseconds_Throws()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => timing.AddDetail("plan", -1));
+        }
+
+        /// <summary>
+        /// What: a step without a name is refused, whether the name is empty or null.
+        /// </summary>
+        [Test]
+        public void AddDetail_EmptyStep_Throws()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+
+            Assert.Throws<ArgumentException>(() => timing.AddDetail(string.Empty, 1));
+            Assert.Throws<ArgumentException>(() => timing.AddDetail(null, 1));
+        }
+
+        /// <summary>
+        /// What: disposing a measured scope adds its elapsed time to the step.
+        /// </summary>
+        [Test]
+        public void MeasureDetail_AddsTheElapsedOnDispose()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+
+            using (timing.MeasureDetail("plan"))
+            {
+            }
+
+            Assert.That(timing.Details.Count, Is.EqualTo(1));
+            Assert.That(timing.Details[0].Key, Is.EqualTo("plan"));
+            Assert.That(timing.Details[0].Value, Is.GreaterThanOrEqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a run that measured no step reports no steps.
+        /// </summary>
+        [Test]
+        public void Details_WithoutAnyStep_IsEmpty()
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+
+            Assert.That(timing.Details, Is.Empty);
         }
     }
 }

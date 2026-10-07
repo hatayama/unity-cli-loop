@@ -83,12 +83,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using IDisposable callSiteCacheHold = HotReloadCompiledCallSiteCache.Shared.HoldEntriesForRun();
             HotReloadRunTiming timing = new HotReloadRunTiming();
 
-            // CompilationPipeline / Application.dataPath require the Unity main thread, and the
-            // groups cannot be planned before every file knows which assembly it compiles into.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            // Why after the switch: PackageInfo is main-thread only, and script paths are
-            // normalized against these roots later on the background threads this run switches to.
-            _packageRootCapture.CaptureCurrent();
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
+            {
+                // CompilationPipeline / Application.dataPath require the Unity main thread, and the
+                // groups cannot be planned before every file knows which assembly it compiles into.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+            }
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepPackageRoots))
+            {
+                // Why after the switch: PackageInfo is main-thread only, and script paths are
+                // normalized against these roots later on the background threads this run switches to.
+                _packageRootCapture.CaptureCurrent();
+            }
+
             // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
             // SessionState, which is a main-thread API.
             HotReloadRunAccumulator run =
@@ -97,6 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _patcher,
                     _unityMessageForwarding,
                     HotReloadAutoRefreshHold.IsHeld);
+
             HotReloadInputResolutionSlot[] slots = new HotReloadInputResolutionSlot[files.Count];
             for (int index = 0; index < slots.Length; index++)
             {
@@ -105,37 +114,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
                 new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
-            for (int index = 0; index < files.Count; index++)
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepResolveInputs))
             {
-                ct.ThrowIfCancellationRequested();
-                _inputFileResolver.ResolveInputFile(
-                    files[index],
-                    index,
-                    contentPathOverride,
-                    contentPathOverrideByFile,
-                    correlationId,
-                    run,
-                    slots[index],
-                    plannerInput);
-            }
-
-            MarkDefaultSelectedInputs(slots, isDefaultSelection);
-            IReadOnlyList<HotReloadFileGroupPlan> plans = HotReloadFileGroupPlanner.Plan(plannerInput);
-            HashSet<string> pathsInRun = new HashSet<string>(
-                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
-            for (int pathIndex = 0; pathIndex < slots.Length; pathIndex++)
-            {
-                if (!string.IsNullOrEmpty(slots[pathIndex].ResultPath))
+                for (int index = 0; index < files.Count; index++)
                 {
-                    pathsInRun.Add(slots[pathIndex].ResultPath);
+                    ct.ThrowIfCancellationRequested();
+                    _inputFileResolver.ResolveInputFile(
+                        files[index],
+                        index,
+                        contentPathOverride,
+                        contentPathOverrideByFile,
+                        correlationId,
+                        run,
+                        slots[index],
+                        plannerInput);
                 }
             }
 
-            IReadOnlyList<HotReloadDeferredInputPlan> classifiedPlans =
-                _deferredInputClassifier.ClassifyAllDeferredPlans(plans, slots);
+            IReadOnlyList<HotReloadFileGroupPlan> plans;
+            HashSet<string> pathsInRun = new HashSet<string>(
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+            IReadOnlyList<HotReloadDeferredInputPlan> classifiedPlans;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepPlan))
+            {
+                MarkDefaultSelectedInputs(slots, isDefaultSelection);
+                plans = HotReloadFileGroupPlanner.Plan(plannerInput);
+                for (int pathIndex = 0; pathIndex < slots.Length; pathIndex++)
+                {
+                    if (!string.IsNullOrEmpty(slots[pathIndex].ResultPath))
+                    {
+                        pathsInRun.Add(slots[pathIndex].ResultPath);
+                    }
+                }
+
+                classifiedPlans = _deferredInputClassifier.ClassifyAllDeferredPlans(plans, slots);
+            }
 
             List<(string Path, HotReloadFileProcessResult Result)> extraResults =
                 new List<(string Path, HotReloadFileProcessResult Result)>();
+            int groupCount = 0;
             for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -145,21 +162,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                bool isLastChangedGroup = _siblingRebindReporter.IsLastChangedPlanForAssembly(
-                    plans,
-                    classifiedPlans,
-                    planIndex);
+                bool isLastChangedGroup;
                 List<int> inputIndexes = new List<int>(plan.InputIndexes);
-                if (isLastChangedGroup)
+                using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepPlan))
                 {
-                    _deferredInputClassifier.AppendUniqueDeferredInputIndexes(
+                    isLastChangedGroup = _siblingRebindReporter.IsLastChangedPlanForAssembly(
                         plans,
                         classifiedPlans,
-                        planIndex,
-                        slots,
-                        inputIndexes);
+                        planIndex);
+                    if (isLastChangedGroup)
+                    {
+                        _deferredInputClassifier.AppendUniqueDeferredInputIndexes(
+                            plans,
+                            classifiedPlans,
+                            planIndex,
+                            slots,
+                            inputIndexes);
+                    }
                 }
 
+                groupCount++;
                 await ProcessPlannedGroupAsync(
                         inputIndexes,
                         slots,
@@ -176,11 +198,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why after every changed plan: an earlier all-deferred plan must not fill its
             // slots before the last changed group can absorb its unique callers.
-            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepPlan))
             {
-                if (classifiedPlans[planIndex].IsAllDeferred)
+                for (int planIndex = 0; planIndex < plans.Count; planIndex++)
                 {
-                    _deferredInputClassifier.ApplyDeferredAlreadyActive(plans[planIndex], slots);
+                    if (classifiedPlans[planIndex].IsAllDeferred)
+                    {
+                        _deferredInputClassifier.ApplyDeferredAlreadyActive(plans[planIndex], slots);
+                    }
                 }
             }
 
@@ -194,15 +219,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 run.AddReappliedSibling(extraResults[extraIndex].Path, extraResults[extraIndex].Result);
             }
 
-            run.RecordAppliedSourceHashes();
-            run.DisplayedRemovedMembers.ApplyTo(_patcher);
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepRecordSourceHashes))
+            {
+                run.RecordAppliedSourceHashes();
+            }
 
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            run.ApplyOneShotCallerNotes(projectRoot);
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepRemovedMembers))
+            {
+                run.DisplayedRemovedMembers.ApplyTo(_patcher);
+            }
 
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            return run.BuildResult(correlationId, timing.Complete(total.ElapsedMilliseconds));
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
+            {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+            }
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepCallerNotes))
+            {
+                string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                run.ApplyOneShotCallerNotes(projectRoot);
+            }
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
+            {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+            }
+
+            HotReloadTimingBreakdown breakdown = timing.Complete(total.ElapsedMilliseconds);
+            HotReloadOrchestratorLog.LogHotReloadTimingDetail(
+                HotReloadTimingDetailPayload.Build(breakdown, timing.Details, groupCount),
+                correlationId);
+            return run.BuildResult(correlationId, breakdown);
         }
 
         // Why on the inputs only: a re-applied sibling joins a group later and was never selected,
@@ -239,14 +286,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int inputCount = inputIndexes.Count;
-            if (isLastGroupOfAssembly)
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepActiveSiblings))
             {
-                _siblingRebindReporter.AppendActiveSiblingsToGroup(
-                    filesOfGroup,
-                    pathsInRun,
-                    contentPathOverrideByFile,
-                    run,
-                    _inputFileResolver);
+                if (isLastGroupOfAssembly)
+                {
+                    _siblingRebindReporter.AppendActiveSiblingsToGroup(
+                        filesOfGroup,
+                        pathsInRun,
+                        contentPathOverrideByFile,
+                        run,
+                        _inputFileResolver);
+                }
             }
 
             // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
