@@ -376,9 +376,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void GetOrCreateShimReferenceCopy_WhenTheAssemblyDoesNotGrantInternalsToTheTarget_KeepsInternalTypesAndMembersHidden()
         {
-            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedExternalRefsRelativeDirectory);
-
-            using AssemblyDefinition copy = ReadShimReferenceCopyOfTestAssembly(StrangerTargetAssemblyName);
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly(StrangerTargetAssemblyName);
 
             Assert.That(
                 FindType(copy, HiddenExtensionsTypeFullName).Attributes & CecilTypeAttributes.VisibilityMask,
@@ -427,7 +425,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void GetOrCreateShimReferenceCopy_WhenTheAssemblyGrantsInternalsToTheTarget_PublicizesInternalMembers()
         {
-            using AssemblyDefinition copy = ReadShimReferenceCopyOfTestAssembly(FriendTargetAssemblyName);
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly(FriendTargetAssemblyName);
 
             Assert.That(
                 MethodAccessOf(FindType(copy, PublicHostTypeFullName), "Hidden"),
@@ -442,7 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void GetOrCreateShimReferenceCopy_WhenTheAssemblyGrantsInternalsToTheTarget_PublicizesInternalTopLevelTypes()
         {
-            using AssemblyDefinition copy = ReadShimReferenceCopyOfTestAssembly(FriendTargetAssemblyName);
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly(FriendTargetAssemblyName);
 
             Assert.That(
                 FindType(copy, HiddenExtensionsTypeFullName).Attributes & CecilTypeAttributes.VisibilityMask,
@@ -503,7 +501,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void GetOrCreateShimReferenceCopy_MatchesTheTargetNameIgnoringCase()
         {
-            using AssemblyDefinition copy = ReadShimReferenceCopyOfTestAssembly("uloopshimreferencefriendtarget");
+            using AssemblyDefinition copy = ReadFreshShimReferenceCopyOfTestAssembly("uloopshimreferencefriendtarget");
 
             Assert.That(
                 FindType(copy, HiddenExtensionsTypeFullName).Attributes & CecilTypeAttributes.VisibilityMask,
@@ -511,8 +509,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "A grant whose name differs only in case must still publicize internal types.");
         }
 
-        private static AssemblyDefinition ReadShimReferenceCopyOfTestAssembly(string shimTargetAssemblyName)
+        // Why delete the cached copies of both variants first: a copy is reused by assembly name and
+        // Mvid alone, so one that an earlier test or run left behind would pass without the rewrite
+        // under test running.
+        private static AssemblyDefinition ReadFreshShimReferenceCopyOfTestAssembly(string shimTargetAssemblyName)
         {
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedExternalRefsRelativeDirectory);
+
             string copyPath = ReferencePublicizer.GetOrCreateShimReferenceCopy(
                 ResolveTestAssemblyHome(),
                 PublicizerTestSearchDirectories.ForHotReloadTestAssembly(),
