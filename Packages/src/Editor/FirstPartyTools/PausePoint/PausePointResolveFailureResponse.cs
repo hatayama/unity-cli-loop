@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool declaresIntroducedType =
                 HotReloadPausePointCoordination.HotReloadSide?.IsIntroducedTypeSourceFile(normalizedFile) == true;
             if (declaresIntroducedType
-                && SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(parameters.File).Count == 0)
+                && SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(normalizedFile).Count == 0)
             {
                 return CreateIntroducedTypeResolveFailure(parameters);
             }

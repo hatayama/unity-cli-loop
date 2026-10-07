@@ -18,6 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
+            // Read by the asset path even for a package script: the Editor resolves a registered package's
+            // Packages/<package-id>/... path to its folder in file IO, as the source snapshot capture does.
             string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
             return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine, resolvedEndLine);
         }

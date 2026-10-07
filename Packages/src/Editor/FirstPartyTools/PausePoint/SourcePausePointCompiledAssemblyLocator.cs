@@ -12,10 +12,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class SourcePausePointCompiledAssemblyLocation
     {
-        // All three are empty unless Found.
+        // All four are empty unless Found.
         internal string AssemblyName { get; }
         internal string AssemblyPath { get; }
         internal string SymbolsPath { get; }
+        // The script's path in the form the PDB records it: for a package script, the file behind
+        // its virtual path, project-relative or absolute when the package lives outside the project;
+        // for an Assets script, the located path itself.
+        internal string PhysicalPath { get; }
         internal SourcePausePointResolveFailureReason FailureReason { get; }
         internal string FailureMessage { get; }
         internal bool Found => FailureReason == SourcePausePointResolveFailureReason.None;
@@ -24,12 +28,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             string assemblyPath,
             string symbolsPath,
+            string physicalPath,
             SourcePausePointResolveFailureReason failureReason,
             string failureMessage)
         {
             AssemblyName = assemblyName;
             AssemblyPath = assemblyPath;
             SymbolsPath = symbolsPath;
+            PhysicalPath = physicalPath;
             FailureReason = failureReason;
             FailureMessage = failureMessage;
         }
@@ -37,15 +43,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static SourcePausePointCompiledAssemblyLocation FoundAt(
             string assemblyName,
             string assemblyPath,
-            string symbolsPath)
+            string symbolsPath,
+            string physicalPath)
         {
             Debug.Assert(
                 !string.IsNullOrEmpty(assemblyName) && !string.IsNullOrEmpty(assemblyPath) && !string.IsNullOrEmpty(symbolsPath),
                 "a found location must carry the assembly name and both paths.");
+            Debug.Assert(!string.IsNullOrEmpty(physicalPath), "a found location must carry the script's physical path.");
             return new SourcePausePointCompiledAssemblyLocation(
                 assemblyName,
                 assemblyPath,
                 symbolsPath,
+                physicalPath,
                 SourcePausePointResolveFailureReason.None,
                 string.Empty);
         }
@@ -61,6 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.Empty,
                 string.Empty,
                 string.Empty,
+                string.Empty,
                 failureReason,
                 failureMessage);
         }
@@ -72,6 +82,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourcePausePointCompiledAssemblyLocator
     {
+        /// <summary>
+        /// Locates a script named by its asset path (Assets/... or Packages/&lt;package-id&gt;/...),
+        /// the only form CompilationPipeline maps to an assembly. Callers normalize any other form
+        /// first; the folder path behind a package is reported as belonging to no assembly.
+        /// Must be called on the Unity main thread.
+        /// </summary>
         internal static SourcePausePointCompiledAssemblyLocation Locate(string projectRelativeFilePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
@@ -113,7 +129,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Debug symbols not found at '{pdbPath}'. Ensure the project uses Debug code optimization.");
             }
 
-            return SourcePausePointCompiledAssemblyLocation.FoundAt(assemblyName, dllPath, pdbPath);
+            // Asked only once the assembly is found, so a script that is not compiled never reaches
+            // the Package Manager.
+            string physicalPath = ScriptPackageRoots.ToPhysicalPath(projectRoot, normalizedInputPath);
+            return SourcePausePointCompiledAssemblyLocation.FoundAt(assemblyName, dllPath, pdbPath, physicalPath);
         }
     }
 }
