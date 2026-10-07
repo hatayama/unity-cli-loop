@@ -9,12 +9,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Maps a script path between the file on disk and the project-relative form that
     /// CompilationPipeline.GetAssemblyNameFromScriptPath accepts, in either direction.
     /// </summary>
-    internal static class HotReloadScriptPathNormalizer
+    internal static class ScriptPathNormalizer
     {
         internal static string ToProjectRelative(
             string fullPath,
             string projectRoot,
-            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
             StringComparison comparison)
         {
             Debug.Assert(!string.IsNullOrEmpty(fullPath), "fullPath must not be empty.");
@@ -45,10 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string TryMapToPackagePath(
             string normalized,
-            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
             StringComparison comparison)
         {
-            foreach (HotReloadPackageRoot packageRoot in packageRoots)
+            foreach (ScriptPackageRoot packageRoot in packageRoots)
             {
                 string resolvedRoot = WithTrailingSlash(packageRoot.ResolvedPath.Replace('\\', '/'));
                 if (!normalized.StartsWith(resolvedRoot, comparison))
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string ToPhysicalProjectRelative(
             string assetRelativePath,
             string projectRoot,
-            IReadOnlyList<HotReloadPackageRoot> packageRoots,
+            IReadOnlyList<ScriptPackageRoot> packageRoots,
             StringComparison comparison)
         {
             Debug.Assert(!string.IsNullOrEmpty(assetRelativePath), "assetRelativePath must not be empty.");
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(packageRoots != null, "packageRoots must not be null.");
 
             string normalized = assetRelativePath.Replace('\\', '/');
-            foreach (HotReloadPackageRoot packageRoot in packageRoots)
+            foreach (ScriptPackageRoot packageRoot in packageRoots)
             {
                 // Matched with the trailing slash so Packages/io.example.pkg does not claim a file of
                 // Packages/io.example.pkg.extra.

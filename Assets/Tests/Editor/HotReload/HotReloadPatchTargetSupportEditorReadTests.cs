@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
             }
 
-            public IReadOnlyList<HotReloadPackageRoot> Current => Array.Empty<HotReloadPackageRoot>();
+            public IReadOnlyList<ScriptPackageRoot> Current => Array.Empty<ScriptPackageRoot>();
         }
     }
 }

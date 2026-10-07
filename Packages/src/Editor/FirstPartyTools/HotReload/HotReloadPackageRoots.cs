@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 
-using UpmPackageInfo = UnityEditor.PackageManager.PackageInfo;
-
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -14,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Refreshes the mapping. Must be called from the Unity main thread.</summary>
         void CaptureCurrent();
 
-        IReadOnlyList<HotReloadPackageRoot> Current { get; }
+        IReadOnlyList<ScriptPackageRoot> Current { get; }
     }
 
     /// <summary>
@@ -23,14 +21,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadPackageRootCapture : IHotReloadPackageRootCapture
     {
-        private IReadOnlyList<HotReloadPackageRoot> _current;
+        private IReadOnlyList<ScriptPackageRoot> _current;
 
         public void CaptureCurrent()
         {
-            _current = Capture();
+            _current = ScriptPackageRoots.ReadCurrent();
         }
 
-        public IReadOnlyList<HotReloadPackageRoot> Current
+        public IReadOnlyList<ScriptPackageRoot> Current
         {
             get
             {
@@ -47,23 +45,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 return _current;
             }
-        }
-
-        private static IReadOnlyList<HotReloadPackageRoot> Capture()
-        {
-            UpmPackageInfo[] packages = UpmPackageInfo.GetAllRegisteredPackages();
-            List<HotReloadPackageRoot> roots = new List<HotReloadPackageRoot>(packages.Length);
-            foreach (UpmPackageInfo package in packages)
-            {
-                if (string.IsNullOrEmpty(package.resolvedPath) || string.IsNullOrEmpty(package.assetPath))
-                {
-                    continue;
-                }
-
-                roots.Add(new HotReloadPackageRoot(package.resolvedPath, package.assetPath));
-            }
-
-            return roots;
         }
     }
 }

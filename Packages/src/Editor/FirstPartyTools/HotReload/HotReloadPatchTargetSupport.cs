@@ -249,7 +249,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             StringComparison comparison = Application.platform == RuntimePlatform.WindowsEditor
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
-            return HotReloadScriptPathNormalizer.ToProjectRelative(
+            return ScriptPathNormalizer.ToProjectRelative(
                 fullPath,
                 projectRoot,
                 packageRootCapture.Current,
