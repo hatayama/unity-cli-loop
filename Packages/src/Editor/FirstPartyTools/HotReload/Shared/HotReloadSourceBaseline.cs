@@ -157,9 +157,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // by the asset path Unity reports for the file, but the PDB records the path the compiler was
         // given, which for an embedded or local package is the folder behind the virtual
         // Packages/<name> path. Why the Package Manager is asked from this assembly: the package roots
-        // a run captures live in the main hot-reload assembly, which this one cannot see, and both
-        // callers of the loader, a run's group step and the pause-point tools, already run on the
-        // Unity main thread the Package Manager requires.
+        // a run captures live in the main hot-reload assembly, which this one cannot see, and every
+        // caller of the loader already runs on the Unity main thread the Package Manager requires:
+        // a run's group step, and the pause-point port, which the pause-point tools and a run's
+        // patch step call.
         private static string ResolvePdbLookupPath(string projectRoot, string slashNormalizedAssetPath)
         {
             PackageManagerPackageInfo package = PackageManagerPackageInfo.FindForAssetPath(slashNormalizedAssetPath);
