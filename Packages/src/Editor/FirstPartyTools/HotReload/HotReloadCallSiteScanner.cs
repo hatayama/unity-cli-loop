@@ -24,12 +24,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<CallSiteHit> Hits;
             public List<string> MissingScanAssemblyNames;
 
+            /// <summary>
+            /// Diagnostic count of the call sites this scan compared against its targets, summed over
+            /// the scanned assemblies. Nothing in a run reads it; it shows that a scan visits only the
+            /// call sites filed under its targets rather than every call site of an assembly.
+            /// </summary>
+            public int ExaminedCallSiteCount;
+
             public HotReloadCallSiteScanResult(
                 List<CallSiteHit> hits,
-                List<string> missingScanAssemblyNames)
+                List<string> missingScanAssemblyNames,
+                int examinedCallSiteCount = 0)
             {
                 Hits = hits;
                 MissingScanAssemblyNames = missingScanAssemblyNames;
+                ExaminedCallSiteCount = examinedCallSiteCount;
             }
         }
 
@@ -97,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets);
+            int examinedCallSiteCount = 0;
             foreach (string assemblyName in scanAssemblyNames)
             {
                 string dllPath = Path.Combine(
@@ -113,10 +123,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                CollectHitsFromAssembly(assemblyName, dllPath, targets, hits);
+                examinedCallSiteCount += CollectHitsFromAssembly(assemblyName, dllPath, targets, hits);
             }
 
-            return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames);
+            return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames, examinedCallSiteCount);
         }
 
         private static HashSet<string> CollectScanAssemblyNames(CompiledMethodIdentity[] targets)
@@ -217,7 +227,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static void CollectHitsFromAssembly(
+        // Returns how many call sites of the assembly it compared against the targets.
+        private static int CollectHitsFromAssembly(
             string assemblyName,
             string dllPath,
             CompiledMethodIdentity[] targets,
@@ -226,10 +237,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why cache: the dll only changes on a compile, which also reloads the domain, so
             // across the runs in between the Cecil read and the instruction walk are pure repeat work.
             HotReloadCompiledCallSiteCache.Entry compiled = HotReloadCompiledCallSiteCache.Shared.GetOrLoad(dllPath);
-            foreach (int position in CollectCandidatePositions(compiled, targets))
+            List<int> positions = CollectCandidatePositions(compiled, targets);
+            foreach (int position in positions)
             {
                 CollectHitFromCallSite(assemblyName, compiled, compiled.CallSites[position], targets, hits);
             }
+
+            return positions.Count;
         }
 
         // Narrows the walk to the call sites filed under a target's type and method name; the

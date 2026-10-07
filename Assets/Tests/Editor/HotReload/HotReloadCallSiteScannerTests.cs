@@ -393,6 +393,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a scan compares only the call sites the index files under its target's type and
+        /// method name, not every call site of the scanned assemblies.
+        /// </summary>
+        [Test]
+        public void FindCallSites_ExaminesOnlyTheCallSitesFiledUnderTheTargets()
+        {
+            const string targetMethodName = nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod);
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = Scan(
+                FixtureTypeMetadataName,
+                targetMethodName,
+                Array.Empty<string>(),
+                0);
+
+            HotReloadCompiledCallSiteCache.Entry compiled =
+                HotReloadCompiledCallSiteCache.Shared.GetOrLoad(GetTestAssemblyDllPath());
+            int filedUnderTarget = compiled.LookupCallSiteIndices(FixtureTypeMetadataName, targetMethodName).Count;
+
+            Assert.That(result.Hits.Count, Is.EqualTo(1));
+            // Why the test assembly's bucket alone: the other scanned assembly never calls this
+            // fixture method, so its bucket under the same key is empty.
+            Assert.That(result.ExaminedCallSiteCount, Is.EqualTo(filedUnderTarget));
+            Assert.That(
+                result.ExaminedCallSiteCount,
+                Is.LessThan(compiled.CallSites.Count),
+                "A scan must not walk every call site of the assembly.");
+        }
+
+        /// <summary>
         /// What: a call site whose type-parameter argument matches two targets is reported once,
         /// for whichever of them comes first in the given order, so one compiled call is never
         /// counted twice.
@@ -445,22 +473,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] parameterTypeFullNames,
             int genericArity)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
-                TestScriptProjectRelativePath);
-            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            return Scan(typeMetadataName, methodName, parameterTypeFullNames, genericArity).Hits;
+        }
 
+        private static HotReloadCallSiteScanner.HotReloadCallSiteScanResult Scan(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames,
+            int genericArity)
+        {
             HotReloadCallSiteScanner.CompiledMethodIdentity target =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
-                    assemblyName,
+                    GetTestAssemblyName(),
                     new HotReloadMetadataTypeName(typeMetadataName),
                     methodName,
                     parameterTypeFullNames,
                     genericArity);
 
             return HotReloadCallSiteScanner.FindCallSites(
-                projectRoot,
-                new[] { target }).Hits;
+                GetProjectRoot(),
+                new[] { target });
+        }
+
+        // The same path FindCallSites reads, so the shared cache returns the entry the scan used.
+        private static string GetTestAssemblyDllPath()
+        {
+            return Path.Combine(
+                GetProjectRoot(),
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                GetTestAssemblyName() + HotReloadConstants.CompiledAssemblyExtension);
+        }
+
+        private static string GetProjectRoot()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        }
+
+        private static string GetTestAssemblyName()
+        {
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
+                TestScriptProjectRelativePath);
+            return Path.GetFileNameWithoutExtension(rawAssemblyName);
         }
     }
 }
