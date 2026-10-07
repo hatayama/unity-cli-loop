@@ -165,8 +165,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Pass --id with the id returned by enable-pause-point, or use --all to clear every marker.");
             }
 
+            // The CLI turns --file/--line into an id built from the path as typed.
+            string id = SourcePausePointId.ToMarkerId(parameters.Id, UnityCliLoopPathResolver.GetProjectRoot());
             (UloopPausePointSnapshot snapshot, bool resumedFromPause, int clearedCount) =
-                UloopPausePointRegistry.Clear(parameters.Id);
+                UloopPausePointRegistry.Clear(id);
             PausePointUseCaseLogger.LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
@@ -222,7 +224,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.File,
                 UnityCliLoopPathResolver.GetProjectRoot(),
                 ScriptPackageRoots.ReadCurrent());
-            string id = BuildSourcePausePointId(normalizedFile, parameters.Line);
+            // The requested line rather than the resolved one, so repeated calls at the same
+            // requested location stay idempotent whichever path form names the file.
+            string id = SourcePausePointId.Build(normalizedFile, parameters.Line);
             SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
             PausePointHotReloadFileState fileState = PausePointHotReloadFileState.Read(normalizedFile);
@@ -546,14 +550,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return response;
-        }
-
-        // The derived id must use the requested file in its asset path form and the requested line
-        // (not the resolved/rounded line), so repeated calls at the same requested location stay
-        // idempotent whichever path form names the file.
-        private static string BuildSourcePausePointId(string assetPath, int line)
-        {
-            return assetPath + ":" + line;
         }
     }
 }

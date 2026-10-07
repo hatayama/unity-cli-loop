@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -25,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static PausePointStatusResponse Execute(JToken paramsToken)
         {
-            string id = ReadId(paramsToken);
+            string id = ReadMarkerId(paramsToken);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
             return PausePointStatusResponse.FromSnapshot(snapshot);
         }
@@ -64,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // slow multi-step CLI round trip does not expire before the await itself observes a hit.
         public static PausePointStatusResponse Extend(JToken paramsToken)
         {
-            string id = ReadId(paramsToken);
+            string id = ReadMarkerId(paramsToken);
             int minimumRemainingSeconds = ReadMinimumRemainingSeconds(paramsToken);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait(id, minimumRemainingSeconds);
             return PausePointStatusResponse.FromSnapshot(snapshot);
@@ -72,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static PausePointStatusResponse Clear(JToken paramsToken)
         {
-            string id = ReadId(paramsToken);
+            string id = ReadMarkerId(paramsToken);
             string reason = ReadReason(paramsToken);
             if (string.IsNullOrEmpty(reason))
             {
@@ -118,6 +119,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 "pause_point_expired",
                 $"Pause point expired before being cleared: {id}",
                 new { Id = id, ElapsedSinceEnabledMilliseconds = elapsedSinceEnabledMilliseconds });
+        }
+
+        // Why here: the CLI builds a --file/--line query id from the path as typed, while the marker
+        // carries the asset path. This runs on the main thread, after the router switches to it.
+        private static string ReadMarkerId(JToken paramsToken)
+        {
+            return SourcePausePointId.ToMarkerId(ReadId(paramsToken), UnityCliLoopPathResolver.GetProjectRoot());
         }
 
         private static string ReadId(JToken paramsToken)
