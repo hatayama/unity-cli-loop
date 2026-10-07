@@ -732,8 +732,7 @@ func TestSendCompileWithBusyRetryStopsRetrying(t *testing.T) {
 	})
 }
 
-// A successful compile result. It starts the post-compile warmup, which waits for a Unity project
-// these tests do not have, so a test that returns it cancels the command at that answer.
+// A successful compile result.
 const pausePointRecoveryCompileSuccess = `{"Success":true}`
 
 // stubPausePointRecoveryBusyRetryWaits makes the wait between server_busy sends return at once and
@@ -767,17 +766,20 @@ func runPausePointRecoveryCompile(
 // Verifies the recovery compile sends a request Unity lost again under a new request ID instead of
 // waiting out the whole timeout, and that the successful compile leaves stdout empty.
 func TestPausePointRecoveryCompileResendsWhenUnityLostTheRequest(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	scenario := newCompileRecoveryScenario(t,
 		[]compileRecoverySend{recoverySendDisconnected(), recoverySendAnswered()},
 		[]compileRecoveryAnswer{recoveryMissing()},
 		[]compileRecoveryAnswer{recoveryDone(pausePointRecoveryCompileSuccess)},
 	)
-	scenario.cancelWhen(cancel, 1, 1)
+	startedAt := time.Now()
 
-	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, scenario.deps())
+	code, stdout, stderr := runPausePointRecoveryCompile(t, context.Background(), map[string]any{}, scenario.deps())
 
+	// Why a time limit: the post-compile warm-up this command no longer runs would wait 180 s for a
+	// readiness a temp project never reaches.
+	if elapsed := time.Since(startedAt); elapsed >= 30*time.Second {
+		t.Fatalf("the recovery compile took %s after a successful answer, want under 30s", elapsed)
+	}
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)
 	}
@@ -804,16 +806,13 @@ func TestPausePointRecoveryCompileResendsAfterABusyRejection(t *testing.T) {
 	for _, errorCode := range []string{"COMPILE_ALREADY_IN_PROGRESS", "COMPILE_EDITOR_UPDATING"} {
 		t.Run(errorCode, func(t *testing.T) {
 			waits := stubPausePointRecoveryBusyRetryWaits(t)
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
 			scenario := newCompileRecoveryScenario(t,
 				[]compileRecoverySend{recoverySendAnswered(), recoverySendAnswered()},
 				compileRecoveryBusyRejectionAnswers(errorCode),
 				[]compileRecoveryAnswer{recoveryDone(pausePointRecoveryCompileSuccess)},
 			)
-			scenario.cancelWhen(cancel, 1, 1)
 
-			code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, scenario.deps())
+			code, stdout, stderr := runPausePointRecoveryCompile(t, context.Background(), map[string]any{}, scenario.deps())
 
 			if code != 0 {
 				t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)
@@ -879,14 +878,10 @@ func TestPausePointRecoveryCompileWritesADefinitiveFailureOnce(t *testing.T) {
 // again after one wait that the time left in the compile wait caps below the retry interval.
 func TestPausePointRecoveryCompileRetriesAServerBusySend(t *testing.T) {
 	waits := stubPausePointRecoveryBusyRetryWaits(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	scenario := newCompileRecoveryScenario(t,
 		[]compileRecoverySend{recoverySendAnswered()},
 		[]compileRecoveryAnswer{recoveryDone(pausePointRecoveryCompileSuccess)},
 	)
-	// The refused send never reaches the scenario, so the scenario's first send is the retry.
-	scenario.cancelWhen(cancel, 0, 1)
 	deps := scenario.deps()
 	scriptedSend := deps.sendCompile
 	busy := serverBusyRPCError(t)
@@ -908,7 +903,7 @@ func TestPausePointRecoveryCompileRetriesAServerBusySend(t *testing.T) {
 
 	// Why a 1s wait: it is shorter than the retry interval, so only a budget taken from the time left
 	// in the compile wait keeps the retry wait at or under 1s.
-	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{compileWaitTimeoutParam: 1}, deps)
+	code, stdout, stderr := runPausePointRecoveryCompile(t, context.Background(), map[string]any{compileWaitTimeoutParam: 1}, deps)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)

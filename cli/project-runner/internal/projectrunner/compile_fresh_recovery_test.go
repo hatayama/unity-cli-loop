@@ -19,7 +19,7 @@ import (
 const (
 	// Stops a wait that never ends instead of letting it poll through the whole default wait.
 	compileRecoveryQueryLimit = 200
-	// A compile error: definitive, and it does not start the post-compile warmup.
+	// A compile error: definitive.
 	compileRecoveryDefinitiveResult        = `{"Success":false,"ErrorCount":1,"WarningCount":0,"ErrorCode":null}`
 	compileRecoveryAlreadyInProgressResult = `{"Success":false,"ErrorCode":"COMPILE_ALREADY_IN_PROGRESS","ErrorCount":1}`
 )

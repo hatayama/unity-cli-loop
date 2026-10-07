@@ -564,8 +564,7 @@ func TestRunCompileWithDomainReloadWaitWarnsWhenTimeoutExceedsRetention(t *testi
 	}
 
 	endpoint, serverErr := startCompileAcceptOnceServer(t)
-	// Why Success:false: Success:true triggers post-compile warmup against a live Editor
-	// and would hang this unit test. The warning is emitted before send/wait.
+	// The warning is emitted before send/wait.
 	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{
 			Ready:     true,
@@ -666,34 +665,6 @@ func TestShouldWaitForCompileStatusAllowsAcceptedFinalResponseTimeout(t *testing
 	unacceptedOutcome := unityipc.UnitySendOutcome{RequestDispatched: true}
 	if shouldWaitForCompileStatus(fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout"), unacceptedOutcome) {
 		t.Fatal("unaccepted timeout should not wait")
-	}
-}
-
-// Verifies compile readiness warmup only runs after confirmed successful results.
-func TestCompileResultReadinessWaitMode(t *testing.T) {
-	cases := map[string]compileReadinessWaitMode{
-		`{"Success":true}`: compileReadinessWaitWarmup,
-		`{"Success":false,"Errors":[{"Message":"boom"}]}`: compileReadinessWaitNone,
-		`{"Success":false,"Message":"indeterminate"}`:     compileReadinessWaitNone,
-		`{"Message":"indeterminate"}`:                     compileReadinessWaitNone,
-	}
-
-	for result, expected := range cases {
-		actual := compileResultReadinessWaitMode([]byte(result))
-		if actual != expected {
-			t.Fatalf("readiness wait mode mismatch for %s: %v", result, actual)
-		}
-	}
-}
-
-// Verifies that failed best-effort warmup reports a warning without taking over compile output.
-func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
-	var stderr bytes.Buffer
-
-	writePostCompileWarmupWarning(&stderr, fmt.Errorf("probe failed"))
-
-	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: probe failed") {
-		t.Fatalf("warning mismatch: %s", stderr.String())
 	}
 }
 

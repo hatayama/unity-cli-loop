@@ -10,7 +10,7 @@ import (
 const compileStatusResponseContractPath = "tests/contracts/compile_status_response_contract.json"
 
 // Verifies the Go compileStatusResponse DTO preserves every field in the shared Unity
-// get-compile-status response contract, including nested Result.Success used by compileResultStatus.
+// get-compile-status response contract, including a nested Result whose Success the CLI reads as the exit code.
 func TestCompileStatusResponseMatchesSharedContract(t *testing.T) {
 	fixturePath := findRepoRelativeFile(t, compileStatusResponseContractPath)
 	fixture, err := os.ReadFile(fixturePath)
@@ -25,12 +25,8 @@ func TestCompileStatusResponseMatchesSharedContract(t *testing.T) {
 
 	assertCompileStatusResponseFieldsPopulated(t, response)
 
-	var resultStatus compileResultStatus
-	if err := json.Unmarshal(response.Result, &resultStatus); err != nil {
-		t.Fatalf("failed to unmarshal Result into compileResultStatus: %v", err)
-	}
-	if resultStatus.Success == nil {
-		t.Fatal("compileResultStatus.Success must be non-nil after unmarshaling the shared contract")
+	if toolEnvelopeExitCode(response.Result) != 0 {
+		t.Fatalf("the shared contract's Result must read as a successful compile: %s", response.Result)
 	}
 
 	roundTripped, err := json.Marshal(response)
