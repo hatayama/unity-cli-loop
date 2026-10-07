@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -87,12 +88,35 @@ internal static class UnresolvedBodyNameGuard
             }
 
             return WorkerReason.Of(
-                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
+                ChooseReasonCode(use, isPartial),
                 diagnosticText,
-                "'" + use.DeclaringType.Name + "'");
+                "'" + use.DeclaringType.Name + "'",
+                "'" + use.MemberName + "'");
         }
 
         return null;
+    }
+
+    // The reason whose last sentence names the change that brings this use within reach. Why only a
+    // partial type checks the kind of a bare name: qualifying brings a partial type's use in only for
+    // a field, a property or an invoked method, while a plain type emits a qualified method passed as
+    // a delegate or a qualified event subscription as well, as IsWithinReach lets them through.
+    private static HotReloadWorkerReasonCode ChooseReasonCode(UnpassedInternalMemberUse use, bool isPartial)
+    {
+        switch (use.Form)
+        {
+            case UnpassedInternalMemberUseForm.BareName:
+                return !isPartial || use.IsOfAPatchableKind
+                    ? HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberBareName
+                    : HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
+            case UnpassedInternalMemberUseForm.InsideClosure:
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberInsideClosure;
+            case UnpassedInternalMemberUseForm.OutOfReach:
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
+            default:
+                Debug.Assert(false, "Unknown internal-member use form: " + use.Form);
+                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
+        }
     }
 
     // Why the two rules differ: a partial type skips a body whose names do not resolve, and lets
