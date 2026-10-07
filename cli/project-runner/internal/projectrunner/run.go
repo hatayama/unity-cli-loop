@@ -106,6 +106,9 @@ func runToolExecution(
 type toolExecutionResult struct {
 	result   json.RawMessage
 	exitCode int
+	// correlationID is the vibe log ID of the request that produced this result, so entries
+	// written after it can be joined to that request.
+	correlationID string
 }
 
 func runPlainTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stderr io.Writer) toolExecutionResult {
@@ -129,13 +132,13 @@ func runPlainTool(ctx context.Context, connection unityipc.Connection, command s
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		})
-		return toolExecutionResult{exitCode: 1}
+		return toolExecutionResult{exitCode: 1, correlationID: correlationID}
 	}
 	result := stripDebugTimingResult(command, outcome.Result)
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
 	exitCode := toolEnvelopeExitCode(result)
 	logPlainToolResponseReceived(connection, command, correlationID, time.Since(startedAt), outcome, result, exitCode)
-	return toolExecutionResult{result: result, exitCode: exitCode}
+	return toolExecutionResult{result: result, exitCode: exitCode, correlationID: correlationID}
 }
 
 func runCompileWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {

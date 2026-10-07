@@ -665,9 +665,11 @@ func TestRunHotReloadWritesFallbackDecidedAndCompleteVibeLogs(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	logContent := readOnlyCliVibeLog(t, projectRoot)
-	singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
+	requestSent := singleCliVibeEntry(t, logContent, "cli_tool_request_sent")
 	singleCliVibeEntry(t, logContent, "cli_tool_response_received")
 	decided := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_decided")
+	// The reader joins the fallback entries to the request they follow by this ID.
+	assertSharedCliVibeCorrelationID(t, requestSent, decided)
 	complete := singleCliVibeEntry(t, logContent, "cli_hot_reload_compile_fallback_complete")
 	assertCliVibeEntryLevel(t, decided, "INFO")
 	assertCliVibeEntryLevel(t, complete, "INFO")
