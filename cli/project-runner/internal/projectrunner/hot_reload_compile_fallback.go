@@ -95,9 +95,14 @@ func runHotReloadWithCompileFallback(
 	if len(result.result) == 0 {
 		return result.exitCode
 	}
-	// Why an ID of its own: the reload request's ID stays inside runPlainTool, so the fallback entries
-	// share this one and line up with the request entries by time.
-	correlationID := vibelog.NewCLIVibeCorrelationID()
+	retry := retryHotReloadAfterEditorReady(ctx, connection, params, stdout, stderr, result)
+	if retry.finished {
+		return retry.exitCode
+	}
+	result = retry.result
+	// Why the request's ID: the reader joins the fallback entries to the request's
+	// cli_tool_request_sent by it.
+	correlationID := result.correlationID
 	requested := isHotReloadCompileFallbackRequested(result.result)
 	logHotReloadCompileFallbackDecided(connection, correlationID, requested, result.result)
 	if !requested {
@@ -295,6 +300,11 @@ func injectHotReloadCompileFallback(raw json.RawMessage, compileRaw json.RawMess
 // Adds the fallback compile's wall time to Timing. The phases the Editor reported stay as they were,
 // and a response from an older package, which sends no Timing, gets one holding only the compile.
 func addHotReloadFallbackCompileTiming(raw []byte, elapsed time.Duration) ([]byte, error) {
+	return addHotReloadTimingMs(raw, hotReloadFallbackCompileMsField, elapsed)
+}
+
+// addHotReloadTimingMs adds one CLI-side duration to Timing under name, in milliseconds.
+func addHotReloadTimingMs(raw []byte, name string, elapsed time.Duration) ([]byte, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
@@ -307,7 +317,7 @@ func addHotReloadFallbackCompileTiming(raw []byte, elapsed time.Duration) ([]byt
 			return nil, err
 		}
 	}
-	timing[hotReloadFallbackCompileMsField] = json.RawMessage(strconv.FormatInt(elapsed.Milliseconds(), 10))
+	timing[name] = json.RawMessage(strconv.FormatInt(elapsed.Milliseconds(), 10))
 	encoded, err := json.Marshal(timing)
 	if err != nil {
 		return nil, err
