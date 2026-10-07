@@ -510,6 +510,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: ending a hold keeps the last entry even when it alone exceeds the budget, so the
+        /// end of a run never empties the cache.
+        /// </summary>
+        [Test]
+        public void HoldEntriesForRun_Dispose_KeepsTheLastEntryOverBudget()
+        {
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(TestAssemblyLength() / 2);
+            try
+            {
+                using (cache.HoldEntriesForRun())
+                {
+                    cache.GetOrLoad(CopyTestAssembly("a.dll"));
+                    cache.GetOrLoad(CopyTestAssembly("b.dll"));
+                }
+
+                Assert.That(cache.Count, Is.EqualTo(1));
+                Assert.That(cache.CachedBytes, Is.EqualTo(TestAssemblyLength()));
+                Assert.That(cache.LastHoldReleaseEvictedCount, Is.EqualTo(1));
+                Assert.That(cache.LastHoldReleaseEvictedBytes, Is.EqualTo(TestAssemblyLength()));
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
         /// What: a dll larger than the whole budget is still cached, alone, and the next dll
         /// replaces it, so a large assembly never makes a lookup fail or loop.
         /// </summary>
