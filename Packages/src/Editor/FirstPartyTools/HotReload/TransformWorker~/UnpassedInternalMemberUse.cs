@@ -26,6 +26,7 @@ internal sealed class UnpassedInternalMemberUse
         INamedTypeSymbol declaringType,
         string memberName,
         UnpassedInternalMemberUseForm form,
+        bool isOfAPatchableKind,
         bool canBePatchedInPlace,
         bool mayRunOutsideThePatchedMethod,
         bool isSimpleNameLookup)
@@ -34,6 +35,7 @@ internal sealed class UnpassedInternalMemberUse
         DeclaringType = declaringType;
         MemberName = memberName;
         Form = form;
+        IsOfAPatchableKind = isOfAPatchableKind;
         CanBePatchedInPlace = canBePatchedInPlace;
         MayRunOutsideThePatchedMethod = mayRunOutsideThePatchedMethod;
         IsSimpleNameLookup = isSimpleNameLookup;
@@ -45,8 +47,14 @@ internal sealed class UnpassedInternalMemberUse
     /// <summary>The name of the internal member the use names.</summary>
     internal string MemberName { get; }
 
-    /// <summary>What keeps the use out of the patched method's reach when it is out of reach.</summary>
+    /// <summary>Where the use runs and how it is named.</summary>
     internal UnpassedInternalMemberUseForm Form { get; }
+
+    /// <summary>
+    /// True when the use is a field, a property or an invoked method, the kinds a partial type
+    /// patches in place once they have their receiver.
+    /// </summary>
+    internal bool IsOfAPatchableKind { get; }
 
     /// <summary>True when the patched method itself runs the use, so a guard may let the body through.</summary>
     internal bool CanBePatchedInPlace { get; }
@@ -120,13 +128,15 @@ internal sealed class UnpassedInternalMemberUse
         // Why a bare name is out of reach: the shim is a static method, and it qualifies a bare
         // member name only when the worker binds the name. This member never binds there, so the
         // name would reach the shim compile unqualified and fail the whole file.
+        bool isOfAPatchableKind = IsPatchableKind(member, name);
         bool canBePatchedInPlace = hasReceiver
-            && IsPatchableKind(member, name)
+            && isOfAPatchableKind
             && !mayRunOutsideThePatchedMethod;
         return new UnpassedInternalMemberUse(
             member.ContainingType,
             member.Name,
             ChooseForm(runPlace, isSimpleNameLookup),
+            isOfAPatchableKind,
             canBePatchedInPlace,
             mayRunOutsideThePatchedMethod,
             isSimpleNameLookup);

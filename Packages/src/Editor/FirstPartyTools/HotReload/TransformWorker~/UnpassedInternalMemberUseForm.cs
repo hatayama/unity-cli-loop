@@ -1,16 +1,16 @@
 /// <summary>
-/// What keeps a use of an internal member of an unpassed type out of the patched method's reach,
-/// which decides the change its skip reason ends with.
+/// Where a use of an internal member of an unpassed type runs and how it is named. The guard reads it,
+/// with its own reach rules, to choose the change the skip reason ends with.
 /// </summary>
 internal enum UnpassedInternalMemberUseForm
 {
     /// <summary>
-    /// Only a compile brings the use in: it runs in an async or iterator state machine or a
-    /// delegating shim, or it is a kind of use hot reload does not patch in place.
+    /// A use in an async or iterator state machine or a delegating shim, where neither moving it nor
+    /// qualifying it brings it in, or a use named with its receiver in the method's own statements.
     /// </summary>
     OutOfReach,
 
-    /// <summary>A bare name in the method's own statements, which a qualified name would reach.</summary>
+    /// <summary>A bare name in the method's own statements.</summary>
     BareName,
 
     /// <summary>

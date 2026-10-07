@@ -856,6 +856,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a method named bare to be passed as a delegate ends its reason with the advice to
+        /// qualify it on a plain type, which emits the qualified method group, and with the compile
+        /// alone on a partial type, which does not patch a method group in place however it is named.
+        /// </summary>
+        [TestCase("Partial", PartialDerivedFileName, PartialDerivedValueBody, CompileOnlyAdvice)]
+        [TestCase("Plain", PlainDerivedFileName, PlainDerivedValueBody, QualifyTheBareNameAdvice)]
+        public async Task Skip_BareInternalMethodPassedAsADelegate_EndsWithTheStepThatReachesIt(
+            string typeKind,
+            string fileName,
+            string fragment,
+            string expectedEnding)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                fileName,
+                "ReasonEndingBareMethodGroup" + typeKind + ".cs",
+                "DerivedValue",
+                fragment,
+                "System.Func<int> read = InternalInstanceValue; return read();");
+
+            Assert.That(reason, Does.EndWith(expectedEnding));
+        }
+
+        /// <summary>
         /// What: a partial type's use of an internal member that has its receiver but is neither a
         /// field, a property nor an invoked method (a method passed as a delegate, an event
         /// subscription) ends its reason with the compile alone, because neither qualifying the use

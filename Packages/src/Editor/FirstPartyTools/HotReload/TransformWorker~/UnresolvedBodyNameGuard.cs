@@ -88,7 +88,7 @@ internal static class UnresolvedBodyNameGuard
             }
 
             return WorkerReason.Of(
-                ChooseReasonCode(use.Form),
+                ChooseReasonCode(use, isPartial),
                 diagnosticText,
                 "'" + use.DeclaringType.Name + "'",
                 "'" + use.MemberName + "'");
@@ -97,19 +97,24 @@ internal static class UnresolvedBodyNameGuard
         return null;
     }
 
-    // The reason whose last sentence names the change that brings this form of use within reach.
-    private static HotReloadWorkerReasonCode ChooseReasonCode(UnpassedInternalMemberUseForm form)
+    // The reason whose last sentence names the change that brings this use within reach. Why only a
+    // partial type checks the kind of a bare name: qualifying brings a partial type's use in only for
+    // a field, a property or an invoked method, while a plain type emits a qualified method passed as
+    // a delegate or a qualified event subscription as well, as IsWithinReach lets them through.
+    private static HotReloadWorkerReasonCode ChooseReasonCode(UnpassedInternalMemberUse use, bool isPartial)
     {
-        switch (form)
+        switch (use.Form)
         {
             case UnpassedInternalMemberUseForm.BareName:
-                return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberBareName;
+                return !isPartial || use.IsOfAPatchableKind
+                    ? HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberBareName
+                    : HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
             case UnpassedInternalMemberUseForm.InsideClosure:
                 return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberInsideClosure;
             case UnpassedInternalMemberUseForm.OutOfReach:
                 return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
             default:
-                Debug.Assert(false, "Unknown internal-member use form: " + form);
+                Debug.Assert(false, "Unknown internal-member use form: " + use.Form);
                 return HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach;
         }
     }
