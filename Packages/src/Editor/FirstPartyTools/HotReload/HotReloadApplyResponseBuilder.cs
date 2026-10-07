@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     allRequestedSkipped,
                     failureKinds),
                 Timing = ToTimingResponse(result.Timing),
-                RetryAfterEditorReady = HotReloadEditorReadyRetry.Decide(hasFailure, failureKinds),
+                RetryAfterEditorReady = HotReloadEditorReadyRetry.Decide(failureKinds),
                 SelectedFiles = ToProjectRelativePaths(selectedFiles, toProjectRelativeScriptPath)
             };
         }

@@ -7,13 +7,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadEditorReadyRetry
     {
         /// <summary>
-        /// True only when every failure of the run is the Editor compiling or importing. A failure
-        /// of any other kind, alone or mixed in, gives the same result after a wait, and a failure
-        /// that lost its kind is treated as one the reader fixes.
+        /// True only when every failure of the run is the Editor compiling or importing.
+        /// <paramref name="failureKinds"/> is the union over the run's failed rows, so a run with no
+        /// failure passes None. A failure of any other kind, alone or mixed in, gives the same result
+        /// after a wait, and a failure that lost its kind is treated as one the reader fixes.
         /// </summary>
-        internal static bool Decide(bool hasFailure, HotReloadFailureKinds failureKinds)
+        internal static bool Decide(HotReloadFailureKinds failureKinds)
         {
-            return hasFailure && failureKinds == HotReloadFailureKinds.EditorNotReady;
+            return failureKinds == HotReloadFailureKinds.EditorNotReady;
         }
     }
 }

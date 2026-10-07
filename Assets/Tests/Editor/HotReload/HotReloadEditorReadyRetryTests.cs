@@ -12,21 +12,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadEditorReadyRetryTests
     {
         /// <summary>
-        /// What: a run with no failure has nothing to apply again.
-        /// </summary>
-        [Test]
-        public void Decide_WithNoFailure_IsFalse()
-        {
-            Assert.That(HotReloadEditorReadyRetry.Decide(false, HotReloadFailureKinds.None), Is.False);
-        }
-
-        /// <summary>
         /// What: a run refused only because the Editor was compiling or importing asks for the retry.
         /// </summary>
         [Test]
         public void Decide_WithOnlyEditorNotReady_IsTrue()
         {
-            Assert.That(HotReloadEditorReadyRetry.Decide(true, HotReloadFailureKinds.EditorNotReady), Is.True);
+            Assert.That(HotReloadEditorReadyRetry.Decide(HotReloadFailureKinds.EditorNotReady), Is.True);
         }
 
         /// <summary>
@@ -38,7 +29,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Assert.That(
                 HotReloadEditorReadyRetry.Decide(
-                    true,
                     HotReloadFailureKinds.EditorNotReady | HotReloadFailureKinds.Declaration),
                 Is.False);
         }
@@ -49,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Decide_WithOnlyDeclaration_IsFalse()
         {
-            Assert.That(HotReloadEditorReadyRetry.Decide(true, HotReloadFailureKinds.Declaration), Is.False);
+            Assert.That(HotReloadEditorReadyRetry.Decide(HotReloadFailureKinds.Declaration), Is.False);
         }
 
         /// <summary>
@@ -61,19 +51,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Assert.That(
                 HotReloadEditorReadyRetry.Decide(
-                    true,
                     HotReloadFailureKinds.EditorNotReady | HotReloadFailureKinds.CompiledAssemblyMissing),
                 Is.False);
         }
 
         /// <summary>
-        /// What: a failure that lost its kind is treated as one the reader fixes, so it does not ask
-        /// for the retry.
+        /// What: no kind at all, from a run with no failure or a failure that lost its kind, does
+        /// not ask for the retry; the second is treated as one the reader fixes.
         /// </summary>
         [Test]
-        public void Decide_WithAFailureOfNoKind_IsFalse()
+        public void Decide_WithNoKind_IsFalse()
         {
-            Assert.That(HotReloadEditorReadyRetry.Decide(true, HotReloadFailureKinds.None), Is.False);
+            Assert.That(HotReloadEditorReadyRetry.Decide(HotReloadFailureKinds.None), Is.False);
         }
     }
 }
