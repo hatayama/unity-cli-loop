@@ -43,7 +43,8 @@ internal sealed class WorkerEntry
 
     public int SourceEndLine { get; set; }
 
-    // Null when the method is not a one-shot lifecycle method and is not only called from them.
+    // Null unless the method is a one-shot lifecycle method or an added method with a test
+    // attribute.
     public string LifecycleNote { get; set; }
 
     public bool ReplacesCompiledMethod { get; set; }

@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -263,7 +264,7 @@ func runCompileWithReattachPolicy(
 		return result
 	}
 
-	return runFreshCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
+	return runFreshCompileRecoveringWithDeps(ctx, connection, params, stderr, compileWait)
 }
 
 func runFreshCompileWithDomainReloadWaitWithDeps(
@@ -285,13 +286,31 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) compileExecutionResult {
+	result, _ := runFreshCompileAttempt(ctx, connection, params, stderr, compileWait, freshCompileAttemptOptions{})
+	return result
+}
+
+// runFreshCompileAttempt sends one compile request and waits for Unity to report its result.
+func runFreshCompileAttempt(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+	options freshCompileAttemptOptions,
+) (compileExecutionResult, freshCompileAttemptOutcome) {
 	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
 	if timeoutErr != nil {
 		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
+	}
+	// Why only a resent attempt: the first one keeps the exact --timeout-seconds wait, which its log
+	// entry and its timeout message report.
+	if options.timeoutOverride > 0 {
+		waitTimeout = options.timeoutOverride
 	}
 
 	requestID, err := prepareCompileWaitParams(params)
@@ -300,7 +319,7 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
@@ -326,7 +345,7 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 
 	spinner.Update("Waiting for domain reload to complete...")
@@ -337,15 +356,23 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 		requestID:      requestID,
 		forceRecompile: compileForceRecompileEnabled(params),
 		timeout:        waitTimeout,
-		pollInterval:   compileWaitPollInterval,
+		pollInterval:   freshWaitPollIntervalFor(compileWait),
+		resendBefore:   options.resendBefore,
+		// Only a dispatched send reaches this wait, so a dropped connection here came after the
+		// request was sent.
+		serverRestartSeen: err != nil && clierrors.IsTransportDisconnectError(err),
 	}, compileWait)
+	if errors.Is(waitErr, errCompileRequestMissing) {
+		spinner.Stop()
+		return compileExecutionResult{}, freshCompileAttemptRequestMissing
+	}
 	if waitErr != nil {
 		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
 	if !completed {
 		spinner.Stop()
@@ -357,9 +384,13 @@ func runFreshCompileWithDomainReloadWaitResultWithDeps(
 			time.Since(waitStartedAt),
 			compilePendingRecordLifetime-waitTimeout,
 		))
-		return compileExecutionResult{exitCode: 1}
+		return compileExecutionResult{exitCode: 1}, freshCompileAttemptFinal
 	}
-	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome)
+	if canResendCompile(options.resendBefore) && isCompileEditorBusyRejection(result) {
+		spinner.Stop()
+		return compileExecutionResult{}, freshCompileAttemptEditorBusy
+	}
+	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome), freshCompileAttemptFinal
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {

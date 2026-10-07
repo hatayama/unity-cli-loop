@@ -47,6 +47,21 @@ Harmony transpiler transplant  (5) patch the original method with a transpiler t
                                    DynamicMethod replacement
 ```
 
+The worker's compilations hold only the edited sources (plus the changed siblings for the const
+checks), so each of them also gets one synthesized tree, `WorkerGlobalUsingBindingTree`, that holds
+nothing but the `global using` directives collected from the assembly's other sources. Without it,
+a type a sibling file imports through a `global using` would not bind, and an existing method whose
+signature names that type would look like an added method.
+
+Methods and property getters of a `partial` type are patched like any other. When an edited file
+declares a partial type, the worker reads the assembly's other sources, keeps only the declarations
+of that type's other parts, and adds them to the transform compilation as binding-only trees:
+nothing is transformed or reported from them. A part counts only when the Editor's changed-file scan
+compared it with the last compile's source snapshot and found it unchanged, so the type's edited
+methods are skipped when a part changed and was not passed (the reason names that file) or when the
+scan was incomplete (no snapshot, or more than 50 changed files); a body that names a member no
+readable part declares, typically a source generator's output, is skipped on its own.
+
 Skip reasons and introduced-type diagnostics leave the worker as a reason `code` plus its
 `args` (and an optional free-form detail), never as a sentence. Only the Editor's
 `HotReloadWorkerReasonText` turns those into the English a caller reads, so a wording change
@@ -58,8 +73,16 @@ Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`, and
 `Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`.
+Cecil looks up the assemblies a publicized copy refers to in the directories of the group
+assembly's compile references first, then in those of every assembly it references transitively.
 When a verified snapshot marks a currently patched method as unchanged, the
 orchestrator reverts that patch to the compiled IL instead of re-emitting a shim.
+The outside-method-body warning compares against the same snapshot, the source of the last
+compile, so a declaration edit made since then keeps the warning on every reload until
+`uloop compile`; comment-only differences do not count.
+
+The response's `Timing` object breaks the run down per phase (worker, shim compile, patch)
+and, after a fallback compile, adds the compile's time.
 
 ## Spike Findings
 
@@ -403,6 +426,10 @@ Wire details:
 - The patch ledger and loaded shim assemblies are static state; both are cleared by domain
   reload by design (no persistence, no auto-reapply). Shim assemblies cannot be unloaded and
   accumulate until the next domain reload; that is accepted.
+- `uloop run-tests` compiles first by default, so that compile drops every live patch;
+  `--skip-compile` runs the tests against the live patches instead. What each path was observed to
+  do is in "Running tests while patches are live" of
+  `Packages/src/Editor/FirstPartyTools/HotReload/Skill/references/mechanism-and-lifecycle.md`.
 - Mvid guard before patching: if the on-disk `Library/ScriptAssemblies/<asm>.dll` Mvid
   differs from the loaded module's `ModuleVersionId`, the assembly has already been rebuilt
   and reloaded — hot reload is refused with a pointer to `uloop compile`.
@@ -428,7 +455,8 @@ Wire details:
   already hold active patches are re-applied so they bind to the newest shim. Shim compile errors caused by references to
   members that are still missing are reported with that hint, and changed `const` values
   (including enum members) are compared against the compiled target assembly and reported as
-  a response warning; other outside-body edits stay silent.
+  a response warning; other outside-body edits are reported as a response warning when a
+  verified source baseline is available, and stay silent without one.
 - A Unity message added to an existing `MonoBehaviour` is delivered by a generated proxy
   component that hot reload attaches to each live instance while Play Mode runs, because
   Unity's own message discovery only sees the compiled class. `Start`, `Update`,

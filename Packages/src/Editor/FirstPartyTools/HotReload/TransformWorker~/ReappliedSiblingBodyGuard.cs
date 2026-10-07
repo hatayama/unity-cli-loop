@@ -7,7 +7,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
 /// Skips an existing method of a file the run pulled in to re-bind its active patches when that
-/// method's body no longer binds, and names the file the reader can pass so it binds again.
+/// method's body no longer binds, and names the file the reader can pass so it binds again. A body
+/// whose only errors are internal members of unpassed compiled types that the patched method
+/// reaches itself goes through, because the shim compile binds them.
 /// </summary>
 /// <remarks>
 /// Why only such files: the binding guard runs for added methods alone, so an existing body
@@ -22,10 +24,24 @@ internal static class ReappliedSiblingBodyGuard
     internal static WorkerReason DescribeSkipOrNull(
         SemanticModel semanticModel,
         SyntaxNode methodBodyNode,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        INamedTypeSymbol typeSymbol)
     {
         Diagnostic bindingError = AddedMemberBindingGuard.FindFirstBindingError(semanticModel, methodBodyNode);
         if (bindingError == null)
+        {
+            return null;
+        }
+
+        if (EveryErrorCanBePatchedInPlace(
+            semanticModel,
+            methodBodyNode,
+            methodDeclarationOrNull,
+            decision,
+            typeSymbol,
+            targetAssembly))
         {
             return null;
         }
@@ -42,6 +58,41 @@ internal static class ReappliedSiblingBodyGuard
             new[] { CecilTypeNames.ToMetadataName(receiver.OriginalDefinition) },
             diagnosticText,
             "'" + receiver.Name + "'");
+    }
+
+    // Why every error has to qualify, and the skip keeps today's reason otherwise: one other error
+    // still fails the file in the shim, or a use out of the patched method's reach throws once
+    // called, and the first error is what the reason has always named.
+    private static bool EveryErrorCanBePatchedInPlace(
+        SemanticModel semanticModel,
+        SyntaxNode methodBodyNode,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        INamedTypeSymbol typeSymbol,
+        IAssemblySymbol targetAssembly)
+    {
+        foreach (Diagnostic diagnostic in semanticModel.GetDiagnostics(methodBodyNode.Span))
+        {
+            if (diagnostic.Severity != DiagnosticSeverity.Error)
+            {
+                continue;
+            }
+
+            UnpassedInternalMemberUse use = UnpassedInternalMemberUse.FindOrNull(
+                diagnostic,
+                semanticModel,
+                methodBodyNode,
+                methodDeclarationOrNull,
+                decision,
+                typeSymbol,
+                targetAssembly);
+            if (use == null || !use.CanBePatchedInPlace)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // Why not CompiledSignatureSplitCollector: it names a compiled API whose signature still takes

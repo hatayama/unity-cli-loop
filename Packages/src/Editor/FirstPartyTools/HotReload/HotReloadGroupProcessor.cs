@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -49,9 +49,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal async Task<IReadOnlyList<HotReloadFileProcessResult>> ProcessGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
             Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
+            Debug.Assert(timing != null, "timing must not be null.");
 
             HotReloadGroupFile firstFile = files[0];
             // Application.dataPath and the ledgers require the Unity main thread.
@@ -78,15 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.Sinks.SiblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
             }
 
-            TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan, _domain);
+            TransformWorkerInputDto workerInput = HotReloadGroupWorkerInputBuilder.BuildWorkerInput(files, siblingScan, _domain);
             workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
                 _domain.IntroducedTypes,
                 workerInput.targetAssemblyName,
                 workerInput.targetAssemblyMvid,
                 FindFullyAppliedSourceHash).ToArray();
+            Stopwatch preparationWatch = Stopwatch.StartNew();
             HotReloadIntroducedTypePreparationResult preparation = await _dependencies
                 .PrepareIntroducedTypes(files, workerInput, ct)
                 .ConfigureAwait(false);
+            // The preparation runs the transform worker too, so its time counts as analysis.
+            timing.AddAnalysis(preparationWatch.ElapsedMilliseconds);
             // Why before the failure branch and only here: one preparation covers every
             // declaration of the group, so a declaration bound from a retained artifact and a
             // non-fatal notice are true whether or not another declaration was refused. A
@@ -122,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             if (preparation.Prepared == null)
             {
-                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, activePaths, correlationId, ct)
+                return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, activePaths, correlationId, timing, ct)
                     .ConfigureAwait(false);
             }
 
@@ -133,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 refusedTypes,
                 activePaths,
                 correlationId,
+                timing,
                 ct).ConfigureAwait(false);
         }
 
@@ -157,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             HashSet<string> activePaths,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
             HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
@@ -186,6 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         refusedTypes,
                         activePaths,
                         correlationId,
+                        timing,
                         ct).ConfigureAwait(false);
                 }
                 finally
@@ -213,9 +221,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             HashSet<string> activePaths,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
-            TransformWorkerClientResult workerResult = await RunWorkerAsync(workerInput, correlationId, ct)
+            TransformWorkerClientResult workerResult = await RunWorkerAsync(workerInput, correlationId, timing, ct)
                 .ConfigureAwait(false);
             if (!workerResult.Success)
             {
@@ -232,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 activePaths);
             if (leftOutPaths.Count == 0)
             {
-                return await ApplyTransformedGroupAsync(files, workerInput, workerOutput, prepared, refusedTypes, correlationId, ct)
+                return await ApplyTransformedGroupAsync(files, workerInput, workerOutput, prepared, refusedTypes, correlationId, timing, ct)
                     .ConfigureAwait(false);
             }
 
@@ -241,7 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto retryInput = _leaveOut.BuildRetryInput(workerInput, leftOutPaths);
             HotReloadGroupLeaveOutSplit split = new HotReloadGroupLeaveOutSplit(files, leftOutPaths);
             List<HotReloadFileProcessResult> leftOutResults = BuildLeftOutResults(split, files, workerOutput);
-            TransformWorkerClientResult retryResult = await RunWorkerAsync(retryInput, correlationId, ct)
+            TransformWorkerClientResult retryResult = await RunWorkerAsync(retryInput, correlationId, timing, ct)
                 .ConfigureAwait(false);
             IReadOnlyList<HotReloadFileProcessResult> remainingResults = retryResult.Success
                 ? await ApplyTransformedGroupAsync(
@@ -251,6 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     prepared,
                     refusedTypes,
                     correlationId,
+                    timing,
                     ct).ConfigureAwait(false)
                 : FailGroup(split.RemainingFiles, retryResult.ErrorMessage);
             return split.Splice(leftOutResults, remainingResults);
@@ -259,11 +269,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private async Task<TransformWorkerClientResult> RunWorkerAsync(
             TransformWorkerInputDto workerInput,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
+            Stopwatch workerWatch = Stopwatch.StartNew();
             TransformWorkerClientResult workerResult = await _dependencies
                 .RunWorker(workerInput, ct)
                 .ConfigureAwait(false);
+            timing.AddAnalysis(workerWatch.ElapsedMilliseconds);
             HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
             return workerResult;
         }
@@ -320,6 +333,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPreparedIntroducedTypes prepared,
             IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes,
             string correlationId,
+            HotReloadRunTiming timing,
             CancellationToken ct)
         {
             HotReloadGroupFile firstFile = files[0];
@@ -367,19 +381,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 files,
                 prepared,
                 new HotReloadCompileFailureNoteSources(workerOutput.skipped, refusedTypes));
+            Stopwatch gateWatch = Stopwatch.StartNew();
             HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
+            // Why before the failure return: a gate or compile that failed still took its time,
+            // and the breakdown has to show where that time went.
+            timing.AddShimCompile(gateWatch.ElapsedMilliseconds);
             if (gateAndCompile.Outcome == HotReloadGroupGateAndCompileOutcome.Failed)
             {
                 return _fileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
-            return await CompleteApplyAfterCoverageAsync(
+            Stopwatch patchWatch = Stopwatch.StartNew();
+            IReadOnlyList<HotReloadFileProcessResult> results = await CompleteApplyAfterCoverageAsync(
                 context,
                 gateAndCompile.Gate,
                 gateAndCompile.Compile,
                 ct).ConfigureAwait(false);
+            timing.AddPatch(patchWatch.ElapsedMilliseconds);
+            return results;
         }
 
         /// <summary>
@@ -566,65 +587,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? HotReloadSourceBaseline.DescribeSnapshotMiss(file.ProjectRelativePath, file.TargetDllPath)
                     : HotReloadSnapshotMissReason.None;
             }
-        }
-
-        private static TransformWorkerInputDto BuildWorkerInput(
-            IReadOnlyList<HotReloadGroupFile> files,
-            HotReloadChangedSiblingScanResult siblingScan,
-            HotReloadDomain domain)
-        {
-            HotReloadGroupFile firstFile = files[0];
-            TransformWorkerSourceDto[] sources = new TransformWorkerSourceDto[files.Count];
-            for (int index = 0; index < files.Count; index++)
-            {
-                HotReloadGroupFile file = files[index];
-                sources[index] = new TransformWorkerSourceDto
-                {
-                    sourcePath = Path.GetFullPath(file.WorkerSourcePath),
-                    projectRelativePath = file.ProjectRelativePath,
-                    snapshotSource = file.SnapshotSource,
-                    reappliedSibling = file.ReappliedSibling
-                };
-            }
-
-            return new TransformWorkerInputDto
-            {
-                sources = sources,
-                defines = firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
-                referencePaths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(
-                    firstFile.CompilationAssembly,
-                    firstFile.Home),
-                targetTypesAssemblyPath = Path.GetFullPath(firstFile.Home.DllPath),
-                // The retained records normalize an introduced type back to the generation of the
-                // assembly that owns its source, so every run has to name that generation even
-                // before it carries a record of its own.
-                targetAssemblyName = firstFile.AssemblyName,
-                targetAssemblyMvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(firstFile.Home.DllPath),
-                assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(
-                    firstFile.ProjectRoot,
-                    firstFile.CompilationAssembly.sourceFiles),
-                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths,
-                activeMethodLabels = CollectActiveMethodLabels(files, domain)
-            };
-        }
-
-        // Why added members too: a skipped method keeps running the body an earlier reload
-        // patched into it, and a skipped added member is deactivated but stays reachable, because
-        // a patch this run leaves active can still call its earlier shim body. Either way the
-        // skipped writer may still assign the field. Both lists hold display labels, which is
-        // the form the worker's skipped rows use.
-        private static string[] CollectActiveMethodLabels(
-            IReadOnlyList<HotReloadGroupFile> files,
-            HotReloadDomain domain)
-        {
-            List<string> labels = new List<string>();
-            foreach (HotReloadGroupFile file in files)
-            {
-                labels.AddRange(domain.ListActiveMethodKeys(file.ProjectRelativePath));
-                labels.AddRange(domain.ListActiveAddedMethodKeys(file.ProjectRelativePath));
-            }
-
-            return labels.ToArray();
         }
 
         private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)

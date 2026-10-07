@@ -132,6 +132,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why copy: retry must still scan the same snapshot-mismatched siblings so
                 // siblingConstDriftWarnings stay populated on the retry worker output.
                 changedSiblingSourcePaths = workerInput.changedSiblingSourcePaths,
+                // Why copy: without it the retry would treat the other parts of every partial type
+                // as unverified and skip methods the first run transformed.
+                changedSiblingScanComplete = workerInput.changedSiblingScanComplete,
                 // Why copy: the retry reports the skipped-writer warnings in place of the first run.
                 activeMethodLabels = workerInput.activeMethodLabels
             };

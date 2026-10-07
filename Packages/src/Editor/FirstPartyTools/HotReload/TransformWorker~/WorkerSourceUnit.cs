@@ -101,6 +101,11 @@ internal sealed class WorkerSourceUnit
     public IReadOnlyDictionary<SyntaxTree, string> RunProjectRelativePathsByBindingTree { get; set; } =
         new Dictionary<SyntaxTree, string>();
 
+    // The run's knowledge of the parts of its partial types in other files. Why Unverified until a
+    // pipeline loads them: a pipeline that never does must keep skipping partial types rather than
+    // bind them against a type that is missing those parts.
+    public PartialTypeParts PartialTypeParts { get; set; } = PartialTypeParts.Unverified;
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

@@ -475,6 +475,215 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: nameof of a compiled instance field inside an added static method folds to a
+        /// string literal instead of naming an instance parameter the static shim does not have.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_NameofInstanceFieldInAddedStaticMethod_FoldsToStringLiteral()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "private static int AddedNameLength()\n        {\n            return nameof(_privateSeed).Length;\n        }");
+            string sourcePath = WriteEdited("NameofInstanceFieldInAddedStatic.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedNameLength");
+            Assert.That(added, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            string slice = SliceShimMethod(result.Output.shimSource, added.shimMethodName);
+            Assert.That(slice, Does.Contain("\"_privateSeed\""));
+            Assert.That(slice, Does.Not.Contain("nameof("));
+            Assert.That(slice, Does.Not.Contain("__uloopInstance"));
+        }
+
+        /// <summary>
+        /// What: nameof of a compiled instance field, method group, and property inside an edited
+        /// existing static method folds to string literals, so its shim names no instance parameter.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_NameofInstanceMembersInExistingStaticMethod_FoldsToStringLiterals()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        private static int PrivateStaticSeven()\n        {\n            return 7;\n        }",
+                "        private static int PrivateStaticSeven()\n        {\n"
+                + "            return nameof(PublicSeed).Length + nameof(ExistingValue).Length"
+                + " + nameof(ExistingGetter).Length;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string sourcePath = WriteEdited("NameofInstanceMembersInExistingStatic.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto existing = FindEntry(result, "PrivateStaticSeven");
+            Assert.That(existing, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            Assert.That(existing.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            string slice = SliceShimMethod(result.Output.shimSource, existing.shimMethodName);
+            Assert.That(slice, Does.Contain("\"PublicSeed\""));
+            Assert.That(slice, Does.Contain("\"ExistingValue\""));
+            Assert.That(slice, Does.Contain("\"ExistingGetter\""));
+            Assert.That(slice, Does.Not.Contain("nameof("));
+            Assert.That(slice, Does.Not.Contain("__uloopInstance"));
+        }
+
+        /// <summary>
+        /// What: nameof of a bare instance field, a this-qualified field, and a parameter inside an
+        /// instance method folds to string literals.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_NameofInInstanceMethod_FoldsToStringLiterals()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return nameof(_privateSeed).Length + nameof(this.PublicSeed).Length"
+                + " + nameof(value).Length + value;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("NameofInInstanceMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("\"_privateSeed\""));
+            Assert.That(slice, Does.Contain("\"PublicSeed\""));
+            Assert.That(slice, Does.Contain("\"value\""));
+            Assert.That(slice, Does.Not.Contain("nameof("));
+        }
+
+        /// <summary>
+        /// What: nameof of a name that does not bind stays a nameof expression in the shim instead
+        /// of folding to a name the original code never compiled with.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_NameofUnboundName_IsNotFolded()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return nameof(NoSuchName).Length + value;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("NameofUnboundName.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("nameof(NoSuchName)"));
+        }
+
+        /// <summary>
+        /// What: nameof of a generic type whose type argument does not bind stays a nameof
+        /// expression in the shim even though the outer type name itself binds.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_NameofWithUnboundTypeArgument_IsNotFolded()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return nameof(System.Collections.Generic.List<NoSuchType>).Length + value;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("NameofUnboundTypeArgument.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("nameof("));
+            Assert.That(slice, Does.Not.Contain("\"List\""));
+        }
+
+        /// <summary>
+        /// What: nameof of an added method that is skipped, and so never registered as added,
+        /// still folds to a string literal instead of naming a member the compiled type lacks.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_NameofAddedMethodThatIsNotApplied_FoldsToStringLiteral()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public T AddedGenericProbe<T>(T value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return nameof(AddedGenericProbe).Length + value;\n"
+                + "        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("NameofAddedMethodNotApplied.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, "AddedGenericProbe"), Is.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("\"AddedGenericProbe\""));
+            Assert.That(slice, Does.Not.Contain("nameof("));
+        }
+
+        /// <summary>
+        /// What: a property pattern that names a compiled member of the target type keeps the
+        /// bare member name in the shim, since a pattern's member name cannot take a receiver.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_PropertyPatternNamingCompiledMember_KeepsTheBareName()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return Inner is { PublicSeed: 3 } ? 1 : value;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("PropertyPatternCompiledMember.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("PublicSeed:"));
+            Assert.That(slice, Does.Not.Contain("__uloopInstance.PublicSeed"));
+        }
+
+        /// <summary>
         /// What: added virtual, override, generic, and method-group-capturing methods are skipped
         /// with the documented reasons; the captured added instance method itself still emits.
         /// </summary>
@@ -570,7 +779,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string reason = FindSkipReason(result, "AddedUnresolved");
             Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolved.");
-            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Contain("could not resolve"));
+            Assert.That(reason, Does.Contain("'MissingReturnType'"));
             Assert.That(reason, Does.Not.Contain("condition c"));
         }
 
@@ -588,7 +798,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string reason = FindSkipReason(result, "AddedUnresolvedList");
             Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolvedList.");
-            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Contain("could not resolve"));
+            Assert.That(reason, Does.Contain("'MissingType'"));
             Assert.That(reason, Does.Not.Contain("condition c"));
         }
 
@@ -715,6 +926,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("AddedProbe").And.Contain("Unity Test Runner"));
+        }
+
+        /// <summary>
+        /// What: an added method with a test attribute says on its own entry that the Unity Test
+        /// Runner will not discover it until a compile, so a reader of its row alone learns it.
+        /// </summary>
+        [TestCase("[Test]\n        public void AddedProbe()\n        {\n        }", "AddedProbe")]
+        [TestCase(
+            "[UnityTest]\n        public System.Collections.IEnumerator AddedUnityProbe()\n        {\n"
+            + "            yield break;\n        }",
+            "AddedUnityProbe")]
+        public async Task Emit_AddedTestMethod_CarriesTestRunnerLifecycleNote(string addedMember, string methodName)
+        {
+            // Why written out: the worker's constant lives in its own program, which the tests
+            // cannot reference.
+            const string expectedNote =
+                "Test method: not discovered by the Unity Test Runner until 'uloop compile'; "
+                + "'uloop run-tests --skip-compile' will not find or run it.";
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, addedMember);
+            string sourcePath = WriteEdited("AddedTestMethodNote" + methodName + ".cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, methodName);
+            Assert.That(added, Is.Not.Null, methodName + " must be an entry.");
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(added.lifecycleNote, Is.EqualTo(expectedNote));
+        }
+
+        /// <summary>
+        /// What: a compiled method whose body was edited and that gained a test attribute is not
+        /// an added method, so its entry carries no Test Runner note, as it gets no warning.
+        /// </summary>
+        [Test]
+        public async Task Emit_EditedExistingTestMethod_HasNoLifecycleNote()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            const string originalExistingValue =
+                "        public int ExistingValue()\n        {\n            return 1;\n        }";
+            Assert.That(onDisk, Does.Contain(originalExistingValue));
+            // Why the body changes too: an unchanged body is recorded as unchanged and has no
+            // entry, so the note could not be checked.
+            string edited = onDisk.Replace(
+                originalExistingValue,
+                "        [Test]\n        public int ExistingValue()\n        {\n            return 99;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("EditedExistingTestMethodNote.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null, "The edited ExistingValue must be an entry.");
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.lifecycleNote, Is.Null.Or.Empty);
+        }
+
+        /// <summary>
+        /// What: an added method without a test attribute carries no Test Runner note.
+        /// </summary>
+        [Test]
+        public async Task Emit_AddedPlainMethod_HasNoLifecycleNote()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public void AddedPlainProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedPlainMethodNote.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedPlainProbe");
+            Assert.That(added, Is.Not.Null, "AddedPlainProbe must be an entry.");
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(added.lifecycleNote, Is.Null.Or.Empty);
         }
 
         /// <summary>
@@ -2026,10 +2322,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// An added bodied property on a partial host is skipped before accessor shims are emitted.
+        /// What: an added bodied property on a partial host whose other part is unchanged is not
+        /// skipped for being on a partial type, and its getter is emitted as an added method the way
+        /// it is on a host that is not partial.
         /// </summary>
         [Test]
-        public async Task Skip_AddedBodiedPropertyOnPartialHost_SkipsAccessors()
+        public async Task Classify_AddedBodiedPropertyOnPartialHost_IsNotSkippedAsPartial()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -2045,10 +2343,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(FindEntry(result, "get_AddedPartial"), Is.Null);
-            Assert.That(FindEntry(result, "set_AddedPartial"), Is.Null);
-            Assert.That(FindSkipReason(result, "get_AddedPartial"), Does.Contain("Partial types are skipped"));
-            Assert.That(FindSkipReason(result, "set_AddedPartial"), Does.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "get_AddedPartial") ?? string.Empty, Does.Not.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial") ?? string.Empty, Does.Not.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "get_AddedPartial") ?? string.Empty, Does.Not.Contain("partial type"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial") ?? string.Empty, Does.Not.Contain("partial type"));
+
+            TransformWorkerEntryDto getter = FindEntry(result, "get_AddedPartial");
+            Assert.That(getter, Is.Not.Null, "Added property getter must be an entry.");
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(FindSkipReason(result, "get_AddedPartial"), Is.Null);
         }
 
         /// <summary>
@@ -2398,6 +2701,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
                 assemblySourcePaths = assemblySourcePaths,
+                // No sibling is passed, which stands for a scan that compared every sibling and
+                // found none changed.
+                changedSiblingScanComplete = true,
                 excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>(),
                 excludedAddedMethodKeys = excludedAddedMethodKeys ?? Array.Empty<string>()
             };

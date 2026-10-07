@@ -20,13 +20,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public static IReadOnlyCollection<string> ForHotReloadTestAssembly()
         {
+            return ReferencePublicizer.CollectResolverSearchDirectories(HotReloadTestAssembly().allReferences);
+        }
+
+        /// <summary>
+        /// Returns Unity's compilation assembly for this test assembly, failing the test when the
+        /// pipeline does not list it.
+        /// </summary>
+        public static UnityCompilationAssembly HotReloadTestAssembly()
+        {
             UnityCompilationAssembly compilationAssembly = FindHotReloadTestAssembly();
             Assert.That(
                 compilationAssembly,
                 Is.Not.Null,
                 "CompilationPipeline assembly not found: " + HotReloadTestAssemblyName);
 
-            return ReferencePublicizer.CollectResolverSearchDirectories(compilationAssembly.allReferences);
+            return compilationAssembly;
         }
 
         private static UnityCompilationAssembly FindHotReloadTestAssembly()

@@ -28,7 +28,9 @@ internal static class IntroducedTypePreparation
         CSharpParseOptions parseOptions,
         List<SyntaxTree> syntaxTrees,
         List<MetadataReference> references,
-        CSharpCompilation planningCompilation)
+        CSharpCompilation planningCompilation,
+        IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings,
+        IReadOnlyList<CompilationUnitSyntax> analyzableRoots)
     {
         List<SyntaxTree> siblingTrees = SiblingConstDriftCollector.ParseChangedSiblings(
             input.ChangedSiblingSourcePaths,
@@ -38,9 +40,24 @@ internal static class IntroducedTypePreparation
             return planningCompilation;
         }
 
-        List<SyntaxTree> allTrees = new List<SyntaxTree>(syntaxTrees.Count + siblingTrees.Count);
+        // Why a tree of its own rather than the planning one: a changed sibling is one of the
+        // assembly's other files, so the global usings it declares are already among
+        // assemblyGlobalUsings, and its own tree now joins the compilation as well.
+        List<CompilationUnitSyntax> allRoots = new List<CompilationUnitSyntax>(analyzableRoots);
+        foreach (SyntaxTree siblingTree in siblingTrees)
+        {
+            allRoots.Add(siblingTree.GetCompilationUnitRoot());
+        }
+
+        List<SyntaxTree> allTrees = new List<SyntaxTree>(syntaxTrees.Count + siblingTrees.Count + 1);
         allTrees.AddRange(syntaxTrees);
         allTrees.AddRange(siblingTrees);
+        SyntaxTree globalUsingTree = WorkerGlobalUsingBindingTree.Build(assemblyGlobalUsings, allRoots, parseOptions);
+        if (globalUsingTree != null)
+        {
+            allTrees.Add(globalUsingTree);
+        }
+
         return CSharpCompilation.Create(
             assemblyName: "UloopHotReloadIntroducedTypeConstVerification",
             syntaxTrees: allTrees,
@@ -72,23 +89,29 @@ internal static class IntroducedTypePreparation
             WorkerGroupPipeline.CollectMetadataReferences(input, referenceParseErrors);
         List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)> artifactReferences =
             IntroducedTypeArtifactReferences.Collect(input, references, referenceParseErrors);
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            assemblyName: "UloopHotReloadIntroducedTypePlanning",
-            syntaxTrees: syntaxTrees,
-            references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        AppendUnreadableReferenceErrors(compilation, references, referenceParseErrors);
-        IAssemblySymbol targetAssembly =
-            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference);
-        WorkerTypeHome home = new WorkerTypeHome(input.TargetAssemblyName, targetAssembly);
         List<CompilationUnitSyntax> analyzableRoots = new List<CompilationUnitSyntax>(analyzableUnits.Count);
         foreach (WorkerSourceUnit analyzableUnit in analyzableUnits)
         {
             analyzableRoots.Add(analyzableUnit.Root);
         }
 
+        // Why collected before planning: a base or member type the source reaches only through
+        // another file's global using must bind in the planning compilation too, or a Unity object
+        // ancestor stays an unresolved error type and the declaration is planned instead of refused.
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
+        SyntaxTree globalUsingTree = WorkerGlobalUsingBindingTree.Build(assemblyGlobalUsings, analyzableRoots, parseOptions);
+        // Why appended only here and not to syntaxTrees: the const drift compilation adds the
+        // changed siblings and builds a tree of its own, which would otherwise repeat directives.
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assemblyName: "UloopHotReloadIntroducedTypePlanning",
+            syntaxTrees: WorkerGlobalUsingBindingTree.Append(syntaxTrees, globalUsingTree),
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        AppendUnreadableReferenceErrors(compilation, references, referenceParseErrors);
+        IAssemblySymbol targetAssembly =
+            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference);
+        WorkerTypeHome home = new WorkerTypeHome(input.TargetAssemblyName, targetAssembly);
         WorkerReason incompleteInputsDiagnostic =
             DescribeIncompleteCompilationInputs(input, targetAssembly, referenceParseErrors);
         IntroducedTypeArtifactMap artifactMap = IntroducedTypeArtifactMap.Empty;
@@ -111,7 +134,9 @@ internal static class IntroducedTypePreparation
             parseOptions,
             syntaxTrees,
             references,
-            compilation);
+            compilation,
+            assemblyGlobalUsings,
+            analyzableRoots);
         AddedMemberReferenceClassifier addedMemberClassifier = new AddedMemberReferenceClassifier(
             compilation,
             home,
@@ -156,7 +181,8 @@ internal static class IntroducedTypePreparation
                     declarationDriftWarnings[index] = ConstDriftCollector.CollectConstDriftWarnings(
                         unit.Root,
                         unit.ConstDriftSemanticModel,
-                        home).ToArray();
+                        home,
+                        new HashSet<string>(StringComparer.Ordinal)).ToArray();
                 }
                 else
                 {

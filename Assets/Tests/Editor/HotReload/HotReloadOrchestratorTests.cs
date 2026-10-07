@@ -187,6 +187,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an apply run reports the time it spent per phase through the production path,
+        /// from the run down to each group. The worker and the shim compile always take time, and
+        /// the total covers every phase.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedMethod_ReportsPhaseTimings()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PhaseTimings.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult result = null;
+            try
+            {
+                result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                    new[] { fixturePath },
+                    editedPath,
+                    CancellationToken.None);
+            }
+            catch (OperationCanceledException exception)
+            {
+                // Why fail here: the test framework records an async test that ends canceled as
+                // passed, which would hide a run that never finished.
+                Assert.Fail("The run was canceled: " + exception.Message);
+            }
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadTimingBreakdown timing = result.Timing;
+            Assert.That(timing, Is.Not.Null);
+            Assert.That(timing.AnalysisMs, Is.GreaterThan(0), "AnalysisMs");
+            Assert.That(timing.ShimCompileMs, Is.GreaterThan(0), "ShimCompileMs");
+            Assert.That(
+                timing.TotalMs,
+                Is.GreaterThanOrEqualTo(timing.AnalysisMs + timing.ShimCompileMs + timing.PatchMs),
+                "TotalMs");
+        }
+
+        /// <summary>
         /// What: a Patched-only apply arms the Auto Refresh hold so focus return cannot recompile.
         /// </summary>
         [Test]
@@ -801,6 +843,212 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.BuildWithGlobalAlias));
             Assert.That(fixture.BuildWithGlobalAlias(), Is.EqualTo("patched"));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method whose parameter type comes only from a
+        /// sibling-file global using alias is patched instead of being classified as added.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithGlobalUsingAliasParameter_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return builder.Length;",
+                "return builder.Length + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias parameter body must differ.");
+
+            string editedPath = WriteEditedSource("MeasureWithGlobalAliasParameter.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.MeasureWithGlobalAliasParameter(new HotReloadGlobalAlias("ab")), Is.EqualTo(2));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.MeasureWithGlobalAliasParameter));
+            Assert.That(fixture.MeasureWithGlobalAliasParameter(new HotReloadGlobalAlias("ab")), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method whose return type comes only from a
+        /// sibling-file global using alias is patched instead of being classified as added.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithGlobalUsingAliasReturnType_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "builder.Append(\"return-base\");",
+                "builder.Append(\"return-patched\");",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias return body must differ.");
+
+            string editedPath = WriteEditedSource("CreateWithGlobalAliasReturn.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.CreateWithGlobalAliasReturn().ToString(), Is.EqualTo("return-base"));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.CreateWithGlobalAliasReturn));
+            Assert.That(fixture.CreateWithGlobalAliasReturn().ToString(), Is.EqualTo("return-patched"));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method that reads a field whose type comes only from a
+        /// sibling-file global using alias is patched.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodReadingFieldOfGlobalUsingAliasType_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return _buffer.Length;",
+                "return _buffer.Length + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: global-alias field reader body must differ.");
+
+            string editedPath = WriteEditedSource("BufferLength.cs", editedSource);
+
+            HotReloadGlobalUsingFixture fixture = new HotReloadGlobalUsingFixture();
+            Assert.That(fixture.BufferLength(), Is.EqualTo(3));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingFixture.BufferLength));
+            Assert.That(fixture.BufferLength(), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: a body edit that reads a member of a base class visible only through a
+        /// sibling-file global using of its namespace is patched.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodReadingBaseMemberFromGlobalUsingNamespace_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return BaseOffset + x;",
+                "return BaseOffset + x + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: base-member reader body must differ.");
+
+            string editedPath = WriteEditedSource("OffsetPlus.cs", editedSource);
+
+            HotReloadGlobalUsingDerivedFixture fixture = new HotReloadGlobalUsingDerivedFixture();
+            Assert.That(fixture.OffsetPlus(1), Is.EqualTo(11));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadGlobalUsingDerivedFixture.OffsetPlus));
+            Assert.That(fixture.OffsetPlus(1), Is.EqualTo(12));
+        }
+
+        /// <summary>
+        /// What: a body edit to an existing method whose parameter type is an internal type of
+        /// another file is patched, and no row of its fixture is Skipped. The worker binds that
+        /// type as an inaccessible error type, which must not count as an unresolved signature type.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedMethodWithInternalParameterTypeFromAnotherFile_PatchesBehavior()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "return probe == null ? 1 : 2;",
+                "return probe == null ? 11 : 12;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: internal-signature body must differ.");
+
+            string editedPath = WriteEditedSource("CountProbe.cs", editedSource);
+
+            HotReloadInternalSignatureFixture fixture = new HotReloadInternalSignatureFixture();
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(1));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadInternalSignatureFixture.CountProbe));
+            // Why only this fixture's rows: the shape fixture file holds other fixtures, and one of
+            // them may be skipped on purpose without saying anything about the inaccessible type.
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (!outcome.Method.Contains(nameof(HotReloadInternalSignatureFixture) + "."))
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    "The internal-signature fixture must not be skipped.\n" + FormatOutcomes(result));
+            }
+
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(11));
+        }
+
+        /// <summary>
+        /// What: a method added next to one whose parameter type is an internal type of another
+        /// file, with that same type in its own signature, is added and its caller is patched. The
+        /// worker binds that type as an inaccessible error type, which must not be reported as an
+        /// unresolved signature type for an added method either.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodWithInternalParameterTypeFromAnotherFile_IsAdded()
+        {
+            string fixturePath = ResolveShapeFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "            return probe == null ? 1 : 2;\n        }\n",
+                "            return AddedCountProbe(probe);\n        }\n\n"
+                + "        public int AddedCountProbe(HotReloadInternalSignatureProbe probe)\n"
+                + "        {\n"
+                + "            return probe == null ? 21 : 22;\n"
+                + "        }\n",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: the added method must be inserted.");
+
+            string editedPath = WriteEditedSource("AddedCountProbe.cs", editedSource);
+
+            HotReloadInternalSignatureFixture fixture = new HotReloadInternalSignatureFixture();
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(1));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            // Why the type-qualified names: "CountProbe" alone is also part of "AddedCountProbe".
+            AssertHasAdded(result, nameof(HotReloadInternalSignatureFixture) + ".AddedCountProbe(");
+            AssertHasPatched(
+                result,
+                nameof(HotReloadInternalSignatureFixture) + "." + nameof(HotReloadInternalSignatureFixture.CountProbe) + "(");
+            Assert.That(fixture.CountProbe(null), Is.EqualTo(21));
         }
 
         /// <summary>

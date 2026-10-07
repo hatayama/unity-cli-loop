@@ -39,6 +39,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Null/omitted is treated as empty.
         public string[] changedSiblingSourcePaths;
 
+        // True only when changedSiblingSourcePaths is the complete list: the snapshot directory was
+        // scanned and the list was not truncated. False/omitted makes the worker treat the other
+        // parts of every partial type as unverified.
+        public bool changedSiblingScanComplete;
+
         // Retained introduced-type assemblies the worker may bind against. Each record carries the
         // complete identity and the reference path together, so the worker can confirm the file it
         // resolved really is the assembly the record claims before it normalizes anything through
@@ -367,8 +372,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int sourceStartLine;
         public int sourceEndLine;
 
-        // Null/empty when the method is not a one-shot lifecycle method and is not only called
-        // from them inside this file.
+        // Null/empty unless the method is a one-shot lifecycle method or an added method with a
+        // test attribute.
         public string lifecycleNote;
 
         // True when this addedMethod entry replaces a compiled method whose return type changed.

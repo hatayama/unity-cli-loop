@@ -12,13 +12,15 @@ internal static class SiblingConstDriftCollector
     /// <summary>
     /// Parses each changed sibling source and reuses ConstDriftCollector against the compiled
     /// target-types assembly. The edited file is already scanned on its in-memory tree; siblings
-    /// are the files TransformWorker's single-file compilation cannot see.
+    /// are the files TransformWorker's single-file compilation cannot see. Each sibling binds
+    /// together with the assembly's global usings it does not declare itself.
     /// </summary>
     internal static List<string> CollectConstDriftWarnings(
         string[] changedSiblingSourcePaths,
         CSharpParseOptions parseOptions,
         IReadOnlyList<MetadataReference> references,
-        WorkerTypeHome home)
+        WorkerTypeHome home,
+        IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings)
     {
         List<string> warnings = new List<string>();
         if (changedSiblingSourcePaths == null
@@ -38,9 +40,13 @@ internal static class SiblingConstDriftCollector
 
             SyntaxTree syntaxTree = ParseSibling(siblingPath, parseOptions);
             CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
+            // Why built per sibling: the sibling may itself be a file that declares global
+            // usings, so a tree built for the whole run would repeat those directives here.
+            SyntaxTree siblingGlobalUsingTree =
+                WorkerGlobalUsingBindingTree.Build(assemblyGlobalUsings, new[] { root }, parseOptions);
             CSharpCompilation siblingCompilation = CSharpCompilation.Create(
                 assemblyName: "UloopHotReloadSiblingConstDriftCompilation",
-                syntaxTrees: new[] { syntaxTree },
+                syntaxTrees: WorkerGlobalUsingBindingTree.Append(new[] { syntaxTree }, siblingGlobalUsingTree),
                 references: references,
                 options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
             SemanticModel semanticModel = siblingCompilation.GetSemanticModel(
@@ -50,7 +56,8 @@ internal static class SiblingConstDriftCollector
                 ConstDriftCollector.CollectConstDriftWarnings(
                     root,
                     semanticModel,
-                    home));
+                    home,
+                    new HashSet<string>(StringComparer.Ordinal)));
         }
 
         return warnings;

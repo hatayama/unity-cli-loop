@@ -3,7 +3,7 @@
 ## How a Reload Applies
 
 1. Resolves each file to its compiled assembly via `CompilationPipeline`, then groups the files by that assembly. Each group runs the worker once and produces one shim assembly, so the members one file adds are visible to the bodies edited in its siblings; groups are processed one after another and never affect each other.
-2. Rewrites each editable method body of the group into a static shim in an out-of-process Roslyn worker. When an async, iterator, lambda, local-function, or LINQ-query body touches private/internal members, those accesses are rewritten to accessor delegates so the body can compile and run from the shim assembly (the delegation shape in step 4).
+2. Rewrites each editable method body of the group into a static shim in an out-of-process Roslyn worker. When an async, iterator, lambda, local-function, or LINQ-query body touches private/internal members, those accesses are rewritten to accessor delegates so the body can compile and run from the shim assembly (the delegation shape in step 4). An `internal` member of a type the reload was not given cannot be rewritten this way, so such a body is `Skipped` (`scope-and-limits.md`).
 3. Compiles the group's shims into one assembly against publicized reference copies, loads the result into the Editor domain, and binds every shim type's accessor delegates (`__BindAccessors`) before any patch is applied.
 4. Patches each original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`) in one of two shapes: transplant copies the shim's IL into the original method, while delegation rewrites the original to forward its arguments to the shim, which runs as normally compiled code.
 
@@ -24,7 +24,7 @@ patch binds to the newest shim. Edit the file and reload again to apply new chan
   behavior converges by construction.
 - Patches and loaded shim assemblies are static Editor state and disappear on the next
   domain reload — that includes entering Play Mode with Domain Reload enabled (the
-  default for projects created before Unity 6.6), `uloop compile`, and `uloop run-tests`. `uloop control-play-mode --action Play` warns with
+  default for projects created before Unity 6.6), `uloop compile`, and the compile `uloop run-tests` runs first unless given `--skip-compile`. `uloop control-play-mode --action Play` warns with
   the counts when it is about to drop patches or pause points. There is no persistence
   and no automatic re-apply.
 - Never reflected by hot reload: initializer changes on compiled fields and new
@@ -41,6 +41,19 @@ patch binds to the newest shim. Edit the file and reload again to apply new chan
   A `Failed` row in `IntroducedTypes` is the exception: type preparation runs once per assembly
   before any method of that assembly is transformed, so the run applies no method body from any
   file of that assembly; files in other assemblies still apply.
+
+## Running tests while patches are live
+
+- `uloop run-tests` compiles first by default. That compile reloads the domain and drops every live
+  patch; the edited source is compiled in, so the code changes stay without re-applying them, but
+  values wired into fields that hot reload added are not kept (they return to their initializer or
+  default values). The response's `CompileNote` carries the count, in the form
+  `1 active hot-reload change(s) were live when this compile was requested.`
+- `--skip-compile` runs the tests against the live patches; added `[Test]` methods are not enumerated
+  that way, so compile first for those. Its `Warning` is a fixed notice that changes were live when the
+  run started and does not say whether they survived; read `uloop hot-reload --status` for that. While
+  hot reload holds Auto Refresh (the state an apply leaves), a verified run kept the patches live.
+- There is no default switch: choose per call.
 
 ## Editor-Code Iteration Without PlayMode
 

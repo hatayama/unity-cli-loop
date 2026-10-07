@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/OutsideMethodBodyDriftChecker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
         private const string OutsideMethodBodyDriftWarningFormat =
-            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up.";
 
         private const string FieldKindChangeProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
@@ -1470,7 +1470,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundDrift, Is.True, "Existing field initializer edits must still warn.");
             AssertHasDeclarationDriftWarning(
                 result,
-                "Edits outside method bodies in AddedFieldWithInitializerDrift.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up.");
+                "Edits outside method bodies in AddedFieldWithInitializerDrift.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up.");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
@@ -1496,7 +1496,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in NamedInitializerDrift.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in NamedInitializerDrift.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1525,7 +1525,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in FieldOrderSwapDrift.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in FieldOrderSwapDrift.cs (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1552,7 +1552,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in MultiDeclaratorAttributeDrift.cs (field attributes: PairAlpha, PairBeta) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in MultiDeclaratorAttributeDrift.cs (field attributes: PairAlpha, PairBeta) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1578,7 +1578,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in MultiDeclaratorInitializerDrift.cs (field initializer: PairAlpha) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in MultiDeclaratorInitializerDrift.cs (field initializer: PairAlpha) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1604,7 +1604,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in MultiDeclaratorRegroupDrift.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in MultiDeclaratorRegroupDrift.cs (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1634,8 +1634,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Edits outside method bodies in DupFieldKeyFailOpen.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in DupFieldKeyFailOpen.cs (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
+        }
+
+        /// <summary>
+        /// What: when a duplicate field syntax key sends the drift check to the whole-tree
+        /// fail-open compare, an edit that only adds a comment still emits no warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_DuplicateFieldSyntaxKeyWithCommentOnlyEdit_DoesNotWarn()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            // Why the duplicate repeats a compiled field: a name the compiled type lacks counts as
+            // an added field of the edited source and is stripped from that tree only, so the
+            // compare would warn without any comment.
+            string snapshotSource = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 3;\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            string edited = snapshotSource.Replace(
+                "        public int PublicSeed = 3;\n        public int PublicSeed = 3;",
+                "        // comment added by the test\n        public int PublicSeed = 3;\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(snapshotSource), "Precondition: the edit must add the comment.");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DupFieldKeyCommentOnly.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Is.Empty,
+                string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: adding only a line comment above the attribute list of an existing field emits no
+        /// outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_LineCommentOnlyEditAboveAFieldAttribute_DoesNotWarn()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            // Why the snapshot carries the attribute too: no field of the compiled host has one, and
+            // the comment must be the only difference between the snapshot and the edited source.
+            string snapshotSource = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        [SerializeField]\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            string edited = snapshotSource.Replace(
+                "        [SerializeField]\n        public int PublicSeed = 3;",
+                "        // comment added by the test\n        [SerializeField]\n        public int PublicSeed = 3;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: the snapshot must add the attribute.");
+            Assert.That(edited, Is.Not.EqualTo(snapshotSource), "Precondition: the edit must add the comment.");
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("FieldAttributeCommentOnly.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Is.Empty,
+                string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1922,7 +1984,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new[]
                     {
                         "Compiled property 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.Hp' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
-                        "Edits outside method bodies in PropertyKindChangeWithInitializer.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in PropertyKindChangeWithInitializer.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 
@@ -1953,7 +2015,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new[]
                     {
                         "Compiled event 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.ScoreChanged' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
-                        "Edits outside method bodies in EventKindChangeWithInitializer.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                        "Edits outside method bodies in EventKindChangeWithInitializer.cs (field initializer: PublicSeed) since the last compile are not applied by hot reload; run uloop compile to pick them up."
                     }));
         }
 

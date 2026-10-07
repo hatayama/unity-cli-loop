@@ -162,6 +162,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public bool AutoRefreshHeld { get; set; }
 
+        /// <summary>
+        /// The Auto Refresh hold sentence this run appended to Message, so a caller (the CLI after
+        /// a fallback compile) can remove exactly that sentence. Omitted when this run did not arm
+        /// the hold.
+        /// </summary>
+        public string AutoRefreshHoldMessage { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Applied, PartiallyApplied, NothingApplied, NothingToApply, or Failed on apply runs
+        /// (ReplacedByCompile once the CLI's fallback compile succeeded): whether the edits of the
+        /// requested files are live now. Omitted on --status, --revert-all and validation failures.
+        /// </summary>
+        public string Outcome { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Methods rows with Kind Skipped, sibling rows included like the other totals.
+        /// </summary>
+        public int SkippedTotal { get; set; }
+
+        /// <summary>
+        /// Methods rows with Kind Added.
+        /// </summary>
+        public int AddedTotal { get; set; }
+
+        /// <summary>
+        /// Methods rows with Kind Failed.
+        /// </summary>
+        public int FailedTotal { get; set; }
+
+        /// <summary>
+        /// Methods rows with Kind AlreadyActive.
+        /// </summary>
+        public int AlreadyActiveTotal { get; set; }
+
+        /// <summary>
+        /// Methods rows with Kind Stale.
+        /// </summary>
+        public int StaleTotal { get; set; }
+
         // Why omit empty: success and validation-only payloads must not grow a next-action
         // field that PausePoint-style responses leave blank on the wire.
         public bool ShouldSerializeRecommendedNextAction()
@@ -178,9 +217,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string CompileFallback { get; set; } =
             HotReloadCompileFallbackDecision.NotNeeded.ToString();
 
+        /// <summary>
+        /// Milliseconds the apply run spent per phase. Written on apply runs only; --status,
+        /// --revert-all, and requests refused before the run leave it out.
+        /// </summary>
+        public HotReloadTimingResponse Timing { get; set; }
+
         public bool ShouldSerializeErrorCode()
         {
             return !string.IsNullOrEmpty(ErrorCode);
+        }
+
+        public bool ShouldSerializeOutcome()
+        {
+            return !string.IsNullOrEmpty(Outcome);
+        }
+
+        public bool ShouldSerializeAutoRefreshHoldMessage()
+        {
+            return !string.IsNullOrEmpty(AutoRefreshHoldMessage);
+        }
+
+        public bool ShouldSerializeTiming()
+        {
+            return Timing != null;
         }
 
         public bool ShouldSerializeNextActions()
@@ -257,6 +317,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why here and not only at the run entry: the tool normalizes script paths for its own
             // selection and response rows, and PackageInfo is main-thread only, which this path is.
             services.PackageRootCapture.CaptureCurrent();
+            // Why here: a request that waited out a domain reload runs before the Editor's first update
+            // tick, where the capture is scheduled, and both the default selection below and the run
+            // read the snapshot of the compile that reload loaded.
+            services.SourceSnapshotCapture.EnsureCaptured();
             HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
                 parameters.Files,
                 services.ChangeDetector.Detect,

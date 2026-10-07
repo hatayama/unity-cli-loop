@@ -297,6 +297,146 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a global alias declared only in another file of the assembly, not in
+        /// either edited source, still lets planning bind and compile both introduced types.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_SiblingGlobalUsingAlias_CompilesTwoIntroducedTypes()
+        {
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("SiblingGlobalUsingAlias");
+            string firstSourcePath = Path.Combine(directory, "First.cs");
+            string secondSourcePath = Path.Combine(directory, "Second.cs");
+            string globalUsingsPath = Path.Combine(directory, "GlobalUsings.cs");
+            File.WriteAllText(
+                firstSourcePath,
+                "namespace GlobalAliasFixture { public class First { public Alias Create() { return null; } } }");
+            File.WriteAllText(
+                secondSourcePath,
+                "namespace GlobalAliasFixture { public class Second { public Alias Create() { return null; } } }");
+            File.WriteAllText(globalUsingsPath, "global using Alias = System.IDisposable;");
+
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(
+                firstSourcePath,
+                secondSourcePath,
+                new[] { globalUsingsPath });
+            TransformWorkerClientResult workerResult = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            List<HotReloadIntroducedTypeDescriptor> descriptors = TransformWorkerIntroducedTypeTestInputs.CreateDescriptors(workerResult.Output.files);
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadIntroducedTypeCompilationRequest request =
+                HotReloadIntroducedTypeCompilationRequest.CreateBatch(
+                    new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "sibling-global-using-alias").Create(),
+                    descriptors,
+                    input.referencePaths,
+                    input.defines);
+            HotReloadIntroducedTypeCompilerResult compileResult = await new HotReloadIntroducedTypeCompiler(
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false)).CompileAsync(request, CancellationToken.None);
+
+            Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
+            Assert.That(descriptors, Has.Count.EqualTo(2));
+            Assert.That(compileResult.Success, Is.True, compileResult.ErrorMessage);
+            Assert.That(compileResult.Artifact.Assembly.GetType("GlobalAliasFixture.First"), Is.Not.Null);
+            Assert.That(compileResult.Artifact.Assembly.GetType("GlobalAliasFixture.Second"), Is.Not.Null);
+
+            HotReloadIntroducedTypeCompilationRequest subsetRequest =
+                HotReloadIntroducedTypeCompilationRequest.CreateBatch(
+                    new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "sibling-global-using-alias-subset").Create(),
+                    new[] { descriptors[1] },
+                    input.referencePaths,
+                    input.defines);
+            HotReloadIntroducedTypeCompilerResult subsetCompileResult = await new HotReloadIntroducedTypeCompiler(
+                new HotReloadRoslynCompilerEnvironment(),
+                new FakeInternalAccessGrant(isAvailable: false)).CompileAsync(subsetRequest, CancellationToken.None);
+
+            Assert.That(subsetCompileResult.Success, Is.True, subsetCompileResult.ErrorMessage);
+            Assert.That(subsetCompileResult.Artifact.Assembly.GetType("GlobalAliasFixture.Second"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// Verifies that a Unity object base class the edited source reaches only through another
+        /// assembly file's global using is still seen, so the introduced type is refused instead of
+        /// being planned against an unresolved base.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_SiblingGlobalUsingBringsUnityObjectBase_IsRefused()
+        {
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("SiblingGlobalUsingUnityObjectBase");
+            string sourcePath = Path.Combine(directory, "Introduced.cs");
+            string emptyPath = Path.Combine(directory, "Empty.cs");
+            File.WriteAllText(
+                sourcePath,
+                "namespace GlobalUsingUnityObjectFixture { public class Introduced : HotReloadGlobalUsingBehaviourBase { } }");
+            File.WriteAllText(emptyPath, string.Empty);
+            string globalUsingsPath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadGlobalUsings.cs"));
+            Assert.That(File.Exists(globalUsingsPath), Is.True, "Global usings fixture missing: " + globalUsingsPath);
+
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(
+                sourcePath,
+                emptyPath,
+                new[] { globalUsingsPath });
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto output = result.Output.files[0];
+            Assert.That(output.parseErrors, Is.Empty);
+            Assert.That(output.introducedTypes, Is.Empty);
+            Assert.That(
+                HotReloadWorkerReasonTestText.RenderAll(output.introducedTypeDiagnostics),
+                Has.Some.Contains("Unity object introduced type requires a compile"));
+        }
+
+        /// <summary>
+        /// Verifies that an introduced type reading a const of a changed sibling, whose type the
+        /// sibling names only through another assembly file's global using, is refused because the
+        /// value changed, not because the value could not be read.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_ChangedSiblingConstOfGlobalUsingEnumType_IsRefusedAsChanged()
+        {
+            string directory = TransformWorkerIntroducedTypeTestInputs.CreateSourceDirectory("ChangedSiblingConstOfGlobalUsingEnumType");
+            string sourcePath = Path.Combine(directory, "Introduced.cs");
+            string emptyPath = Path.Combine(directory, "Empty.cs");
+            string siblingPath = Path.Combine(directory, "Sibling.cs");
+            File.WriteAllText(
+                sourcePath,
+                "namespace GlobalUsingConstFixture { public class Introduced { public int Read() { return (int)io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingMode; } } }");
+            File.WriteAllText(emptyPath, string.Empty);
+            File.WriteAllText(
+                siblingPath,
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload { public static class HotReloadSiblingConstDefinitions { public const HotReloadGlobalUsingMode SiblingMode = HotReloadGlobalUsingMode.Second; } }");
+            string globalUsingsPath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadGlobalUsings.cs"));
+            Assert.That(File.Exists(globalUsingsPath), Is.True, "Global usings fixture missing: " + globalUsingsPath);
+
+            TransformWorkerInputDto input = TransformWorkerIntroducedTypeTestInputs.CreateInput(
+                sourcePath,
+                emptyPath,
+                new[] { globalUsingsPath },
+                new[] { siblingPath });
+            TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerFileOutputDto output = result.Output.files[0];
+            Assert.That(output.parseErrors, Is.Empty);
+            Assert.That(output.introducedTypes, Is.Empty);
+            string[] diagnostics = HotReloadWorkerReasonTestText.RenderAll(output.introducedTypeDiagnostics);
+            Assert.That(
+                diagnostics,
+                Has.Some.Contains(
+                    "Changed const requires a compile: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingMode"),
+                string.Join("\n", diagnostics));
+            Assert.That(diagnostics, Has.None.Contains("Const value cannot be verified"), string.Join("\n", diagnostics));
+        }
+
+        /// <summary>
         /// Verifies that root imports remain in compilation-unit scope when a namespace contains
         /// a relative namespace with the same name as the imported global namespace.
         /// </summary>

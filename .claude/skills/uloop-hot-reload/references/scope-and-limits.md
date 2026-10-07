@@ -9,6 +9,8 @@ implementations) are never scanned: **edits** to them produce **no per-method
 entry at all** and are silently not applied — use `uloop compile` for those.
 Adding a constructor, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
+Methods and property getters of `partial` types are patched like any other; the
+other parts of the type are read from the assembly's source files.
 
 ## Added methods and fields
 
@@ -175,7 +177,10 @@ baseline is available (next paragraph), other outside-body drift — existing-fi
 initializers, attributes, and other declaration edits — is reported as a `Warnings`
 entry as well (handled added members and reported removed members are excluded
 from this generic warning); without a baseline it stays silent. Either way, use
-`uloop compile` for such edits.
+`uloop compile` for such edits. The comparison is against the source the loaded
+assembly was compiled from, so an earlier edit outside method bodies keeps this
+warning on every reload until `uloop compile`. Comment-only edits (line, block, and
+XML documentation comments) do not count.
 
 ## Signature changes: return type, rename, parameters
 
@@ -396,7 +401,12 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 
 | Condition | Why |
 |-----------|-----|
-| Method on a `partial` type (including a type nested inside a partial outer type) | A single file cannot provide a complete semantic model |
+| Method on a `partial` type when another part of the type changed since the last compile and was not passed, or when a file that names the type has syntax errors (passed or not) | Hot reload binds against the compiled type; pass that file with `--files` too, or run `uloop compile`. For a file with syntax errors, fix it and run hot reload again |
+| Method on a `partial` type when the other parts could not be checked against the last compile (no source snapshot yet, or more than 50 changed files in the assembly) | Run `uloop compile` |
+| Method on a `partial` type whose body names a member no source file of the assembly declares | A part generated at compile time (a source generator's output) is not visible to hot reload; run `uloop compile` |
+| Method or getter whose body uses an `internal` member of a type the reload was not given, by its bare name, inside a lambda, local function, query, iterator or async method, in a body where a lambda, local function or query works with a value hot reload could not resolve (such as the member's result), or in a body patched through a delegating shim | Hot reload reaches such a member only in the method's own statements, written with its receiver (`this.Name`, `Type.Name`, `value.Name`); qualify a bare name, or run `uloop compile` |
+| Method or getter on a `partial` type whose body passes an `internal` method of such a type as a delegate, uses an `internal` event of it, or names an `internal` member of it in an object initializer or a property pattern | On a `partial` type hot reload patches such a member only as a field, a property or a method call written with its receiver; run `uloop compile` |
+| Method or getter on a `partial` type whose body uses an `internal` member of a type in another assembly (through `InternalsVisibleTo`) | Reported as a name no source file of the `partial` type declares; hot reload does not patch this use from a `partial` type yet. Run `uloop compile` |
 | Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
@@ -420,6 +430,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | File does not belong to any compiled assembly | Per-file entry with `Method` = `(file)`; only `Assets/` and `Packages/` sources resolve |
 | Resolved assembly name is missing from CompilationPipeline | Per-file entry with `Method` = `(file)`; Unity may have mapped a not-yet-imported `.asmdef` onto a predefined assembly. Run `uloop compile` first |
 | Script is not in the last compiled assembly's source list and its assembly membership cannot be confirmed | Per-file entry with `Method` = `(file)`; a new file passed with `--files` is hot-reloadable when its membership in an existing, unchanged compiled assembly is confirmed (`.asmdef` / `.asmref` boundaries are checked when present; a predefined assembly with none also passes), but fails when the Editor is not ready or an `.asmdef` / `.asmref` on its path was added, deleted, or changed since the last import — run `uloop compile` first |
+| The Editor is a Multiplayer Play Mode Virtual Player | Per-file entry with `Method` = `(file)`; a Virtual Player has no compiled assemblies under its own project root, so hot reload cannot patch it yet. The edit reaches that player only through a compile: the CLI's compile fallback brings it in when `--compile-on-skip` lets the compile run, and `auto` holds it while that player is in Play Mode (`CompileFallback` is `HeldForPlayMode`). A patch applied to the main Editor does not reach Virtual Players (each is a separate Editor process) |
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file `Failed` entry with `Method` = `(file)` carrying the parse errors; nothing from that file is applied, its earlier patches stay active, and `Success` is false |
 | Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |

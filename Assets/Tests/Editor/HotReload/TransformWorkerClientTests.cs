@@ -113,6 +113,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "HotReloadSiblingEnumDefinitions.cs",
             "HotReloadInternalMonoBehaviourBase.cs",
             "HotReloadIntroducedTypeStageProbe.cs",
+            "HotReloadInternalSignatureProbe.cs",
+            "HotReloadGlobalUsingBehaviourBase.cs",
+            "HotReloadGlobalUsingMode.cs",
         };
 
         /// <summary>
@@ -1063,6 +1066,103 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding only an XML documentation comment above an existing method emits neither
+        /// the file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithXmlDocCommentOnlyEditOnAMethod_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "XmlDocCommentOnMethodDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "        public int VisibleSibling()",
+                    "        /// <summary>Documentation added by the test.</summary>\n        public int VisibleSibling()"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: adding only a block comment inside a field initializer emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithBlockCommentOnlyEditInsideAFieldInitializer_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "BlockCommentInFieldInitializerDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "private int _secret = 10;",
+                    "private int _secret = /* comment added by the test */ 10;"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: adding only a line comment on its own line above a field emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithLineCommentOnlyEditAboveAField_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "LineCommentAboveFieldDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "        private int _secret = 10;",
+                    "        // comment added by the test\n        private int _secret = 10;"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: adding only a block comment between a field's type and its name emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithBlockCommentOnlyEditAfterAFieldType_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "BlockCommentAfterFieldTypeDrift.cs";
+            // Why after the type: a comment on the same line belongs to the token before it, so
+            // this one becomes part of the field's type rather than of its modifiers.
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "private int _secret = 10;",
+                    "private int /* comment added by the test */ _secret = 10;"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: rewording only the XML documentation comment of the type emits neither the
+        /// file-level nor a named outside-method-body warning.
+        /// </summary>
+        [Test]
+        public async Task Run_WithXmlDocCommentOnlyEditOnTheType_DoesNotEmitOutsideMethodBodyWarning()
+        {
+            const string fileName = "XmlDocCommentOnTypeDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => ReplaceUniqueFragment(
+                    editedSource,
+                    "Compiled fixture whose on-disk source path",
+                    "Prebuilt fixture whose on-disk source path"));
+
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
+        }
+
+        /// <summary>
         /// What: editing only a const value emits the dedicated const-drift warning and does not
         /// also emit the generic outside-method-body warning.
         /// </summary>
@@ -1142,6 +1242,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Has.None.EqualTo(
                     "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value, so nothing runs with 7 yet. This warning repeats on every reload while the two values differ. Run 'uloop compile' to apply this change."),
                 "Sibling const-drift warnings must stay on siblingConstDriftWarnings, not declarationDriftWarnings.");
+        }
+
+        /// <summary>
+        /// What: a changed sibling const whose type the sibling names only through another file's
+        /// global using is still compared with the compiled value and reported as drifted.
+        /// </summary>
+        [Test]
+        public async Task Run_WithChangedSiblingConstOfGlobalUsingEnumType_EmitsSiblingConstDriftWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string siblingPath = Path.Combine(directory, "SiblingGlobalUsingEnumConstDrift.cs");
+            File.WriteAllText(
+                siblingPath,
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    public static class HotReloadSiblingConstDefinitions\n"
+                + "    {\n"
+                + "        public const HotReloadGlobalUsingMode SiblingMode = HotReloadGlobalUsingMode.Second;\n"
+                + "    }\n"
+                + "}\n");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveE2EFixturePath(),
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk,
+                additionalAssemblySourcePaths: null,
+                changedSiblingSourcePaths: new[] { siblingPath });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.siblingConstDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.siblingConstDriftWarnings,
+                Has.Some.Contain("HotReloadSiblingConstDefinitions.SiblingMode is 2 in the edited source but 1"),
+                "The sibling const must bind its enum type through the assembly's global using.\n"
+                + string.Join("\n", result.Output.siblingConstDriftWarnings));
         }
 
         /// <summary>
@@ -1248,7 +1386,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in NonConstFieldInitializerDrift.cs (field initializer: _secret) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in NonConstFieldInitializerDrift.cs (field initializer: _secret) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -1536,6 +1674,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 unchangedFCount,
                 Is.EqualTo(2),
                 "Both F(int) and F<T>(int) must appear in unchangedMethods after arity normalization.");
+        }
+
+        /// <summary>
+        /// What: a generic method whose parameter type cannot be resolved no longer matches its
+        /// compiled signature, and its skip reason names that type instead of calling it an added
+        /// generic method, so the caller sees the missing type rather than a generic-method limit.
+        /// </summary>
+        [Test]
+        public async Task Run_GenericMethodWhoseParameterTypeDoesNotResolve_IsSkippedNamingTheType()
+        {
+            const string fileName = "HotReloadShapeFixtures.cs";
+            string onDisk = File.ReadAllText(ResolveShapeFixturePath());
+            string editedSource = onDisk.Replace(
+                "public int F<T>(int x)",
+                "public int F<T>(HotReloadMissingAlias x)",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: the generic parameter must change.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            // Why "F`1(": the method label carries the generic arity, and "F(" would match the
+            // non-generic F(System.Int32) instead.
+            AssertHasSkip(result, "F`1(", "HotReloadMissingAlias");
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                string rendered = HotReloadWorkerReasonText.Render(skipped.reason);
+                Assert.That(
+                    rendered,
+                    Does.Not.Contain("Added generic methods are skipped"),
+                    skipped.method + ": " + rendered);
+            }
         }
 
         /// <summary>
@@ -1975,7 +2154,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/OutsideMethodBodyDriftChecker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
         private const string OutsideMethodBodyDriftWarningFormat =
-            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) since the last compile are not applied by hot reload; run uloop compile to pick them up.";
 
         /// <summary>
         /// What: editing one instance constructor reports that .ctor as Skipped and omits an
@@ -2330,7 +2509,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindCtorInitializerDrift.cs (constructor: .ctor) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindCtorInitializerDrift.cs (constructor: .ctor) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2349,7 +2528,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindOperatorAttributeDrift.cs (operator: +) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindOperatorAttributeDrift.cs (operator: +) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2368,7 +2547,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindConversionAttributeDrift.cs (conversion: implicit->int) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindConversionAttributeDrift.cs (conversion: implicit->int) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2387,7 +2566,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
-                    "Edits outside method bodies in UnsupportedKindEventAttributeDrift.cs (event: Edited) are not applied by hot reload; run uloop compile to pick them up."));
+                    "Edits outside method bodies in UnsupportedKindEventAttributeDrift.cs (event: Edited) since the last compile are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -2630,6 +2809,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        // Why the uniqueness check: Replace edits every occurrence, and a comment that also landed
+        // somewhere else would reach a comparison other than the one the test is about.
+        private static string ReplaceUniqueFragment(string source, string fragment, string replacement)
+        {
+            int index = source.IndexOf(fragment, StringComparison.Ordinal);
+            Assert.That(index, Is.GreaterThanOrEqualTo(0), "Precondition: the fixture must hold " + fragment);
+            Assert.That(
+                source.LastIndexOf(fragment, StringComparison.Ordinal),
+                Is.EqualTo(index),
+                "Precondition: the fixture must hold " + fragment + " exactly once.");
+            return source.Replace(fragment, replacement, StringComparison.Ordinal);
         }
 
         private static void AssertPatchedComputeWithPrivate(TransformWorkerClientResult result)

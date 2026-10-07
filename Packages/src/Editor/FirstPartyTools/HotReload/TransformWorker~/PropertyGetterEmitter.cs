@@ -104,7 +104,8 @@ internal static class PropertyGetterEmitter
                     addedPropertyCatalog,
                     typeState.HomeAssemblyName,
                     typeState.SourceUnit.Input.ReappliedSibling,
-                    typeState.TargetAssembly);
+                    typeState.TargetAssembly,
+                    typeState.SourceUnit.PartialTypeParts);
         }
     }
 
@@ -135,7 +136,8 @@ internal static class PropertyGetterEmitter
             AddedPropertyCatalog addedPropertyCatalog,
             string homeAssemblyName,
             bool reappliedSibling,
-            IAssemblySymbol targetAssembly)
+            IAssemblySymbol targetAssembly,
+            PartialTypeParts partialTypeParts)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -213,6 +215,8 @@ internal static class PropertyGetterEmitter
             addedMethodCatalog,
             addedFieldCatalog,
             addedPropertyCatalog,
+            partialTypeParts,
+            targetAssembly,
             skipped);
         if (skipGetter)
         {
@@ -227,7 +231,10 @@ internal static class PropertyGetterEmitter
             WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
                 semanticModel,
                 getterBodyNode,
-                targetAssembly);
+                targetAssembly,
+                methodDeclarationOrNull: null,
+                decision,
+                typeSymbol);
             if (siblingSkip != null)
             {
                 skipped.Add(new WorkerSkipped

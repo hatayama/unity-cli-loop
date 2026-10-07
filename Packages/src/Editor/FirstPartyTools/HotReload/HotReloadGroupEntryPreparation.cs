@@ -45,12 +45,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why once for the group: a body can call an added member another file of the group
             // declares, and only the whole group's entries name every added member it may call.
             HotReloadAddedCalleeIndex addedCallees = new HotReloadAddedCalleeIndex(entriesToPatch);
+            // Why once for the group: every entry of the group that names the same home resolves
+            // against the same compiled image, and reading it per entry made the patch stage grow
+            // with the number of live patches in a file.
+            using HotReloadMethodMatcher matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
+            HotReloadMethodResolver resolveMethod = matcher.Resolve;
             List<HotReloadPreparedGroupFile> prepared =
                 new List<HotReloadPreparedGroupFile>(context.Files.Count);
             foreach (HotReloadGroupFile file in context.Files)
             {
                 prepared.Add(
-                    PrepareFile(compileResult, homeResolver, file, entriesByFile, bindFailures, addedCallees));
+                    PrepareFile(
+                        compileResult,
+                        homeResolver,
+                        resolveMethod,
+                        file,
+                        entriesByFile,
+                        bindFailures,
+                        addedCallees));
             }
 
             return prepared;
@@ -59,6 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static HotReloadPreparedGroupFile PrepareFile(
             HotReloadShimCompileResult compileResult,
             HotReloadEntryHomeResolver homeResolver,
+            HotReloadMethodResolver resolveMethod,
             HotReloadGroupFile file,
             Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile,
             Dictionary<string, string> bindFailures,
@@ -79,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
                 file.Home,
                 homeResolver,
+                resolveMethod,
                 file.AssemblyResolvePath,
                 compileResult.Assembly,
                 entries,

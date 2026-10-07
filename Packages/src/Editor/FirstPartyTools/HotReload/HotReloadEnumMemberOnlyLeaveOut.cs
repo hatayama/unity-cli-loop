@@ -156,9 +156,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 excludedMethodKeys = firstInput.excludedMethodKeys,
                 excludedAddedMethodKeys = firstInput.excludedAddedMethodKeys,
                 assemblySourcePaths = firstInput.assemblySourcePaths,
-                // Why the left-out files are not added as siblings: the transform reads siblings
-                // only for const drift, which the left-out file's own notices already report.
+                // Why the left-out files are not added as siblings: the transform reads siblings for
+                // const drift and to tell a changed part of a partial type, and a left-out file only
+                // adds enum members, so neither applies to it; its own notices report its drift.
                 changedSiblingSourcePaths = firstInput.changedSiblingSourcePaths,
+                changedSiblingScanComplete = firstInput.changedSiblingScanComplete,
                 introducedTypeArtifacts = firstInput.introducedTypeArtifacts,
                 activeMethodLabels = firstInput.activeMethodLabels
             };

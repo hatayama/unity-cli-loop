@@ -30,6 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+        private const string CoreFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadCoreFixtures.cs";
         private const string PredefinedEditorAssemblyName = "Assembly-CSharp-Editor";
         private const string PredefinedEditorFixtureProjectRelativePath =
             "Assets/RegressionHarness/AnnotatedScreenshotMismatch/Editor/AnnotatedScreenshotMismatchSceneBuilder.cs";
@@ -66,6 +68,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Document.Hash must equal the hash of the on-disk source bytes (algorithm="
                 + document.HashAlgorithm + ").");
+        }
+
+        /// <summary>
+        /// What: the PDB document index finds, for files of two assemblies, the same document a walk that stops at the first matching sequence point returns.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_ReturnsTheSameDocumentAsTheWalk()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+
+            AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), FixtureProjectRelativePath);
+            AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), CoreFixtureProjectRelativePath);
+            AssertIndexFindsTheWalkedDocument(
+                index,
+                Path.Combine(
+                    projectRoot,
+                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    PredefinedEditorAssemblyName + HotReloadConstants.CompiledAssemblyExtension),
+                PredefinedEditorFixtureProjectRelativePath);
+        }
+
+        private static void AssertIndexFindsTheWalkedDocument(
+            HotReloadPdbDocumentIndex index,
+            string dllPath,
+            string projectRelativePath)
+        {
+            string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+            Document walked = FindDocumentForProjectRelativePath(dllPath, pdbPath, projectRelativePath);
+            Assert.That(walked, Is.Not.Null, "Precondition: the walk must find a document for " + projectRelativePath);
+
+            bool found = index.TryFindDocument(
+                dllPath,
+                pdbPath,
+                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath),
+                projectRelativePath,
+                out HotReloadPdbDocument indexed);
+
+            Assert.That(found, Is.True, projectRelativePath);
+            Assert.That(indexed.Url, Is.EqualTo(walked.Url), projectRelativePath);
+            Assert.That(indexed.HashAlgorithm, Is.EqualTo(walked.HashAlgorithm), projectRelativePath);
+            Assert.That(indexed.Hash.SequenceEqual(walked.Hash), Is.True, projectRelativePath);
         }
 
         /// <summary>
@@ -163,7 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
                     fakeRoot,
                     FixtureProjectRelativePath,
-                    dllPath);
+                    dllPath,
+                    HotReloadPdbDocumentIndex.Shared);
                 Assert.That(loaded, Is.Null);
             }
             finally
@@ -187,7 +232,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                 projectRoot,
                 BodylessFixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot));
+                TestAssemblyDllPath(projectRoot),
+                HotReloadPdbDocumentIndex.Shared);
 
             Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
         }
@@ -204,7 +250,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                 emptyRoot,
                 FixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot));
+                TestAssemblyDllPath(projectRoot),
+                HotReloadPdbDocumentIndex.Shared);
 
             Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoSnapshotFile));
         }
@@ -224,7 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                     fakeRoot,
                     FixtureProjectRelativePath,
-                    dllPath);
+                    dllPath,
+                    HotReloadPdbDocumentIndex.Shared);
                 Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.HashMismatch));
             }
             finally
@@ -244,9 +292,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
                 projectRoot,
                 FixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot));
+                TestAssemblyDllPath(projectRoot),
+                HotReloadPdbDocumentIndex.Shared);
 
             Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.None));
+        }
+
+        /// <summary>
+        /// What: loading the verified snapshots of two files of one assembly reads its dll and PDB once.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSourceAt_TwoFilesOfOneAssembly_ReadsThePdbOnce()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+
+            string first = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                FixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+            string second = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                CoreFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.Not.Null);
+            Assert.That(index.LoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: asking why a load found no document reuses the list that load read, so the PDB is read once.
+        /// </summary>
+        [Test]
+        public void DescribeSnapshotMissAt_AfterALoadThatFoundNoDocument_DoesNotReadThePdbAgain()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+
+            string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                BodylessFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                projectRoot,
+                BodylessFixtureProjectRelativePath,
+                TestAssemblyDllPath(projectRoot),
+                index);
+
+            Assert.That(loaded, Is.Null);
+            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
+            Assert.That(index.LoadCount, Is.EqualTo(1));
         }
 
         private static string TestAssemblyDllPath(string projectRoot)

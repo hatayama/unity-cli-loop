@@ -70,17 +70,20 @@ func finishNonRetryableConnectionAttempt(
 	responseTimeout time.Duration,
 	focusController *connectionRetryFocusController,
 ) (unityipc.UnitySendOutcome, error) {
-	// A transport error after a busy response in this window must not mask the
-	// busy; the server answered moments ago, so busy is the truer diagnosis.
-	// An RPC error is a real Unity answer, not a transport artifact, and must
-	// surface as-is. The transport error is not compared against the window
-	// deadline because the connection deadline can fire microseconds before
-	// the context reports expiry.
+	// A busy answer earlier in this window wins only over an attempt whose request never reached
+	// Unity, such as a failed connect or write: nothing ran, so busy is the truer diagnosis. A
+	// request that reached Unity may already be running, so that attempt's own error and outcome
+	// take the same path as a first attempt's, and the caller recovers from them (compile, for
+	// one, asks Unity for its compile status). An RPC error is a real Unity answer, not a
+	// transport artifact, and must surface as-is.
 	if currentAttempt.err != nil && !isRPCError(currentAttempt.err) && isUnityServerBusyRPCError(lastAttempt.err) {
+		// A caller that cancelled gets the cancellation back, whichever attempt failed.
 		if ctx.Err() != nil {
 			return currentAttempt.outcome, ctx.Err()
 		}
-		return lastAttempt.outcome, lastAttempt.err
+		if !currentAttempt.outcome.RequestDispatched {
+			return lastAttempt.outcome, lastAttempt.err
+		}
 	}
 	if reason, ok := connectionRetryFocusReasonForError(currentAttempt.err, currentAttempt.outcome, responseTimeout); ok {
 		focusController.tryFocus(ctx, reason, currentAttempt.err)

@@ -23,6 +23,11 @@ internal static class TestAttributeNames
         + "'uloop run-tests --skip-compile' will not find or run it. "
         + "Run 'uloop compile' (or 'uloop run-tests' without --skip-compile) first.";
 
+    // The note on the entry of an added test method, so its row says what the warning says.
+    public const string AddedTestMethodLifecycleNote =
+        "Test method: not discovered by the Unity Test Runner until 'uloop compile'; "
+        + "'uloop run-tests --skip-compile' will not find or run it.";
+
     private static readonly HashSet<string> Names = new HashSet<string>(StringComparer.Ordinal)
     {
         "Test",

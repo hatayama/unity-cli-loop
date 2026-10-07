@@ -146,7 +146,8 @@ internal static class AddedPropertyAccessorGuard
             typeState.SourceUnit.SemanticModel,
             typeState.CompiledType,
             addedMemberAccess: null,
-            typeState.AddedEvents);
+            typeState.AddedEvents,
+            typeState.SourceUnit.PartialTypeParts);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

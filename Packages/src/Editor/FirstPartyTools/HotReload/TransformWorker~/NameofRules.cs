@@ -40,4 +40,24 @@ internal static class NameofRules
 
         return false;
     }
+
+    // Returns the name a bound nameof evaluates to, or null when the nameof must not be folded.
+    public static string FindBoundNameofValueOrNull(
+        InvocationExpressionSyntax nameofInvocation,
+        SemanticModel semanticModel)
+    {
+        // Why the error check before the constant: an operand that does not bind, or binds only
+        // in part, can still yield a constant, and that value need not be the name the code
+        // would compile with.
+        foreach (Diagnostic diagnostic in semanticModel.GetDiagnostics(nameofInvocation.Span))
+        {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+            {
+                return null;
+            }
+        }
+
+        Optional<object> constant = semanticModel.GetConstantValue(nameofInvocation);
+        return constant.HasValue ? constant.Value as string : null;
+    }
 }

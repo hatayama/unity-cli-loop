@@ -12,6 +12,8 @@ member access, static methods, return values, async methods, and iterators all w
 the limits below, including private access inside async, iterator, lambda, local-function,
 and LINQ-query bodies. Methods that cannot be patched are reported as `Skipped` or `Failed`;
 one unpatchable method never aborts the rest of the run.
+`Outcome` says whether the edit is live (`ReplacedByCompile`: a fallback compile succeeded, so
+it is compiled in and no patch is active).
 
 ## Usage
 
@@ -106,4 +108,4 @@ All files live in `references/` beside this skill; read the one whose trigger ma
 - `references/pause-point-interaction.md` — how patches re-target or suppress armed pause points; one-way reachability checks.
 - `references/introduced-types.md` — types a reload can introduce: supported shapes, internal access, refusal wording, identity and lifetime, why a new file is never selected automatically.
 - `references/added-field-wiring.md` — putting a value into an added field without a compile.
-- `references/output.md` — every response field: `ErrorCode`, `NextActions`, `Methods` rows, `Warnings`, totals.
+- `references/output.md` — "Is my edit live?" (`Outcome`), `Timing`, every response field: `ErrorCode`, `NextActions`, `Methods` rows, `Warnings`, totals.

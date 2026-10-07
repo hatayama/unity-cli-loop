@@ -50,6 +50,10 @@ internal sealed class WorkerInput
     // Null/omitted is treated as empty (no sibling const-drift scan).
     public string[] ChangedSiblingSourcePaths { get; set; }
 
+    // False/omitted means ChangedSiblingSourcePaths may be incomplete, so no other part of a
+    // partial type is trusted.
+    public bool ChangedSiblingScanComplete { get; set; }
+
     // Retained introduced-type assemblies this run may bind against.
     // Null/omitted is treated as empty (nothing is normalized through an artifact).
     public WorkerIntroducedTypeArtifact[] IntroducedTypeArtifacts { get; set; }

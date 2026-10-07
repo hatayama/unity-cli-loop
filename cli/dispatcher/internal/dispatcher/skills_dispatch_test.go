@@ -72,7 +72,7 @@ func TestTryHandleSkillsRequestInstallListUninstallRoundTrip(t *testing.T) {
 }
 
 func TestTryHandleSkillsRequestPrintsTargetGuidanceWithoutTargets(t *testing.T) {
-	// Verifies install and uninstall without target flags only print guidance and change nothing.
+	// Verifies install and uninstall without target flags only print guidance and change nothing when no target holds a uloop skill yet.
 	projectRoot := createSkillsTestProject(t)
 	for _, subcommand := range []string{"install", "uninstall"} {
 		code, stdout, stderr := runSkillsRequestForTest(t, projectRoot, subcommand)
@@ -82,6 +82,86 @@ func TestTryHandleSkillsRequestPrintsTargetGuidanceWithoutTargets(t *testing.T) 
 	}
 	if fileExists(filepath.Join(projectRoot, ".claude")) {
 		t.Fatal("guidance must not create any skill directory")
+	}
+}
+
+func TestRunSkillsSubcommandInstallWithoutTargetRefreshesDetectedInstall(t *testing.T) {
+	// Verifies install without a target flag refreshes a target that already holds a uloop skill instead of printing guidance.
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	skills := []skillDefinition{skill}
+	claudeOptions := skillCommandOptions{targets: []skillTarget{targetConfigs["claude"]}}
+	var setupStderr bytes.Buffer
+	if code := runSkillsSubcommand("install", root, skills, claudeOptions, &bytes.Buffer{}, &setupStderr); code != 0 {
+		t.Fatalf("initial install failed: code=%d stderr=%s", code, setupStderr.String())
+	}
+	baseDir, err := getSkillsBaseDir(root, targetConfigs["claude"], claudeOptions.global)
+	if err != nil {
+		t.Fatalf("failed to resolve the skills base dir: %v", err)
+	}
+	installedSkillFile := filepath.Join(getPreferredSkillDir(baseDir, skill.name, groupManagedSkillsForOptions(claudeOptions)), "SKILL.md")
+	writeDispatcherTestFile(t, installedSkillFile, "stale")
+	sourceContent, err := os.ReadFile(filepath.Join(skill.sourceDirectory, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read the skill source: %v", err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runSkillsSubcommand("install", root, skills, skillCommandOptions{}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("install without a target failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Auto-refreshing") || strings.Contains(stdout.String(), "Please specify at least one target") {
+		t.Fatalf("install without a target must refresh the detected install instead of printing guidance:\n%s", stdout.String())
+	}
+	assertFileContent(t, installedSkillFile, string(sourceContent))
+}
+
+func TestRunSkillsSubcommandInstallWithoutTargetAndNoInstallPrintsGuidance(t *testing.T) {
+	// Verifies install without a target flag still prints guidance and writes no skill when no target holds a uloop skill.
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runSkillsSubcommand("install", root, []skillDefinition{skill}, skillCommandOptions{}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("install without a target failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Please specify at least one target for 'install'") || strings.Contains(stdout.String(), "Auto-refreshing") {
+		t.Fatalf("install without a target must only print guidance when nothing is installed:\n%s", stdout.String())
+	}
+	walkErr := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && path == skill.sourceDirectory {
+			return filepath.SkipDir
+		}
+		if !entry.IsDir() && entry.Name() == "SKILL.md" {
+			t.Errorf("install without a target must not write a skill file: %s", path)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("failed to walk the project root: %v", walkErr)
+	}
+}
+
+func TestRunSkillsSubcommandInstallWithoutTargetReportsDetectionErrors(t *testing.T) {
+	// Verifies install without a target flag fails with code 1 instead of printing guidance when installed targets cannot be detected.
+	stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
+	skill := skillDefinition{name: "uloop-sample", content: []byte(sampleSkillContent)}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runSkillsSubcommand("install", t.TempDir(), []skillDefinition{skill}, skillCommandOptions{global: true}, &stdout, &stderr)
+
+	if code != 1 || !strings.Contains(stderr.String(), "home unavailable") || strings.Contains(stdout.String(), "Please specify at least one target") {
+		t.Fatalf("expected the detection error: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
 

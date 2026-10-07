@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -1467,5 +1468,187 @@ func TestSendWithTransientConnectionRetrySurfacesDispatchedFailureAfterBusy(t *t
 	var rpcErr *unityipc.RPCError
 	if !errors.As(err, &rpcErr) {
 		t.Fatalf("dispatched failure must surface as the original RPC error, got: %v", err)
+	}
+}
+
+// busyFirstServerConnection starts a TCP stand-in for Unity that answers the first connection with
+// a busy error and hands every later connection, once its request has been read, to
+// handleDispatched. The returned connection points at the stand-in.
+func busyFirstServerConnection(t *testing.T, handleDispatched func(conn net.Conn)) unityipc.Connection {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	busy := `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Unity is busy running 'execute-dynamic-code'.","data":{"type":"server_busy","runningToolName":"execute-dynamic-code","requestedToolName":"compile","message":"busy"}}}`
+	go func() {
+		first := true
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			sendBusy := first
+			first = false
+			go func(conn net.Conn, sendBusy bool) {
+				defer func() {
+					_ = conn.Close()
+				}()
+				if _, readErr := unityipc.Read(bufio.NewReader(conn)); readErr != nil {
+					return
+				}
+				if sendBusy {
+					_ = unityipc.Write(conn, []byte(busy))
+					return
+				}
+				handleDispatched(conn)
+			}(conn, sendBusy)
+		}
+	}()
+
+	return unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: "tcp",
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+}
+
+// Verifies a connection that drops after Unity accepted the retried request comes back as that
+// disconnect, not as the busy answer from the attempt before it, so compile can go on to ask Unity
+// for its compile status.
+func TestSendWithTransientConnectionRetrySurfacesADroppedConnectionAfterBusy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.retryTimeout = 150 * time.Millisecond
+	deps.retryPoll = 5 * time.Millisecond
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+	connection := busyFirstServerConnection(t, func(conn net.Conn) {
+		accepted := `{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`
+		_ = unityipc.Write(conn, []byte(accepted))
+	})
+
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"compile",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	if err == nil {
+		t.Fatal("expected the dropped connection to surface")
+	}
+	if isUnityServerBusyRPCError(err) {
+		t.Fatalf("a request that reached Unity must not be reported as the earlier busy answer, got: %v", err)
+	}
+	if !clierrors.IsTransportDisconnectError(err) {
+		t.Fatalf("err = %v, want a transport disconnect", err)
+	}
+	if !outcome.RequestDispatched || !outcome.RequestAccepted {
+		t.Fatalf("outcome = %+v, want a dispatched and accepted request", outcome)
+	}
+	if !shouldWaitForCompileStatus(err, outcome) {
+		t.Fatalf("compile must be able to wait for its status after err = %v, outcome = %+v", err, outcome)
+	}
+}
+
+// Verifies a final response wait that times out after Unity accepted the retried request, which is
+// how a compile longer than its response timeout ends, comes back as that timeout and not as the
+// busy answer from the attempt before it, so compile can go on to ask Unity for its compile status.
+func TestSendWithTransientConnectionRetrySurfacesAFinalResponseTimeoutAfterBusy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.retryTimeout = 150 * time.Millisecond
+	deps.retryPoll = 5 * time.Millisecond
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+	connection := busyFirstServerConnection(t, func(conn net.Conn) {
+		accepted := `{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`
+		if writeErr := unityipc.Write(conn, []byte(accepted)); writeErr != nil {
+			return
+		}
+		// Staying silent until the client hangs up means the client's own deadline is always what
+		// ends the wait, never a close from this side.
+		_, _ = io.Copy(io.Discard, conn)
+	})
+
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"compile",
+		map[string]any{},
+		nil,
+		50*time.Millisecond,
+		deps)
+	if err == nil {
+		t.Fatal("expected the final response timeout to surface")
+	}
+	if isUnityServerBusyRPCError(err) {
+		t.Fatalf("a request that reached Unity must not be reported as the earlier busy answer, got: %v", err)
+	}
+	if !clierrors.IsFinalResponseTimeoutError(err) {
+		t.Fatalf("err = %v, want a final response timeout", err)
+	}
+	if !outcome.RequestAccepted {
+		t.Fatalf("outcome = %+v, want an accepted request", outcome)
+	}
+	if !shouldWaitForCompileStatus(err, outcome) {
+		t.Fatalf("compile must be able to wait for its status after err = %v, outcome = %+v", err, outcome)
+	}
+}
+
+// Verifies a retried request that Unity read but never acknowledged times out as an unanswered
+// request, not as the busy answer from the attempt before it.
+func TestSendWithTransientConnectionRetrySurfacesAnUnansweredRequestAfterBusy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
+	}
+
+	deps := defaultConnectionRetryDeps()
+	deps.retryTimeout = 150 * time.Millisecond
+	deps.retryPoll = 5 * time.Millisecond
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+	connection := busyFirstServerConnection(t, func(conn net.Conn) {
+		// Staying silent until the client hangs up means the client's own accept deadline is always
+		// what ends the wait, never a close from this side.
+		_, _ = io.Copy(io.Discard, conn)
+	})
+
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
+		context.Background(),
+		connection,
+		"compile",
+		map[string]any{},
+		nil,
+		0,
+		deps)
+	if err == nil {
+		t.Fatal("expected the unanswered request to surface")
+	}
+	if isUnityServerBusyRPCError(err) {
+		t.Fatalf("a request that reached Unity must not be reported as the earlier busy answer, got: %v", err)
+	}
+	if !clierrors.IsFinalResponseTimeoutError(err) {
+		t.Fatalf("err = %v, want a response timeout", err)
+	}
+	if !outcome.RequestDispatched || outcome.RequestAccepted {
+		t.Fatalf("outcome = %+v, want a dispatched request that was never accepted", outcome)
 	}
 }

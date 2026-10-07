@@ -57,7 +57,7 @@ Returns JSON:
 - `WarningCount`: number or null
 - `Warning` (string, optional): set when the compile was requested during Play Mode (the Play session is discarded), while pause points were armed in either Play Mode or Edit Mode (the domain reload drops every pause point patch; those enabled with `--persist` are counted separately and re-armed from their saved enable request after the reload), or while hot-reload changes were active (a successful compile drops every patch; the edited sources are compiled in).
 - `Message`: string
-- `ErrorCode`: string or null. `COMPILE_ALREADY_IN_PROGRESS` when Unity is already compiling, `COMPILE_EDITOR_UPDATING` when the editor is updating, `COMPILE_RESULT_UNKNOWN` after a forced recompile that did not return a definitive result.
+- `ErrorCode`: string or null. `COMPILE_ALREADY_IN_PROGRESS` / `COMPILE_EDITOR_UPDATING` when Unity was still compiling or updating after the CLI waited for it and sent the compile again (it does so twice before giving up; run `uloop compile` again), `COMPILE_RESULT_UNKNOWN` after a forced recompile that did not return a definitive result.
 - `NextActions`: string array or null. Corrective steps derived from the errors, e.g. the assembly that declares an unresolved namespace (CS0234), or, for CS0246 in a script under an asmdef, a reminder to check that asmdef's references (the type may instead be a typo — decide from the error).
 
 When Unity stops compiling before the finish callback (`Success: null`, indeterminate), `Message` keeps the get-logs pointer and appends `Recent Console errors:` with the last few Console errors (typically the asmdef or compiler error that aborted the compile), so fix from that list before reaching for `uloop get-logs`.

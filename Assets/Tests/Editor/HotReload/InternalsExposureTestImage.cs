@@ -60,38 +60,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Action<TypeDefinition> configure = null)
         {
             string externalDirectory = Path.Combine(Application.temporaryCachePath, externalName);
-            Directory.CreateDirectory(externalDirectory);
             try
             {
-                using DefaultAssemblyResolver writeResolver = new DefaultAssemblyResolver();
-                writeResolver.AddSearchDirectory(externalDirectory);
-                using AssemblyDefinition external = AssemblyDefinition.CreateAssembly(
-                    new AssemblyNameDefinition(externalName, new Version(1, 0, 0, 0)), externalName, ModuleKind.Dll);
-                TypeDefinition externalKind = new TypeDefinition(
-                    "", "ExternalKind", TypeAttributes.Public | TypeAttributes.Sealed,
-                    external.MainModule.ImportReference(typeof(Enum)));
-                externalKind.Fields.Add(new FieldDefinition(
-                    "value__",
-                    FieldAttributes.Public | FieldAttributes.SpecialName | FieldAttributes.RTSpecialName,
-                    external.MainModule.TypeSystem.Int32));
-                external.MainModule.Types.Add(externalKind);
-                external.Write(Path.Combine(externalDirectory, externalName + ".dll"));
-                return new InternalsExposureTestImage(
-                    candidate =>
-                    {
-                        configure?.Invoke(candidate);
-                        candidate.Fields.Add(new FieldDefinition(
-                            "Default",
-                            FieldAttributes.Assembly | FieldAttributes.Static | FieldAttributes.Literal
-                            | FieldAttributes.HasDefault,
-                            candidate.Module.ImportReference(externalKind)) { Constant = 1 });
-                    },
-                    writeResolver);
+                return CreateWithConstantOfEnumIn(externalDirectory, externalName, configure);
             }
             finally
             {
                 Directory.Delete(externalDirectory, true);
             }
+        }
+
+        // Why the enum's assembly is left in place: a copy of this image can then be written only by
+        // a resolver that searches externalDirectory, so a test can tell which search directories
+        // reach it. The caller owns externalDirectory and deletes it.
+        internal static InternalsExposureTestImage CreateWithConstantOfEnumIn(
+            string externalDirectory,
+            string externalName,
+            Action<TypeDefinition> configure = null)
+        {
+            Directory.CreateDirectory(externalDirectory);
+            using DefaultAssemblyResolver writeResolver = new DefaultAssemblyResolver();
+            writeResolver.AddSearchDirectory(externalDirectory);
+            using AssemblyDefinition external = AssemblyDefinition.CreateAssembly(
+                new AssemblyNameDefinition(externalName, new Version(1, 0, 0, 0)), externalName, ModuleKind.Dll);
+            TypeDefinition externalKind = new TypeDefinition(
+                "", "ExternalKind", TypeAttributes.Public | TypeAttributes.Sealed,
+                external.MainModule.ImportReference(typeof(Enum)));
+            externalKind.Fields.Add(new FieldDefinition(
+                "value__",
+                FieldAttributes.Public | FieldAttributes.SpecialName | FieldAttributes.RTSpecialName,
+                external.MainModule.TypeSystem.Int32));
+            external.MainModule.Types.Add(externalKind);
+            external.Write(Path.Combine(externalDirectory, externalName + ".dll"));
+            return new InternalsExposureTestImage(
+                candidate =>
+                {
+                    configure?.Invoke(candidate);
+                    candidate.Fields.Add(new FieldDefinition(
+                        "Default",
+                        FieldAttributes.Assembly | FieldAttributes.Static | FieldAttributes.Literal
+                        | FieldAttributes.HasDefault,
+                        candidate.Module.ImportReference(externalKind)) { Constant = 1 });
+                },
+                writeResolver);
         }
 
         internal static MethodDefinition AddReadMethod(TypeDefinition type, string name, MethodAttributes access)

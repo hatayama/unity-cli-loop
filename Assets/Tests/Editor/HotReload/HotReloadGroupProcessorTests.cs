@@ -9,6 +9,7 @@ using NUnit.Framework;
 
 using UnityEditor.Compilation;
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -641,6 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 results = await HotReloadCompositionRoot.Services.GroupProcessor.ProcessGroupAsync(
                     new[] { file },
                     "worker-failure-test",
+                    new HotReloadRunTiming(),
                     CancellationToken.None);
             }
 
@@ -648,6 +650,122 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(results[0].SourceContentSha256, Is.Null);
             Assert.That(results[0].PatchedCount, Is.EqualTo(0));
             Assert.That(CountFileFailedRows(file), Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: each phase of a group run records the time of its own step. Every stubbed step
+        /// takes a different time, so a step recorded under another phase, or not recorded at
+        /// all, leaves some phase short of what its own steps measured.
+        /// </summary>
+        [Test]
+        public async Task ProcessGroupAsync_RecordsEachPhaseFromItsOwnStep()
+        {
+            PhaseStubs stubs = new PhaseStubs(CreatePhaseFile())
+            {
+                PreparationDelayMs = 40,
+                WorkerDelayMs = 300,
+                GateDelayMs = 100
+            };
+
+            HotReloadTimingBreakdown breakdown = await RunGroupWithPhaseStubsAsync(stubs);
+
+            Assert.That(stubs.ApplyCalls, Is.EqualTo(1), "The run must reach the apply step.");
+            Assert.That(
+                breakdown.AnalysisMs,
+                Is.GreaterThanOrEqualTo(stubs.PreparationMs + stubs.WorkerMs),
+                "AnalysisMs");
+            Assert.That(breakdown.ShimCompileMs, Is.GreaterThanOrEqualTo(stubs.GateMs), "ShimCompileMs");
+            Assert.That(breakdown.PatchMs, Is.GreaterThanOrEqualTo(stubs.ApplyMs), "PatchMs");
+        }
+
+        /// <summary>
+        /// What: a gate or compile that fails still records the time it took, and the run that
+        /// stops there records no patch time.
+        /// </summary>
+        [Test]
+        public async Task ProcessGroupAsync_WhenGateAndCompileFails_RecordsShimCompileAndNoPatch()
+        {
+            PhaseStubs stubs = new PhaseStubs(CreatePhaseFile())
+            {
+                GateDelayMs = 100,
+                GateFails = true
+            };
+
+            HotReloadTimingBreakdown breakdown = await RunGroupWithPhaseStubsAsync(stubs);
+
+            Assert.That(stubs.GateCalls, Is.EqualTo(1), "The run must reach the gate.");
+            Assert.That(stubs.ApplyCalls, Is.EqualTo(0), "A failed gate must not apply.");
+            Assert.That(breakdown.ShimCompileMs, Is.GreaterThanOrEqualTo(stubs.GateMs), "ShimCompileMs");
+            Assert.That(breakdown.PatchMs, Is.EqualTo(0), "PatchMs");
+        }
+
+        /// <summary>
+        /// What: a transform worker that fails records its time as analysis, and the run that
+        /// stops there records no shim compile or patch time.
+        /// </summary>
+        [Test]
+        public async Task ProcessGroupAsync_WhenWorkerFails_RecordsAnalysisOnly()
+        {
+            PhaseStubs stubs = new PhaseStubs(CreatePhaseFile())
+            {
+                WorkerDelayMs = 100,
+                WorkerFails = true
+            };
+
+            HotReloadTimingBreakdown breakdown = await RunGroupWithPhaseStubsAsync(stubs);
+
+            Assert.That(stubs.WorkerCalls, Is.EqualTo(1), "The run must reach the worker.");
+            Assert.That(stubs.GateCalls, Is.EqualTo(0), "A failed worker must not reach the gate.");
+            Assert.That(breakdown.AnalysisMs, Is.GreaterThanOrEqualTo(stubs.WorkerMs), "AnalysisMs");
+            Assert.That(breakdown.ShimCompileMs, Is.EqualTo(0), "ShimCompileMs");
+            Assert.That(breakdown.PatchMs, Is.EqualTo(0), "PatchMs");
+        }
+
+        private static HotReloadGroupFile CreatePhaseFile()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            return CreateFile(HealthySourcePath, projectRoot, FindCompilationAssembly());
+        }
+
+        /// <summary>
+        /// Runs one group through the production processor with its collaborators replaced by
+        /// the stubs, and returns what the run recorded per phase.
+        /// </summary>
+        private static async Task<HotReloadTimingBreakdown> RunGroupWithPhaseStubsAsync(PhaseStubs stubs)
+        {
+            HotReloadRunTiming timing = new HotReloadRunTiming();
+            // Why time the call instead of passing a fixed total: the stubs really wait, so the
+            // phases hold measured times, and only the time around the call is a total that
+            // covers them, as in the production run.
+            Stopwatch total = new Stopwatch();
+            using (HotReloadServicesTestScope.BeginWithDependencies(collaborators =>
+                HotReloadGroupProcessorDependencies.Create(
+                    files => true,
+                    stubs.PrepareAsync,
+                    stubs.RunWorkerAsync,
+                    stubs.GateAndCompileAsync,
+                    (context, compileResult, entriesToPatch) => Array.Empty<HotReloadPreparedGroupFile>(),
+                    stubs.ApplyPreparedEntries)))
+            {
+                try
+                {
+                    total.Start();
+                    await HotReloadCompositionRoot.Services.GroupProcessor.ProcessGroupAsync(
+                        new[] { stubs.GroupFile },
+                        "phase-timing-test",
+                        timing,
+                        CancellationToken.None);
+                    total.Stop();
+                }
+                catch (OperationCanceledException exception)
+                {
+                    // Why fail here: the test framework records an async test that ends canceled
+                    // as passed, which would hide a run that never finished.
+                    Assert.Fail("The group run was canceled: " + exception.Message);
+                }
+            }
+
+            return timing.Complete(total.ElapsedMilliseconds);
         }
 
         private static TransformWorkerEntryDto CreateAtomicEntry(string projectRelativePath)
@@ -1059,6 +1177,143 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             Calls++;
                             return Results;
                         }));
+            }
+        }
+
+        /// <summary>
+        /// Stands in for each step of a group run with a wait of its own length, and measures
+        /// that wait itself, so a test can tell which phase each step's time was recorded under.
+        /// </summary>
+        private sealed class PhaseStubs
+        {
+            private const int ApplySpinMs = 20;
+
+            private readonly string _sourceContentSha256;
+
+            internal PhaseStubs(HotReloadGroupFile file)
+            {
+                GroupFile = file;
+                // Why the hash the file was written with: the commit boundary re-hashes the
+                // request source and refuses a run whose worker reported a different one.
+                _sourceContentSha256 = file.FileOutput.sourceContentSha256;
+            }
+
+            internal HotReloadGroupFile GroupFile { get; }
+
+            internal int PreparationDelayMs { get; set; }
+
+            internal int WorkerDelayMs { get; set; }
+
+            internal int GateDelayMs { get; set; }
+
+            internal bool WorkerFails { get; set; }
+
+            internal bool GateFails { get; set; }
+
+            internal long PreparationMs { get; private set; }
+
+            internal long WorkerMs { get; private set; }
+
+            internal long GateMs { get; private set; }
+
+            internal long ApplyMs { get; private set; }
+
+            internal int WorkerCalls { get; private set; }
+
+            internal int GateCalls { get; private set; }
+
+            internal int ApplyCalls { get; private set; }
+
+            internal async Task<HotReloadIntroducedTypePreparationResult> PrepareAsync(
+                IReadOnlyList<HotReloadGroupFile> files,
+                TransformWorkerInputDto input,
+                CancellationToken ct)
+            {
+                Stopwatch waited = Stopwatch.StartNew();
+                await Task.Delay(PreparationDelayMs);
+                PreparationMs = waited.ElapsedMilliseconds;
+                return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes();
+            }
+
+            internal async Task<TransformWorkerClientResult> RunWorkerAsync(
+                TransformWorkerInputDto input,
+                CancellationToken ct)
+            {
+                WorkerCalls++;
+                Stopwatch waited = Stopwatch.StartNew();
+                await Task.Delay(WorkerDelayMs);
+                WorkerMs = waited.ElapsedMilliseconds;
+                return WorkerFails
+                    ? TransformWorkerClientResult.Failure("transform worker failed")
+                    : TransformWorkerClientResult.SuccessResult(BuildWorkerOutput());
+            }
+
+            internal async Task<HotReloadGroupGateAndCompileResult> GateAndCompileAsync(
+                HotReloadApplyContext context,
+                CancellationToken ct)
+            {
+                GateCalls++;
+                Stopwatch waited = Stopwatch.StartNew();
+                await Task.Delay(GateDelayMs);
+                GateMs = waited.ElapsedMilliseconds;
+                return GateFails
+                    ? HotReloadGroupGateAndCompileResult.Failed()
+                    : HotReloadGroupGateAndCompileResult.Ready(
+                        CreateEmptyGateResult(),
+                        CreateCompile(CreateAtomicEntry(GroupFile.ProjectRelativePath)));
+            }
+
+            internal IReadOnlyList<HotReloadFileProcessResult> ApplyPreparedEntries(
+                HotReloadApplyContext context,
+                HotReloadShimCompileResult compileResult,
+                IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
+            {
+                ApplyCalls++;
+                // Why a busy loop: applying patches is synchronous work on the main thread in
+                // production too, and this stands in for its duration. It waits on nothing, so it
+                // cannot cause the deadlock the guardrails ban Thread.Sleep for, a main thread
+                // blocked on a continuation only the editor thread can run.
+                Stopwatch spun = Stopwatch.StartNew();
+                while (spun.ElapsedMilliseconds < ApplySpinMs)
+                {
+                }
+
+                ApplyMs = spun.ElapsedMilliseconds;
+                return new[]
+                {
+                    new HotReloadFileProcessResult(new List<HotReloadMethodOutcome>(), new List<string>(), 1)
+                };
+            }
+
+            private TransformWorkerOutputDto BuildWorkerOutput()
+            {
+                return new TransformWorkerOutputDto
+                {
+                    shimSource = string.Empty,
+                    entries = Array.Empty<TransformWorkerEntryDto>(),
+                    skipped = Array.Empty<TransformWorkerSkippedDto>(),
+                    files = new[]
+                    {
+                        new TransformWorkerFileOutputDto
+                        {
+                            projectRelativePath = GroupFile.ProjectRelativePath,
+                            sourceContentSha256 = _sourceContentSha256,
+                            parseErrors = Array.Empty<string>(),
+                            declarationDriftWarnings = Array.Empty<string>(),
+                            removedMembers = Array.Empty<TransformWorkerRemovedMemberDto>(),
+                            removedMethodSignatures = Array.Empty<TransformWorkerRemovedMethodSignatureDto>(),
+                            addedFieldNames = Array.Empty<string>(),
+                            addedConstNames = Array.Empty<string>(),
+                            addedEnumMemberNames = Array.Empty<string>(),
+                            introducedTypes = Array.Empty<TransformWorkerIntroducedTypeDto>(),
+                            introducedTypeDiagnostics = Array.Empty<TransformWorkerReasonDto>(),
+                            introducedTypeReuses = Array.Empty<TransformWorkerIntroducedTypeReuseDto>()
+                        }
+                    },
+                    parseErrors = Array.Empty<string>(),
+                    siblingConstDriftWarnings = Array.Empty<string>(),
+                    unchangedMethods = Array.Empty<TransformWorkerUnchangedMethodDto>()
+                };
             }
         }
 

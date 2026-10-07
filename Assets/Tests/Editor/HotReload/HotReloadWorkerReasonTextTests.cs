@@ -210,9 +210,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "(state-machine MoveNext JIT-compiles normally and fails accessibility checks)."
                 + " Accessor rewrite unavailable: " + GenericMethodFragment);
             yield return Case(
-                HotReloadWorkerReasonCode.MethodTransformPartialType,
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartChanged,
+                new[] { "Assets/Scripts/Presenter.Other.cs" },
+                "Another part of this partial type changed since the last compile "
+                + "(Assets/Scripts/Presenter.Other.cs), so hot reload cannot bind this method against the "
+                + "compiled type. Pass that file with --files too, or run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified,
                 NoArgs,
-                "Partial types are skipped because a single file cannot provide a complete semantic model.");
+                "The other parts of this partial type could not be checked against the last compile "
+                + "(no source snapshot for the assembly, or too many changed files to scan), so hot reload "
+                + "cannot bind this method against the compiled type. Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformPartialBodyUnbound,
+                new[] { "CS0103: The name '_generated' does not exist in the current context" },
+                "CS0103: The name '_generated' does not exist in the current context. None of this partial "
+                + "type's source files known to hot reload declares that name: a part generated at compile "
+                + "time is not visible to it, and a file added since the last compile must be passed with "
+                + "--files. Otherwise run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
+                new[] { "CS0117: 'Host' does not contain a definition for 'Value'", "'Host'" },
+                "CS0117: 'Host' does not contain a definition for 'Value'. That member is internal to 'Host', "
+                + "whose source this reload was not given. Hot reload patches a use of such a member only where "
+                + "it is a field, a property or a method call written with its receiver ('this.Name', "
+                + "'Type.Name', 'value.Name') in the method's own statements: not a bare name, a method passed "
+                + "as a delegate, or a use inside a lambda, local function, query, iterator or async method, or "
+                + "in a body patched through a delegating shim. A lambda, local function or query that works "
+                + "with a value hot reload could not resolve, such as the member's result, keeps the whole body "
+                + "out as well. Qualify a bare name with 'this.' or the type name, or run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 NoArgs,
@@ -252,6 +278,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
                 + "Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved,
+                new[] { "Missing<T>" },
+                "The method signature names a type the hot-reload compilation could not resolve "
+                + "('Missing<T>'), so hot reload cannot tell whether this method already exists "
+                + "in the compiled assembly. If the type is declared in another file of this edit, pass "
+                + "that file with --files too; otherwise run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodMethodGroupReference,
                 new[] { "Helper", " (such as 'a => Helper(a)')" },
@@ -314,7 +347,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "The added member's body could not be fully bound in the hot-reload compilation "
                 + "(CS1503: Argument 1: cannot convert); hot reload cannot verify a member it cannot bind, "
                 + "so it is skipped. If the name is declared in a new file, pass that file to --files too "
-                + "(new files are not selected automatically); run 'uloop compile' only if it still does not bind.");
+                + "(new files are not selected automatically). If the name is generated at compile time, "
+                + "for example by a source generator, hot reload cannot see it: run 'uloop compile'. "
+                + "Also run 'uloop compile' if it still does not bind.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedMethodBodyBindsCompiledSignature,
                 new[] { "CS1503: Argument 1: cannot convert", "'Example.Payload'", "'Example.Registry'", "'Assets/Registry.cs'" },

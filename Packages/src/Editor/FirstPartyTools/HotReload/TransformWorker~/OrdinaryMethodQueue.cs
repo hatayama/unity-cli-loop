@@ -283,7 +283,8 @@ internal static class OrdinaryMethodQueue
                 semanticModel,
                 typeState.CompiledType,
                 typeState.AddedMemberAccess,
-                typeState.AddedEvents);
+                typeState.AddedEvents,
+                typeState.SourceUnit.PartialTypeParts);
         if (isAddedMethod && decision.SkipReason == null)
         {
             decision = MethodTransformDecider.DecideAddedMethodAccessors(
@@ -302,10 +303,31 @@ internal static class OrdinaryMethodQueue
             WorkerReason siblingSkip = ReappliedSiblingBodyGuard.DescribeSkipOrNull(
                 semanticModel,
                 methodBodyNode,
-                typeState.TargetAssembly);
+                typeState.TargetAssembly,
+                methodDeclaration,
+                decision,
+                typeState.TypeSymbol);
             if (siblingSkip != null)
             {
                 decision = MethodTransformDecision.Skip(siblingSkip);
+            }
+        }
+
+        // Why existing methods only: an added method's unbound body is already skipped by the
+        // added-member binding check, with its own reason.
+        if (!isAddedMethod && decision.SkipReason == null)
+        {
+            WorkerReason unresolvedNameSkip = UnresolvedBodyNameGuard.DescribeSkipOrNull(
+                typeState.TypeDeclaration,
+                semanticModel,
+                methodBodyNode,
+                methodDeclaration,
+                decision,
+                typeState.TypeSymbol,
+                typeState.TargetAssembly);
+            if (unresolvedNameSkip != null)
+            {
+                decision = MethodTransformDecision.Skip(unresolvedNameSkip);
             }
         }
 

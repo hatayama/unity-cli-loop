@@ -75,6 +75,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Methods,
                 result.ReappliedSiblingPaths,
                 toProjectRelativeScriptPath);
+            int skippedSiblingCount = HotReloadRequestedFileOutcomeSummary.CountSkippedSiblingOutcomes(
+                result.Methods,
+                result.ReappliedSiblingPaths,
+                toProjectRelativeScriptPath);
             string message = BuildApplyMessage(
                 result,
                 hasFailure,
@@ -85,10 +89,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warnings,
                     HotReloadReappliedSiblingFiles.ForActivePatches(result, toProjectRelativeScriptPath)),
                 allRequestedSkipped,
-                reappliedSiblingCount);
+                reappliedSiblingCount,
+                skippedSiblingCount);
+            HotReloadOutcomeTally tally = HotReloadOutcomeAggregation.CountMethodOutcomeKinds(result.Methods);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
+                Outcome = HotReloadApplyOutcome.Decide(
+                    result.Methods,
+                    result.IntroducedTypes,
+                    reappliedSiblingFiles,
+                    hasFailure).ToString(),
+                SkippedTotal = tally.SkippedCount,
+                AddedTotal = tally.AddedCount,
+                FailedTotal = tally.FailedCount,
+                AlreadyActiveTotal = tally.AlreadyActiveCount,
+                StaleTotal = tally.StaleCount,
                 Methods = methods,
                 Warnings = warnings.ToList(),
                 IntroducedTypes = HotReloadIntroducedTypeResponseSection.BuildRows(result.IntroducedTypes),
@@ -104,12 +120,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = HotReloadAutoRefreshHoldResponseEnricher.AppendNewlyArmedMessage(
                     message,
                     result.AutoRefreshHoldNewlyArmed),
+                AutoRefreshHoldMessage = result.AutoRefreshHoldNewlyArmed
+                    ? HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix
+                    : string.Empty,
                 RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
                     hasFailure,
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
                     HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
-                    allRequestedSkipped)
+                    allRequestedSkipped),
+                Timing = ToTimingResponse(result.Timing)
+            };
+        }
+
+        private static HotReloadTimingResponse ToTimingResponse(HotReloadTimingBreakdown timing)
+        {
+            if (timing == null)
+            {
+                return null;
+            }
+
+            return new HotReloadTimingResponse
+            {
+                AnalysisMs = timing.AnalysisMs,
+                ShimCompileMs = timing.ShimCompileMs,
+                PatchMs = timing.PatchMs,
+                OtherMs = timing.OtherMs,
+                TotalMs = timing.TotalMs
             };
         }
 
@@ -138,8 +175,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int warningCount,
             bool appendCompileResolution,
             bool allRequestedSkipped,
-            int reappliedSiblingCount)
+            int reappliedSiblingCount,
+            int skippedSiblingCount)
         {
+            string skippedCountSuffix = BuildSkippedCountSuffix(result, skippedSiblingCount);
+
             // Why asked first: the file a run introduces a type into usually holds untouched
             // methods as well, and every message below would then report the methods only.
             if (HotReloadIntroducedTypeResponseSection.TryBuildMessage(
@@ -147,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     hasMethodFailure,
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
-                    CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped),
+                    skippedCountSuffix,
                     out string typeMessage))
             {
                 return AppendWarningCount(typeMessage, warningCount, appendCompileResolution);
@@ -165,13 +205,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     appendCompileResolution);
             }
 
-            string message = BuildApplyOutcomeMessage(result, hasFailure, allRequestedSkipped, reappliedSiblingCount);
+            string message = BuildApplyOutcomeMessage(
+                result,
+                hasFailure,
+                allRequestedSkipped,
+                reappliedSiblingCount,
+                skippedCountSuffix);
             message = AppendUnchangedAndLifecycleNotes(message, result);
             message = HotReloadIntroducedTypeResponseSection.AppendTypeSummary(
                 message,
                 result.IntroducedTypes);
 
             return AppendWarningCount(message, warningCount, appendCompileResolution);
+        }
+
+        // The Skipped clause the applied messages end their counts with, or an empty string when
+        // no row was Skipped. Built once so the type-only message and the ordinary one agree.
+        // Why the sibling rows are named: the count covers every row while Outcome only judges
+        // the requested files, so an Applied run beside a bare count reads as if one of the
+        // requested edits had been skipped.
+        private static string BuildSkippedCountSuffix(HotReloadOrchestratorResult result, int skippedSiblingCount)
+        {
+            int skippedCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped);
+            Debug.Assert(
+                skippedSiblingCount <= skippedCount,
+                "skippedSiblingCount must not exceed the Skipped rows it was counted from.");
+            if (skippedCount == 0)
+            {
+                return string.Empty;
+            }
+
+            return skippedSiblingCount > 0
+                ? string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.SkippedCountWithSiblingRowsApplyMessageSuffixFormat,
+                    skippedCount,
+                    skippedSiblingCount)
+                : string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.SkippedCountApplyMessageSuffixFormat,
+                    skippedCount);
         }
 
         // Whether the Message may say one compile clears every warning and none has to be cleared
@@ -222,7 +295,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result,
             bool hasFailure,
             bool allRequestedSkipped,
-            int reappliedSiblingCount)
+            int reappliedSiblingCount,
+            string skippedCountSuffix)
         {
             int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
@@ -272,16 +346,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + " of the patched and added rows re-applied changes from earlier reloads in sibling files.";
             }
 
-            // Why counted here: the totals only count what was applied, so a run that skipped
-            // some of the edits otherwise reads as if every one of them took effect.
-            int skippedCount = CountOutcomesOfKind(result, HotReloadMethodOutcomeKind.Skipped);
-            if (skippedCount > 0)
-            {
-                message += string.Format(
-                    CultureInfo.InvariantCulture,
-                    HotReloadConstants.SkippedCountApplyMessageSuffixFormat,
-                    skippedCount);
-            }
+            // Why the Skipped count goes here: the totals only count what was applied, so a run
+            // that skipped some of the edits otherwise reads as if every one of them took effect.
+            message += skippedCountSuffix;
 
             return AppendStaleSummary(message, result);
         }

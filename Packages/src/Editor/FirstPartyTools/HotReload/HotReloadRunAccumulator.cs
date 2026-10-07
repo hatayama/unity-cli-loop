@@ -226,8 +226,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Appends the run-level warnings, logs the summary, syncs the Auto Refresh hold, and
         /// builds the final result. Requires the Unity main thread for the Auto Refresh sync.
+        /// <paramref name="timing"/> is what the run measured per phase; null leaves it unmeasured.
         /// </summary>
-        public HotReloadOrchestratorResult BuildResult(string correlationId)
+        public HotReloadOrchestratorResult BuildResult(
+            string correlationId,
+            HotReloadTimingBreakdown timing = null)
         {
             // Why before anything reads the rows: the response copies each Skipped row's reason
             // into Warnings, so a step added later would reach the row but not its warning.
@@ -274,7 +277,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 autoRefreshHoldNewlyArmed: newlyArmed,
                 introducedTypeNoticeCount: _introducedTypeNoticeCount,
                 serializedAddedFieldsReported: _serializedAddedFieldsReported,
-                activePatchSiblingPaths: CollectActivePatchSiblingPaths());
+                activePatchSiblingPaths: CollectActivePatchSiblingPaths(),
+                timing: timing);
         }
 
         // Why only ActiveChanges: a sibling retried after an earlier Skip or brought in as a

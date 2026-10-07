@@ -49,14 +49,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Package-relative sources compiled into the worker in addition to the tilde directory.
         // Why: the resident-mode line protocol, the introduced-type fingerprint, the reason code
-        // the worker reports and the Unity messages hot reload does not forward are shared
-        // verbatim between the Editor host and the worker so the two ends cannot drift apart.
+        // the worker reports, the Unity messages hot reload does not forward and the source-path
+        // matching are shared verbatim between the Editor host and the worker so the two ends
+        // cannot drift apart.
         public static readonly string[] WorkerSharedSourcePackageRelativePaths =
         {
             "Editor/FirstPartyTools/HotReload/Shared/TransformWorkerServeProtocol.cs",
             "Editor/FirstPartyTools/HotReload/Shared/HotReloadIntroducedTypeFingerprint.cs",
             "Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonCode.cs",
-            "Editor/FirstPartyTools/HotReload/Shared/HotReloadNotForwardedUnityMessageNames.cs"
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadNotForwardedUnityMessageNames.cs",
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadSourcePathMatching.cs"
         };
 
         public const string WorkerDllFileName = "worker.dll";
@@ -503,6 +505,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Format: how many method outcomes of this run were Skipped.
         public const string SkippedCountApplyMessageSuffixFormat = " Skipped: {0}.";
+
+        // Format: how many method outcomes of this run were Skipped, and how many of those belong
+        // to sibling files the run re-applied on its own.
+        public const string SkippedCountWithSiblingRowsApplyMessageSuffixFormat =
+            " Skipped: {0} ({1} in sibling files the run re-applied on its own; Outcome does not count those).";
 
         // Format: how many types this run introduced.
         public const string IntroducedTypesOnlyApplyMessageFormat =

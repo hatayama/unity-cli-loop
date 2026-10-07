@@ -4,9 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-using Mono.Cecil;
 using Mono.Cecil.Cil;
-using Mono.Cecil.Pdb;
 
 using UnityEngine;
 
@@ -27,20 +25,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be null or empty.");
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            return LoadVerifiedSnapshotSourceAt(projectRoot, projectRelativeSourcePath, targetDllPath);
+            return LoadVerifiedSnapshotSourceAt(
+                projectRoot,
+                projectRelativeSourcePath,
+                targetDllPath,
+                HotReloadPdbDocumentIndex.Shared);
         }
 
         // projectRoot is injectable so EditMode tests can point at a tampered snapshot tree
-        // without expanding the public API surface.
+        // without expanding the public API surface, and documentIndex so they can count how
+        // often the PDB is read.
         internal static string LoadVerifiedSnapshotSourceAt(
             string projectRoot,
             string projectRelativeSourcePath,
-            string targetDllPath)
+            string targetDllPath,
+            HotReloadPdbDocumentIndex documentIndex)
         {
             TryLoadVerifiedSnapshotSource(
                 projectRoot,
                 projectRelativeSourcePath,
                 targetDllPath,
+                documentIndex,
                 out string source);
             return source;
         }
@@ -50,26 +55,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <remarks>
         /// Why a second lookup rather than a richer load result: the loader has several callers
-        /// that only need the text, and only the missing-baseline warning needs the reason, so the
-        /// cost of reading the PDB again is paid on that rare path alone.
+        /// that only need the text, and only the missing-baseline warning needs the reason. The
+        /// second lookup reuses the document list the first one kept, so it does not read the PDB
+        /// again.
         /// </remarks>
         internal static HotReloadSnapshotMissReason DescribeSnapshotMiss(
             string projectRelativeSourcePath,
             string targetDllPath)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            return DescribeSnapshotMissAt(projectRoot, projectRelativeSourcePath, targetDllPath);
+            return DescribeSnapshotMissAt(
+                projectRoot,
+                projectRelativeSourcePath,
+                targetDllPath,
+                HotReloadPdbDocumentIndex.Shared);
         }
 
         internal static HotReloadSnapshotMissReason DescribeSnapshotMissAt(
             string projectRoot,
             string projectRelativeSourcePath,
-            string targetDllPath)
+            string targetDllPath,
+            HotReloadPdbDocumentIndex documentIndex)
         {
             return TryLoadVerifiedSnapshotSource(
                 projectRoot,
                 projectRelativeSourcePath,
                 targetDllPath,
+                documentIndex,
                 out string _);
         }
 
@@ -77,11 +89,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string projectRelativeSourcePath,
             string targetDllPath,
+            HotReloadPdbDocumentIndex documentIndex,
             out string source)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeSourcePath), "projectRelativeSourcePath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be null or empty.");
+            Debug.Assert(documentIndex != null, "documentIndex must not be null.");
 
             source = null;
             string pdbPath = Path.ChangeExtension(targetDllPath, ".pdb");
@@ -107,8 +121,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why read once: the verified bytes must be the exact payload decoded for the worker —
             // a second read could race with another writer and diverge from the checksummed content.
             byte[] snapshotBytes = File.ReadAllBytes(snapshotPath);
-            Document document = FindDocumentForProjectRelativePath(targetDllPath, pdbPath, slashNormalizedRelativePath);
-            if (document == null)
+            if (!documentIndex.TryFindDocument(
+                    targetDllPath,
+                    pdbPath,
+                    mvid,
+                    slashNormalizedRelativePath,
+                    out HotReloadPdbDocument document))
             {
                 return HotReloadSnapshotMissReason.NoDocumentInPdb;
             }
@@ -130,58 +148,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using StreamReader reader = new StreamReader(memoryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             source = reader.ReadToEnd();
             return HotReloadSnapshotMissReason.None;
-        }
-
-        private static Document FindDocumentForProjectRelativePath(
-            string dllPath,
-            string pdbPath,
-            string projectRelativePath)
-        {
-            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-
-            ReaderParameters readerParameters = new ReaderParameters
-            {
-                InMemory = true,
-                ReadSymbols = true,
-                SymbolReaderProvider = new PortablePdbReaderProvider(),
-                SymbolStream = pdbStream
-            };
-
-            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
-            foreach (TypeDefinition type in assemblyDefinition.MainModule.GetTypes())
-            {
-                foreach (MethodDefinition method in type.Methods)
-                {
-                    if (!method.HasBody)
-                    {
-                        continue;
-                    }
-
-                    MethodDebugInformation debugInformation = method.DebugInformation;
-                    if (debugInformation == null || !debugInformation.HasSequencePoints)
-                    {
-                        continue;
-                    }
-
-                    foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
-                    {
-                        if (sequencePoint.IsHidden || sequencePoint.Document == null)
-                        {
-                            continue;
-                        }
-
-                        if (HotReloadSourcePathNormalizer.PathsReferToSameFile(
-                                sequencePoint.Document.Url,
-                                projectRelativePath))
-                        {
-                            return sequencePoint.Document;
-                        }
-                    }
-                }
-            }
-
-            return null;
         }
 
         private static byte[] ComputeDocumentHash(DocumentHashAlgorithm algorithm, byte[] sourceBytes)

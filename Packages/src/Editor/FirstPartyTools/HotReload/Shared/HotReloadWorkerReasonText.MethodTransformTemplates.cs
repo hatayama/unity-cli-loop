@@ -35,10 +35,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     AccessorRewriteUnavailableSeparator,
                     string.Empty));
             templates.Add(
-                HotReloadWorkerReasonCode.MethodTransformPartialType,
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartChanged,
                 Plain(
-                    "Partial types are skipped because a single file cannot provide a complete semantic model.",
+                    "Another part of this partial type changed since the last compile ({0}), so hot reload "
+                    + "cannot bind this method against the compiled type. Pass that file with --files too, "
+                    + "or run 'uloop compile'.",
+                    1));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified,
+                Plain(
+                    "The other parts of this partial type could not be checked against the last compile "
+                    + "(no source snapshot for the assembly, or too many changed files to scan), so hot "
+                    + "reload cannot bind this method against the compiled type. Run 'uloop compile'.",
                     0));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformPartialBodyUnbound,
+                Plain(
+                    "{0}. None of this partial type's source files known to hot reload declares that name: "
+                    + "a part generated at compile time is not visible to it, and a file added since the "
+                    + "last compile must be passed with --files. Otherwise run 'uloop compile'.",
+                    1));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformUnpassedInternalMemberOutOfReach,
+                Plain(
+                    "{0}. That member is internal to {1}, whose source this reload was not given. Hot reload patches "
+                    + "a use of such a member only where it is a field, a property or a method call written with its "
+                    + "receiver ('this.Name', 'Type.Name', 'value.Name') in the method's own statements: not a bare "
+                    + "name, a method passed as a delegate, or a use inside a lambda, local function, query, iterator "
+                    + "or async method, or in a body patched through a delegating shim. A lambda, local function or "
+                    + "query that works with a value hot reload could not resolve, such as the member's result, keeps "
+                    + "the whole body out as well. Qualify a bare name with 'this.' or the type name, or run "
+                    + "'uloop compile'.",
+                    2));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformStructHost,
                 Plain(

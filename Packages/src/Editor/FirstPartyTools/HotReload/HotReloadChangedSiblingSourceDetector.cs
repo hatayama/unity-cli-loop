@@ -88,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return new HotReloadChangedSiblingScanResult(
                 changedSiblingAbsolutePaths.ToArray(),
-                sourceScan.ScanLimitWarning);
+                sourceScan.ScanLimitWarning,
+                sourceScan.HasBaseline && string.IsNullOrEmpty(sourceScan.ScanLimitWarning));
         }
 
         /// <summary>

@@ -16,12 +16,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why not EditorApplication.delayCall: a cold-start session that hits Unity's native
             // "Scripts have compiler errors" dialog never flushes delayCall again for the rest of
             // that process's lifetime, even for later registrations — while
-            // EditorApplication.update keeps ticking (see SetupWizardWindow.cs:56-70). Capture is
-            // racy-safe (use-time PDB checksum), so running on the first update tick is fine.
+            // EditorApplication.update keeps ticking (see SetupWizardWindow.cs:56-70). The
+            // hot-reload apply entry makes sure of the capture through the same gate before it
+            // reads a snapshot; this tick still captures as early as it can when no request comes
+            // first, because a file edited before the capture is snapshotted with that edit.
             void CaptureOnFirstUpdateTick()
             {
                 EditorApplication.update -= CaptureOnFirstUpdateTick;
-                HotReloadSourceSnapshotter.CaptureAfterDomainReload();
+                HotReloadCompositionRoot.Services.SourceSnapshotCapture.EnsureCaptured();
             }
 
             // Why a callback of its own rather than a line in the capture above: an exception in
