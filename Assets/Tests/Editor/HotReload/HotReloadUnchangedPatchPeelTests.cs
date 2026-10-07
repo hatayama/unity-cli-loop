@@ -265,10 +265,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static PeelRun RevertRows(HotReloadGroupFile file, params TransformWorkerUnchangedMethodDto[] rows)
         {
             int resolveCalls = 0;
+            using HotReloadMethodMatcher matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
             HotReloadMethodResolver counting = (home, typeMetadataName, methodName, parameterTypeFullNames, genericArity) =>
             {
                 resolveCalls++;
-                return HotReloadMethodMatcher.Resolve(
+                return matcher.Resolve(
                     home, typeMetadataName, methodName, parameterTypeFullNames, genericArity);
             };
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();

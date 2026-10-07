@@ -18,9 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // accessor binders run once for the group instead of once per file.
         // Why addedCallees is passed in: a body can call an added member another file of the group
         // declares, so one file's entries alone cannot name every call.
+        // Why resolveMethod is passed in: the caller owns the run's matcher and decides how long it
+        // lives, so resolution never holds a matcher past the run.
         internal static Result ResolveEntries(
             HotReloadTypeHome fileHome,
             HotReloadEntryHomeResolver homeResolver,
+            HotReloadMethodResolver resolveMethod,
             string filePath,
             Assembly shimAssembly,
             TransformWorkerEntryDto[] entriesToPatch,
@@ -29,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(fileHome != null, "fileHome must not be null.");
             Debug.Assert(homeResolver != null, "homeResolver must not be null.");
+            Debug.Assert(resolveMethod != null, "resolveMethod must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
             Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
@@ -42,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     entriesToPatch[index],
                     fileHome,
                     homeResolver,
+                    resolveMethod,
                     shimAssembly,
                     bindFailures,
                     addedCallees,
@@ -114,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerEntryDto entry,
             HotReloadTypeHome fileHome,
             HotReloadEntryHomeResolver homeResolver,
+            HotReloadMethodResolver resolveMethod,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
             HotReloadAddedCalleeIndex addedCallees,
@@ -148,6 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 methodLabel,
                 fileHome,
                 homeResolver,
+                resolveMethod,
                 shimAssembly,
                 bindFailures,
                 calledAddedMembers,
@@ -224,6 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string methodLabel,
             HotReloadTypeHome fileHome,
             HotReloadEntryHomeResolver homeResolver,
+            HotReloadMethodResolver resolveMethod,
             Assembly shimAssembly,
             IReadOnlyDictionary<string, string> bindFailures,
             IReadOnlyList<HotReloadCalledAddedMember> calledAddedMembers,
@@ -245,7 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // introduced-type artifact this domain retains rather than in the assembly the
             // edited file belongs to, and only the row knows which.
             HotReloadTypeHome home = homeResolver.Resolve(fileHome, entry.homeAssemblyName);
-            HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
+            HotReloadMethodMatchResult matchResult = resolveMethod(
                 home,
                 entry.typeMetadataName,
                 entry.methodName,

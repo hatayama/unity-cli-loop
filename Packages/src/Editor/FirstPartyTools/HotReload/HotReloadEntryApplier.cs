@@ -98,8 +98,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Returns how many Revert calls actually removed a live patch.
         /// </summary>
         /// <param name="resolveMethod">
-        /// How a row is resolved; production passes HotReloadMethodMatcher.Resolve, and tests
-        /// count the calls.
+        /// How a row is resolved; production passes the Resolve of the matcher it made for the
+        /// group, and tests count the calls.
         /// </param>
         internal int RevertUnchangedPatches(
             HotReloadTypeHome fileHome,
@@ -138,11 +138,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // resolved.
                 HotReloadTypeHome home = homeResolver.Resolve(fileHome, unchanged.homeAssemblyName);
 
-                // Why by name before resolving: resolving a row reads the whole compiled assembly,
-                // and a row can only be peeled when the method it resolves to holds a live patch.
-                // That method carries the row's name, so a name no live patch has cannot lead to a
-                // peel. The name is only a prefilter: a row that passes is still resolved exactly,
-                // type, parameters and arity included.
+                // Why by name before resolving: the first row resolved against an image reads the
+                // whole compiled assembly, and every row is then matched against it, while a row can
+                // only be peeled when the method it resolves to holds a live patch. That method
+                // carries the row's name, so a name no live patch has cannot lead to a peel, and the
+                // filter spares that row both costs. The name is only a prefilter: a row that passes
+                // is still resolved exactly, type, parameters and arity included.
                 if (!patchedMethodNames.Contains(unchanged.methodName))
                 {
                     continue;
@@ -197,6 +198,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadEntryHomeResolver homeResolver =
                 new HotReloadEntryHomeResolver(_domain, files[0].ProjectRoot);
+            // Why once for the group: every row of the group that names the same home resolves
+            // against the same compiled image, so the peel reads that image once instead of once
+            // for every row it resolves.
+            using HotReloadMethodMatcher matcher = HotReloadMethodMatcher.CreateReadingFromDisk();
+            HotReloadMethodResolver resolveMethod = matcher.Resolve;
             foreach (HotReloadGroupFile file in files)
             {
                 // Why a file left unapplied is left alone: a file the shim compile refused keeps
@@ -223,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     unchangedMethods,
                     file.Sinks.Outcomes,
                     file.AssemblyResolvePath,
-                    HotReloadMethodMatcher.Resolve);
+                    resolveMethod);
             }
         }
         /// <summary>
