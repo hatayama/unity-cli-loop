@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/v3.13.0...v3.14.0) (2026-10-07)
+
+
+### Features
+
+* Hot reload waits for a busy Editor instead of compiling, stays fast as live patches grow, and pause points work in package scripts ([#3224](https://github.com/hatayama/unity-cli-loop/issues/3224)) ([35084a8](https://github.com/hatayama/unity-cli-loop/commit/35084a8d244c357fe85fc95d3bef739e7302109f))
+
 ## [3.13.0](https://github.com/hatayama/unity-cli-loop/compare/v3.12.0...v3.13.0) (2026-10-07)
 
 
