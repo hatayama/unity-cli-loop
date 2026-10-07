@@ -876,7 +876,7 @@ func TestPausePointRecoveryCompileWritesADefinitiveFailureOnce(t *testing.T) {
 }
 
 // Verifies a send refused as server_busy, because another tool held Unity's execution slot, is sent
-// again after one wait no longer than the retry interval.
+// again after one wait that the time left in the compile wait caps below the retry interval.
 func TestPausePointRecoveryCompileRetriesAServerBusySend(t *testing.T) {
 	waits := stubPausePointRecoveryBusyRetryWaits(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -906,7 +906,9 @@ func TestPausePointRecoveryCompileRetriesAServerBusySend(t *testing.T) {
 		return scriptedSend(sendCtx, connection, method, params, progress, responseTimeout)
 	}
 
-	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{}, deps)
+	// Why a 1s wait: it is shorter than the retry interval, so only a budget taken from the time left
+	// in the compile wait keeps the retry wait at or under 1s.
+	code, stdout, stderr := runPausePointRecoveryCompile(t, ctx, map[string]any{compileWaitTimeoutParam: 1}, deps)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr)
@@ -914,8 +916,8 @@ func TestPausePointRecoveryCompileRetriesAServerBusySend(t *testing.T) {
 	if sends != 2 {
 		t.Fatalf("sends = %d, want 2", sends)
 	}
-	if len(*waits) != 1 || (*waits)[0] <= 0 || (*waits)[0] > pausePointRecoveryCompileBusyRetryInterval {
-		t.Fatalf("waits = %v, want one wait no longer than %v", *waits, pausePointRecoveryCompileBusyRetryInterval)
+	if len(*waits) != 1 || (*waits)[0] <= 0 || (*waits)[0] > time.Second {
+		t.Fatalf("waits = %v, want one wait capped by the 1s compile wait", *waits)
 	}
 	if stdout != "" {
 		t.Fatalf("a successful recovery compile must leave stdout to the enable response: %q", stdout)
