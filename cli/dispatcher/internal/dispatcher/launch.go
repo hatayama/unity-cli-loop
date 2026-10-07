@@ -319,7 +319,7 @@ func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 }
 
 func newUnityLaunchCommand(unityPath string, launchArgs []string) *exec.Cmd {
-	command := exec.Command(unityPath, launchArgs...)
+	command := newPlatformUnityLaunchCommand(unityPath, launchArgs)
 	command.Env = append(os.Environ(), "MSYS_NO_PATHCONV=1")
 	configureDetachedUnityLaunchCommand(command)
 	return command
