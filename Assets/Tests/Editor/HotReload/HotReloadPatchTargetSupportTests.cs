@@ -26,7 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that a loaded assembly whose MVID differs from the compiled dll is reported as stale.
+        /// Verifies that a loaded assembly whose MVID differs from the compiled dll is reported as
+        /// stale, and as the Editor not being ready, because a compile or a reload replaced it.
         /// </summary>
         [Test]
         public void CheckMvidGuard_WhenLoadedAssemblyMvidDiffersFromDll_ReturnsStaleHint()
@@ -35,13 +36,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string otherDllPath = typeof(AssemblyDefinition).Assembly.Location;
             HotReloadTypeHome home = HotReloadTypeHome.ScriptAssemblies(loadedAssemblyName, otherDllPath);
 
-            string error = HotReloadPatchTargetSupport.CheckMvidGuard(home);
+            HotReloadFailureDescription failure = HotReloadPatchTargetSupport.CheckMvidGuard(home);
 
-            Assert.That(error, Is.EqualTo(HotReloadConstants.StaleAssemblyHint));
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Message, Is.EqualTo(HotReloadConstants.StaleAssemblyHint));
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
         }
 
         /// <summary>
-        /// Verifies that a compiled dll whose assembly name is not loaded in the domain is reported as not loaded.
+        /// Verifies that a compiled dll whose assembly name is not loaded in the domain is reported as
+        /// not loaded, and as a Declaration, because only the reader's code path loads it.
         /// </summary>
         [Test]
         public void CheckMvidGuard_WhenAssemblyIsNotLoaded_ReturnsNotLoadedHint()
@@ -50,9 +54,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string dllPath = typeof(HotReloadPatchTargetSupport).Assembly.Location;
             HotReloadTypeHome home = HotReloadTypeHome.ScriptAssemblies(notLoadedAssemblyName, dllPath);
 
-            string error = HotReloadPatchTargetSupport.CheckMvidGuard(home);
+            HotReloadFailureDescription failure = HotReloadPatchTargetSupport.CheckMvidGuard(home);
 
-            Assert.That(error, Is.EqualTo(HotReloadConstants.AssemblyNotLoadedHint));
+            Assert.That(failure, Is.Not.Null);
+            Assert.That(failure.Message, Is.EqualTo(HotReloadConstants.AssemblyNotLoadedHint));
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.Declaration));
         }
     }
 }

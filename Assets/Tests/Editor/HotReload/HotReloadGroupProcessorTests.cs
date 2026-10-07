@@ -1936,7 +1936,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Library",
                 "ScriptAssemblies",
                 AssemblyName + ".dll");
-            string failure = HotReloadNewSourceMembershipValidator.TryCapture(
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryCapture(
                 HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
                 projectRoot,
                 MissingNewSourcePath,

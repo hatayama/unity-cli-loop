@@ -15,6 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadNewSourceMembershipValidator
     {
+        private const string CompiledAssemblyChangedFailure =
+            "The compiled assembly changed while hot reload was preparing. Compile the project and retry hot reload.";
+
         [Serializable]
         private sealed class AssemblyDefinitionJson
         {
@@ -27,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public string reference;
         }
 
-        internal static string TryCapture(
+        internal static HotReloadFailureDescription TryCapture(
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             string projectRoot,
             string projectRelativePath,
@@ -38,19 +41,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             evidence = null;
-            string notReadyReason = editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
-            if (notReadyReason != null)
+            HotReloadFailureDescription notReadyFailure =
+                editorStateSnapshotCapture.CaptureCurrent().GetNotReadyFailure();
+            if (notReadyFailure != null)
             {
-                return notReadyReason;
+                return notReadyFailure;
             }
 
+            // Why the failures below are a Declaration: none of them clears by waiting for the
+            // Editor, so they keep the advice every failure had before the kinds existed.
             string captureFailure = HotReloadNewSourceMembershipBoundaryCollector.TryCapture(
                 projectRoot,
                 projectRelativePath,
                 out HotReloadNewSourceMembershipBoundary[] boundaries);
             if (captureFailure != null)
             {
-                return captureFailure;
+                return HotReloadFailureDescription.Declaration(captureFailure);
             }
 
             string resolvedAssemblyDefinitionPath =
@@ -63,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedAssemblyDefinitionPath);
             if (resolutionFailure != null)
             {
-                return resolutionFailure;
+                return HotReloadFailureDescription.Declaration(resolutionFailure);
             }
 
             evidence = new HotReloadNewSourceMembershipEvidence(
@@ -76,39 +82,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static string TryRevalidate(
+        internal static HotReloadFailureDescription TryRevalidate(
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             HotReloadNewSourceMembershipEvidence evidence)
         {
             Debug.Assert(editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             Debug.Assert(evidence != null, "evidence must not be null.");
-            string notReadyReason = editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
-            if (notReadyReason != null)
+            HotReloadFailureDescription notReadyFailure =
+                editorStateSnapshotCapture.CaptureCurrent().GetNotReadyFailure();
+            if (notReadyFailure != null)
             {
-                return notReadyReason;
+                return notReadyFailure;
             }
 
+            return DescribeMembershipChange(evidence);
+        }
+
+        // The way the new source's membership differs from the evidence captured for it, or null
+        // when it still matches. Why most changes are a Declaration: none of them clears by waiting
+        // for the Editor, so they keep the advice every failure had before the kinds existed.
+        private static HotReloadFailureDescription DescribeMembershipChange(
+            HotReloadNewSourceMembershipEvidence evidence)
+        {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(evidence.AssemblyName);
             if (compilationAssembly == null)
             {
-                return "The resolved assembly is no longer present in the compilation pipeline. Compile the project and retry hot reload.";
+                return HotReloadFailureDescription.Declaration(
+                    "The resolved assembly is no longer present in the compilation pipeline. Compile the project and retry hot reload.");
             }
 
             string targetDllPath = Path.Combine(
                 projectRoot,
                 HotReloadConstants.ScriptAssembliesRelativeDirectory,
                 evidence.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
-            if (!string.Equals(Path.GetFullPath(targetDllPath), evidence.TargetDllPath, StringComparison.Ordinal)
-                || !File.Exists(targetDllPath)
-                || !string.Equals(
-                    HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
-                    evidence.TargetDllMvid,
-                    StringComparison.Ordinal)
-                || HotReloadPatchTargetSupport.CheckMvidGuard(
-                    HotReloadTypeHome.ScriptAssemblies(evidence.AssemblyName, targetDllPath)) != null)
+            HotReloadFailureDescription compiledAssemblyChange = DescribeCompiledAssemblyChange(
+                evidence,
+                targetDllPath);
+            if (compiledAssemblyChange != null)
             {
-                return "The compiled assembly changed while hot reload was preparing. Compile the project and retry hot reload.";
+                return compiledAssemblyChange;
             }
 
             string captureFailure = HotReloadNewSourceMembershipBoundaryCollector.TryCapture(
@@ -117,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 out HotReloadNewSourceMembershipBoundary[] currentBoundaries);
             if (captureFailure != null)
             {
-                return captureFailure;
+                return HotReloadFailureDescription.Declaration(captureFailure);
             }
 
             string resolvedAssemblyDefinitionPath =
@@ -130,7 +143,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedAssemblyDefinitionPath);
             if (resolutionFailure != null)
             {
-                return resolutionFailure;
+                return HotReloadFailureDescription.Declaration(resolutionFailure);
             }
 
             HotReloadNewSourceMembershipEvidence currentEvidence = new HotReloadNewSourceMembershipEvidence(
@@ -142,13 +155,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 currentBoundaries);
             if (!EvidenceMatches(evidence, currentEvidence))
             {
-                return "Assembly definition membership changed while hot reload was preparing. Compile the project and retry hot reload.";
+                return HotReloadFailureDescription.Declaration(
+                    "Assembly definition membership changed while hot reload was preparing. Compile the project and retry hot reload.");
             }
 
             return null;
         }
 
-        internal static string TryRevalidateFiles(
+        // How the compiled assembly differs from the one the evidence was captured against, or null
+        // when it is the same image and still the loaded one.
+        private static HotReloadFailureDescription DescribeCompiledAssemblyChange(
+            HotReloadNewSourceMembershipEvidence evidence,
+            string targetDllPath)
+        {
+            if (!string.Equals(Path.GetFullPath(targetDllPath), evidence.TargetDllPath, StringComparison.Ordinal)
+                || !File.Exists(targetDllPath))
+            {
+                return HotReloadFailureDescription.Declaration(CompiledAssemblyChangedFailure);
+            }
+
+            // Why EditorNotReady: a new image means a compile rebuilt the assembly during the run,
+            // which the commit boundary and the target-assembly drift check report the same way.
+            if (!string.Equals(
+                    HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                    evidence.TargetDllMvid,
+                    StringComparison.Ordinal))
+            {
+                return HotReloadFailureDescription.EditorNotReady(CompiledAssemblyChangedFailure);
+            }
+
+            // Why the guard's kinds are kept: it already tells a replaced assembly, which waiting
+            // clears, from one that is not loaded, which it does not.
+            HotReloadFailureDescription mvidGuardFailure = HotReloadPatchTargetSupport.CheckMvidGuard(
+                HotReloadTypeHome.ScriptAssemblies(evidence.AssemblyName, targetDllPath));
+            if (mvidGuardFailure == null)
+            {
+                return null;
+            }
+
+            return mvidGuardFailure.Kinds == HotReloadFailureKinds.EditorNotReady
+                ? HotReloadFailureDescription.EditorNotReady(CompiledAssemblyChangedFailure)
+                : HotReloadFailureDescription.Declaration(CompiledAssemblyChangedFailure);
+        }
+
+        internal static HotReloadFailureDescription TryRevalidateFiles(
             HotReloadGroupStageCollaborators collaborators,
             IReadOnlyList<HotReloadGroupFile> files)
         {
@@ -162,7 +212,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string failure = TryRevalidate(collaborators.EditorStateSnapshotCapture, evidence);
+                HotReloadFailureDescription failure =
+                    TryRevalidate(collaborators.EditorStateSnapshotCapture, evidence);
                 if (failure != null)
                 {
                     return failure;

@@ -97,6 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(resolution.EarlyResult.Outcomes, Has.Count.EqualTo(1));
             Assert.That(resolution.EarlyResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
             Assert.That(resolution.EarlyResult.Outcomes[0].Reason, Is.EqualTo(expectedReason));
+            Assert.That(
+                resolution.EarlyResult.Outcomes[0].FailureKinds,
+                Is.EqualTo(HotReloadFailureKinds.Declaration),
+                "None of these exits clears by waiting, so each keeps the fix advice.");
             Assert.That(resolution.NewSourceMembershipEvidence, Is.Null);
         }
 

@@ -20,22 +20,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal bool ScriptCompilationFailed { get; }
 
-        /// <summary>The reason new-source membership cannot be trusted, or null when it can.</summary>
-        internal string GetNotReadyReason()
+        /// <summary>
+        /// Why new-source membership cannot be trusted, or null when it can. A compile or an import
+        /// in progress ends on its own, so it is <see cref="HotReloadFailureKinds.EditorNotReady"/>.
+        /// The errors a failed compile left stay until the reader fixes them, so that state is a
+        /// <see cref="HotReloadFailureKinds.Declaration"/>.
+        /// </summary>
+        internal HotReloadFailureDescription GetNotReadyFailure()
         {
             if (IsCompiling)
             {
-                return "The Editor is compiling, so new source membership is not ready. Compile the project first and retry hot reload.";
+                return HotReloadFailureDescription.EditorNotReady(
+                    "The Editor is compiling, so new source membership is not ready. Compile the project first and retry hot reload.");
             }
 
             if (IsUpdating)
             {
-                return "The Editor is importing assets, so new source membership is not ready. Wait for import to finish, then retry hot reload.";
+                return HotReloadFailureDescription.EditorNotReady(
+                    "The Editor is importing assets, so new source membership is not ready. Wait for import to finish, then retry hot reload.");
             }
 
             if (ScriptCompilationFailed)
             {
-                return "The last script compilation failed, so new source membership cannot be verified. Fix the compile errors, compile the project, and retry hot reload.";
+                return HotReloadFailureDescription.Declaration(
+                    "The last script compilation failed, so new source membership cannot be verified. Fix the compile errors, compile the project, and retry hot reload.");
             }
 
             return null;

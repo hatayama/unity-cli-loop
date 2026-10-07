@@ -10,7 +10,9 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Verifies that new-source membership admission stops before group processing while Editor state is unsafe.
+    /// Verifies that the patch target resolver admits a new source only with membership evidence, and
+    /// that it stops a file before group processing, with the kinds of failure its row reports, while
+    /// the Editor state is unsafe or the file's compiled assembly is missing or replaced.
     /// </summary>
     public sealed class HotReloadNewSourceMembershipTests
     {
@@ -32,16 +34,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
         }
 
+        // Why the kinds travel as their name: the test method is public, and a public method cannot
+        // take the internal enum as a parameter.
         /// <summary>
         /// Compiling, importing, and compilation-failed Editor states each stop the production target resolver before a group can be planned.
+        /// A compile or an import in progress is reported as the Editor not being ready, and a failed compile as something to fix.
         /// </summary>
-        [TestCase(true, false, false)]
-        [TestCase(false, true, false)]
-        [TestCase(false, false, true)]
+        [TestCase(true, false, false, "EditorNotReady")]
+        [TestCase(false, true, false, "EditorNotReady")]
+        [TestCase(false, false, true, "Declaration")]
         public void ResolvePatchTarget_WhenEditorStateIsUnsafe_ReturnsEarlyResult(
             bool isCompiling,
             bool isUpdating,
-            bool scriptCompilationFailed)
+            bool scriptCompilationFailed,
+            string expectedKindsName)
         {
             using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
                 new HotReloadStubEditorStateSnapshotCapture(() => new HotReloadEditorStateSnapshot(isCompiling, isUpdating, scriptCompilationFailed)));
@@ -63,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(resolution.EarlyResult.Outcomes, Has.Count.EqualTo(1));
             Assert.That(resolution.EarlyResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
             Assert.That(resolution.EarlyResult.Outcomes[0].Reason, Does.Contain("retry hot reload"));
+            Assert.That(resolution.EarlyResult.Outcomes[0].FailureKinds.ToString(), Is.EqualTo(expectedKindsName));
             Assert.That(resolution.ProjectRelativePath, Is.Null);
             Assert.That(resolution.AssemblyName, Is.Null);
             Assert.That(resolution.CompilationAssembly, Is.Null);
@@ -118,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
             {
                 HotReloadCompositionRoot.Services.Domain.AppliedSources.RecordAppliedSource(existingScriptPath, "stale-hash", true, "/worker-copy/Recorded.cs", Array.Empty<HotReloadUnappliedRow>());
-                ActivateIntroducedTypeFor(existingScriptPath);
+                ActivateIntroducedTypeFor(existingScriptPath, "artifact.dll");
 
                 ResolveExistingScript("introduced-type-active");
 
@@ -177,6 +184,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// An Editor that starts compiling after the resolver's first look at it, but before the new
+        /// source's membership is captured, refuses the source as the Editor not being ready.
+        /// </summary>
+        [Test]
+        public void ResolvePatchTarget_WhenTheEditorStartsCompilingBeforeTheMembershipCapture_ReportsTheEditorAsNotReady()
+        {
+            int captureCount = 0;
+            using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
+                new HotReloadStubEditorStateSnapshotCapture(() =>
+                {
+                    captureCount++;
+                    return new HotReloadEditorStateSnapshot(
+                        isCompiling: captureCount > 1,
+                        isUpdating: false,
+                        scriptCompilationFailed: false);
+                }));
+
+            HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.PackageRootCapture,
+                HotReloadCompositionRoot.Services.EditorStateSnapshotCapture,
+                MissingHotReloadScriptPath,
+                MissingHotReloadScriptPath,
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                "new-source-busy-at-capture",
+                new List<HotReloadMethodOutcome>());
+
+            Assert.That(captureCount, Is.EqualTo(2), "Precondition: the membership capture must read the second state.");
+            HotReloadMethodOutcome refusal = AssertRefusedWithOneRow(resolution);
+            Assert.That(refusal.Reason, Does.Contain("retry hot reload"));
+            Assert.That(refusal.FailureKinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
+            Assert.That(resolution.NewSourceMembershipEvidence, Is.Null);
+        }
+
+        /// <summary>
+        /// A file whose compiled assembly is missing is refused with the missing-assembly kind, so the
+        /// response recommends a compile rather than a fix.
+        /// </summary>
+        [Test]
+        public void ResolvePatchTarget_WhenTheCompiledAssemblyIsMissing_ReportsTheMissingAssembly()
+        {
+            string missingImagePath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "uloop-missing-" + Guid.NewGuid().ToString("N") + ".dll");
+
+            HotReloadPatchTargetResolution resolution = ResolveExistingScriptWithItsImageAt(
+                missingImagePath,
+                "compiled-assembly-missing");
+
+            HotReloadMethodOutcome refusal = AssertRefusedWithOneRow(resolution);
+            Assert.That(
+                refusal.Reason,
+                Is.EqualTo("Compiled assembly not found at '" + missingImagePath + "'. Compile the project first."));
+            Assert.That(refusal.FailureKinds, Is.EqualTo(HotReloadFailureKinds.CompiledAssemblyMissing));
+        }
+
+        /// <summary>
+        /// A file whose loaded assembly is not the compiled image on disk, as after a compile replaced
+        /// the image during the run, is refused as the Editor not being ready.
+        /// </summary>
+        [Test]
+        public void ResolvePatchTarget_WhenTheLoadedAssemblyIsStale_ReportsTheEditorAsNotReady()
+        {
+            string anotherAssemblysImagePath = typeof(HotReloadConstants).Assembly.Location;
+            Assert.That(
+                System.IO.File.Exists(anotherAssemblysImagePath),
+                Is.True,
+                "Precondition: the stand-in image must exist, so only its Mvid differs.");
+
+            HotReloadPatchTargetResolution resolution = ResolveExistingScriptWithItsImageAt(
+                anotherAssemblysImagePath,
+                "loaded-assembly-stale");
+
+            HotReloadMethodOutcome refusal = AssertRefusedWithOneRow(resolution);
+            Assert.That(refusal.Reason, Is.EqualTo(HotReloadConstants.StaleAssemblyHint));
+            Assert.That(refusal.FailureKinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
+        }
+
+        // Why an introduced-type artifact stands in for the compiled assembly: the resolver reads the
+        // image from the domain's type home, and an active artifact is the one home a test can point
+        // at a missing or a different image without touching the project's compiled assemblies.
+        private static HotReloadPatchTargetResolution ResolveExistingScriptWithItsImageAt(
+            string imagePath,
+            string correlationId)
+        {
+            using (HotReloadCompositionRoot.BeginReplacement(HotReloadCompositionRoot.CreateProductionServices()))
+            {
+                ActivateIntroducedTypeFor(ExistingScriptPath, imagePath);
+                return ResolveExistingScript(correlationId);
+            }
+        }
+
+        private static HotReloadMethodOutcome AssertRefusedWithOneRow(HotReloadPatchTargetResolution resolution)
+        {
+            Assert.That(resolution.EarlyResult, Is.Not.Null);
+            Assert.That(resolution.EarlyResult.Outcomes, Has.Count.EqualTo(1));
+            Assert.That(resolution.EarlyResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            return resolution.EarlyResult.Outcomes[0];
+        }
+
         private static HotReloadPatchTargetResolution ResolveExistingScript(string correlationId)
         {
             using IDisposable editorStateScope = HotReloadServicesTestScope.BeginWithEditorState(
@@ -193,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<HotReloadMethodOutcome>());
         }
 
-        private static void ActivateIntroducedTypeFor(string projectRelativeScriptPath)
+        private static void ActivateIntroducedTypeFor(string projectRelativeScriptPath, string artifactDllPath)
         {
             string assemblyName = System.IO.Path.GetFileNameWithoutExtension(
                 UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativeScriptPath));
@@ -206,7 +315,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public class Introduced { }");
             HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
                 typeof(HotReloadNewSourceMembershipTests).Assembly,
-                "artifact.dll",
+                artifactDllPath,
                 "artifact.pdb",
                 new List<HotReloadIntroducedTypeDescriptor> { descriptor });
             HotReloadCompositionRoot.Services.Domain.IntroducedTypes.RegisterPrepared(artifact);

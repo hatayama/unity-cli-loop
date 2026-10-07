@@ -34,12 +34,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadReappliedSiblingFiles(result.ReappliedSiblingPaths, toProjectRelativeScriptPath);
             List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(result.Methods.Count);
             bool hasFailure = false;
+            HotReloadFailureKinds failureKinds = HotReloadFailureKinds.None;
             for (int index = 0; index < result.Methods.Count; index++)
             {
                 HotReloadMethodOutcome outcome = result.Methods[index];
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
                 {
                     hasFailure = true;
+                    failureKinds |= outcome.FailureKinds;
                 }
 
                 methods.Add(
@@ -60,8 +62,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool hasMethodFailure = hasFailure;
 
             // Why folded in here: the type rows are a failure section of their own, and a run
-            // whose only failure was a refused declaration would otherwise answer Success.
-            hasFailure = hasFailure || HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
+            // whose only failure was a refused declaration would otherwise answer Success. A
+            // refused declaration is one the reader changes in the source.
+            if (HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes))
+            {
+                hasFailure = true;
+                failureKinds |= HotReloadFailureKinds.Declaration;
+            }
 
             HotReloadResponseWarnings warnings = HotReloadApplyWarningsAssembler.Assemble(
                 result,
@@ -128,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
                     HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes),
-                    allRequestedSkipped),
+                    allRequestedSkipped,
+                    failureKinds),
                 Timing = ToTimingResponse(result.Timing)
             };
         }
