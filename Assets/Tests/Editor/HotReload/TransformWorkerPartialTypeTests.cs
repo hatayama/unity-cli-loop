@@ -831,13 +831,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an internal member used in an async or iterator method ends its reason with the compile
-        /// alone, even with its receiver or by a bare name, because the state machine runs outside the
-        /// patched method however the use is written.
+        /// alone, with its receiver, by a bare name, or inside a lambda, because the state machine runs
+        /// outside the patched method however the use is written or wherever it is moved.
         /// </summary>
         [TestCase("PartialAsyncThroughThis", PartialDerivedFileName, "AsyncValue", "return 50;", "return this.InternalInstanceValue();")]
         [TestCase("PlainAsyncThroughThis", PlainDerivedFileName, "AsyncValue", "return 50;", "return this.InternalInstanceValue();")]
         [TestCase("PlainIteratorThroughThis", PlainDerivedFileName, "IteratorValues", "yield return _seed;", "yield return this.InternalInstanceValue();")]
         [TestCase("PlainAsyncBareName", PlainDerivedFileName, "AsyncValue", "return 50;", "return InternalInstanceValue();")]
+        [TestCase("PartialAsyncLambda", PartialDerivedFileName, "AsyncValue", "return 50;", "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
+        [TestCase("PlainAsyncLambda", PlainDerivedFileName, "AsyncValue", "return 50;", "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); return read();")]
+        [TestCase("PlainIteratorLambda", PlainDerivedFileName, "IteratorValues", "yield return _seed;", "System.Func<int> read = () => HotReloadInternalMemberHost.InternalStaticValue(); yield return read();")]
         public async Task Skip_InternalMemberUsedInAnAsyncOrIteratorMethod_EndsWithCompileOnly(
             string form,
             string fileName,
@@ -851,6 +854,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 methodName,
                 fragment,
                 replacement);
+
+            Assert.That(reason, Does.EndWith(CompileOnlyAdvice));
+        }
+
+        /// <summary>
+        /// What: an internal member used inside the lambda of a getter that runs through a delegating
+        /// shim, because the lambda also reads a private member, ends its reason with the compile
+        /// alone, not with the advice to move the use out: the shim runs the whole getter outside the
+        /// patched method, so moving the use out of the lambda does not bring it within reach.
+        /// </summary>
+        [TestCase("Partial", PartialDerivedFileName)]
+        [TestCase("Plain", PlainDerivedFileName)]
+        public async Task Skip_InternalMemberUsedInALambdaOfAGetterPatchedThroughADelegatingShim_EndsWithCompileOnly(
+            string typeKind,
+            string fileName)
+        {
+            string reason = await ReadTheInternalMemberSkipReasonAsync(
+                fileName,
+                "ReasonEndingShimGetterLambda" + typeKind + ".cs",
+                "get_DerivedProperty",
+                "return 40;",
+                "System.Func<int> read = () => this._seed + HotReloadInternalMemberHost.InternalStaticValue(); return read();");
 
             Assert.That(reason, Does.EndWith(CompileOnlyAdvice));
         }
