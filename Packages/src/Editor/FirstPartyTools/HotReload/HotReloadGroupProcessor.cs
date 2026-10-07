@@ -117,7 +117,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
                 else
                 {
-                    HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", preparation.ErrorMessage);
+                    HotReloadGroupOutcomeRouter.AppendGroupFailure(
+                        files,
+                        "(file)",
+                        HotReloadFailureDescription.Declaration(preparation.ErrorMessage));
                 }
 
                 return _fileEntryApplier.BuildUnappliedGroupResults(files);
@@ -283,7 +286,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private List<HotReloadFileProcessResult> FailGroup(IReadOnlyList<HotReloadGroupFile> files, string errorMessage)
         {
-            HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", errorMessage);
+            HotReloadGroupOutcomeRouter.AppendGroupFailure(
+                files,
+                "(file)",
+                HotReloadFailureDescription.Declaration(errorMessage));
             return _fileEntryApplier.BuildUnappliedGroupResults(files);
         }
 
@@ -436,7 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
                     files,
                     "(signature-change-gate)",
-                    gateResult.FailureMessage);
+                    HotReloadFailureDescription.Declaration(gateResult.FailureMessage));
                 return HotReloadGroupGateAndCompileResult.Failed();
             }
 
@@ -495,11 +501,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ct.ThrowIfCancellationRequested();
-            string staleReason =
-                HotReloadGroupCommitBoundary.DescribeStaleReason(_collaborators, context);
-            if (staleReason != null)
+            HotReloadFailureDescription staleFailure =
+                HotReloadGroupCommitBoundary.DescribeStaleFailure(_collaborators, context);
+            if (staleFailure != null)
             {
-                HotReloadGroupOutcomeRouter.AppendGroupFailure(context.Files, "(file)", staleReason);
+                HotReloadGroupOutcomeRouter.AppendGroupFailure(context.Files, "(file)", staleFailure);
                 return _fileEntryApplier.BuildUnappliedGroupResults(context.Files);
             }
 
@@ -531,7 +537,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupStageCollaborators collaborators,
             IReadOnlyList<HotReloadGroupFile> files)
         {
-            string failure =
+            HotReloadFailureDescription failure =
                 HotReloadNewSourceMembershipValidator.TryRevalidateFiles(collaborators, files);
             if (failure == null)
             {

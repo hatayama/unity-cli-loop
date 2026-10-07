@@ -87,11 +87,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (isNewSource)
             {
-                string notReadyReason =
-                    editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
-                if (notReadyReason != null)
+                HotReloadFailureDescription notReadyFailure =
+                    editorStateSnapshotCapture.CaptureCurrent().GetNotReadyFailure();
+                if (notReadyFailure != null)
                 {
-                    outcomes.Add(HotReloadMethodOutcome.Failed("(file)", notReadyReason, assemblyResolvePath));
+                    outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", notReadyFailure, assemblyResolvePath));
                     return HotReloadPatchTargetResolution.EarlyExit(
                         new HotReloadFileProcessResult(outcomes, warnings, 0));
                 }
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!File.Exists(home.DllPath))
             {
                 outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
+                    HotReloadMethodOutcome.FailedBecause(
                         "(file)",
                         HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(projectRoot, home.DllPath),
                         assemblyResolvePath));
@@ -111,10 +111,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
-            string mvidGuardError = CheckMvidGuard(home);
-            if (mvidGuardError != null)
+            HotReloadFailureDescription mvidGuardFailure = CheckMvidGuard(home);
+            if (mvidGuardFailure != null)
             {
-                outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
+                outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", mvidGuardFailure, assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null;
             if (isNewSource)
             {
-                string membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
+                HotReloadFailureDescription membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
                     editorStateSnapshotCapture,
                     projectRoot,
                     projectRelativePath,
@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     out newSourceMembershipEvidence);
                 if (membershipFailure != null)
                 {
-                    outcomes.Add(HotReloadMethodOutcome.Failed("(file)", membershipFailure, assemblyResolvePath));
+                    outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", membershipFailure, assemblyResolvePath));
                     return HotReloadPatchTargetResolution.EarlyExit(
                         new HotReloadFileProcessResult(outcomes, warnings, 0));
                 }
@@ -207,7 +207,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
-        internal static string CheckMvidGuard(HotReloadTypeHome home)
+        // Why a stale assembly is EditorNotReady: a compile or a domain reload replaced it during
+        // the run, so nothing in the source needs a change. An assembly that is not loaded stays a
+        // Declaration: what loads it is the reader's code path, which waiting does not run.
+        internal static HotReloadFailureDescription CheckMvidGuard(HotReloadTypeHome home)
         {
             Debug.Assert(home != null, "home must not be null.");
 
@@ -219,12 +222,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadLoadedAssemblyState state = home.ResolveLoadedAssembly(compiledMvid).State;
             if (state == HotReloadLoadedAssemblyState.Stale)
             {
-                return HotReloadConstants.StaleAssemblyHint;
+                return HotReloadFailureDescription.EditorNotReady(HotReloadConstants.StaleAssemblyHint);
             }
 
             if (state == HotReloadLoadedAssemblyState.NotLoaded)
             {
-                return HotReloadConstants.AssemblyNotLoadedHint;
+                return HotReloadFailureDescription.Declaration(HotReloadConstants.AssemblyNotLoadedHint);
             }
 
             return null;

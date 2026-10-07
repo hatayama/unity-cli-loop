@@ -20,6 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // InvocationCount. Null for every other row.
         public HotReloadAddedMemberInfo AddedMember { get; }
 
+        // What a Failed row's failure was, which chooses the response's next step. None for every
+        // other row.
+        public HotReloadFailureKinds FailureKinds { get; }
+
         private HotReloadMethodOutcome(
             HotReloadMethodOutcomeKind kind,
             string method,
@@ -27,7 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string filePath,
             string lifecycleNote,
             HotReloadWorkerReasonFacts workerReason = null,
-            HotReloadAddedMemberInfo addedMember = null)
+            HotReloadAddedMemberInfo addedMember = null,
+            HotReloadFailureKinds failureKinds = HotReloadFailureKinds.None)
         {
             Kind = kind;
             Method = method;
@@ -36,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LifecycleNote = lifecycleNote ?? string.Empty;
             WorkerReason = workerReason;
             AddedMember = addedMember;
+            FailureKinds = failureKinds;
         }
 
         public static HotReloadMethodOutcome Patched(
@@ -68,7 +74,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 method,
                 reason,
                 filePath,
-                string.Empty);
+                string.Empty,
+                failureKinds: HotReloadFailureKinds.Declaration);
+        }
+
+        // A failure whose kinds were decided where it happened, such as an Editor that started
+        // compiling during the run, which the next step must not report as something to fix.
+        public static HotReloadMethodOutcome FailedBecause(
+            string method,
+            HotReloadFailureDescription failure,
+            string filePath)
+        {
+            if (failure == null)
+            {
+                throw new ArgumentNullException(nameof(failure));
+            }
+
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.Failed,
+                method,
+                failure.Message,
+                filePath,
+                string.Empty,
+                failureKinds: failure.Kinds);
         }
 
         public static HotReloadMethodOutcome Added(
@@ -136,17 +164,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public HotReloadMethodOutcome WithLifecycleNote(string lifecycleNote)
         {
-            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote, WorkerReason, AddedMember);
+            return new HotReloadMethodOutcome(
+                Kind,
+                Method,
+                Reason,
+                FilePath,
+                lifecycleNote,
+                WorkerReason,
+                AddedMember,
+                FailureKinds);
         }
 
         public HotReloadMethodOutcome WithReason(string reason)
         {
-            return new HotReloadMethodOutcome(Kind, Method, reason, FilePath, LifecycleNote, WorkerReason, AddedMember);
+            return new HotReloadMethodOutcome(
+                Kind,
+                Method,
+                reason,
+                FilePath,
+                LifecycleNote,
+                WorkerReason,
+                AddedMember,
+                FailureKinds);
         }
 
         public HotReloadMethodOutcome WithWorkerReason(HotReloadWorkerReasonFacts workerReason)
         {
-            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, LifecycleNote, workerReason, AddedMember);
+            return new HotReloadMethodOutcome(
+                Kind,
+                Method,
+                Reason,
+                FilePath,
+                LifecycleNote,
+                workerReason,
+                AddedMember,
+                FailureKinds);
         }
     }
 }

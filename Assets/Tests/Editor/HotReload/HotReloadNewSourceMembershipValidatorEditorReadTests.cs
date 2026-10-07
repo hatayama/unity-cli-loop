@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void TryCapture_WhenUnityResolvesTheSourceToAnotherAssembly_ReturnsDifferentAssemblyFailure()
         {
-            string failure = HotReloadNewSourceMembershipValidator.TryCapture(
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryCapture(
                 CreateReadyCapture(),
                 GetProjectRoot(),
                 MissingSourceInExistingDirectory,
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BuildScriptAssemblyDllPath(HotReloadTestAssemblyName),
                 out HotReloadNewSourceMembershipEvidence evidence);
 
-            Assert.That(failure, Is.EqualTo(DifferentAssemblyFailure));
+            Assert.That(failure?.Message, Is.EqualTo(DifferentAssemblyFailure));
             Assert.That(evidence, Is.Null);
         }
 
@@ -64,10 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 null,
                 Array.Empty<HotReloadNewSourceMembershipBoundary>());
 
-            string failure = HotReloadNewSourceMembershipValidator.TryRevalidate(CreateReadyCapture(), evidence);
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryRevalidate(CreateReadyCapture(), evidence);
 
             Assert.That(
-                failure,
+                failure?.Message,
                 Is.EqualTo("The resolved assembly is no longer present in the compilation pipeline. Compile the project and retry hot reload."));
         }
 
@@ -84,10 +84,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadTestAssemblyName,
                 Array.Empty<HotReloadNewSourceMembershipBoundary>());
 
-            string failure = HotReloadNewSourceMembershipValidator.TryRevalidate(CreateReadyCapture(), evidence);
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryRevalidate(CreateReadyCapture(), evidence);
 
             Assert.That(
-                failure,
+                failure?.Message,
                 Is.EqualTo("The new source membership boundary is not available on disk. Compile the project and retry hot reload."));
         }
 
@@ -102,9 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 EditorTestAssemblyName,
                 Array.Empty<HotReloadNewSourceMembershipBoundary>());
 
-            string failure = HotReloadNewSourceMembershipValidator.TryRevalidate(CreateReadyCapture(), evidence);
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryRevalidate(CreateReadyCapture(), evidence);
 
-            Assert.That(failure, Is.EqualTo(DifferentAssemblyFailure));
+            Assert.That(failure?.Message, Is.EqualTo(DifferentAssemblyFailure));
         }
 
         /// <summary>
@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void TryRevalidate_WhenCapturedBoundariesNoLongerMatch_ReturnsMembershipChangedFailure()
         {
-            string captureFailure = HotReloadNewSourceMembershipValidator.TryCapture(
+            HotReloadFailureDescription captureFailure = HotReloadNewSourceMembershipValidator.TryCapture(
                 CreateReadyCapture(),
                 GetProjectRoot(),
                 MissingSourceInExistingDirectory,
@@ -131,12 +131,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 captured.ResolvedAssemblyDefinitionPath,
                 Array.Empty<HotReloadNewSourceMembershipBoundary>());
 
-            string failure = HotReloadNewSourceMembershipValidator.TryRevalidate(
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryRevalidate(
                 CreateReadyCapture(),
                 withoutBoundaries);
 
             Assert.That(
-                failure,
+                failure?.Message,
                 Is.EqualTo("Assembly definition membership changed while hot reload was preparing. Compile the project and retry hot reload."));
         }
 

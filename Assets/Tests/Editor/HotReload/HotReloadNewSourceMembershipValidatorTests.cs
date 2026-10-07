@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadStubEditorStateSnapshotCapture capture = new HotReloadStubEditorStateSnapshotCapture(
                 () => new HotReloadEditorStateSnapshot(true, false, false));
 
-            string failure = HotReloadNewSourceMembershipValidator.TryCapture(
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryCapture(
                 capture,
                 CreateMissingProjectRoot(),
                 SourcePath,
@@ -33,8 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 out HotReloadNewSourceMembershipEvidence evidence);
 
             Assert.That(
-                failure,
+                failure?.Message,
                 Is.EqualTo("The Editor is compiling, so new source membership is not ready. Compile the project first and retry hot reload."));
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.EditorNotReady));
             Assert.That(evidence, Is.Null);
         }
 
@@ -47,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadStubEditorStateSnapshotCapture capture = new HotReloadStubEditorStateSnapshotCapture(
                 () => new HotReloadEditorStateSnapshot(false, false, false));
 
-            string failure = HotReloadNewSourceMembershipValidator.TryCapture(
+            HotReloadFailureDescription failure = HotReloadNewSourceMembershipValidator.TryCapture(
                 capture,
                 CreateMissingProjectRoot(),
                 SourcePath,
@@ -57,8 +58,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 out HotReloadNewSourceMembershipEvidence evidence);
 
             Assert.That(
-                failure,
+                failure?.Message,
                 Is.EqualTo("The new source membership boundary is not available on disk. Compile the project and retry hot reload."));
+            Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.Declaration));
             Assert.That(evidence, Is.Null);
         }
 

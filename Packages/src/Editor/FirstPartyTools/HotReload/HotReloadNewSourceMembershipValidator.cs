@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public string reference;
         }
 
-        internal static string TryCapture(
+        internal static HotReloadFailureDescription TryCapture(
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             string projectRoot,
             string projectRelativePath,
@@ -38,19 +38,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             evidence = null;
-            string notReadyReason = editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
-            if (notReadyReason != null)
+            HotReloadFailureDescription notReadyFailure =
+                editorStateSnapshotCapture.CaptureCurrent().GetNotReadyFailure();
+            if (notReadyFailure != null)
             {
-                return notReadyReason;
+                return notReadyFailure;
             }
 
+            // Why the failures below are a Declaration: none of them clears by waiting for the
+            // Editor, so they keep the advice every failure had before the kinds existed.
             string captureFailure = HotReloadNewSourceMembershipBoundaryCollector.TryCapture(
                 projectRoot,
                 projectRelativePath,
                 out HotReloadNewSourceMembershipBoundary[] boundaries);
             if (captureFailure != null)
             {
-                return captureFailure;
+                return HotReloadFailureDescription.Declaration(captureFailure);
             }
 
             string resolvedAssemblyDefinitionPath =
@@ -63,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedAssemblyDefinitionPath);
             if (resolutionFailure != null)
             {
-                return resolutionFailure;
+                return HotReloadFailureDescription.Declaration(resolutionFailure);
             }
 
             evidence = new HotReloadNewSourceMembershipEvidence(
@@ -76,18 +79,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static string TryRevalidate(
+        internal static HotReloadFailureDescription TryRevalidate(
             IHotReloadEditorStateSnapshotCapture editorStateSnapshotCapture,
             HotReloadNewSourceMembershipEvidence evidence)
         {
             Debug.Assert(editorStateSnapshotCapture != null, "editorStateSnapshotCapture must not be null.");
             Debug.Assert(evidence != null, "evidence must not be null.");
-            string notReadyReason = editorStateSnapshotCapture.CaptureCurrent().GetNotReadyReason();
-            if (notReadyReason != null)
+            HotReloadFailureDescription notReadyFailure =
+                editorStateSnapshotCapture.CaptureCurrent().GetNotReadyFailure();
+            if (notReadyFailure != null)
             {
-                return notReadyReason;
+                return notReadyFailure;
             }
 
+            // Why a Declaration: no membership change clears by waiting for the Editor, so it keeps
+            // the advice every failure had before the kinds existed.
+            string membershipChange = DescribeMembershipChange(evidence);
+            return membershipChange == null
+                ? null
+                : HotReloadFailureDescription.Declaration(membershipChange);
+        }
+
+        // The way the new source's membership differs from the evidence captured for it, or null
+        // when it still matches.
+        private static string DescribeMembershipChange(HotReloadNewSourceMembershipEvidence evidence)
+        {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(evidence.AssemblyName);
             if (compilationAssembly == null)
@@ -148,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static string TryRevalidateFiles(
+        internal static HotReloadFailureDescription TryRevalidateFiles(
             HotReloadGroupStageCollaborators collaborators,
             IReadOnlyList<HotReloadGroupFile> files)
         {
@@ -162,7 +178,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string failure = TryRevalidate(collaborators.EditorStateSnapshotCapture, evidence);
+                HotReloadFailureDescription failure =
+                    TryRevalidate(collaborators.EditorStateSnapshotCapture, evidence);
                 if (failure != null)
                 {
                     return failure;

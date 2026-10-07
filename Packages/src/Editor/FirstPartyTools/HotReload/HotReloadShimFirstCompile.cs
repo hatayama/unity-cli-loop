@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
                     context.Files,
                     "(file)",
-                    shimReferencePaths.ErrorMessage);
+                    HotReloadFailureDescription.Declaration(shimReferencePaths.ErrorMessage));
                 return HotReloadGroupCompileResult.Failed();
             }
 
@@ -185,10 +185,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupOutcomeRouter.AppendGroupFailure(
                 context.Files,
                 failureMethodLabel,
-                HotReloadSkippedMemberCompileNote.AppendNotes(
-                    compileResult.ErrorMessage,
-                    fallbackErrorMessages,
-                    context.CompileFailureNoteSources));
+                HotReloadFailureDescription.Declaration(
+                    HotReloadSkippedMemberCompileNote.AppendNotes(
+                        compileResult.ErrorMessage,
+                        fallbackErrorMessages,
+                        context.CompileFailureNoteSources)));
         }
 
         private static HotReloadGroupCompileResult ResolveIsolatedEntriesToPatch(

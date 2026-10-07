@@ -1606,7 +1606,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadGroupOutcomeRouter.AppendGroupFailure(
                         files,
                         "(file)",
-                        "The compiled assembly changed while the group was being processed.");
+                        HotReloadFailureDescription.Declaration(
+                            "The compiled assembly changed while the group was being processed."));
                     return false;
                 },
                 (files, input, ct) =>

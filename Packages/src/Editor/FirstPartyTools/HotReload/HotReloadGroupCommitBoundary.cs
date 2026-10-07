@@ -19,35 +19,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadGroupCommitBoundary
     {
         /// <summary>
-        /// The reason this group must not be committed, or null when every recheck passed.
+        /// Why this group must not be committed, or null when every recheck passed.
         /// </summary>
-        internal static string DescribeStaleReason(
+        internal static HotReloadFailureDescription DescribeStaleFailure(
             HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context)
         {
             Debug.Assert(collaborators != null, "collaborators must not be null.");
             // The Editor may have started compiling or importing while the run awaited its worker.
-            string notReadyReason =
+            HotReloadFailureDescription notReadyFailure =
                 collaborators.EditorStateSnapshotCapture.CaptureCurrent()
-                    .GetNotReadyReason();
-            if (notReadyReason != null)
+                    .GetNotReadyFailure();
+            if (notReadyFailure != null)
             {
-                return "The Editor became busy before the reload could be applied: " + notReadyReason;
+                return notReadyFailure.WithMessagePrefix(
+                    "The Editor became busy before the reload could be applied: ");
             }
 
-            string targetAssemblyDrift = DescribeTargetAssemblyDrift(collaborators, context);
+            HotReloadFailureDescription targetAssemblyDrift = DescribeTargetAssemblyDrift(collaborators, context);
             if (targetAssemblyDrift != null)
             {
                 return targetAssemblyDrift;
             }
 
+            // Why the two source drifts are a Declaration: the reader edited the source while the
+            // run was underway, so the next run has to take that edit in.
             string preparationDrift = DescribePreparationDrift(context);
             if (preparationDrift != null)
             {
-                return preparationDrift;
+                return HotReloadFailureDescription.Declaration(preparationDrift);
             }
 
-            return DescribeRequestSourceDrift(context.Files);
+            string requestSourceDrift = DescribeRequestSourceDrift(context.Files);
+            return requestSourceDrift == null
+                ? null
+                : HotReloadFailureDescription.Declaration(requestSourceDrift);
         }
 
         /// <summary>
@@ -58,9 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Why only for a run that commits types: an ordinary patch of a rebuilt assembly is
         /// already refused by the guard the patcher applies per method, while an artifact
         /// assembly carries the module version id of the generation it was compiled for and
-        /// stays active for the rest of the domain's life.
+        /// stays active for the rest of the domain's life. Why EditorNotReady: a compile during
+        /// the run rebuilt the assembly, so nothing in the source needs a change.
         /// </remarks>
-        private static string DescribeTargetAssemblyDrift(
+        private static HotReloadFailureDescription DescribeTargetAssemblyDrift(
             HotReloadGroupStageCollaborators collaborators,
             HotReloadApplyContext context)
         {
@@ -74,7 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string currentMvid = TryReadTargetAssemblyMvid(context.TargetDllPath);
             if (currentMvid == null)
             {
-                return "The target assembly could not be read again before the reload was applied.";
+                return HotReloadFailureDescription.EditorNotReady(
+                    "The target assembly could not be read again before the reload was applied.");
             }
 
             if (string.Equals(
@@ -85,8 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return "The target assembly was rebuilt after this run read it, so the types it"
-                + " prepared belong to a generation the domain no longer has.";
+            return HotReloadFailureDescription.EditorNotReady(
+                "The target assembly was rebuilt after this run read it, so the types it"
+                + " prepared belong to a generation the domain no longer has.");
         }
 
         // Why a failed read is drift rather than a throw: the same rebuild this check exists for

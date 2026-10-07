@@ -665,6 +665,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
 
+        // Why these replace the fix advice when every failure is of their kind: the failed rows
+        // name a compile or an import the Editor ran during the reload, and "Fix the failed
+        // declarations or methods" sends the reader looking for a mistake that is not there.
+        public const string EditorNotReadyRecommendedNextAction =
+            "The Editor compiled or imported while this reload ran, so there is nothing to fix in the source. Wait until 'uloop status' no longer reports compiling or importing, then rerun; or run 'uloop compile' to apply every edit.";
+
+        public const string EditorNotReadyAfterPartialApplyRecommendedNextAction =
+            "Partially applied. The remaining files were not patched because the Editor compiled or imported while this reload ran: wait until 'uloop status' no longer reports that, then rerun; or run 'uloop compile' to apply every edit; or run 'uloop hot-reload --revert-all' to discard the applied patches.";
+
+        // Appended after the fix advice when the run also failed for a reason the reader has to
+        // fix, so the rows that only need a rerun are not read as more to fix.
+        public const string EditorNotReadyAppendedRecommendedNextAction =
+            "Some files were not patched only because the Editor compiled or imported while this reload ran; those need no change, just a rerun.";
+
+        // Why the main Editor's project: a Virtual Player loads the script assemblies of the main
+        // project, so only a compile there reaches it.
+        public const string VirtualPlayerRecommendedNextAction =
+            "This Editor is a Multiplayer Play Mode Virtual Player, which hot reload cannot patch. Run 'uloop compile' against the main Editor's project; the compiled result reaches this player. A patch applied in the main Editor does not.";
+
+        public const string CompiledAssemblyMissingRecommendedNextAction =
+            "The compiled assembly for the file is missing, so there is nothing to fix in the source: run 'uloop compile'.";
+
         // Why this replaces whatever next action the run chose: those all read "run 'uloop
         // compile'", and during play that is the one thing --compile-on-skip auto declined to do,
         // so the reader has to be told the choice was theirs and how to make it.

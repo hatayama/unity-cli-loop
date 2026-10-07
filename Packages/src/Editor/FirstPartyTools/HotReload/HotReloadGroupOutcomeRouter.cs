@@ -58,14 +58,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void AppendGroupFailure(
             IReadOnlyList<HotReloadGroupFile> files,
             string methodLabel,
-            string reason)
+            HotReloadFailureDescription failure)
         {
             Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
 
             foreach (HotReloadGroupFile file in files)
             {
                 file.Sinks.Outcomes.Add(
-                    HotReloadMethodOutcome.Failed(methodLabel, reason, file.AssemblyResolvePath));
+                    HotReloadMethodOutcome.FailedBecause(methodLabel, failure, file.AssemblyResolvePath));
             }
         }
     }
