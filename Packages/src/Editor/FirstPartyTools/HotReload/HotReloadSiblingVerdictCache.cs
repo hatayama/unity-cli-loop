@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -8,9 +10,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadSiblingVerdictCache
     {
+        // Why both paths in the key: the same file compared with another assembly generation's
+        // snapshot is a different verdict, and the same snapshot can be compared with another file.
+        private readonly Dictionary<(string snapshotPath, string sourcePath), Entry> _entries =
+            new Dictionary<(string snapshotPath, string sourcePath), Entry>();
+
         /// <summary>
         /// Returns true with the remembered verdict when the pair was recorded with the same stamp.
         /// </summary>
+        /// <remarks>
+        /// Why a changed stamp reads as no verdict: the caller then has a single path that reads,
+        /// compares, and records again, so a stale verdict is never returned.
+        /// </remarks>
         internal bool TryGetVerdict(
             string snapshotPath,
             string sourcePath,
@@ -21,8 +32,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(snapshotPath), "snapshotPath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(sourcePath), "sourcePath must not be null or empty.");
 
-            matchesSnapshot = false;
-            return false;
+            if (!_entries.TryGetValue((snapshotPath, sourcePath), out Entry entry))
+            {
+                matchesSnapshot = false;
+                return false;
+            }
+
+            if (entry.Length != length || entry.LastWriteTimeUtcTicks != lastWriteTimeUtcTicks)
+            {
+                matchesSnapshot = false;
+                return false;
+            }
+
+            matchesSnapshot = entry.MatchesSnapshot;
+            return true;
         }
 
         /// <summary>
@@ -37,12 +60,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(!string.IsNullOrEmpty(snapshotPath), "snapshotPath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(sourcePath), "sourcePath must not be null or empty.");
+
+            _entries[(snapshotPath, sourcePath)] = new Entry(length, lastWriteTimeUtcTicks, matchesSnapshot);
         }
 
         internal void Clear()
         {
+            _entries.Clear();
         }
 
-        internal int Count => 0;
+        internal int Count => _entries.Count;
+
+        private readonly struct Entry
+        {
+            internal readonly long Length;
+            internal readonly long LastWriteTimeUtcTicks;
+            internal readonly bool MatchesSnapshot;
+
+            internal Entry(long length, long lastWriteTimeUtcTicks, bool matchesSnapshot)
+            {
+                Length = length;
+                LastWriteTimeUtcTicks = lastWriteTimeUtcTicks;
+                MatchesSnapshot = matchesSnapshot;
+            }
+        }
     }
 }
