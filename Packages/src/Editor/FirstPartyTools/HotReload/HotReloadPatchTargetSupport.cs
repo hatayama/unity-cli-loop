@@ -112,6 +112,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
+            HotReloadFailureDescription outputPathFailure = HotReloadCompiledAssemblyPathCheck.DescribeOutputPathMismatch(
+                layout,
+                assemblyName,
+                compilationAssembly.outputPath);
+            if (outputPathFailure != null)
+            {
+                outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", outputPathFailure, assemblyResolvePath));
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
+            }
+
             HotReloadFailureDescription mvidGuardFailure = CheckMvidGuard(home);
             if (mvidGuardFailure != null)
             {
