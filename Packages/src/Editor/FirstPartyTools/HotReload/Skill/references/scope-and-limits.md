@@ -348,6 +348,10 @@ line each. A file with a declaration that hot reload refused to introduce (its
 `Warnings` line says the type requires a compile) gets no such line, because that
 compile also establishes its baseline. This also holds for an existing file that
 gains such a declaration, for example a nested type or a delegate.
+Within one Editor session, a source compared with its baseline once is compared again
+only when its length or last write time changes; a rewrite that keeps both (for example
+a copy that preserves timestamps) is noticed only after the next domain reload, such as
+`uloop compile`.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
