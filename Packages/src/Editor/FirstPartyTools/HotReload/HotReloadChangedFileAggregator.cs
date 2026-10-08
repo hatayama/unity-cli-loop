@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-using UnityEditor.Compilation;
-
 using UnityEngine;
 
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
@@ -64,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             List<HotReloadSnapshotAssembly> snapshotAssemblies = CollectSnapshotAssemblies(
                 projectRoot,
-                CompilationPipeline.GetAssemblies());
+                HotReloadCompilationAssemblies.Current());
             return DetectFromSnapshotDirectories(projectRoot, snapshotAssemblies);
         }
 

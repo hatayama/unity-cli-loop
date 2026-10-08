@@ -6,7 +6,6 @@ using System.Text;
 
 using Mono.Cecil;
 
-using UnityEditor.Compilation;
 using UnityEditor.PackageManager;
 
 using UnityEngine;
@@ -33,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void CaptureAfterDomainReload()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            CaptureAssemblies(projectRoot, CompilationPipeline.GetAssemblies());
+            CaptureAssemblies(projectRoot, HotReloadCompilationAssemblies.Current());
         }
 
         // Why separate from CaptureAfterDomainReload: the project root and the compilation assemblies come

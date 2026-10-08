@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-            UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(assemblyName);
+            UnityCompilationAssembly compilationAssembly = HotReloadCompilationAssemblies.FindByName(assemblyName);
             // Why gate on compilationAssembly == null: the unimported-asmdef flag is only
             // consumed on that branch, and walking ancestor directories on every successful
             // resolve (including loose Assembly-CSharp scripts) is wasted disk I/O.
@@ -206,19 +206,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return editorStateSnapshotCapture.CaptureCurrent().GetBusyFailure();
-        }
-
-        private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
-        {
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
-            {
-                if (assembly.name == assemblyName)
-                {
-                    return assembly;
-                }
-            }
-
-            return null;
         }
 
         // Why Path.Combine then GetFullPath: Unity Assembly.sourceFiles are project-relative
