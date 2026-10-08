@@ -120,14 +120,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal void Clear()
-        {
-            lock (_gate)
-            {
-                _entries.Clear();
-            }
-        }
-
         private string PersistedSetPath(string fullDllPath)
         {
             return Path.Combine(_persistenceDirectory, Path.GetFileNameWithoutExtension(fullDllPath) + ".txt");
