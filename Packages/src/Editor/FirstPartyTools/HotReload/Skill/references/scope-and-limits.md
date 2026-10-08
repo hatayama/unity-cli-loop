@@ -351,7 +351,9 @@ gains such a declaration, for example a nested type or a delegate.
 Within one Editor session, a source compared with its baseline once is compared again
 only when its length or last write time changes; a rewrite that keeps both (for example
 a copy that preserves timestamps) is noticed only after the next domain reload, such as
-`uloop compile`.
+`uloop compile`. This applies wherever a source is compared with its baseline: finding
+drifted siblings, deciding which live patches to re-apply after a skip, and selecting
+files when `--files` is omitted.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
