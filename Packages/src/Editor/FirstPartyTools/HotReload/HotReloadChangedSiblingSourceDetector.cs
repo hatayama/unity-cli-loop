@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
+using UnityEditor.Compilation;
+
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -13,6 +15,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadChangedSiblingSourceDetector
     {
+        // Why per domain: a verdict compares a file with a snapshot that never changes for its MVID, so it can only
+        // go stale when the file itself changes, and a save changes the file's length or write time.
+        private static readonly HotReloadSiblingVerdictCache _verdicts = new HotReloadSiblingVerdictCache();
+
+        static HotReloadChangedSiblingSourceDetector()
+        {
+            // Why: a compile that fails keeps the domain alive, so without this the memo would keep
+            // verdicts for an assembly generation that is no longer current.
+            CompilationPipeline.compilationStarted += _ => _verdicts.Clear();
+        }
+
         /// <summary>
         /// Returns changed sibling absolute paths for <paramref name="sourceFiles"/>, excluding
         /// <paramref name="editedProjectRelativePaths"/>. Missing snapshots or DLLs yield an empty
@@ -159,7 +172,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "assemblySnapshotDirectoryName must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be null or empty.");
 
-            if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+            if (string.IsNullOrEmpty(sourcePath))
+            {
+                return false;
+            }
+
+            FileInfo source = new FileInfo(sourcePath);
+            if (!source.Exists)
             {
                 return false;
             }
@@ -174,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            return BytesEqual(File.ReadAllBytes(sourcePath), File.ReadAllBytes(snapshotPath));
+            return MatchesSnapshot(source, snapshotPath);
         }
 
         private static HotReloadChangedSourceScanResult DetectChangedFromSnapshotDirectory(
@@ -232,7 +251,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string absoluteSourcePath = ToAbsoluteProjectPath(projectRoot, normalizedRelativePath);
-            if (!File.Exists(absoluteSourcePath))
+            FileInfo source = new FileInfo(absoluteSourcePath);
+            if (!source.Exists)
             {
                 return null;
             }
@@ -245,15 +265,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            byte[] diskBytes = File.ReadAllBytes(absoluteSourcePath);
-            byte[] snapshotBytes = File.ReadAllBytes(snapshotPath);
-            if (BytesEqual(diskBytes, snapshotBytes))
+            if (MatchesSnapshot(source, snapshotPath))
             {
                 return null;
             }
 
             // Why project-relative: the default --files path must work across machines and is the CLI contract.
             return normalizedRelativePath;
+        }
+
+        // Compares an existing source with an existing snapshot file, reusing the last verdict while
+        // the source keeps its length and write time.
+        private static bool MatchesSnapshot(FileInfo source, string snapshotPath)
+        {
+            long lastWriteTimeUtcTicks = source.LastWriteTimeUtc.Ticks;
+            if (_verdicts.TryGetVerdict(
+                    snapshotPath,
+                    source.FullName,
+                    source.Length,
+                    lastWriteTimeUtcTicks,
+                    out bool matches))
+            {
+                return matches;
+            }
+
+            bool equal = BytesEqual(File.ReadAllBytes(source.FullName), File.ReadAllBytes(snapshotPath));
+            // Why the stamp taken before reading: a write during the read moves the stamp on, so the
+            // next scan reads the file again instead of trusting this verdict.
+            _verdicts.Record(snapshotPath, source.FullName, source.Length, lastWriteTimeUtcTicks, equal);
+            return equal;
         }
 
         private static HotReloadChangedSourceScanResult LimitChangedSources(
