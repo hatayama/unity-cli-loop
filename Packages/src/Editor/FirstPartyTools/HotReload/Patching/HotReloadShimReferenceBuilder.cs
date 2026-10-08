@@ -35,9 +35,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 foreach (string reference in compilationAssembly.allReferences)
                 {
-                    if (!string.IsNullOrEmpty(reference) && File.Exists(reference))
+                    if (string.IsNullOrEmpty(reference))
                     {
-                        paths.Add(Path.GetFullPath(reference));
+                        continue;
+                    }
+
+                    // Why against the root: a Virtual Player's script assemblies are listed relative
+                    // to its root (../../ScriptAssemblies), and its process need not run there.
+                    string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
+                    if (File.Exists(fullReference))
+                    {
+                        paths.Add(fullReference);
                     }
                 }
             }
@@ -453,12 +461,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string shimTargetAssemblyName = Path.GetFileNameWithoutExtension(fullTarget);
             foreach (string reference in compilationAssembly.allReferences)
             {
-                if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                if (string.IsNullOrEmpty(reference))
                 {
                     continue;
                 }
 
-                string fullReference = Path.GetFullPath(reference);
+                // Resolved against the root for the same reason as in BuildWorkerReferencePaths.
+                string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
+                if (!File.Exists(fullReference))
+                {
+                    continue;
+                }
                 if (string.Equals(fullReference, fullTarget, StringComparison.OrdinalIgnoreCase))
                 {
                     // Replaced by the publicized copy above.
