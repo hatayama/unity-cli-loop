@@ -192,6 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             Stopwatch watch = Stopwatch.StartNew();
+            bool entered = false;
             try
             {
                 // Why each item enters on the main thread: after the previous item's
@@ -200,12 +201,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // waits for the next update tick, and one that ignored a cancel would start this
                 // item on the tick after the run that cancelled it had begun.
                 await MainThreadSwitcher.SwitchToMainThread(ct);
+                entered = true;
                 await item.RunAsync(context, ct).ConfigureAwait(false);
                 return HotReloadWarmUpItemOutcome.Done(item.Name, watch.ElapsedMilliseconds);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                return HotReloadWarmUpItemOutcome.Cancelled(item.Name, watch.ElapsedMilliseconds);
+                // Why 0 before entering: a cancel during the tick wait must not look like an item
+                // stopped between its units.
+                return HotReloadWarmUpItemOutcome.Cancelled(item.Name, entered ? watch.ElapsedMilliseconds : 0);
             }
             catch (Exception ex) when (IsSkippableItemException(ex))
             {
