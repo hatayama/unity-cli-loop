@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/vibelog"
 )
@@ -311,5 +312,14 @@ func TestLogPlainToolRequestFailedNamesTheRunningToolOnlyForABusyAnswer(t *testi
 			}
 			assertCliVibeContextOmits(t, failedContext, "running_tool_name")
 		})
+	}
+}
+
+// Verifies a pre-accept timeout that the retry loop wrapped as UnityServerNotRespondingError is still
+// logged as a final response timeout.
+func TestClassifyPlainToolErrorSeesTheTimeoutInsideUnityNotResponding(t *testing.T) {
+	err := clierrors.UnityServerNotRespondingError{Cause: os.ErrDeadlineExceeded}
+	if got := classifyPlainToolError(err); got != "final_response_timeout" {
+		t.Fatalf("classifyPlainToolError = %q, want %q", got, "final_response_timeout")
 	}
 }

@@ -219,12 +219,12 @@ func TestFinishNonRetryableConnectionAttemptPrefersBusyOverAnUndispatchedTranspo
 	current := sendAttempt{err: io.ErrUnexpectedEOF}
 	last := sendAttempt{err: busy}
 
-	_, err := finishNonRetryableConnectionAttempt(context.Background(), current, last, 0, nil)
+	_, err := finishNonRetryableConnectionAttempt(context.Background(), unityipc.Connection{}, current, last, 0, nil)
 	if !errors.Is(err, busy) {
 		t.Fatalf("err = %v, want the earlier busy answer", err)
 	}
 
-	_, err = finishNonRetryableConnectionAttempt(cancelledContext(), current, last, 0, nil)
+	_, err = finishNonRetryableConnectionAttempt(cancelledContext(), unityipc.Connection{}, current, last, 0, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
@@ -264,7 +264,7 @@ func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *
 			t.Run("reports the dispatched failure", func(t *testing.T) {
 				// A positive response timeout keeps the accepted timeout out of the focus handling,
 				// which needs a focus controller this test does not build.
-				outcome, err := finishNonRetryableConnectionAttempt(context.Background(), testCase.current, last, time.Second, nil)
+				outcome, err := finishNonRetryableConnectionAttempt(context.Background(), unityipc.Connection{}, testCase.current, last, time.Second, nil)
 				if !errors.Is(err, testCase.current.err) || isUnityServerBusyRPCError(err) {
 					t.Fatalf("err = %v, want the dispatched attempt's own error %v", err, testCase.current.err)
 				}
@@ -273,7 +273,7 @@ func TestFinishNonRetryableConnectionAttemptKeepsADispatchedFailureAfterBusy(t *
 				}
 			})
 			t.Run("reports the cancellation", func(t *testing.T) {
-				_, err := finishNonRetryableConnectionAttempt(cancelledContext(), testCase.current, last, time.Second, nil)
+				_, err := finishNonRetryableConnectionAttempt(cancelledContext(), unityipc.Connection{}, testCase.current, last, time.Second, nil)
 				if !errors.Is(err, context.Canceled) {
 					t.Fatalf("err = %v, want context.Canceled", err)
 				}
@@ -316,7 +316,7 @@ func TestFinishNonRetryableConnectionAttemptKeepsAnEditorUnresponsiveErrorAfterB
 	// controller. Finding no Unity process keeps the focus itself from running.
 	focusController := newConnectionRetryFocusController(unityipc.Connection{ProjectRoot: t.TempDir()}, "get-logs", deps)
 
-	outcome, err := finishNonRetryableConnectionAttempt(context.Background(), current, last, 0, focusController)
+	outcome, err := finishNonRetryableConnectionAttempt(context.Background(), unityipc.Connection{}, current, last, 0, focusController)
 	if !errors.Is(err, current.err) || isUnityServerBusyRPCError(err) {
 		t.Errorf("err = %v, want the accepted attempt's own error %v", err, current.err)
 	}
@@ -326,6 +326,168 @@ func TestFinishNonRetryableConnectionAttemptKeepsAnEditorUnresponsiveErrorAfterB
 	if processLookups != 1 {
 		t.Errorf("Unity process lookups = %d, want 1 from the main-thread-stall focus handling", processLookups)
 	}
+}
+
+// Verifies a request that reached Unity but timed out before Unity accepted it comes back as
+// UnityServerNotRespondingError carrying the timeout and the connection it was sent on, whether or
+// not a Unity process was found and whether or not the caller has cancelled since.
+func TestFinishNonRetryableConnectionAttemptWrapsAPreAcceptTimeoutAsUnityNotResponding(t *testing.T) {
+	cases := []struct {
+		name string
+		ctx  context.Context
+	}{
+		{name: "live context", ctx: context.Background()},
+		{name: "cancelled context", ctx: cancelledContext()},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			connection := unityipc.Connection{
+				Endpoint:    unityipc.Endpoint{Network: "unix", Address: "/tmp/uloop/sample.sock"},
+				ProjectRoot: t.TempDir(),
+			}
+			current := sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: os.ErrDeadlineExceeded}
+
+			outcome, err := finishNonRetryableConnectionAttempt(testCase.ctx, connection, current, sendAttempt{}, 0, nilProbeFocusController(t))
+
+			var notResponding clierrors.UnityServerNotRespondingError
+			if !errors.As(err, &notResponding) {
+				t.Fatalf("err = %v, want UnityServerNotRespondingError", err)
+			}
+			if notResponding.ProjectRoot != connection.ProjectRoot || notResponding.Endpoint != connection.Endpoint.Address {
+				t.Errorf("error = %+v, want project root %q and endpoint %q", notResponding, connection.ProjectRoot, connection.Endpoint.Address)
+			}
+			if !errors.Is(err, os.ErrDeadlineExceeded) {
+				t.Errorf("err = %v, want it to carry the pre-accept timeout", err)
+			}
+			if !clierrors.IsFinalResponseTimeoutError(err) {
+				t.Errorf("err = %v, want it to still read as a timeout", err)
+			}
+			if !reflect.DeepEqual(outcome, current.outcome) {
+				t.Errorf("outcome = %+v, want the attempt's outcome %+v", outcome, current.outcome)
+			}
+		})
+	}
+}
+
+// Verifies every attempt other than a pre-accept timeout comes back unwrapped, as its own error (or
+// the cancellation, when a busy answer came before and the caller cancelled).
+func TestFinishNonRetryableConnectionAttemptLeavesOtherFailuresUnwrapped(t *testing.T) {
+	permanentConnectFailure := &unityipc.ConnectionAttemptError{Cause: os.ErrPermission}
+	cases := []struct {
+		name            string
+		ctx             context.Context
+		current         sendAttempt
+		last            sendAttempt
+		responseTimeout time.Duration
+		// needsFocus marks an attempt the focus handling sees, which needs a real focus controller.
+		needsFocus bool
+		wantErr    error
+	}{
+		{
+			name:    "accepted then timed out",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: os.ErrDeadlineExceeded},
+		},
+		{
+			name:    "dropped before the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: io.EOF},
+		},
+		{
+			name:    "dropped after the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: io.ErrUnexpectedEOF},
+		},
+		{
+			name:       "editor unresponsive after the accept",
+			current:    sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: &unityipc.EditorUnresponsiveError{StallSeconds: 30}},
+			needsFocus: true,
+		},
+		{
+			// A write that timed out; a dial that timed out is a ConnectionAttemptError and is retried
+			// before it gets here.
+			name:    "undispatched timeout",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{}, err: os.ErrDeadlineExceeded},
+		},
+		{
+			name:            "accepted then timed out, no response timeout",
+			current:         sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: os.ErrDeadlineExceeded},
+			responseTimeout: 0,
+			needsFocus:      true,
+		},
+		{
+			name:    "cancelled after busy",
+			ctx:     cancelledContext(),
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: os.ErrDeadlineExceeded},
+			last:    busyAttemptAfterAccept(serverBusyRPCError(t)),
+			wantErr: context.Canceled,
+		},
+		{
+			name:    "succeeded",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}},
+		},
+		{
+			name:    "malformed frame before the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true}, err: errors.New("invalid frame")},
+		},
+		{
+			name:    "undispatched disconnect",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{}, err: io.EOF},
+		},
+		{
+			name:    "cancelled after the accept",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, err: context.Canceled},
+		},
+		{
+			name:    "permanent connect failure",
+			current: sendAttempt{outcome: unityipc.UnitySendOutcome{}, err: permanentConnectFailure},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx := testCase.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			responseTimeout := testCase.responseTimeout
+			if !testCase.needsFocus {
+				// A positive response timeout keeps the accepted timeout out of the focus handling.
+				responseTimeout = time.Second
+			}
+			var focusController *connectionRetryFocusController
+			if testCase.needsFocus {
+				focusController = nilProbeFocusController(t)
+			}
+			wantErr := testCase.wantErr
+			if wantErr == nil {
+				wantErr = testCase.current.err
+			}
+
+			_, err := finishNonRetryableConnectionAttempt(ctx, unityipc.Connection{ProjectRoot: t.TempDir()}, testCase.current, testCase.last, responseTimeout, focusController)
+
+			var notResponding clierrors.UnityServerNotRespondingError
+			if errors.As(err, &notResponding) {
+				t.Fatalf("err = %v, want it left unwrapped", err)
+			}
+			if wantErr == nil {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("err = %v, want %v", err, wantErr)
+			}
+		})
+	}
+}
+
+// nilProbeFocusController builds a focus controller whose Unity process lookup finds nothing, so an
+// attempt that enters the focus handling never focuses a real window.
+func nilProbeFocusController(t *testing.T) *connectionRetryFocusController {
+	t.Helper()
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+	return newConnectionRetryFocusController(unityipc.Connection{ProjectRoot: t.TempDir()}, "get-logs", deps)
 }
 
 // Verifies the unity-alive retry reports the caller's cancellation when its retry context ends

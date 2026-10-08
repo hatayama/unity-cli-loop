@@ -1000,6 +1000,13 @@ func TestSendWithTransientConnectionRetryKeepsUnityFocusedAfterPreAcceptTimeout(
 	if err == nil {
 		t.Fatal("expected pre-accept timeout")
 	}
+	var notResponding clierrors.UnityServerNotRespondingError
+	if !errors.As(err, &notResponding) {
+		t.Fatalf("err = %v, want UnityServerNotRespondingError wrapping the pre-accept timeout", err)
+	}
+	if !clierrors.IsFinalResponseTimeoutError(err) {
+		t.Fatalf("err = %v, want it to still read as a timeout", err)
+	}
 	if focusCallCount != 1 {
 		t.Fatalf("expected one focus attempt, got %d", focusCallCount)
 	}
@@ -1795,6 +1802,10 @@ func TestSendWithTransientConnectionRetrySurfacesAnUnansweredRequestAfterBusy(t 
 	}
 	if !clierrors.IsFinalResponseTimeoutError(err) {
 		t.Fatalf("err = %v, want a response timeout", err)
+	}
+	var notResponding clierrors.UnityServerNotRespondingError
+	if !errors.As(err, &notResponding) {
+		t.Fatalf("err = %v, want UnityServerNotRespondingError wrapping the pre-accept timeout", err)
 	}
 	if !outcome.RequestDispatched || outcome.RequestAccepted {
 		t.Fatalf("outcome = %+v, want a dispatched request that was never accepted", outcome)

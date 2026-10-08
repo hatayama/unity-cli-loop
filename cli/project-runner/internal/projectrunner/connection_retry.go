@@ -279,6 +279,7 @@ func sendWithTransientConnectionRetryWithDeps(
 		if !shouldRetryUndispatchedConnection(err, outcome) {
 			return finishNonRetryableConnectionAttempt(
 				ctx,
+				connection,
 				sendAttempt{
 					outcome: outcome,
 					err:     err,
