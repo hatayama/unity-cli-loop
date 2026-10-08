@@ -162,7 +162,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    outcomes.Add(await RunItemAsync(item, capture.Context, ct));
+                    // Why ConfigureAwait(false): the next item switches to the main thread itself,
+                    // and the entry after the last item must not wait for a main thread that a
+                    // reload may never give back.
+                    outcomes.Add(await RunItemAsync(item, capture.Context, ct).ConfigureAwait(false));
                 }
 
                 LogComplete(capture.Context, outcomes, total.ElapsedMilliseconds);
