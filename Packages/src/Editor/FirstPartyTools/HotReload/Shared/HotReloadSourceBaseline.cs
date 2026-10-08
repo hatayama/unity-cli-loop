@@ -128,7 +128,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // every caller of the loader already runs on the Unity main thread the Package Manager
             // requires: a run's group step, and the pause-point port, which the pause-point tools and a
             // run's patch step call.
-            string pdbLookupPath = ScriptPackageRoots.ToPhysicalPath(projectRoot, slashNormalizedRelativePath);
+            // Why the root that compiled the assembly rather than the snapshot owner's: the PDB spells a
+            // source inside the compiling project as a path relative to that project's root (behind a
+            // leading "./"), which the lookup matches as the end of the url. A Multiplayer Play Mode
+            // Virtual Player reads the main project's assemblies from a root under the main project's
+            // Library, so a package folder of the main project lies outside the player's root, and
+            // relativizing against the player's root would hand the lookup an absolute path that no
+            // document ends with. For an ordinary project the two roots are the same.
+            string compiledProjectRoot = CompiledAssemblyLayout.Resolve(projectRoot).MainProjectRoot;
+            string pdbLookupPath = ScriptPackageRoots.ToPhysicalPath(compiledProjectRoot, slashNormalizedRelativePath);
             if (!documentIndex.TryFindDocument(
                     targetDllPath,
                     pdbPath,

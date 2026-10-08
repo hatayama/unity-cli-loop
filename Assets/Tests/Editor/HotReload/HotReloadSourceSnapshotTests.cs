@@ -192,6 +192,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: in a Multiplayer Play Mode Virtual Player, whose root lies under the main project's
+        /// Library, a package source's PDB document is found by the path the main project's compile
+        /// recorded, so the verified snapshot loads instead of reporting NoDocumentInPdb.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSourceAt_VirtualPlayerRootAndPackageSource_FindsTheDocumentTheMainProjectCompiled()
+        {
+            string mainRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string dllPath = Path.Combine(
+                mainRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                PausePointsRuntimeAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string physicalSourcePath = Path.Combine(mainRoot, PackageSourcePhysicalPath);
+            Assert.That(File.Exists(dllPath), Is.True, "Precondition: the package assembly must be compiled.");
+            Assert.That(File.Exists(physicalSourcePath), Is.True, "Precondition: the package source must exist.");
+
+            string virtualPlayersDirectory = Path.Combine(mainRoot, "Library", "VP");
+            bool createdVirtualPlayersDirectory = !Directory.Exists(virtualPlayersDirectory);
+            string playerRoot = Path.Combine(virtualPlayersDirectory, "uloop-test-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                // The player's snapshot is planted by hand: a root under Library is not a project the
+                // Editor resolves package asset paths for, so the capture would skip the source.
+                string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+                string snapshotDirectory = Path.Combine(
+                    playerRoot,
+                    HotReloadConstants.SourceSnapshotRelativeDirectory,
+                    PausePointsRuntimeAssemblyName + "-" + mvid);
+                Directory.CreateDirectory(snapshotDirectory);
+                File.Copy(
+                    physicalSourcePath,
+                    Path.Combine(
+                        snapshotDirectory,
+                        HotReloadSourceSnapshotter.HashProjectRelativePath(PackageSourceAssetPath) + ".cs"));
+                HotReloadPdbDocumentIndex documentIndex = new HotReloadPdbDocumentIndex(
+                    Path.Combine(playerRoot, HotReloadConstants.PdbDocumentsRelativeDirectory));
+
+                HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                    playerRoot,
+                    PackageSourceAssetPath,
+                    dllPath,
+                    documentIndex);
+                string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                    playerRoot,
+                    PackageSourceAssetPath,
+                    dllPath,
+                    documentIndex);
+
+                Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.None));
+                Assert.That(loaded, Is.EqualTo(File.ReadAllText(physicalSourcePath)));
+            }
+            finally
+            {
+                if (Directory.Exists(playerRoot))
+                {
+                    Directory.Delete(playerRoot, recursive: true);
+                }
+
+                if (createdVirtualPlayersDirectory
+                    && Directory.Exists(virtualPlayersDirectory)
+                    && Directory.GetFileSystemEntries(virtualPlayersDirectory).Length == 0)
+                {
+                    Directory.Delete(virtualPlayersDirectory);
+                }
+            }
+        }
+
+        /// <summary>
         /// What: a one-byte tamper of the snapshot bytes fails PDB checksum validation and yields null.
         /// </summary>
         [Test]
