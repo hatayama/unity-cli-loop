@@ -65,7 +65,7 @@ internal static class IntroducedTypePreparation
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
     }
 
-    internal static WorkerOutput Prepare(WorkerInput input)
+    internal static WorkerOutput Prepare(WorkerInput input, WorkerRequestTimings timings)
     {
         CSharpParseOptions parseOptions = new CSharpParseOptions(
             languageVersion: LanguageVersion.Latest,
@@ -84,11 +84,13 @@ internal static class IntroducedTypePreparation
             }
         }
 
+        timings.Lap("parse_sources");
         List<string> referenceParseErrors = new List<string>();
         (List<MetadataReference> references, MetadataReference targetTypesReference) =
             WorkerGroupPipeline.CollectMetadataReferences(input, referenceParseErrors);
         List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)> artifactReferences =
             IntroducedTypeArtifactReferences.Collect(input, references, referenceParseErrors);
+        timings.Lap("collect_references");
         List<CompilationUnitSyntax> analyzableRoots = new List<CompilationUnitSyntax>(analyzableUnits.Count);
         foreach (WorkerSourceUnit analyzableUnit in analyzableUnits)
         {
@@ -101,6 +103,7 @@ internal static class IntroducedTypePreparation
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
         SyntaxTree globalUsingTree = WorkerGlobalUsingBindingTree.Build(assemblyGlobalUsings, analyzableRoots, parseOptions);
+        timings.Lap("global_usings");
         // Why appended only here and not to syntaxTrees: the const drift compilation adds the
         // changed siblings and builds a tree of its own, which would otherwise repeat directives.
         CSharpCompilation compilation = CSharpCompilation.Create(
@@ -108,6 +111,7 @@ internal static class IntroducedTypePreparation
             syntaxTrees: WorkerGlobalUsingBindingTree.Append(syntaxTrees, globalUsingTree),
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        timings.Lap("create_compilation");
         AppendUnreadableReferenceErrors(compilation, references, referenceParseErrors);
         IAssemblySymbol targetAssembly =
             WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference);
