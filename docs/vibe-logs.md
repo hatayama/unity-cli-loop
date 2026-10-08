@@ -39,6 +39,19 @@ command ran against:
   `hot_reload_call_site_cache_evicted` with the evicted count and bytes, the bytes still cached,
   and the budget — a sign that the assemblies one run scans do not fit the cache and are read
   again on the next run.
+  The time inside the analysis and shim-compile phases is split by separate entries, never by
+  `steps`, so `unaccountedMs` keeps its meaning. `hot_reload_worker_request_timing` (one per
+  request to the transform worker, prepare and transform) has the gate wait, launch target
+  resolution, input write, process spawn, response wait and output read, whether the request
+  started the worker, and the stages the worker timed itself (`workerSteps`).
+  `hot_reload_signature_gate_timing` and `hot_reload_shim_first_compile_timing` (one per group)
+  have the main-thread switches, the signature gate, the membership check and the shim compile.
+  `hot_reload_shim_references_timing` (one per shim compile) has the resolver directories, the
+  target's publicized copy, the artifact copies and the reference copies with their counts.
+  `hot_reload_publicized_copy_written` appears only when a rewritten copy was written, with
+  its rewrite and write time. `hot_reload_shim_compiler_timing` has the compile, the load and
+  the backend kind. `dynamic_code_shared_worker_started` appears only when the shared Roslyn
+  worker was started, with its source sync, worker assembly check and process spawn.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -27,11 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(gateResult != null, "gateResult must not be null.");
 
+            Stopwatch watch = Stopwatch.StartNew();
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            long mainThreadSwitchMs = watch.ElapsedMilliseconds;
+            watch.Restart();
             if (!HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(collaborators, context.Files))
             {
                 return HotReloadGroupCompileResult.Failed();
             }
+
+            long membershipMs = watch.ElapsedMilliseconds;
 
             if (gateResult.UsedWorkerRetry)
             {
@@ -66,7 +72,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadGroupCompileResult.ReadyWithoutMethods();
             }
 
-            return await CompileShimForGroupAsync(collaborators, context, ct).ConfigureAwait(false);
+            watch.Restart();
+            HotReloadGroupCompileResult compiled = await CompileShimForGroupAsync(collaborators, context, ct).ConfigureAwait(false);
+            HotReloadOrchestratorLog.LogHotReloadShimFirstCompileTiming(
+                mainThreadSwitchMs, membershipMs, watch.ElapsedMilliseconds, context.CorrelationId);
+            return compiled;
         }
 
         /// <summary>

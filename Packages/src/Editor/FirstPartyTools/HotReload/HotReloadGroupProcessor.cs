@@ -461,14 +461,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(collaborators != null, "collaborators must not be null.");
             // The worker-bound continuation after the pre-revert check is not guaranteed to
             // resume on Unity's context, while the signature gate reads compilation state.
+            Stopwatch switchWatch = Stopwatch.StartNew();
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            long mainThreadSwitchMs = switchWatch.ElapsedMilliseconds;
             ct.ThrowIfCancellationRequested();
             IReadOnlyList<HotReloadGroupFile> files = context.Files;
             HotReloadGroupFile gateWarningSink = files[0];
+            Stopwatch gateWatch = Stopwatch.StartNew();
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
                 collaborators,
                 context,
                 ct).ConfigureAwait(false);
+            HotReloadOrchestratorLog.LogHotReloadSignatureGateTiming(
+                mainThreadSwitchMs, gateWatch.ElapsedMilliseconds, gateResult.UsedWorkerRetry, context.CorrelationId);
             HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(
                 gateWarningSink.Sinks.SiblingDerivedWarnings,
                 gateResult.Isolation);

@@ -11,6 +11,7 @@ using UnityEngine;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 using Assembly = System.Reflection.Assembly;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -39,8 +40,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(projectRelativePaths != null, "projectRelativePaths must not be null.");
 
             // Application.dataPath (ResolveWorkDirectory) needs the Unity main thread.
+            Stopwatch switchWatch = Stopwatch.StartNew();
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            long mainThreadSwitchMs = switchWatch.ElapsedMilliseconds;
 
+            ShimCompileTiming timing = new ShimCompileTiming();
+            HotReloadShimCompileResult result = await CompileAndLoadOnMainThreadAsync(
+                shimSource,
+                referencePaths,
+                defineSymbols,
+                projectRelativePaths,
+                timing,
+                ct);
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogShimCompilerTiming,
+                "Hot reload shim compiler timing.",
+                new
+                {
+                    mainThreadSwitchMs,
+                    compileMs = timing.CompileMs,
+                    loadMs = timing.LoadMs,
+                    backendKind = timing.BackendKind,
+                    success = result.Success
+                });
+            return result;
+        }
+
+        // The compile and load proper, once on the main thread. Fills timing as it goes.
+        private static async Task<HotReloadShimCompileResult> CompileAndLoadOnMainThreadAsync(
+            string shimSource,
+            IReadOnlyList<string> referencePaths,
+            IReadOnlyList<string> defineSymbols,
+            IReadOnlyCollection<string> projectRelativePaths,
+            ShimCompileTiming timing,
+            CancellationToken ct)
+        {
             string workDirectory = ResolveWorkDirectory();
             try
             {
@@ -60,9 +94,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why constructed here rather than injected: this class is still static, so it has
                 // no constructor to receive them. Move both to constructor injection when it
                 // becomes an instance.
+                Stopwatch compileWatch = Stopwatch.StartNew();
                 HotReloadRoslynCompileOutcome outcome = await new HotReloadRoslynCompiler(
                     new HotReloadRoslynCompilerEnvironment()).CompileAsync(request, ct)
                     .ConfigureAwait(false);
+                timing.CompileMs = compileWatch.ElapsedMilliseconds;
+                timing.BackendKind = outcome.PathsResolved
+                    ? outcome.BackendResult.BackendKind.ToString()
+                    : "Unresolved";
                 if (!outcome.PathsResolved)
                 {
                     return HotReloadShimCompileResult.Failure(
@@ -89,9 +128,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return HotReloadShimCompileResult.Failure("Shim dll was not produced: " + dllPath);
                 }
 
+                Stopwatch loadWatch = Stopwatch.StartNew();
                 byte[] assemblyBytes = File.ReadAllBytes(dllPath);
                 byte[] pdbBytes = File.Exists(pdbPath) ? File.ReadAllBytes(pdbPath) : null;
                 CompiledAssemblyLoadResult loadResult = CompiledAssemblyLoader.Load(assemblyBytes, pdbBytes);
+                timing.LoadMs = loadWatch.ElapsedMilliseconds;
                 if (!loadResult.Success || loadResult.CompiledAssembly == null)
                 {
                     return HotReloadShimCompileResult.Failure(
@@ -110,6 +151,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Directory.Delete(workDirectory, recursive: true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Where one shim compile spent its time and which compiler backend served it.
+        /// </summary>
+        private sealed class ShimCompileTiming
+        {
+            public long CompileMs { get; set; }
+            public long LoadMs { get; set; }
+            public string BackendKind { get; set; } = string.Empty;
         }
 
         // Only these diagnostics indicate a member/type the compiled assembly does not have yet;
