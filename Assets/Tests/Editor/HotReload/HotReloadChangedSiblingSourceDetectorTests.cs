@@ -646,6 +646,189 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a sibling whose length and write time equal the stamp the capture recorded is
+        /// taken to match its snapshot without comparing bytes, even though the bytes differ.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenTheManifestStampEqualsTheSource_TrustsItWithoutComparingBytes()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", StampLine(siblingRelative, 12, FirstWriteTimeUtc));
+
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a recorded stamp with another length is not trusted, so the bytes are compared
+        /// and a differing sibling is reported.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenTheManifestLengthDiffers_ComparesBytes()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", StampLine(siblingRelative, 13, FirstWriteTimeUtc));
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a recorded stamp with another write time is not trusted, so the bytes are compared
+        /// and a differing sibling is reported.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenTheManifestWriteTimeDiffers_ComparesBytes()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", StampLine(siblingRelative, 12, SecondWriteTimeUtc));
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a sibling whose stamp differs from the recorded one but whose bytes still equal the
+        /// snapshot is left out, because the byte comparison decides.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenTheManifestStampDiffersButTheBytesAreEqual_OmitsTheSibling()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", StampLine(siblingRelative, 12, SecondWriteTimeUtc));
+
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a manifest with one line that cannot be parsed is ignored as a whole, so even a
+        /// matching stamp on another line is not trusted and the differing sibling is reported.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenAManifestLineIsMalformed_IgnoresTheWholeManifest()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(
+                    projectRoot,
+                    "Asm-mvid",
+                    StampLine(siblingRelative, 12, FirstWriteTimeUtc),
+                    "broken\t12");
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: the re-apply check after a skip also takes a source whose stamp equals the recorded
+        /// one to match its snapshot without comparing bytes.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshotDirectory_WhenTheManifestStampEqualsTheSource_IsTrueWithoutComparingBytes()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", StampLine(siblingRelative, 12, FirstWriteTimeUtc));
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshotDirectory(
+                    projectRoot,
+                    "Asm-mvid",
+                    siblingRelative,
+                    AbsoluteProjectPath(projectRoot, siblingRelative));
+
+                Assert.That(matches, Is.True);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: the default file selection leaves out a source whose stamp equals the recorded one,
+        /// without comparing bytes.
+        /// </summary>
+        [Test]
+        public void DetectAllChangedFromSnapshotDirectory_WhenTheManifestStampEqualsTheSource_LeavesTheSourceOut()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", StampLine(siblingRelative, 12, FirstWriteTimeUtc));
+
+                HotReloadChangedSourceScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectAllChangedFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        new[] { siblingRelative });
+
+                Assert.That(result.ChangedProjectRelativePaths, Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
         /// What: sibling-derived warnings are ordinal-deduped among themselves and skipped
         /// when the own-file list already contains the exact string, without collapsing
         /// duplicates that were already in the own-file list.
@@ -667,6 +850,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why an edited file: a run always has one, and the detector requires it.
         private const string EditedRelative = "Assets/Edited.cs";
+
+        // Spelled here until the manifest has constants of its own.
+        private const string StampManifestFileName = "source-stamps.txt";
+        private const string StampManifestHeader = "uloop-source-stamps 1";
 
         private static string[] ScanSibling(
             string projectRoot,
@@ -730,6 +917,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllBytes(
                 snapshotPath,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(contents));
+        }
+
+        // Plants a stamp manifest as the capture would write it: the header line, then one
+        // "<snapshot file name>\t<length>\t<ticks>" line per entry, "\n" after every line.
+        private static void WriteStampManifest(
+            string projectRoot,
+            string assemblySnapshotDirectoryName,
+            params string[] lines)
+        {
+            string snapshotDirectory = Path.Combine(
+                projectRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                assemblySnapshotDirectoryName);
+            Directory.CreateDirectory(snapshotDirectory);
+            StringBuilder text = new StringBuilder();
+            text.Append(StampManifestHeader).Append('\n');
+            foreach (string line in lines)
+            {
+                text.Append(line).Append('\n');
+            }
+
+            File.WriteAllText(
+                Path.Combine(snapshotDirectory, StampManifestFileName),
+                text.ToString(),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+
+        private static string StampLine(string projectRelativePath, long length, DateTime lastWriteTimeUtc)
+        {
+            return HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/'))
+                + ".cs\t" + length.ToString(CultureInfo.InvariantCulture)
+                + "\t" + lastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture);
         }
 
         private static string AbsoluteProjectPath(string projectRoot, string projectRelativePath)
