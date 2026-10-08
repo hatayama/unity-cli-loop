@@ -95,4 +95,4 @@ interrupt the flow or ask the user about it mid-run. At the next stopping point 
 propose `uloop set-code-optimization debug --startup` (session-only without `--startup`),
 and only apply it if the user approves.
 
-The automatic Debug switch changes only the current project's code optimization for this Editor session; it reverts on every Editor restart, and each re-switch costs a full script recompile. `uloop set-code-optimization debug --startup` makes Debug the startup default through a machine-wide Unity preference that applies to every project. Only the project's C# scripts run slower, mainly in Play Mode - the Editor itself is not slowed.
+The automatic Debug switch changes the code optimization of this Editor session only; on every Editor restart it goes back to the 'Code Optimization On Startup' preference (a per-user Unity preference, Release unless changed), and each re-switch costs a full script recompile. `uloop set-code-optimization debug --startup` makes Debug the startup default through a machine-wide Unity preference that applies to every project. Only the project's C# scripts run slower, mainly in Play Mode - the Editor itself is not slowed.
