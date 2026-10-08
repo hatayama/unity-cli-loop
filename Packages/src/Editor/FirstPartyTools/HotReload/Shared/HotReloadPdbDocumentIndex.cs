@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text;
 
-using Mono.Cecil;
-using Mono.Cecil.Cil;
-using Mono.Cecil.Pdb;
+using DocumentHashAlgorithm = Mono.Cecil.Cil.DocumentHashAlgorithm;
 
 using UnityEngine;
 
@@ -89,6 +89,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string PersistedFormatHeader = "uloop-pdb-documents 1";
         private const int PersistedStampFieldCount = 6;
         private const int PersistedDocumentFieldCount = 3;
+
+        // Hash algorithm GUIDs a portable PDB records for its documents.
+        private static readonly Guid Sha1HashAlgorithmGuid = new Guid("ff1816ec-aa5e-4d10-87f7-6f4963833460");
+        private static readonly Guid Sha256HashAlgorithmGuid = new Guid("8829d00f-11b8-4213-878b-770e8597ac16");
+        private static readonly Guid Md5HashAlgorithmGuid = new Guid("406ea660-64cf-4c82-b6f0-42d48172a799");
 
         private sealed class Entry
         {
@@ -411,60 +416,111 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        // Every distinct document a sequence point refers to, in the order a walk over types,
-        // methods and sequence points first meets them. Why not the PDB's document table: it
-        // also lists files without a method body, which the walk this replaces never returned.
+        // Every distinct document a visible sequence point refers to, in the order the PDB's
+        // method debug information table, which follows method tokens, first meets them. Why not
+        // the PDB's document table: it also lists files without a method body, which the Cecil
+        // walk this replaces never returned. Why only the dll's debug directory: matching the PDB
+        // to its build needs the CodeView GUID alone, and reading the type and method tables took
+        // over a second on a large assembly. A PDB of another build is rejected by that GUID
+        // before any document is read.
         internal static List<HotReloadPdbDocument> ReadDocuments(string dllPath, string pdbPath)
         {
-            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            Guid codeViewGuid = ReadCodeViewGuid(dllPath);
             using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using MetadataReaderProvider provider = MetadataReaderProvider.FromPortablePdbStream(pdbStream);
+            MetadataReader reader = provider.GetMetadataReader();
 
-            ReaderParameters readerParameters = new ReaderParameters
+            // Why checked here: the stamp pairs the dll and the PDB by time, not by build; a PDB of
+            // another build would describe sources the dll was not compiled from.
+            BlobContentId pdbId = new BlobContentId(reader.DebugMetadataHeader.Id);
+            if (pdbId.Guid != codeViewGuid)
             {
-                InMemory = true,
-                ReadSymbols = true,
-                SymbolReaderProvider = new PortablePdbReaderProvider(),
-                SymbolStream = pdbStream
-            };
+                throw new InvalidOperationException(
+                    "The PDB beside " + Path.GetFileName(dllPath) + " belongs to another build of it.");
+            }
 
-            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
-            List<HotReloadPdbDocument> documents = new List<HotReloadPdbDocument>();
-            // Why by reference: Cecil hands out one Document per row of the PDB's document table.
-            HashSet<Document> seen = new HashSet<Document>();
-            foreach (TypeDefinition type in assemblyDefinition.MainModule.GetTypes())
+            List<DocumentHandle> ordered = CollectDocumentsWithVisibleSequencePoints(reader);
+            List<HotReloadPdbDocument> documents = new List<HotReloadPdbDocument>(ordered.Count);
+            foreach (DocumentHandle handle in ordered)
             {
-                foreach (MethodDefinition method in type.Methods)
+                Document document = reader.GetDocument(handle);
+                documents.Add(new HotReloadPdbDocument(
+                    reader.GetString(document.Name),
+                    ToHashAlgorithm(reader.GetGuid(document.HashAlgorithm)),
+                    reader.GetBlobBytes(document.Hash)));
+            }
+
+            return documents;
+        }
+
+        // Why by handle: there is one DocumentHandle per row of the PDB's document table.
+        private static List<DocumentHandle> CollectDocumentsWithVisibleSequencePoints(MetadataReader reader)
+        {
+            List<DocumentHandle> ordered = new List<DocumentHandle>();
+            HashSet<DocumentHandle> seen = new HashSet<DocumentHandle>();
+            foreach (MethodDebugInformationHandle handle in reader.MethodDebugInformation)
+            {
+                MethodDebugInformation information = reader.GetMethodDebugInformation(handle);
+                if (information.SequencePointsBlob.IsNil)
                 {
-                    if (!method.HasBody)
+                    continue;
+                }
+
+                foreach (SequencePoint point in information.GetSequencePoints())
+                {
+                    if (point.IsHidden || point.Document.IsNil)
                     {
                         continue;
                     }
 
-                    MethodDebugInformation debugInformation = method.DebugInformation;
-                    if (debugInformation == null || !debugInformation.HasSequencePoints)
+                    if (seen.Add(point.Document))
                     {
-                        continue;
-                    }
-
-                    foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
-                    {
-                        if (sequencePoint.IsHidden || sequencePoint.Document == null)
-                        {
-                            continue;
-                        }
-
-                        if (seen.Add(sequencePoint.Document))
-                        {
-                            documents.Add(new HotReloadPdbDocument(
-                                sequencePoint.Document.Url,
-                                sequencePoint.Document.HashAlgorithm,
-                                sequencePoint.Document.Hash));
-                        }
+                        ordered.Add(point.Document);
                     }
                 }
             }
 
-            return documents;
+            return ordered;
+        }
+
+        // Reads only the PE headers and the debug directory; the type and method tables stay unread.
+        private static Guid ReadCodeViewGuid(string dllPath)
+        {
+            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using PEReader peReader = new PEReader(dllStream);
+            foreach (DebugDirectoryEntry entry in peReader.ReadDebugDirectory())
+            {
+                if (entry.Type != DebugDirectoryEntryType.CodeView)
+                {
+                    continue;
+                }
+
+                return peReader.ReadCodeViewDebugDirectoryData(entry).Guid;
+            }
+
+            throw new InvalidOperationException(
+                Path.GetFileName(dllPath) + " has no CodeView debug directory entry, so its PDB cannot be matched.");
+        }
+
+        // The same mapping Cecil's portable PDB reader applies to a document's hash algorithm GUID.
+        private static DocumentHashAlgorithm ToHashAlgorithm(Guid algorithm)
+        {
+            if (algorithm == Sha1HashAlgorithmGuid)
+            {
+                return DocumentHashAlgorithm.SHA1;
+            }
+
+            if (algorithm == Sha256HashAlgorithmGuid)
+            {
+                return DocumentHashAlgorithm.SHA256;
+            }
+
+            if (algorithm == Md5HashAlgorithmGuid)
+            {
+                return DocumentHashAlgorithm.MD5;
+            }
+
+            return DocumentHashAlgorithm.None;
         }
     }
 }
