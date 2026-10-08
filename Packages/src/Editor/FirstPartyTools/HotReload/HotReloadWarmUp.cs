@@ -15,8 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Loads, once per domain and before the first hot reload run, what that run would otherwise
     /// load cold: the call sites, referenced-method sets and PDB document lists of the assemblies
     /// earlier runs of this project edited. Each kind of work is one item, run in order.
-    /// When a run comes while the warm-up is running, the run waits for the item in flight, whose
-    /// result it then finds in the caches, and the remaining items are dropped. When a run comes
+    /// When a run comes while the warm-up is running, the run waits until the item in flight
+    /// finishes its current unit (one dll), whose result it then finds in the caches; that item is
+    /// reported cancelled when it had units left, and the remaining items are dropped. When a run comes
     /// before the warm-up starts, the warm-up never starts.
     /// Why no macOS activity is held while it runs: an activity is held only while a command is
     /// handled, and the warm-up is not one. The Editor is not throttled for the first half minute
@@ -158,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // items never ran.
                     if (ct.IsCancellationRequested)
                     {
-                        outcomes.Add(HotReloadWarmUpItemOutcome.Cancelled(item.Name));
+                        outcomes.Add(HotReloadWarmUpItemOutcome.Cancelled(item.Name, 0));
                         continue;
                     }
 
@@ -204,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                return HotReloadWarmUpItemOutcome.Cancelled(item.Name);
+                return HotReloadWarmUpItemOutcome.Cancelled(item.Name, watch.ElapsedMilliseconds);
             }
             catch (Exception ex) when (IsSkippableItemException(ex))
             {

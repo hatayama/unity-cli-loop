@@ -61,6 +61,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(index.LoadCount, Is.EqualTo(2), "reads after the second preload");
         }
 
+        /// <summary>
+        /// What: a cancelled token throws before the first referencing dll, so the item is not reported done, and reads nothing.
+        /// </summary>
+        [Test]
+        public void PreloadSets_WhenCancelled_ThrowsAndReadsNothing()
+        {
+            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex(_persistenceDirectory);
+            HotReloadWarmUpTarget[] targets =
+            {
+                new HotReloadWarmUpTarget(
+                    TestAssemblyName,
+                    DllPath(TestAssemblyName),
+                    Path.ChangeExtension(DllPath(TestAssemblyName), ".pdb"),
+                    new[] { DllPath(CrossAssemblyCallerAssemblyName) })
+            };
+
+            Assert.Throws<OperationCanceledException>(
+                () => HotReloadReferencedMethodSetWarmUpItem.PreloadSets(targets, index, new CancellationToken(true)));
+
+            Assert.That(index.LoadCount, Is.EqualTo(0), "reads");
+        }
+
         private static string DllPath(string assemblyName)
         {
             return Path.Combine(

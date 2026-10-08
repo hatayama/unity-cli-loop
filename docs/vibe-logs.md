@@ -66,8 +66,9 @@ command ran against:
   assemblies, each item's `outcome` (`done`, `cancelled` or `failed`) and time, and `cancelledBy`
   (`run`, `beforeAssemblyReload`, `compilationStarted`, or null), or one
   `hot_reload_warm_up_skipped` with its `reason` (`no_targets`, `compiling`, `updating`,
-  `no_compiled_assembly`, `run_started_first`). A run's `steps` have `warm_up_yield`, the time it
-  waited for the warm-up's item in flight, and `warm_up_targets`, the time it took to record its
+  `no_compiled_assembly`, `run_started_first`). `cancelled` covers both an item that never started
+  (`ms` 0) and one stopped between its units (one dll each) with units left, with the time it ran.
+  A run's `steps` have `warm_up_yield`, the time it waited for the unit in flight, and `warm_up_targets`, the time it took to record its
   assemblies for the next warm-up.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).

@@ -124,6 +124,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
+    /// <summary>
+    /// An item of two units: it appends its name for the first, waits until the test completes
+    /// its source, checks the token between the units as production items do, and appends its
+    /// name with "#2" for the second.
+    /// </summary>
+    internal sealed class TwoUnitWarmUpItem : IHotReloadWarmUpItem
+    {
+        private readonly List<string> _ran;
+
+        internal TwoUnitWarmUpItem(string name, List<string> ran)
+        {
+            Name = name;
+            _ran = ran;
+        }
+
+        public string Name { get; }
+
+        internal TaskCompletionSource<bool> BetweenUnits { get; } = new TaskCompletionSource<bool>();
+
+        public async Task RunAsync(HotReloadWarmUpContext context, CancellationToken ct)
+        {
+            _ran.Add(Name);
+            await BetweenUnits.Task;
+            ct.ThrowIfCancellationRequested();
+            _ran.Add(Name + "#2");
+        }
+    }
+
     /// <summary>An item whose task faults with the given exception.</summary>
     internal sealed class ThrowingWarmUpItem : IHotReloadWarmUpItem
     {

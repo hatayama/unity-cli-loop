@@ -90,8 +90,8 @@ the background what the first run would otherwise load cold, for the most recent
 `targets.txt` (up to eight) whose dll and PDB exist: their compiled call sites, the
 referenced-method sets of the assemblies that reference them, and their PDB document lists. It
 does not start while the Editor compiles or imports, and a domain reload or a compile start stops
-it. A run that arrives while it works waits only for the item in flight, whose result it reuses,
-and the remaining items are dropped; a run that arrives before the tick keeps it from starting.
+it. A run that arrives while it works waits only for the unit (one dll) in flight, whose result
+it reuses; that item and the remaining ones are dropped; a run that arrives before the tick keeps it from starting.
 `hot_reload_warm_up_complete` and `hot_reload_warm_up_skipped` show what it did, and the run's
 `warm_up_yield` step shows how long the run waited (see `docs/vibe-logs.md`). The transform
 worker, the shared Roslyn worker and the publicized copies are not warmed up yet.

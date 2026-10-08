@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Task.Run(() => LoadCallSites(context.Targets, cache, ct));
         }
 
-        /// <summary>Loads each target's dll until cancelled and returns how many it loaded.</summary>
+        /// <summary>Loads each target's dll and returns how many it loaded; throws before the next dll once cancelled.</summary>
         internal static int LoadCallSites(
             IReadOnlyList<HotReloadWarmUpTarget> targets,
             HotReloadCompiledCallSiteCache cache,
@@ -29,11 +29,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int count = 0;
             foreach (HotReloadWarmUpTarget target in targets)
             {
-                if (ct.IsCancellationRequested)
-                {
-                    break;
-                }
-
+                // Why throw rather than stop: an item that returns normally is reported done, and
+                // one that skipped targets has not loaded them.
+                ct.ThrowIfCancellationRequested();
                 cache.GetOrLoad(target.DllPath);
                 count++;
             }

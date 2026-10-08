@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// Contract of the call-site warm-up item: it loads each target's dll into the cache it is
-    /// given once, and loads nothing once cancelled. Works on a copy of the test assembly in a
+    /// given once, and throws before the next dll once cancelled. Works on a copy of the test assembly in a
     /// private temp directory and a cache of its own.
     /// </summary>
     public sealed class HotReloadCallSiteWarmUpItemTests
@@ -58,16 +58,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a cancelled token loads no dll.
+        /// What: a cancelled token throws before the first dll, so the item is not reported done, and loads nothing.
         /// </summary>
         [Test]
-        public void LoadCallSites_WhenCancelled_LoadsNothing()
+        public void LoadCallSites_WhenCancelled_ThrowsAndLoadsNothing()
         {
             HotReloadWarmUpTarget[] targets = { CopyTarget() };
 
-            int loaded = HotReloadCallSiteWarmUpItem.LoadCallSites(targets, _cache, new CancellationToken(true));
+            Assert.Throws<OperationCanceledException>(
+                () => HotReloadCallSiteWarmUpItem.LoadCallSites(targets, _cache, new CancellationToken(true)));
 
-            Assert.That(loaded, Is.EqualTo(0), "loaded targets");
             Assert.That(_cache.LoadCount, Is.EqualTo(0), "reads");
         }
 

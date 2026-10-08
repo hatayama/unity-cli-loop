@@ -32,9 +32,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new HotReloadWarmUpItemOutcome(name, ms, HotReloadWarmUpItemOutcomeKind.Done, string.Empty);
         }
 
-        internal static HotReloadWarmUpItemOutcome Cancelled(string name)
+        /// <summary>An item that never started (<paramref name="ms"/> 0) or stopped between its units.</summary>
+        internal static HotReloadWarmUpItemOutcome Cancelled(string name, long ms)
         {
-            return new HotReloadWarmUpItemOutcome(name, 0, HotReloadWarmUpItemOutcomeKind.Cancelled, string.Empty);
+            return new HotReloadWarmUpItemOutcome(name, ms, HotReloadWarmUpItemOutcomeKind.Cancelled, string.Empty);
         }
 
         internal static HotReloadWarmUpItemOutcome Failed(string name, long ms, Exception exception)

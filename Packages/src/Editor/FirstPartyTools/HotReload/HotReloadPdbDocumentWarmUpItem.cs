@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Task.Run(() => PreloadDocuments(context.Targets, index, ct));
         }
 
-        /// <summary>Preloads each target's document list until cancelled, with the MVID a run would read.</summary>
+        /// <summary>Preloads each target's document list with the MVID a run would read; throws before the next target once cancelled.</summary>
         internal static void PreloadDocuments(
             IReadOnlyList<HotReloadWarmUpTarget> targets,
             HotReloadPdbDocumentIndex index,
@@ -28,11 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (HotReloadWarmUpTarget target in targets)
             {
-                if (ct.IsCancellationRequested)
-                {
-                    return;
-                }
-
+                // Why throw rather than stop: an item that returns normally is reported done.
+                ct.ThrowIfCancellationRequested();
                 string moduleVersionId = HotReloadSourceSnapshotter.ReadAssemblyMvid(target.DllPath);
                 index.Preload(target.DllPath, target.PdbPath, moduleVersionId);
             }

@@ -146,6 +146,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a run that comes between two units of an item stops that item before its next
+        /// unit, and the entry reports it cancelled rather than done.
+        /// </summary>
+        [Test]
+        public async Task YieldToRunAsync_BetweenUnitsOfAnItem_StopsItAndReportsItCancelled()
+        {
+            TwoUnitWarmUpItem twoUnits = new TwoUnitWarmUpItem("a", _ran);
+            HotReloadWarmUp warmUp = CreateReady(twoUnits, new RecordingWarmUpItem("b", _ran));
+            try
+            {
+                warmUp.Start();
+                Assert.That(_ran, Is.EqualTo(new[] { "a" }), "Precondition: item a must be between its units.");
+
+                Task yield = warmUp.YieldToRunAsync();
+                twoUnits.BetweenUnits.TrySetResult(true);
+                await yield;
+            }
+            finally
+            {
+                twoUnits.BetweenUnits.TrySetResult(true);
+            }
+
+            Assert.That(_ran, Is.EqualTo(new[] { "a" }), "units run");
+            Assert.That(
+                HotReloadWarmUpTestDoubles.ReadCompletedOutcomes(),
+                Is.EqualTo(new[] { "a:cancelled", "b:cancelled" }));
+            Assert.That(
+                (string)HotReloadWarmUpTestDoubles.ReadSingleVibeContext(HotReloadConstants.VibeLogWarmUpComplete)["cancelledBy"],
+                Is.EqualTo(HotReloadConstants.WarmUpCancelledByRun));
+        }
+
+        /// <summary>
         /// What: a run that comes after the warm-up finished does not wait.
         /// </summary>
         [Test]

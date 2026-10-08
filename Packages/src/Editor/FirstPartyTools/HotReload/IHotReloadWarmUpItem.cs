@@ -13,9 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         string Name { get; }
 
         /// <summary>
-        /// Entered on the main thread. Checks ct before each unit of work (one dll, one process start)
-        /// and returns without side effects when it is already cancelled; never observes ct in the
-        /// middle of a unit.
+        /// Entered on the main thread. Throws OperationCanceledException before the next unit of work
+        /// (one dll, one process start) once ct is cancelled, so an item that stopped early is never
+        /// reported done; never observes ct in the middle of a unit.
         /// </summary>
         Task RunAsync(HotReloadWarmUpContext context, CancellationToken ct);
     }

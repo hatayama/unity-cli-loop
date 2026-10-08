@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Task.Run(() => PreloadSets(context.Targets, index, ct));
         }
 
-        /// <summary>Preloads each referencing dll's set until cancelled.</summary>
+        /// <summary>Preloads each referencing dll's set; throws before the next dll once cancelled.</summary>
         internal static void PreloadSets(
             IReadOnlyList<HotReloadWarmUpTarget> targets,
             HotReloadReferencedMethodIndex index,
@@ -30,11 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 foreach (string dllPath in target.ReferencingDllPaths)
                 {
-                    if (ct.IsCancellationRequested)
-                    {
-                        return;
-                    }
-
+                    // Why throw rather than stop: an item that returns normally is reported done.
+                    ct.ThrowIfCancellationRequested();
                     index.Preload(dllPath);
                 }
             }
