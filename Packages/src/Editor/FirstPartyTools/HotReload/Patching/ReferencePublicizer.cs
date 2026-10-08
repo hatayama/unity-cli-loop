@@ -276,31 +276,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
             string normalizedSource = NormalizePathForComparison(fullSourceDllPath);
-            bool underAcceptedDirectory = IsUnderProjectDirectory(
+            bool underAcceptedDirectory = IsUnderDirectory(
                     normalizedSource,
-                    projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    CompiledAssemblyLayout.Resolve(projectRoot).CompiledAssembliesDirectory,
                     comparison)
-                || IsUnderProjectDirectory(
+                || IsUnderDirectory(
                     normalizedSource,
-                    projectRoot,
-                    HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory,
+                    Path.Combine(projectRoot, HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory),
                     comparison);
 
             Debug.Assert(
                 underAcceptedDirectory,
-                "ReferencePublicizer only accepts DLLs under Library/ScriptAssemblies/ or "
+                "ReferencePublicizer only accepts DLLs under the compiled assemblies directory or "
                 + "Library/UloopHotReload/IntroducedTypes/.");
         }
 
-        private static bool IsUnderProjectDirectory(
+        private static bool IsUnderDirectory(
             string normalizedSourcePath,
-            string projectRoot,
-            string relativeDirectory,
+            string absoluteDirectory,
             StringComparison comparison)
         {
-            string normalizedDirectory = NormalizePathForComparison(
-                Path.GetFullPath(Path.Combine(projectRoot, relativeDirectory)));
+            string normalizedDirectory = NormalizePathForComparison(Path.GetFullPath(absoluteDirectory));
             return normalizedSourcePath.StartsWith(normalizedDirectory + "/", comparison);
         }
 
@@ -320,8 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             resolver.AddSearchDirectory(Path.GetDirectoryName(sourceDllPath));
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            resolver.AddSearchDirectory(
-                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
+            resolver.AddSearchDirectory(CompiledAssemblyLayout.Resolve(projectRoot).CompiledAssembliesDirectory);
 
             foreach (string searchDirectory in resolverSearchDirectories)
             {

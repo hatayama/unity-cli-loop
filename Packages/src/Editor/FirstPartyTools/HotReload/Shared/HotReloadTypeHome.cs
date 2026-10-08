@@ -87,10 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
 
-            string dllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string dllPath = CompiledAssemblyLayout.Resolve(projectRoot).DllPath(assemblyName);
             return ScriptAssemblies(assemblyName, dllPath);
         }
 

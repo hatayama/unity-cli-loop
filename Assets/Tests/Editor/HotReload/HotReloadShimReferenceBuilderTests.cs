@@ -57,9 +57,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AssemblyFlags.None);
             HotReloadTypeHome targetHome = HotReloadTypeHome.ScriptAssemblies("Fixture.Target", targetPath);
 
-            string[] paths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(compilationAssembly, targetHome);
+            string[] paths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(_tempRoot, compilationAssembly, targetHome);
 
             Assert.That(paths, Is.EqualTo(new[] { Path.GetFullPath(otherPath), Path.GetFullPath(targetPath) }));
+        }
+
+        /// <summary>
+        /// Verifies that a reference Unity lists relative to a Virtual Player's root, as it does for
+        /// the main project's script assemblies, is resolved against that root and not the current
+        /// directory.
+        /// </summary>
+        [Test]
+        public void BuildWorkerReferencePaths_RelativeReference_IsResolvedAgainstTheProjectRoot()
+        {
+            const string relativeReference = "../../ScriptAssemblies/Fixture.Other.dll";
+            string scriptAssembliesDirectory = Path.Combine(_tempRoot, "Library", "ScriptAssemblies");
+            string otherPath = Path.Combine(scriptAssembliesDirectory, "Fixture.Other.dll");
+            string targetPath = Path.Combine(_tempRoot, "Fixture.Target.dll");
+            string playerRoot = Path.Combine(_tempRoot, "Library", "VP", "mppm1");
+            Directory.CreateDirectory(scriptAssembliesDirectory);
+            Directory.CreateDirectory(playerRoot);
+            File.WriteAllBytes(otherPath, new byte[] { 0 });
+            File.WriteAllBytes(targetPath, new byte[] { 0 });
+            Assert.That(
+                File.Exists(relativeReference),
+                Is.False,
+                "The reference must not exist relative to the current directory, or the test cannot tell the two apart.");
+            UnityCompilationAssembly compilationAssembly = new UnityCompilationAssembly(
+                "Fixture.Target",
+                targetPath,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<UnityCompilationAssembly>(),
+                new[] { relativeReference, targetPath },
+                AssemblyFlags.None);
+            HotReloadTypeHome targetHome = HotReloadTypeHome.ScriptAssemblies("Fixture.Target", targetPath);
+
+            string[] paths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(playerRoot, compilationAssembly, targetHome);
+
+            Assert.That(paths, Does.Contain(Path.GetFullPath(otherPath)));
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using UnityEngine;
 
@@ -16,8 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadResolverSearchDirectories
     {
-        internal static IReadOnlyCollection<string> Collect(UnityCompilationAssembly rootAssembly)
+        internal static IReadOnlyCollection<string> Collect(string projectRoot, UnityCompilationAssembly rootAssembly)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(rootAssembly != null, "rootAssembly must not be null.");
 
             List<string> orderedDirectories = new List<string>();
@@ -35,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityCompilationAssembly current = pending.Dequeue();
                 // allReferences already dereferences assemblyReferences, so a null array would have
                 // thrown here; no null guard after this point.
-                List<string> unseenReferences = TakeUnseenReferences(current.allReferences, seenReferences);
+                List<string> unseenReferences = TakeUnseenReferences(projectRoot, current.allReferences, seenReferences);
                 foreach (string directory in ReferencePublicizer.CollectResolverSearchDirectories(unseenReferences))
                 {
                     if (seenDirectories.Add(directory))
@@ -59,14 +61,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why skip a path seen earlier: the engine references, about 230 per assembly, repeat in
         // every assembly of the closure, and each one would cost a File.Exists. A path seen earlier
         // already added its directory at the same or a shallower level, or did not exist then either.
-        private static List<string> TakeUnseenReferences(string[] references, HashSet<string> seenReferences)
+        // Why against the root: a Virtual Player's script assemblies are listed relative to its root
+        // (../../ScriptAssemblies), and its process need not run there.
+        private static List<string> TakeUnseenReferences(
+            string projectRoot,
+            string[] references,
+            HashSet<string> seenReferences)
         {
             List<string> unseenReferences = new List<string>();
             foreach (string reference in references)
             {
-                if (seenReferences.Add(reference))
+                if (string.IsNullOrEmpty(reference))
                 {
-                    unseenReferences.Add(reference);
+                    continue;
+                }
+
+                string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
+                if (seenReferences.Add(fullReference))
+                {
+                    unseenReferences.Add(fullReference);
                 }
             }
 

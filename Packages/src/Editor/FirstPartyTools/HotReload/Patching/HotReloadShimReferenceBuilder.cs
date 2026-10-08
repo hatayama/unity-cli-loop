@@ -23,9 +23,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadShimReferenceBuilder
     {
         internal static string[] BuildWorkerReferencePaths(
+            string projectRoot,
             UnityCompilationAssembly compilationAssembly,
             HotReloadTypeHome targetHome)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(targetHome != null, "targetHome must not be null.");
 
             List<string> paths = new List<string>();
@@ -33,9 +35,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 foreach (string reference in compilationAssembly.allReferences)
                 {
-                    if (!string.IsNullOrEmpty(reference) && File.Exists(reference))
+                    if (string.IsNullOrEmpty(reference))
                     {
-                        paths.Add(Path.GetFullPath(reference));
+                        continue;
+                    }
+
+                    // Why against the root: a Virtual Player's script assemblies are listed relative
+                    // to its root (../../ScriptAssemblies), and its process need not run there.
+                    string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
+                    if (File.Exists(fullReference))
+                    {
+                        paths.Add(fullReference);
                     }
                 }
             }
@@ -416,14 +426,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string scriptAssembliesDirectory = Path.GetFullPath(
-                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
+            string scriptAssembliesDirectory = CompiledAssemblyLayout.Resolve(projectRoot).CompiledAssembliesDirectory;
 
             // Derive Cecil search dirs from Unity's actual compile references so publicize
             // resolves netstandard/engine modules without hardcoding Editor Contents layouts.
             // Referenced assemblies count transitively: Cecil may need a DLL only they list.
             IReadOnlyCollection<string> resolverSearchDirectories =
-                HotReloadResolverSearchDirectories.Collect(compilationAssembly);
+                HotReloadResolverSearchDirectories.Collect(projectRoot, compilationAssembly);
 
             List<string> references = new List<string>();
             string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(
@@ -452,12 +461,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string shimTargetAssemblyName = Path.GetFileNameWithoutExtension(fullTarget);
             foreach (string reference in compilationAssembly.allReferences)
             {
-                if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                if (string.IsNullOrEmpty(reference))
                 {
                     continue;
                 }
 
-                string fullReference = Path.GetFullPath(reference);
+                // Resolved against the root for the same reason as in BuildWorkerReferencePaths.
+                string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
+                if (!File.Exists(fullReference))
+                {
+                    continue;
+                }
                 if (string.Equals(fullReference, fullTarget, StringComparison.OrdinalIgnoreCase))
                 {
                     // Replaced by the publicized copy above.

@@ -89,11 +89,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            string dllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assembly.name + HotReloadConstants.CompiledAssemblyExtension);
-            string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+            // Why projectRoot stays the snapshot owner: only the compiled assemblies move to the main
+            // project for a Virtual Player; its snapshots stay under its own root.
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
+            string dllPath = layout.DllPath(assembly.name);
+            string pdbPath = layout.PdbPath(assembly.name);
             if (!File.Exists(dllPath) || !File.Exists(pdbPath))
             {
                 return;

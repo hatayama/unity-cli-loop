@@ -107,12 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets);
             int examinedCallSiteCount = 0;
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
             foreach (string assemblyName in scanAssemblyNames)
             {
-                string dllPath = Path.Combine(
-                    projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                    assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+                string dllPath = layout.DllPath(assemblyName);
 
                 // Why skip (not assert): an assembly that has not been written to ScriptAssemblies
                 // cannot contain call sites, so it cannot be a caller. Missing here is "not compiled

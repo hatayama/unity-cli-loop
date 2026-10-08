@@ -157,6 +157,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result[0].SourceFiles, Is.EqualTo(new[] { SourceRelativePath }));
         }
 
+        /// <summary>
+        /// Verifies a Virtual Player's capture reads the main project's compiled assembly and writes
+        /// the snapshot under the player's own root, leaving no hot reload state under the main project.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblies_ForVirtualPlayerRoot_ReadsTheMainProjectsDllAndSnapshotsUnderThePlayer()
+        {
+            string mainRoot = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string scriptAssembliesDirectory = Path.Combine(mainRoot, "Library", "ScriptAssemblies");
+                Directory.CreateDirectory(scriptAssembliesDirectory);
+                string sourceDllPath = typeof(HotReloadSnapshotAssemblyEnumerationTests).Assembly.Location;
+                string dllPath = Path.Combine(scriptAssembliesDirectory, "Fixture" + HotReloadConstants.CompiledAssemblyExtension);
+                File.Copy(sourceDllPath, dllPath);
+                File.Copy(Path.ChangeExtension(sourceDllPath, ".pdb"), Path.ChangeExtension(dllPath, ".pdb"));
+                string playerRoot = Path.Combine(mainRoot, "Library", "VP", "mppm1");
+                Directory.CreateDirectory(Path.Combine(playerRoot, "Assets"));
+                File.WriteAllText(Path.Combine(playerRoot, "Assets", "Fixture.cs"), "class Fixture {}\n");
+                string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+
+                HotReloadSourceSnapshotter.CaptureAssemblies(playerRoot, new[] { CreateAssembly("Fixture") });
+
+                string playerSnapshotSource = Path.Combine(
+                    playerRoot,
+                    HotReloadConstants.SourceSnapshotRelativeDirectory,
+                    "Fixture-" + mvid,
+                    HotReloadSourceSnapshotter.HashProjectRelativePath(SourceRelativePath) + ".cs");
+                Assert.That(File.Exists(playerSnapshotSource), Is.True);
+                Assert.That(Directory.Exists(Path.Combine(mainRoot, "Library", "UloopHotReload")), Is.False);
+            }
+            finally
+            {
+                if (Directory.Exists(mainRoot))
+                {
+                    Directory.Delete(mainRoot, true);
+                }
+            }
+        }
+
         // Copies this test assembly's own DLL and PDB, so the fixture has a real image for Cecil to read.
         private string PlantCompiledAssembly(string assemblyName)
         {

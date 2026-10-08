@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Reflection;
 
@@ -32,6 +33,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
                 return Path.Combine(projectRoot, "Library/ScriptAssemblies", TestAssemblyName + ".dll");
             }
+        }
+
+        /// <summary>
+        /// What: a Virtual Player root resolves its script assemblies under the main project.
+        /// </summary>
+        [Test]
+        public void ScriptAssembliesUnderProject_VirtualPlayerRoot_PointsAtTheMainProjectsCompiledAssembly()
+        {
+            string mainRoot = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
+            string playerRoot = Path.Combine(mainRoot, "Library", "VP", "mppm1");
+
+            HotReloadTypeHome home = HotReloadTypeHome.ScriptAssembliesUnderProject(playerRoot, "A");
+
+            Assert.That(home.Kind, Is.EqualTo(HotReloadTypeHomeKind.ScriptAssemblies));
+            Assert.That(
+                home.DllPath,
+                Is.EqualTo(Path.GetFullPath(Path.Combine(mainRoot, "Library", "ScriptAssemblies", "A.dll"))));
         }
 
         /// <summary>

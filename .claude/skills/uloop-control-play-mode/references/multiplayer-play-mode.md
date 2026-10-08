@@ -49,17 +49,18 @@ main Editor) do not block each other.
 
 ## Hot reload
 
-- A hot-reload patch lives in the Editor process it was applied to. A patch applied to the
-  main Editor does not reach the Virtual Players, and a player's own
-  `uloop --project-path <PROJECT_ROOT>/Library/VP/mppm<id> hot-reload --status` reports no
-  active patch.
-- Hot reload cannot patch a Virtual Player yet: a player loads the main project's
-  `Library/ScriptAssemblies` and has none under its own root. `hot-reload --files ...` sent
-  to a player reports the file as `Failed`. Whether the CLI then compiles in that player
-  follows `--compile-on-skip`, as for any unapplied edit: when it compiles, the edit comes in
-  (`Outcome` is `ReplacedByCompile`); when the compile is held (`CompileFallback` is
-  `HeldForPlayMode`: `auto`, the default, while that player is in Play Mode), the edit has not
-  reached the player.
+- A hot-reload patch lives in the Editor process it was applied to. To patch a Virtual
+  Player, send the command to that player:
+  `uloop --project-path <PROJECT_ROOT>/Library/VP/mppm<id> hot-reload --files ...`.
+- A player reads the main project's `Library/ScriptAssemblies` and keeps its own hot-reload
+  state (the `ActivePatchTotal` that `--status` reports, and the source snapshots) under its own
+  `Library/UloopHotReload/`.
+- A patch applied to the main Editor does not reach the players, and a patch applied to a player
+  does not reach the main Editor or the other players. A compile of the main Editor's project
+  reaches every player, and clears the patches a player holds.
+- When the main Editor's project has never compiled the edited assembly, a player reports the
+  file as `Failed` with `Compiled assembly not found ... Compile the main Editor's project
+  first.`
 
 ## Known limitations
 

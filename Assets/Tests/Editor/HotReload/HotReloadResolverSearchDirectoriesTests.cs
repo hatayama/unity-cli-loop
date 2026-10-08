@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string pluginPath = CreateEmptyFile("plugins", "Plugin.dll");
             ReferenceGraph graph = CreateReferenceGraph(pluginPath, Array.Empty<string>());
 
-            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(graph.Tests);
+            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(_tempRoot, graph.Tests);
 
             Assert.That(directories, Does.Contain(FullDirectoryOf(graph.Tests.outputPath)));
             Assert.That(directories, Does.Contain(FullDirectoryOf(pluginPath)));
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string ownPath = CreateEmptyFile("own", "Own.dll");
             ReferenceGraph graph = CreateReferenceGraph(pluginPath, new[] { ownPath });
 
-            List<string> directories = new List<string>(HotReloadResolverSearchDirectories.Collect(graph.Tests));
+            List<string> directories = new List<string>(HotReloadResolverSearchDirectories.Collect(_tempRoot, graph.Tests));
 
             int ownIndex = directories.IndexOf(FullDirectoryOf(ownPath));
             int pluginIndex = directories.IndexOf(FullDirectoryOf(pluginPath));
@@ -112,7 +112,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Not.Contain(pluginDirectory),
                 "Unity listed the plugin among the test assembly's own references, so the transitive walk is not what reaches it.");
 
-            Assert.That(HotReloadResolverSearchDirectories.Collect(testAssembly), Does.Contain(pluginDirectory));
+            Assert.That(HotReloadResolverSearchDirectories.Collect(
+                    Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                    testAssembly), Does.Contain(pluginDirectory));
         }
 
         /// <summary>
@@ -140,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string publicized = ReferencePublicizer.GetOrCreatePublicizedCopy(
                 image.Home,
-                HotReloadResolverSearchDirectories.Collect(graph.Tests));
+                HotReloadResolverSearchDirectories.Collect(_tempRoot, graph.Tests));
 
             Assert.That(File.Exists(publicized), Is.True);
         }
@@ -172,6 +174,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.ErrorMessage, Is.Null);
             Assert.That(File.Exists(result.References[0]), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a reference Unity lists relative to a Virtual Player's root, as it does for the
+        /// main project's script assemblies, is resolved against that root and not the current
+        /// directory, so its directory becomes a search directory.
+        /// </summary>
+        [Test]
+        public void Collect_ResolvesARelativeReferenceAgainstTheProjectRoot()
+        {
+            const string relativeReference = "../../ScriptAssemblies/Fixture.Other.dll";
+            string scriptAssembliesPath = CreateEmptyFile(Path.Combine("Library", "ScriptAssemblies"), "Fixture.Other.dll");
+            string playerRoot = Path.Combine(_tempRoot, "Library", "VP", "mppm1");
+            Directory.CreateDirectory(playerRoot);
+            Assert.That(
+                File.Exists(relativeReference),
+                Is.False,
+                "The reference must not exist relative to the current directory, or the test cannot tell the two apart.");
+            UnityCompilationAssembly root = new UnityCompilationAssembly(
+                "Tests",
+                ScriptPath("Tests.dll"),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<UnityCompilationAssembly>(),
+                new[] { relativeReference },
+                AssemblyFlags.EditorAssembly);
+
+            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(playerRoot, root);
+
+            Assert.That(directories, Does.Contain(FullDirectoryOf(scriptAssembliesPath)));
         }
 
         // Tests -> Game -> Core -> plugin: two steps, so a walk that adds only the direct
