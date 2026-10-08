@@ -25,11 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ProjectChangedHandlerName = "OnProjectChanged";
 
         /// <summary>
-        /// Verifies that the static constructor subscribed the memo's invalidation to compile start and
-        /// project change.
+        /// Verifies that the static constructor subscribed the memo's invalidation to compile start but not
+        /// to project change, because Unity raises project change for the import that triggered a compile
+        /// after the new domain's startup capture has already filled the memo.
         /// </summary>
         [Test]
-        public void StaticConstructor_SubscribesInvalidationToCompilationStartedAndProjectChanged()
+        public void StaticConstructor_SubscribesInvalidationToCompilationStartedOnly()
         {
             HotReloadCompilationAssemblies.Current();
 
@@ -39,8 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OnCompilationStarted must be subscribed on CompilationPipeline.");
             Assert.That(
                 StaticEventHasHandler(typeof(EditorApplication), ProjectChangedHandlerName),
-                Is.True,
-                "OnProjectChanged must be subscribed on EditorApplication.");
+                Is.False,
+                "OnProjectChanged must not be subscribed on EditorApplication: it fires after the startup capture of every compile.");
         }
 
         /// <summary>
