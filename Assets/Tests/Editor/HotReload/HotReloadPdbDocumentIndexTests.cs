@@ -380,6 +380,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a persisted file whose header, stamp, count and line count are right but whose one
+        /// document line has a hash that is not hex is treated as missing: the PDB is read, the
+        /// same document is found, and the list is written again so the next new index reads it.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedFileWithMalformedDocumentLine_ReadsThePdb()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument firstDocument);
+            string[] lines = File.ReadAllText(PersistedListPath(dllPath)).Split('\n');
+            string[] documentFields = lines[2].Split(new[] { '\t' }, 3);
+            documentFields[1] = "zz";
+            lines[2] = string.Join("\t", documentFields);
+            File.WriteAllText(PersistedListPath(dllPath), string.Join("\n", lines));
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument secondDocument);
+            HotReloadPdbDocumentIndex third = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+            bool foundThird = Find(third, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(foundFirst, Is.True);
+            Assert.That(foundSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(0));
+            Assert.That(secondDocument.Url, Is.EqualTo(firstDocument.Url));
+            Assert.That(secondDocument.Hash.SequenceEqual(firstDocument.Hash), Is.True);
+            Assert.That(foundThird, Is.True);
+            Assert.That(third.LoadCount, Is.EqualTo(0));
+            Assert.That(third.PersistedLoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: a persisted file whose stamp names another dll length is not used, because it was
         /// written for other files.
         /// </summary>
