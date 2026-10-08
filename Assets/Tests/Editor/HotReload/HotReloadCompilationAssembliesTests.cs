@@ -22,7 +22,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Why string names: the handlers are private to the production class; a rename fails these tests
         // instead of silently passing them.
         private const string CompilationStartedHandlerName = "OnCompilationStarted";
-        private const string ProjectChangedHandlerName = "OnProjectChanged";
 
         /// <summary>
         /// Verifies that the static constructor subscribed the memo's invalidation to compile start but not
@@ -35,13 +34,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCompilationAssemblies.Current();
 
             Assert.That(
-                StaticEventHasHandler(typeof(CompilationPipeline), CompilationStartedHandlerName),
+                StaticEventHasHandler(
+                    typeof(CompilationPipeline),
+                    listener => IsNamedProductionHandler(listener, CompilationStartedHandlerName)),
                 Is.True,
                 "OnCompilationStarted must be subscribed on CompilationPipeline.");
             Assert.That(
-                StaticEventHasHandler(typeof(EditorApplication), ProjectChangedHandlerName),
+                StaticEventHasHandler(typeof(EditorApplication), IsAnyProductionHandler),
                 Is.False,
-                "OnProjectChanged must not be subscribed on EditorApplication: it fires after the startup capture of every compile.");
+                "Nothing of HotReloadCompilationAssemblies may be subscribed on EditorApplication: projectChanged fires after the startup capture of every compile.");
         }
 
         /// <summary>
@@ -59,14 +60,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why: CompilationPipeline stores handlers on Delegate fields, but EditorApplication.projectChanged
         // lives on EventWithPerformanceTracker. A Delegate-only scan cannot see it.
-        private static bool StaticEventHasHandler(Type eventOwner, string handlerName)
+        private static bool StaticEventHasHandler(Type eventOwner, Func<Delegate, bool> isMatch)
         {
             FieldInfo[] fields = eventOwner.GetFields(
                 BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             for (int index = 0; index < fields.Length; index++)
             {
                 object value = fields[index].GetValue(null);
-                if (ContainsProductionHandler(value, handlerName))
+                if (ContainsHandler(value, isMatch))
                 {
                     return true;
                 }
@@ -75,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return false;
         }
 
-        private static bool ContainsProductionHandler(object source, string handlerName)
+        private static bool ContainsHandler(object source, Func<Delegate, bool> isMatch)
         {
             if (source == null)
             {
@@ -85,18 +86,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Delegate current = source as Delegate;
             if (current != null)
             {
-                return InvocationListContains(current, handlerName);
+                return InvocationListContains(current, isMatch);
             }
 
-            return EnumeratorContainsHandler(source, handlerName);
+            return EnumeratorContainsHandler(source, isMatch);
         }
 
-        private static bool InvocationListContains(Delegate current, string handlerName)
+        private static bool InvocationListContains(Delegate current, Func<Delegate, bool> isMatch)
         {
             Delegate[] listeners = current.GetInvocationList();
             for (int listenerIndex = 0; listenerIndex < listeners.Length; listenerIndex++)
             {
-                if (IsProductionHandler(listeners[listenerIndex], handlerName))
+                if (isMatch(listeners[listenerIndex]))
                 {
                     return true;
                 }
@@ -105,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return false;
         }
 
-        private static bool EnumeratorContainsHandler(object source, string handlerName)
+        private static bool EnumeratorContainsHandler(object source, Func<Delegate, bool> isMatch)
         {
             string typeName = source.GetType().Name;
             if (typeName.IndexOf("EventWithPerformanceTracker", StringComparison.Ordinal) < 0)
@@ -137,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             while ((bool)moveNext.Invoke(enumerator, null))
             {
                 Delegate listener = currentProperty.GetValue(enumerator) as Delegate;
-                if (IsProductionHandler(listener, handlerName))
+                if (listener != null && isMatch(listener))
                 {
                     return true;
                 }
@@ -146,16 +147,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return false;
         }
 
-        private static bool IsProductionHandler(Delegate listener, string handlerName)
+        private static bool IsNamedProductionHandler(Delegate listener, string handlerName)
         {
-            if (listener == null)
-            {
-                return false;
-            }
-
             MethodInfo listenerMethod = listener.Method;
             return listenerMethod.DeclaringType == typeof(HotReloadCompilationAssemblies)
                 && listenerMethod.Name == handlerName;
+        }
+
+        // Why walk the declaring types outward: a lambda subscribed from the production class lives on a
+        // compiler-generated type nested in it, so a name or direct-type match would miss it.
+        private static bool IsAnyProductionHandler(Delegate listener)
+        {
+            for (Type declaringType = listener.Method.DeclaringType;
+                declaringType != null;
+                declaringType = declaringType.DeclaringType)
+            {
+                if (declaringType == typeof(HotReloadCompilationAssemblies))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

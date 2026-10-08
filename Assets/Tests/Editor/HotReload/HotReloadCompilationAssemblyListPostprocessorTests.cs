@@ -65,6 +65,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a source imported after an asset that does not change the assembly list, in the
+        /// same batch without a domain reload, still drops the kept list.
+        /// </summary>
+        [Test]
+        public void OnPostprocessAllAssets_AssemblyListAssetAfterOtherAssetWithoutReload_DropsTheMemo()
+        {
+            AssertBatchDropsTheMemo(
+                new[] { "Assets/Textures/A.png", "Assets/Scripts/New.cs" },
+                Empty,
+                Empty,
+                Empty);
+        }
+
+        /// <summary>
         /// Verifies that deleting a source without a domain reload drops the kept list.
         /// </summary>
         [Test]
