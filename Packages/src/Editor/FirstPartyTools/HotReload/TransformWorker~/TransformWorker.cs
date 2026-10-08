@@ -105,9 +105,13 @@ public static class TransformWorkerProgram
 
     private static int RunTransform(string inputJsonPath, string outputJsonPath)
     {
+        WorkerRequestTimings timings = new WorkerRequestTimings();
         WorkerInput input = ReadInput(inputJsonPath);
+        timings.Lap("read_input");
         WorkerOutput invalidSources = TryCreateInvalidSourcesOutput(input);
-        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Run(input);
+        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Run(input, timings);
+        timings.Lap("pipeline_remainder");
+        output.Timings = timings.ToArray();
         WriteOutput(outputJsonPath, output);
         return 0;
     }

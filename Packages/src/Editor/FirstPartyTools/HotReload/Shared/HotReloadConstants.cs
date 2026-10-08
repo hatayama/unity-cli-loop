@@ -661,6 +661,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogWorkerHostFallbackOneShot = "hot_reload_worker_fallback_one_shot";
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
+        public const string VibeLogWorkerRequestTiming = "hot_reload_worker_request_timing";
+        public const string VibeLogSignatureGateTiming = "hot_reload_signature_gate_timing";
+        public const string VibeLogShimFirstCompileTiming = "hot_reload_shim_first_compile_timing";
+        public const string VibeLogShimReferencesTiming = "hot_reload_shim_references_timing";
+        public const string VibeLogPublicizedCopyWritten = "hot_reload_publicized_copy_written";
+        public const string VibeLogShimCompilerTiming = "hot_reload_shim_compiler_timing";
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
         public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
         public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";

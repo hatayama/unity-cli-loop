@@ -94,6 +94,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.ErrorMessage, Does.Contain("Unknown worker operation"));
         }
 
+        /// <summary>
+        /// What: the real worker reports how long each of its stages took: reading the input
+        /// first, the rest of the pipeline last, and parsing, reference loading and compilation
+        /// creation in that order between them, none negative.
+        /// </summary>
+        [Test]
+        public async Task BootstrapAndRun_OnE2EFixture_ReturnsTheWorkerStepsInOrder()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync();
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerTimingStepDto[] timings = result.Output.timings;
+            Assert.That(timings, Is.Not.Null, "timings");
+
+            int readInput = Array.FindIndex(timings, step => step.step == "read_input");
+            int parseSources = Array.FindIndex(timings, step => step.step == "parse_sources");
+            int collectReferences = Array.FindIndex(timings, step => step.step == "collect_references");
+            int createCompilation = Array.FindIndex(timings, step => step.step == "create_compilation");
+            int pipelineRemainder = Array.FindIndex(timings, step => step.step == "pipeline_remainder");
+            // Why each presence first: a missing stage is -1 and would pass an order comparison.
+            Assert.That(readInput, Is.GreaterThanOrEqualTo(0), "read_input");
+            Assert.That(parseSources, Is.GreaterThanOrEqualTo(0), "parse_sources");
+            Assert.That(collectReferences, Is.GreaterThanOrEqualTo(0), "collect_references");
+            Assert.That(createCompilation, Is.GreaterThanOrEqualTo(0), "create_compilation");
+            Assert.That(pipelineRemainder, Is.GreaterThanOrEqualTo(0), "pipeline_remainder");
+            Assert.That(readInput, Is.EqualTo(0), "read_input first");
+            Assert.That(pipelineRemainder, Is.EqualTo(timings.Length - 1), "pipeline_remainder last");
+            Assert.That(parseSources, Is.LessThan(collectReferences), "parse before references");
+            Assert.That(collectReferences, Is.LessThan(createCompilation), "references before compilation");
+            foreach (TransformWorkerTimingStepDto step in timings)
+            {
+                Assert.That(step.ms, Is.GreaterThanOrEqualTo(0), step.step);
+            }
+        }
+
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const int SelfSnapshotBatchSize = 16;
         private const string ExpectedListEnumeratorFullName =

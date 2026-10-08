@@ -37,4 +37,7 @@ internal sealed class WorkerOutput
 
     // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
     public bool HasAddedFieldRewrites { get; set; }
+
+    // Milliseconds of each stage of this request, in the order they ran.
+    public WorkerTimingStep[] Timings { get; set; }
 }

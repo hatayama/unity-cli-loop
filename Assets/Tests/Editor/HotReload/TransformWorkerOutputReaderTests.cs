@@ -45,5 +45,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(output, Is.Null);
             Assert.That(error, Does.Contain("could not be read"));
         }
+
+        /// <summary>
+        /// What: the worker's per-step timings are read in the order the worker wrote them.
+        /// </summary>
+        [Test]
+        public void TryDeserialize_WithTimings_ReadsTheStepsInOrder()
+        {
+            string json = "{\"files\":[],\"timings\":[{\"step\":\"read_input\",\"ms\":3},{\"step\":\"parse_sources\",\"ms\":12}]}";
+
+            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryDeserialize(json, out string error);
+
+            Assert.That(error, Is.Null, "error");
+            Assert.That(output.timings.Length, Is.EqualTo(2), "count");
+            Assert.That(output.timings[0].step, Is.EqualTo("read_input"), "first step");
+            Assert.That(output.timings[1].ms, Is.EqualTo(12), "second ms");
+        }
+
+        /// <summary>
+        /// What: output from a worker that writes no timings, such as an older build, leaves them null.
+        /// </summary>
+        [Test]
+        public void TryDeserialize_WithoutTimings_LeavesTimingsNull()
+        {
+            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryDeserialize("{\"files\":[]}", out string error);
+
+            Assert.That(error, Is.Null, "error");
+            Assert.That(output.timings, Is.Null, "timings");
+        }
     }
 }

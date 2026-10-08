@@ -13,6 +13,8 @@ using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
+using Stopwatch = System.Diagnostics.Stopwatch;
+
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -431,14 +433,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Derive Cecil search dirs from Unity's actual compile references so publicize
             // resolves netstandard/engine modules without hardcoding Editor Contents layouts.
             // Referenced assemblies count transitively: Cecil may need a DLL only they list.
+            Stopwatch watch = Stopwatch.StartNew();
             IReadOnlyCollection<string> resolverSearchDirectories =
                 HotReloadResolverSearchDirectories.Collect(projectRoot, compilationAssembly);
+            ShimReferencesTiming timing = new ShimReferencesTiming { ResolverDirectoriesMs = watch.ElapsedMilliseconds };
 
+            watch.Restart();
             List<string> references = new List<string>();
             string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(
                 targetHome,
                 resolverSearchDirectories);
             references.Add(publicizedTarget);
+            timing.TargetCopyMs = watch.ElapsedMilliseconds;
 
             AppendOptionalShimAssemblyReferences(
                 references,
@@ -446,15 +452,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 includeAddedFieldStoreReference);
             // Why here: the shim binds against the retained types the worker bound against, and a
             // shim that cannot see them fails to compile the bodies that use them.
+            watch.Restart();
             AppendPublicizedIntroducedTypeArtifactReferences(
                 references,
                 introducedTypeArtifactHomes,
                 resolverSearchDirectories);
+            timing.ArtifactCopiesMs = watch.ElapsedMilliseconds;
 
             if (compilationAssembly.allReferences == null)
             {
+                LogReferencesTiming(timing);
                 return references;
             }
+
+            watch.Restart();
 
             string fullTarget = Path.GetFullPath(targetHome.DllPath);
             // The name another assembly's InternalsVisibleTo grant names the edited assembly by.
@@ -478,15 +489,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                references.Add(
-                    PublicizeProjectReference(
-                        fullReference,
-                        scriptAssembliesDirectory,
-                        resolverSearchDirectories,
-                        shimTargetAssemblyName));
+                string shimReference = PublicizeProjectReference(
+                    fullReference,
+                    scriptAssembliesDirectory,
+                    resolverSearchDirectories,
+                    shimTargetAssemblyName);
+                references.Add(shimReference);
+                timing.ReferenceCount++;
+                if (!string.Equals(shimReference, fullReference, StringComparison.Ordinal))
+                {
+                    timing.CopiedReferenceCount++;
+                }
             }
 
+            timing.ReferenceCopiesMs = watch.ElapsedMilliseconds;
+            LogReferencesTiming(timing);
             return references;
+        }
+
+        private static void LogReferencesTiming(ShimReferencesTiming timing)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogShimReferencesTiming,
+                "Hot reload shim reference paths timing.",
+                new
+                {
+                    resolverDirectoriesMs = timing.ResolverDirectoriesMs,
+                    targetCopyMs = timing.TargetCopyMs,
+                    artifactCopiesMs = timing.ArtifactCopiesMs,
+                    referenceCopiesMs = timing.ReferenceCopiesMs,
+                    referenceCount = timing.ReferenceCount,
+                    copiedReferenceCount = timing.CopiedReferenceCount
+                });
+        }
+
+        /// <summary>
+        /// Where one build of the shim reference paths spent its time, and how many project
+        /// references it handed to the publicizer and got a copy back for.
+        /// </summary>
+        private sealed class ShimReferencesTiming
+        {
+            public long ResolverDirectoriesMs;
+            public long TargetCopyMs;
+            public long ArtifactCopiesMs;
+            public long ReferenceCopiesMs;
+            public int ReferenceCount;
+            public int CopiedReferenceCount;
         }
 
         /// <summary>

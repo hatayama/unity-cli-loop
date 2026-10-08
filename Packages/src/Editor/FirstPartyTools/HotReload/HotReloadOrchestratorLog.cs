@@ -45,6 +45,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
+        internal static void LogHotReloadSignatureGateTiming(
+            long mainThreadSwitchMs,
+            long signatureGateMs,
+            bool usedWorkerRetry,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogSignatureGateTiming,
+                "Hot reload signature gate timing.",
+                new { mainThreadSwitchMs, signatureGateMs, usedWorkerRetry },
+                correlationId);
+        }
+
+        internal static void LogHotReloadShimFirstCompileTiming(
+            long mainThreadSwitchMs,
+            long membershipMs,
+            long compileShimMs,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogShimFirstCompileTiming,
+                "Hot reload shim first compile timing.",
+                new { mainThreadSwitchMs, membershipMs, compileShimMs },
+                correlationId);
+        }
+
         internal static void LogHotReloadShimCompileFailed(
             HotReloadShimCompileResult compileResult,
             string stage,

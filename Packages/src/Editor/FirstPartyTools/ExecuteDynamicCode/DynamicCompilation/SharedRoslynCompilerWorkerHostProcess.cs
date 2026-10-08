@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string RoslynWorkerSourceFileName = "RoslynCompilerWorker.cs";
         private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
+        private const string VibeLogSharedWorkerStarted = "dynamic_code_shared_worker_started";
 
         /// <summary>
         /// Provides Worker Paths behavior for Unity CLI Loop.
@@ -132,23 +133,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return earlyResult;
             }
 
+            Stopwatch watch = Stopwatch.StartNew();
             WorkerPaths workerPaths = CreateWorkerPaths(session);
             SynchronizeWorkerSource(workerPaths);
+            long sourceSyncMs = watch.ElapsedMilliseconds;
 
+            watch.Restart();
             WorkerStartupResult workerAssemblyResult = await EnsureWorkerAssemblyBuiltAsync(
                 session,
                 externalCompilerPaths,
                 workerPaths).ConfigureAwait(false);
+            long assemblyEnsureMs = watch.ElapsedMilliseconds;
             if (!workerAssemblyResult.IsReady)
             {
+                LogWorkerStarted(sourceSyncMs, assemblyEnsureMs, 0, workerAssemblyResult);
                 return workerAssemblyResult;
             }
 
-            return StartWorkerProcess(
+            watch.Restart();
+            WorkerStartupResult startResult = StartWorkerProcess(
                 session,
                 externalCompilerPaths,
                 workerPaths,
                 lifecycleGenerationAtStart);
+            // Only the spawn: the worker's start-up until it answers lands in the first compile.
+            LogWorkerStarted(sourceSyncMs, assemblyEnsureMs, watch.ElapsedMilliseconds, startResult);
+            return startResult;
+        }
+
+        // Written only when no live process could serve the request, which after a domain reload
+        // is the first compile, so the cold cost of the shared worker shows apart from compiles.
+        private static void LogWorkerStarted(
+            long sourceSyncMs,
+            long assemblyEnsureMs,
+            long processStartMs,
+            WorkerStartupResult result)
+        {
+            VibeLogger.LogInfo(
+                VibeLogSharedWorkerStarted,
+                "Shared Roslyn compiler worker started.",
+                new { sourceSyncMs, assemblyEnsureMs, processStartMs, ready = result.IsReady });
         }
 
         internal static async Task<WorkerStartupResult> EnsureWorkerAssemblyBuiltAsync(

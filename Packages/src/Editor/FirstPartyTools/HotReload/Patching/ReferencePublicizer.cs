@@ -6,9 +6,12 @@ using Mono.Cecil;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -195,6 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // need the previous publicized copy, so drop stale siblings before writing the new one.
             DeleteStaleCopies(outputDirectory, assemblyName, outputDllPath);
 
+            Stopwatch watch = Stopwatch.StartNew();
             foreach (ModuleDefinition module in assemblyDefinition.Modules)
             {
                 foreach (TypeDefinition type in module.GetTypes())
@@ -209,6 +213,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            long rewriteMs = watch.ElapsedMilliseconds;
+            watch.Restart();
             // Write to a temp path then Move so a thrown Write cannot leave a 0-byte final cache.
             string tempDllPath = outputDllPath + ".tmp-" + Guid.NewGuid().ToString("N");
             try
@@ -224,6 +230,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            // Only on a miss: a copy written is the cold cost of a rebuilt assembly.
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogPublicizedCopyWritten,
+                "Hot reload wrote a rewritten reference copy.",
+                new { assemblyName, variant = outputRelativeDirectory, rewriteMs, writeMs = watch.ElapsedMilliseconds });
             return outputDllPath;
         }
 
