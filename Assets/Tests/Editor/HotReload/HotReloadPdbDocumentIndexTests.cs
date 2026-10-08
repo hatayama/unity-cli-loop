@@ -149,6 +149,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a preload reads the dll and the PDB once, and a lookup afterwards finds the file
+        /// without reading them again.
+        /// </summary>
+        [Test]
+        public void Preload_WalksOnce_AndTryFindDocumentAfterwardsWalksNothing()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+
+            _index.Preload(
+                dllPath,
+                Path.ChangeExtension(dllPath, ".pdb"),
+                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath));
+            int afterPreload = _index.LoadCount;
+            bool found = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(afterPreload, Is.EqualTo(1), "after preload");
+            Assert.That(found, Is.True, "found");
+            Assert.That(_index.LoadCount, Is.EqualTo(1), "after lookup");
+        }
+
+        /// <summary>
         /// What: a newer write time on the dll makes the next lookup read the files again.
         /// </summary>
         [Test]
