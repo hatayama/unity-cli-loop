@@ -316,6 +316,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a persisted file with three known keys answers for both its first and its last key,
+        /// so a key loop that drops the first or the last line fails here instead of returning a
+        /// set that is one key short.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileWithThreeKeys_AnswersForTheFirstAndTheLastKey()
+        {
+            string firstKey = Key(TestAssemblyName(), CrossAssemblyGenericHostTypeMetadataName, "Target");
+            string middleKey = CalledKeys()[0];
+            string lastKey = Key(
+                TestAssemblyName(),
+                CrossAssemblyTargetTypeMetadataName + "/Nested",
+                "CalledFromOtherAssembly");
+            NewIndex().MentionsAny(CrossDll(), CalledKeys());
+            string[] lines = File.ReadAllText(PersistedPath(CrossDll())).Split('\n');
+            string[] stampFields = lines[1].Split('\t');
+            stampFields[3] = "3";
+            File.WriteAllText(
+                PersistedPath(CrossDll()),
+                lines[0] + "\n" + string.Join("\t", stampFields) + "\n"
+                + firstKey + "\n" + middleKey + "\n" + lastKey + "\n");
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentionsFirst = second.MentionsAny(CrossDll(), new[] { firstKey });
+            bool mentionsLast = second.MentionsAny(CrossDll(), new[] { lastKey });
+
+            Assert.That(mentionsFirst, Is.True);
+            Assert.That(mentionsLast, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(0));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
         /// What: when the persisted set cannot be moved into place, the question throws after the
         /// dll was read and no temp file is left behind.
         /// </summary>
