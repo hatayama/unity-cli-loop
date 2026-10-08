@@ -121,6 +121,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that FindByName matches the whole name with case, not a prefix or a case-folded name,
+        /// and that it looks at the first assembly too.
+        /// </summary>
+        [Test]
+        public void FindByName_SimilarNames_ReturnsExactMatchOnly()
+        {
+            UnityCompilationAssembly lowerCase = CreateAssembly("foo");
+            UnityCompilationAssembly prefixed = CreateAssembly("Foo.Editor");
+            UnityCompilationAssembly exact = CreateAssembly("Foo");
+            _answers.Enqueue(new[] { lowerCase, prefixed, exact });
+            HotReloadCompilationAssemblyCache cache = CreateCache();
+
+            UnityCompilationAssembly foundUpper = cache.FindByName("Foo");
+            UnityCompilationAssembly foundLower = cache.FindByName("foo");
+
+            Assert.That(foundUpper, Is.SameAs(exact));
+            Assert.That(foundLower, Is.SameAs(lowerCase));
+        }
+
+        /// <summary>
         /// Verifies that FindByName returns null for a name no compilation assembly has.
         /// </summary>
         [Test]
