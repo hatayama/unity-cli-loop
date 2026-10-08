@@ -588,6 +588,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Hits.Count, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: the referencing dlls of the test assembly include the cross-assembly caller's dll
+        /// and never the test assembly's own dll.
+        /// </summary>
+        [Test]
+        public void CollectReferencingDllPaths_ReturnsTheCrossAssemblyCallerAndNotTheTargetItself()
+        {
+            string projectRoot = GetProjectRoot();
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
+
+            IReadOnlyList<string> dllPaths = HotReloadCallSiteScanner.CollectReferencingDllPaths(
+                projectRoot,
+                GetTestAssemblyName());
+
+            Assert.That(dllPaths, Does.Contain(layout.DllPath(CrossAssemblyCallerAssemblyName)));
+            Assert.That(dllPaths, Does.Not.Contain(layout.DllPath(GetTestAssemblyName())));
+        }
+
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
             string typeMetadataName,
             string methodName,
