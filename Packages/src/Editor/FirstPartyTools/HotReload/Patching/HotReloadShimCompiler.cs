@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defineSymbols,
                 projectRelativePaths,
                 timing,
-                ct);
+                ct).ConfigureAwait(false);
             VibeLogger.LogInfo(
                 HotReloadConstants.VibeLogShimCompilerTiming,
                 "Hot reload shim compiler timing.",
