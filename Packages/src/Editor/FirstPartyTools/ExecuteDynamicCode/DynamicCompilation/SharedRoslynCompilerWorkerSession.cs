@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly SharedRoslynCompilerWorkerSessionCoordination _coordination = new();
         private Func<ProcessStartInfo, Process> _startProcess = ProcessStartHelper.TryStart;
+        private Func<string> _resolveWorkerAssemblyCacheRoot = SharedRoslynCompilerWorkerAssemblyCache.ResolveCacheRoot;
         private Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]>
             _compileWorkerAssemblyForTests;
         private Process _workerProcess;
@@ -318,6 +319,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Func<ProcessStartInfo, Process> previous = _startProcess;
             _startProcess = starter;
+            return previous;
+        }
+
+        internal string ResolveWorkerAssemblyCacheRoot()
+        {
+            return _resolveWorkerAssemblyCacheRoot();
+        }
+
+        internal Func<string> SwapWorkerAssemblyCacheRootForTests(Func<string> resolver)
+        {
+            Debug.Assert(resolver != null, "resolver must not be null");
+
+            Func<string> previous = _resolveWorkerAssemblyCacheRoot;
+            _resolveWorkerAssemblyCacheRoot = resolver;
             return previous;
         }
 

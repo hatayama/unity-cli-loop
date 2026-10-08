@@ -291,6 +291,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             File.WriteAllText(firstSourcePath, "public class First { }");
             File.WriteAllText(secondSourcePath, "public class Second { }");
             int fallbackCalls = 0;
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, UnityEditor.Compilation.CompilerMessage[]> previousWorker =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths _, string __, string ___, string ____) =>
@@ -367,6 +368,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 {
                     Directory.Delete(directory, recursive: true);
                 }
+                cacheScope.Dispose();
             }
         }
 
@@ -525,6 +527,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new List<string>(),
                 null,
                 paths);
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, UnityEditor.Compilation.CompilerMessage[]> previousWorker =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths _, string __, string ___, string ____) =>
@@ -583,6 +586,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 {
                     Directory.Delete(directory, recursive: true);
                 }
+                cacheScope.Dispose();
             }
         }
 
@@ -638,6 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             File.WriteAllText(firstSourcePath, "public class ValidFirst { }");
             File.WriteAllText(secondSourcePath, "public class BrokenSecond { public MissingType Value; }");
             List<string> references = new DynamicReferenceSetBuilderService().BuildReferenceSet(new List<string>(), null, paths);
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, UnityEditor.Compilation.CompilerMessage[]> previousWorker =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths _, string __, string ___, string ____) =>
@@ -663,6 +668,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorker);
                 SharedRoslynCompilerWorkerHost.ShutdownForTests();
                 Directory.Delete(directory, recursive: true);
+                cacheScope.Dispose();
             }
         }
 

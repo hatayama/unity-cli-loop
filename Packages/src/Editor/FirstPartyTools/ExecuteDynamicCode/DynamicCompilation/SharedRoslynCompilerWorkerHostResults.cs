@@ -1,4 +1,5 @@
 using UnityEditor.Compilation;
+using Debug = UnityEngine.Debug;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -128,6 +129,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 false,
                 SharedWorkerFailureReasons.LifecycleClosed,
                 new { reason = "lifecycle_generation_advanced" });
+        }
+    }
+
+    /// <summary>
+    /// Result of making sure the worker assembly exists: whether the worker can start, where its
+    /// assembly came from ("existing", "cache", "built", or empty on failure), and what happened
+    /// when a built assembly was offered to the cache.
+    /// </summary>
+    internal sealed class WorkerAssemblyEnsureResult
+    {
+        public WorkerStartupResult Result { get; }
+
+        public string AssemblySource { get; }
+
+        public CachePublishOutcome Publish { get; }
+
+        private WorkerAssemblyEnsureResult(
+            WorkerStartupResult result,
+            string assemblySource,
+            CachePublishOutcome publish)
+        {
+            Result = result;
+            AssemblySource = assemblySource;
+            Publish = publish;
+        }
+
+        public static WorkerAssemblyEnsureResult FromExistingAssembly()
+        {
+            return new WorkerAssemblyEnsureResult(
+                WorkerStartupResult.Ready(), "existing", CachePublishOutcome.NotAttempted);
+        }
+
+        public static WorkerAssemblyEnsureResult FromCache()
+        {
+            return new WorkerAssemblyEnsureResult(
+                WorkerStartupResult.Ready(), "cache", CachePublishOutcome.NotAttempted);
+        }
+
+        public static WorkerAssemblyEnsureResult Built(CachePublishOutcome publish)
+        {
+            return new WorkerAssemblyEnsureResult(WorkerStartupResult.Ready(), "built", publish);
+        }
+
+        public static WorkerAssemblyEnsureResult Failed(WorkerStartupResult failure)
+        {
+            Debug.Assert(failure != null && !failure.IsReady, "failure must not be ready");
+            return new WorkerAssemblyEnsureResult(failure, string.Empty, CachePublishOutcome.NotAttempted);
         }
     }
 }

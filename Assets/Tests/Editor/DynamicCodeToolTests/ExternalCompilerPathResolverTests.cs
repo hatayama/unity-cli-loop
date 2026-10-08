@@ -360,6 +360,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new System.Text.RegularExpressions.Regex(
                     "execute-dynamic-code shared Roslyn worker is unavailable; falling back to one-shot compiler execution; reason=worker_unavailable"));
 
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousWorkerCompiler =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths paths, string workerSourcePath, string workerAssemblyPath, string workerCompileResponseFilePath) =>
@@ -398,6 +399,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorkerCompiler);
                 SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                cacheScope.Dispose();
             }
         }
 
@@ -427,6 +429,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             SharedRoslynCompilerWorkerHost.ShutdownForTests();
             LogAssert.NoUnexpectedReceived();
 
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousWorkerCompiler =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths paths, string workerSourcePath, string workerAssemblyPath, string workerCompileResponseFilePath) =>
@@ -462,6 +465,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorkerCompiler);
                 SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                cacheScope.Dispose();
             }
         }
 
