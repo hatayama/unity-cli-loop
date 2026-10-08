@@ -16,8 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadResolverSearchDirectories
     {
-        internal static IReadOnlyCollection<string> Collect(UnityCompilationAssembly rootAssembly)
+        internal static IReadOnlyCollection<string> Collect(string projectRoot, UnityCompilationAssembly rootAssembly)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(rootAssembly != null, "rootAssembly must not be null.");
 
             List<string> orderedDirectories = new List<string>();

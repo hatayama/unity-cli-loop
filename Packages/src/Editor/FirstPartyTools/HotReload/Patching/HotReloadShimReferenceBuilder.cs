@@ -23,9 +23,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadShimReferenceBuilder
     {
         internal static string[] BuildWorkerReferencePaths(
+            string projectRoot,
             UnityCompilationAssembly compilationAssembly,
             HotReloadTypeHome targetHome)
         {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(targetHome != null, "targetHome must not be null.");
 
             List<string> paths = new List<string>();
@@ -422,7 +424,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // resolves netstandard/engine modules without hardcoding Editor Contents layouts.
             // Referenced assemblies count transitively: Cecil may need a DLL only they list.
             IReadOnlyCollection<string> resolverSearchDirectories =
-                HotReloadResolverSearchDirectories.Collect(compilationAssembly);
+                HotReloadResolverSearchDirectories.Collect(projectRoot, compilationAssembly);
 
             List<string> references = new List<string>();
             string publicizedTarget = ReferencePublicizer.GetOrCreatePublicizedCopy(

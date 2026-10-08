@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sources = sources,
                 defines = firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(
+                    firstFile.ProjectRoot,
                     firstFile.CompilationAssembly,
                     firstFile.Home),
                 targetTypesAssemblyPath = Path.GetFullPath(firstFile.Home.DllPath),
