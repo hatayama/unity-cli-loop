@@ -174,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Dictionary<string, string[]> graph = new Dictionary<string, string[]>(StringComparer.Ordinal);
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            foreach (UnityCompilationAssembly assembly in HotReloadCompilationAssemblies.Current())
             {
                 graph[assembly.name] = CollectReferenceFileNames(assembly.allReferences);
             }
