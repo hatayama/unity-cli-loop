@@ -56,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string source = File.ReadAllText(fixturePath);
             Assert.That(source, Does.Contain(ReadBody), "Precondition: the Read body anchor must exist.");
             int scannedAssemblyCount = CountScannedAssemblies();
+            await _scope.InstalledWarmUpStopped;
             // Why clear: entries cached by earlier tests would let the first run read nothing,
             // which could not tell a cached dll from a scan that never ran.
             HotReloadCompiledCallSiteCache.Shared.Clear();

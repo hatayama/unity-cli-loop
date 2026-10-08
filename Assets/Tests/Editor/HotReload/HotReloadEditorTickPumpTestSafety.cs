@@ -2,6 +2,7 @@ using NUnit.Framework;
 
 using UnityEditor;
 
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -23,6 +24,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [OneTimeSetUp]
         public void StartPump()
         {
+            // Why stop the installed warm-up once for the whole run: it reads the shared caches on
+            // a pool thread after a reload, and the tests that count those reads must not race it.
+            _ = HotReloadCompositionRoot.Services.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestRun);
             StopPump();
             // EditorApplication.SignalTick is [ThreadSafe] in the Editor bindings, which is what
             // allows the timer thread to call it.

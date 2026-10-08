@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 using NUnit.Framework;
 
@@ -549,8 +550,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// lists the referencing assembly as skipped.
         /// </summary>
         [Test]
-        public void FindCallSites_TargetNoOtherAssemblyMentions_ReadsOnlyTheTargetAssembly()
+        public async Task FindCallSites_TargetNoOtherAssemblyMentions_ReadsOnlyTheTargetAssembly()
         {
+            await StopInstalledWarmUpAsync();
             HotReloadCompiledCallSiteCache.Shared.Clear();
             int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
 
@@ -570,8 +572,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// it as skipped.
         /// </summary>
         [Test]
-        public void FindCallSites_CrossAssemblyCaller_ReadsTheCallerAssembly()
+        public async Task FindCallSites_CrossAssemblyCaller_ReadsTheCallerAssembly()
         {
+            await StopInstalledWarmUpAsync();
             HotReloadCompiledCallSiteCache.Shared.Clear();
             int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
 
@@ -604,6 +607,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(dllPaths, Does.Contain(layout.DllPath(CrossAssemblyCallerAssemblyName)));
             Assert.That(dllPaths, Does.Not.Contain(layout.DllPath(GetTestAssemblyName())));
+        }
+
+        // Why: the installed warm-up loads into the shared cache on a pool thread after a reload,
+        // and a read it makes between Clear and the scan would be counted as the scan's.
+        private static Task StopInstalledWarmUpAsync()
+        {
+            return HotReloadCompositionRoot.Services.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope);
         }
 
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(

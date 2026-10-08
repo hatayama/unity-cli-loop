@@ -49,6 +49,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static HotReloadServices CreateProductionServices()
         {
+            return CreateProductionServicesWithWarmUp(CreateProductionWarmUp());
+        }
+
+        /// <summary>
+        /// Builds the production services around <paramref name="warmUp"/>, without installing
+        /// them. A test that drives the warm-up itself passes its own.
+        /// </summary>
+        internal static HotReloadServices CreateProductionServicesWithWarmUp(HotReloadWarmUp warmUp)
+        {
             HotReloadHarmonyGateway harmony =
                 new HotReloadHarmonyGateway(new Harmony(HotReloadConstants.HarmonyId));
             return CreateServices(
@@ -59,7 +68,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransformWorkerHost.Shared,
                 HotReloadGroupProcessorDependencies.CreateProduction,
                 new HotReloadApplicationPlayModeQuery(),
-                new HotReloadSourceSnapshotCapture(HotReloadSourceSnapshotter.CaptureAfterDomainReload));
+                new HotReloadSourceSnapshotCapture(HotReloadSourceSnapshotter.CaptureAfterDomainReload),
+                warmUp);
+        }
+
+        private static HotReloadWarmUp CreateProductionWarmUp()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            return new HotReloadWarmUp(
+                new HotReloadWarmUpContextSource(
+                    projectRoot,
+                    new HotReloadEditorStateSnapshotCapture(),
+                    assemblyName => HotReloadCallSiteScanner.CollectReferencingDllPaths(projectRoot, assemblyName)),
+                HotReloadWarmUpItems.CreateProduction());
         }
 
         /// <summary>
@@ -90,7 +111,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<HotReloadGroupStageCollaborators, HotReloadGroupProcessorDependencies>
                 buildDependencies,
             IHotReloadPlayModeQuery playMode,
-            HotReloadSourceSnapshotCapture sourceSnapshotCapture)
+            HotReloadSourceSnapshotCapture sourceSnapshotCapture,
+            HotReloadWarmUp warmUp)
         {
             // Built in dependency order, and every collaborator takes what it needs here: nothing
             // below may read the installed services, or a replacement scope would leave it bound
@@ -174,7 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadDeferredInputClassifier(),
                     new HotReloadSiblingRebindReporter(domain),
                     packageRootCapture,
-                    unityMessageForwarding),
+                    unityMessageForwarding,
+                    warmUp),
                 new HotReloadStatusExecutor(
                     domain,
                     patcher,
@@ -187,7 +210,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unityMessageForwarding,
                 wiredValuePersistence,
                 wiredValueRestoreRefresh,
-                sourceSnapshotCapture);
+                sourceSnapshotCapture,
+                warmUp);
         }
 
         /// <summary>
@@ -278,6 +302,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void UninstallServices(HotReloadServices services)
         {
             ClearWiring();
+            // Why stop the warm-up: services replaced within a domain would otherwise leave the
+            // previous warm-up reading the shared caches on a pool thread. Not awaited: the
+            // caller is synchronous, and the item in flight ends on its own.
+            _ = services?.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerServicesReplaced);
             // Why the domain is disposed after the wiring is dropped: disposing unsubscribes its
             // resolver, and a bind arriving through a still-installed gateway would otherwise
             // reach a domain that can no longer answer.

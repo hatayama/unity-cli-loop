@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadDomain _domain;
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
+        private readonly HotReloadWarmUp _warmUp;
 
         internal HotReloadOrchestrator(
             HotReloadDomain domain,
@@ -34,7 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadDeferredInputClassifier deferredInputClassifier,
             HotReloadSiblingRebindReporter siblingRebindReporter,
             IHotReloadPackageRootCapture packageRootCapture,
-            HotReloadUnityMessageForwarding unityMessageForwarding)
+            HotReloadUnityMessageForwarding unityMessageForwarding,
+            HotReloadWarmUp warmUp)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
@@ -45,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(packageRootCapture != null, "packageRootCapture must not be null.");
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
+            Debug.Assert(warmUp != null, "warmUp must not be null.");
             _domain = domain;
             _patcher = patcher;
             _groupProcessor = groupProcessor;
@@ -53,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _siblingRebindReporter = siblingRebindReporter;
             _packageRootCapture = packageRootCapture;
             _unityMessageForwarding = unityMessageForwarding;
+            _warmUp = warmUp;
         }
 
         /// <summary>
@@ -82,6 +86,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // one hold keeps every dll they read until the run ends.
             using IDisposable callSiteCacheHold = HotReloadCompiledCallSiteCache.Shared.HoldEntriesForRun();
             HotReloadRunTiming timing = new HotReloadRunTiming();
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWarmUpYield))
+            {
+                // Why first: the warm-up may be reading a dll this run is about to read; waiting for
+                // that one item here is cheaper than contending for the cache lock inside the run.
+                await _warmUp.YieldToRunAsync().ConfigureAwait(false);
+            }
 
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
             {
@@ -129,6 +140,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         slots[index],
                         plannerInput);
                 }
+            }
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWarmUpTargets))
+            {
+                // Why here: the assembly names are known once the inputs are resolved, and the next
+                // domain's warm-up reads them before any run of that domain.
+                string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+                HotReloadWarmUpTargetLedger.Record(projectRoot, CollectDistinctAssemblyNames(plannerInput));
             }
 
             IReadOnlyList<HotReloadFileGroupPlan> plans;
@@ -254,6 +273,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why on the inputs only: a re-applied sibling joins a group later and was never selected,
         // so it keeps the flag unset even in a default-selection run.
+        private static List<string> CollectDistinctAssemblyNames(
+            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput)
+        {
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            List<string> names = new List<string>();
+            foreach ((int InputIndex, string AssemblyName, string ProjectRelativePath) input in plannerInput)
+            {
+                if (!string.IsNullOrEmpty(input.AssemblyName) && seen.Add(input.AssemblyName))
+                {
+                    names.Add(input.AssemblyName);
+                }
+            }
+
+            return names;
+        }
+
         private void MarkDefaultSelectedInputs(HotReloadInputResolutionSlot[] slots, bool isDefaultSelection)
         {
             foreach (HotReloadInputResolutionSlot slot in slots)
