@@ -112,10 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "The resolved assembly is no longer present in the compilation pipeline. Compile the project and retry hot reload.");
             }
 
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                evidence.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string targetDllPath = CompiledAssemblyLayout.Resolve(projectRoot).DllPath(evidence.AssemblyName);
             HotReloadFailureDescription compiledAssemblyChange = DescribeCompiledAssemblyChange(
                 evidence,
                 targetDllPath);

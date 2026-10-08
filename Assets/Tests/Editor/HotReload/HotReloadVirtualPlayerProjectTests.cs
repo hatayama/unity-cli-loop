@@ -18,17 +18,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static readonly string OrdinaryProjectRoot = Path.Combine("workspace", "project");
 
         /// <summary>
-        /// What: for a Virtual Player, the reason says hot reload cannot patch it and that a compile
-        /// brings the edit in, instead of asking for a compile first, and the failure is marked as a
-        /// Virtual Player's so the next step names the main Editor's project.
+        /// What: for a Virtual Player, the reason says the main Editor's project has not compiled the
+        /// assembly and asks for that project to be compiled, instead of this one, and the failure is
+        /// marked as a Virtual Player's so the next step names the main Editor's project.
         /// </summary>
         [Test]
-        public void DescribeMissingCompiledAssembly_VirtualPlayerRoot_SaysHotReloadCannotPatchAVirtualPlayer()
+        public void DescribeMissingCompiledAssembly_VirtualPlayerRoot_SaysTheMainProjectHasNotCompiledTheAssembly()
         {
-            string dllPath = Path.Combine(VirtualPlayerRoot, "Library", "ScriptAssemblies", "Sample.dll");
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(VirtualPlayerRoot);
+            string dllPath = layout.DllPath("Sample");
 
             HotReloadFailureDescription failure =
-                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(VirtualPlayerRoot, dllPath);
+                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(layout, dllPath);
             string reason = failure.Message;
 
             Assert.That(
@@ -39,6 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(reason, Does.Contain("main Editor"));
             Assert.That(reason, Does.Contain("compile"));
             Assert.That(reason, Does.Not.Contain("Compile the project first"));
+            Assert.That(reason, Does.Contain("Compile the main Editor's project first"));
+            Assert.That(reason, Does.Contain("has not compiled"));
         }
 
         /// <summary>
@@ -51,7 +54,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string dllPath = Path.Combine(OrdinaryProjectRoot, "Library", "ScriptAssemblies", "Sample.dll");
 
             HotReloadFailureDescription failure =
-                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(OrdinaryProjectRoot, dllPath);
+                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(
+                    CompiledAssemblyLayout.Resolve(OrdinaryProjectRoot),
+                    dllPath);
 
             Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.CompiledAssemblyMissing));
             Assert.That(

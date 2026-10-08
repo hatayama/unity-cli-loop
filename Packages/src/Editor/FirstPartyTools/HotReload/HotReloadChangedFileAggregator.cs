@@ -121,6 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(assemblies != null, "assemblies must not be null.");
 
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
             List<HotReloadSnapshotAssembly> snapshotAssemblies = new List<HotReloadSnapshotAssembly>();
             foreach (UnityCompilationAssembly assembly in assemblies)
             {
@@ -135,11 +136,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string dllPath = Path.Combine(
-                    projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                    assembly.name + HotReloadConstants.CompiledAssemblyExtension);
-                string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+                string dllPath = layout.DllPath(assembly.name);
+                string pdbPath = layout.PdbPath(assembly.name);
                 if (!File.Exists(dllPath) || !File.Exists(pdbPath))
                 {
                     continue;

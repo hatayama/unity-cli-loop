@@ -416,8 +416,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadTypeHome> introducedTypeArtifactHomes)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string scriptAssembliesDirectory = Path.GetFullPath(
-                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
+            string scriptAssembliesDirectory = CompiledAssemblyLayout.Resolve(projectRoot).CompiledAssembliesDirectory;
 
             // Derive Cecil search dirs from Unity's actual compile references so publicize
             // resolves netstandard/engine modules without hardcoding Editor Contents layouts.

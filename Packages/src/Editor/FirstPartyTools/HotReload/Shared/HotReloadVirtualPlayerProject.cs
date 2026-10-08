@@ -11,12 +11,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the text and the kinds come from one decision: a reason that names a Virtual Player
         // has to arrive with VirtualPlayer set, or the next step would tell the player to compile
         // its own project, which has no assemblies to compile.
-        internal static HotReloadFailureDescription DescribeMissingCompiledAssembly(string projectRoot, string dllPath)
+        internal static HotReloadFailureDescription DescribeMissingCompiledAssembly(
+            CompiledAssemblyLayout layout,
+            string dllPath)
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(layout != null, "layout must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(dllPath), "dllPath must not be null or empty.");
 
-            if (!CompiledAssemblyLayout.Resolve(projectRoot).IsVirtualPlayer)
+            if (!layout.IsVirtualPlayer)
             {
                 return HotReloadFailureDescription.CompiledAssemblyMissing(
                     "Compiled assembly not found at '" + dllPath + "'. Compile the project first.",

@@ -97,15 +97,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadTypeHome home = domain.ResolveTypeHome(projectRoot, assemblyName);
+            CompiledAssemblyLayout layout =
+                CompiledAssemblyLayout.Resolve(Path.GetFullPath(Path.Combine(Application.dataPath, "..")));
+            HotReloadTypeHome home = domain.ResolveTypeHome(layout.ProjectRoot, assemblyName);
 
             if (!File.Exists(home.DllPath))
             {
                 outcomes.Add(
                     HotReloadMethodOutcome.FailedBecause(
                         "(file)",
-                        HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(projectRoot, home.DllPath),
+                        HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(layout, home.DllPath),
                         assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
@@ -124,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 HotReloadFailureDescription membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
                     editorStateSnapshotCapture,
-                    projectRoot,
+                    layout.ProjectRoot,
                     projectRelativePath,
                     assemblyName,
                     compilationAssembly,
@@ -174,7 +175,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName,
                 compilationAssembly,
                 home,
-                projectRoot,
+                layout.ProjectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);
         }
