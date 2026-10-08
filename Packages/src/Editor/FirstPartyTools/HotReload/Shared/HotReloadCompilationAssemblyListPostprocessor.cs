@@ -15,6 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadCompilationAssemblyListPostprocessor : AssetPostprocessor
     {
+        // Assets whose import, deletion or move changes what CompilationPipeline.GetAssemblies()
+        // answers: sources, assembly definitions and references, and precompiled references.
+        private static readonly string[] AssemblyListExtensions = { ".cs", ".asmdef", ".asmref", ".dll" };
+
         // Called by Unity through reflection after every import batch. Why this five-parameter
         // form and no four-parameter one: Unity calls the four-parameter form when both exist,
         // and only this one says whether the batch's compile already reloaded the domain.
@@ -25,6 +29,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] movedFromAssetPaths,
             bool didDomainReload)
         {
+            Debug.Assert(importedAssets != null, "importedAssets must not be null.");
+            Debug.Assert(deletedAssets != null, "deletedAssets must not be null.");
+            Debug.Assert(movedAssets != null, "movedAssets must not be null.");
+            Debug.Assert(movedFromAssetPaths != null, "movedFromAssetPaths must not be null.");
+
+            // Why keep the list after a reload: the new domain fills it after the reload, from the
+            // list the compile produced, so the import that triggered that compile has nothing newer.
+            if (didDomainReload)
+            {
+                return;
+            }
+
+            if (!ChangesTheAssemblyList(importedAssets)
+                && !ChangesTheAssemblyList(deletedAssets)
+                && !ChangesTheAssemblyList(movedAssets)
+                && !ChangesTheAssemblyList(movedFromAssetPaths))
+            {
+                return;
+            }
+
+            HotReloadCompilationAssemblies.DropForScriptSetChange();
+        }
+
+        private static bool ChangesTheAssemblyList(string[] assetPaths)
+        {
+            foreach (string assetPath in assetPaths)
+            {
+                string extension = Path.GetExtension(assetPath);
+                foreach (string candidate in AssemblyListExtensions)
+                {
+                    if (string.Equals(extension, candidate, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }
