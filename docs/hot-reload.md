@@ -72,8 +72,11 @@ added on one side alone fails a test rather than silently serializing to nothing
 Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point's ID).
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/PublicizedExternalRefs/fmt1/<assemblyName>-<mvid>.dll`,
-`Library/UloopHotReload/Worker/<sourceHash>/`, and
-`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`.
+`Library/UloopHotReload/Worker/<sourceHash>/`,
+`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`, and
+`Library/UloopHotReload/PdbDocuments/fmt1/<assemblyName>.txt` (the documents the PDB's sequence
+points refer to, stamped with the dll's and the PDB's length and write time and the MVID, so the
+first run after a domain reload does not walk the PDB again while they still match).
 The shim compile references a fully publicized copy of the edited assembly, and of every other
 project assembly that grants the edited one its internals through `InternalsVisibleTo`. Any other
 project assembly is referenced through a `PublicizedExternalRefs` copy that keeps its top-level
