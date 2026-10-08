@@ -14,6 +14,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadChangedSourceDetectorTests
     {
+        // Why fixed write times: the detector reuses a verdict while a file's length and write time
+        // stay the same, so each test sets the stamp it means instead of relying on the clock.
+        private static readonly DateTime FirstWriteTimeUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private static readonly DateTime SecondWriteTimeUtc = FirstWriteTimeUtc.AddDays(1);
+
         /// <summary>
         /// What: a missing snapshot directory reports no baseline instead of conflating it with no changes.
         /// </summary>
@@ -176,6 +181,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 Directory.Delete(projectRoot, recursive: true);
             }
+        }
+
+        /// <summary>
+        /// What: the default file selection does not pick a source rewritten while it keeps its
+        /// length and write time, because the earlier "matches" verdict is reused. This is a known
+        /// limit until the next compile.
+        /// </summary>
+        [Test]
+        public void DetectAllChangedFromSnapshotDirectory_SecondScanWithSameStamp_DoesNotSelectTheRewrite()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string sourcePath = "Assets/Source.cs";
+                WriteSnapshot(projectRoot, "Assembly-mvid", sourcePath, "source-AAAA");
+                WriteProjectFileAt(projectRoot, sourcePath, "source-AAAA", FirstWriteTimeUtc);
+                Assert.That(ScanAll(projectRoot, sourcePath), Is.Empty);
+
+                WriteProjectFileAt(projectRoot, sourcePath, "source-BBBB", FirstWriteTimeUtc);
+
+                Assert.That(ScanAll(projectRoot, sourcePath), Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: the default file selection picks a source rewritten with a later write time after
+        /// an earlier scan found it unchanged.
+        /// </summary>
+        [Test]
+        public void DetectAllChangedFromSnapshotDirectory_SecondScanAfterRewriteWithNewWriteTime_SelectsTheRewrite()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string sourcePath = "Assets/Source.cs";
+                WriteSnapshot(projectRoot, "Assembly-mvid", sourcePath, "source-AAAA");
+                WriteProjectFileAt(projectRoot, sourcePath, "source-AAAA", FirstWriteTimeUtc);
+                Assert.That(ScanAll(projectRoot, sourcePath), Is.Empty);
+
+                WriteProjectFileAt(projectRoot, sourcePath, "source-BBBB", SecondWriteTimeUtc);
+
+                Assert.That(ScanAll(projectRoot, sourcePath), Is.EqualTo(new[] { sourcePath }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        private static System.Collections.Generic.List<string> ScanAll(string projectRoot, string sourcePath)
+        {
+            return HotReloadChangedSiblingSourceDetector.DetectAllChangedFromSnapshotDirectory(
+                projectRoot,
+                "Assembly-mvid",
+                new[] { sourcePath }).ChangedProjectRelativePaths;
+        }
+
+        // Why a write time the test chooses: SetLastWriteTimeUtc stores microseconds while
+        // LastWriteTimeUtc reports 100 ns ticks, so only a chosen value can be put back exactly.
+        private static void WriteProjectFileAt(
+            string projectRoot,
+            string projectRelativePath,
+            string contents,
+            DateTime lastWriteTimeUtc)
+        {
+            WriteProjectFile(projectRoot, projectRelativePath, contents);
+            string absolutePath = AbsoluteProjectPath(projectRoot, projectRelativePath);
+            File.SetLastWriteTimeUtc(absolutePath, lastWriteTimeUtc);
+            Assert.That(
+                new FileInfo(absolutePath).LastWriteTimeUtc,
+                Is.EqualTo(lastWriteTimeUtc),
+                "The write time must be settable exactly, or the stamp the detector reads is not the one the test chose.");
         }
 
         private static string CreateTempProjectRoot()

@@ -17,6 +17,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadChangedSiblingSourceDetectorTests
     {
+        // Why fixed write times: the detector reuses a verdict while a file's length and write time
+        // stay the same, so each test sets the stamp it means instead of relying on the clock.
+        private static readonly DateTime FirstWriteTimeUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private static readonly DateTime SecondWriteTimeUtc = FirstWriteTimeUtc.AddDays(1);
+
         /// <summary>
         /// What: a sibling whose on-disk bytes differ from its snapshot is returned, and the
         /// edited file itself is excluded even when it also differs.
@@ -505,6 +510,142 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a sibling that matched its snapshot is reported once it is rewritten with another
+        /// length while its write time stays the same, so the length alone triggers a new comparison.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_SecondScanAfterRewriteWithNewLength_ReturnsSibling()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
+
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA-longer", FirstWriteTimeUtc);
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a sibling that matched its snapshot is reported once it is rewritten with the same
+        /// length and a later write time, so the write time alone triggers a new comparison.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_SecondScanAfterRewriteWithNewWriteTime_ReturnsSibling()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
+
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-BBBB", SecondWriteTimeUtc);
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a sibling rewritten with the same length while its write time is put back keeps
+        /// the earlier "matches" verdict. This is a known limit: a change that keeps both length and
+        /// write time (a copy that preserves timestamps) is not noticed until the next compile.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_SecondScanWithSameStamp_KeepsTheMatchVerdict()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
+
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-BBBB", FirstWriteTimeUtc);
+
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a verdict against one assembly generation's snapshot is not reused against
+        /// another generation's snapshot of the same file.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_SameSiblingAgainstAnotherSnapshotDirectory_ComparesAgain()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid1", siblingRelative, "sibling-AAAA");
+                WriteSnapshot(projectRoot, "Asm-mvid2", siblingRelative, "sibling-BBBB");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                Assert.That(ScanSibling(projectRoot, "Asm-mvid1", siblingRelative), Is.Empty);
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid2", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: a sibling put back to its snapshot bytes while its length and write time are
+        /// kept keeps the earlier "differs" verdict. This is the same known limit in the other
+        /// direction: it stays reported until the next compile.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_SecondScanWithSameStamp_KeepsTheDiffersVerdict()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-BBBB", FirstWriteTimeUtc);
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
         /// What: sibling-derived warnings are ordinal-deduped among themselves and skipped
         /// when the own-file list already contains the exact string, without collapsing
         /// duplicates that were already in the own-file list.
@@ -522,6 +663,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 ownFileWarnings,
                 Is.EqualTo(new[] { "own-a", "own-a", "shared", "sibling-b" }));
+        }
+
+        // Why an edited file: a run always has one, and the detector requires it.
+        private const string EditedRelative = "Assets/Edited.cs";
+
+        private static string[] ScanSibling(
+            string projectRoot,
+            string assemblySnapshotDirectoryName,
+            string siblingRelative)
+        {
+            return HotReloadChangedSiblingSourceDetector.DetectFromSnapshotDirectory(
+                projectRoot,
+                assemblySnapshotDirectoryName,
+                new[] { EditedRelative, siblingRelative },
+                new[] { EditedRelative }).ChangedSiblingAbsolutePaths;
+        }
+
+        // Why a write time the test chooses: SetLastWriteTimeUtc stores microseconds while
+        // LastWriteTimeUtc reports 100 ns ticks, so only a chosen value can be put back exactly.
+        private static void WriteProjectFileAt(
+            string projectRoot,
+            string projectRelativePath,
+            string contents,
+            DateTime lastWriteTimeUtc)
+        {
+            WriteProjectFile(projectRoot, projectRelativePath, contents);
+            string absolutePath = AbsoluteProjectPath(projectRoot, projectRelativePath);
+            File.SetLastWriteTimeUtc(absolutePath, lastWriteTimeUtc);
+            Assert.That(
+                new FileInfo(absolutePath).LastWriteTimeUtc,
+                Is.EqualTo(lastWriteTimeUtc),
+                "The write time must be settable exactly, or the stamp the detector reads is not the one the test chose.");
         }
 
         private static string CreateTempProjectRoot()
