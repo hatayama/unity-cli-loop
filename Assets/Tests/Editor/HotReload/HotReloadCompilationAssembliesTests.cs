@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 StaticEventHasHandler(typeof(EditorApplication), IsAnyProductionHandler),
                 Is.False,
-                "Nothing of HotReloadCompilationAssemblies may be subscribed on EditorApplication: projectChanged fires after the startup capture of every compile.");
+                "Nothing of HotReloadCompilationAssemblies or its cache may be subscribed on EditorApplication: projectChanged fires after the startup capture of every compile.");
         }
 
         /// <summary>
@@ -156,13 +156,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why walk the declaring types outward: a lambda subscribed from the production class lives on a
         // compiler-generated type nested in it, so a name or direct-type match would miss it.
+        // Why also the cache type: subscribing the memo's own Invalidate as a method group puts the
+        // handler on HotReloadCompilationAssemblyCache, a top-level type.
         private static bool IsAnyProductionHandler(Delegate listener)
         {
             for (Type declaringType = listener.Method.DeclaringType;
                 declaringType != null;
                 declaringType = declaringType.DeclaringType)
             {
-                if (declaringType == typeof(HotReloadCompilationAssemblies))
+                if (declaringType == typeof(HotReloadCompilationAssemblies)
+                    || declaringType == typeof(HotReloadCompilationAssemblyCache))
                 {
                     return true;
                 }
