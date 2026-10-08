@@ -62,6 +62,22 @@ main Editor) do not block each other.
   file as `Failed` with `Compiled assembly not found ... Compile the main Editor's project
   first.`
 
+## When a player quits right after activation
+
+A player whose Editor shows
+`Fatal Error! Compilation Pipeline: Could not read file Packages/<package>/<path>.asmdef`
+a few seconds after it was activated, and then quits, never loaded its packages. Multiplayer
+Play Mode gives a player symlinks to `Assets` and `ProjectSettings` and an empty `Packages`
+folder (that is normal), and starts its Editor with `-noUpm -upmRestorePackages`: the player
+takes the package list from the main project's `Library/PackageManager/ProjectCache` instead
+of resolving packages itself. When the main Editor showed `Project has invalid dependencies` at
+startup (for example a `file:` dependency whose folder is missing), that file is absent and the
+player finds no package. Fix the main project's dependencies, restart the main Editor until it
+starts without that dialog and `<PROJECT_ROOT>/Library/PackageManager/ProjectCache` exists,
+then activate the player again. Until then
+`uloop --project-path <PROJECT_ROOT>/Library/VP/mppm<id> ...` fails at project resolution: the
+player never loaded uloop's project runner.
+
 ## Known limitations
 
 - `Stop` sent while Virtual Players are still starting (the main Editor is not yet in Play Mode)
