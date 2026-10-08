@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
         /// <summary>
         /// Verifies that a cache directory that cannot be created yields a failed outcome with an error
-        /// instead of an exception, and leaves no temp file behind.
+        /// instead of an exception.
         /// </summary>
         [Test]
         public void PublishBuiltAssembly_WhenTheCacheDirectoryCannotBeCreated_ReturnsFailedWithoutThrowing()
@@ -222,6 +222,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 Directory.GetFiles(_rootPath),
                 Is.EquivalentTo(new[] { built, blockingFile }));
+        }
+
+        /// <summary>
+        /// Verifies that a publish failing after the temp copy was written (the move cannot replace a
+        /// directory at the cached path) reports a failure and removes the temp file.
+        /// </summary>
+        [Test]
+        public void PublishBuiltAssembly_WhenTheMoveFails_ReturnsFailedAndLeavesNoTempFile()
+        {
+            string built = WriteBuiltAssembly();
+            string cached = Path.Combine(_rootPath, "cache", "key", "RoslynCompilerWorker.dll");
+            Directory.CreateDirectory(cached);
+
+            CachePublishOutcome outcome = default;
+            Assert.DoesNotThrow(() =>
+                outcome = SharedRoslynCompilerWorkerAssemblyCache.PublishBuiltAssembly(built, cached));
+
+            Assert.That(outcome.Kind, Is.EqualTo(CachePublishKind.Failed));
+            Assert.That(outcome.Error, Is.Not.Empty);
+            Assert.That(Directory.GetFiles(Path.GetDirectoryName(cached)), Is.Empty);
+            Assert.That(Directory.Exists(cached), Is.True);
         }
 
         /// <summary>
