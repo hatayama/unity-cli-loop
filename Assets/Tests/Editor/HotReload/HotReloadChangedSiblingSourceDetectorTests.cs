@@ -851,10 +851,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Why an edited file: a run always has one, and the detector requires it.
         private const string EditedRelative = "Assets/Edited.cs";
 
-        // Spelled here until the manifest has constants of its own.
-        private const string StampManifestFileName = "source-stamps.txt";
-        private const string StampManifestHeader = "uloop-source-stamps 1";
-
         private static string[] ScanSibling(
             string projectRoot,
             string assemblySnapshotDirectoryName,
@@ -932,14 +928,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblySnapshotDirectoryName);
             Directory.CreateDirectory(snapshotDirectory);
             StringBuilder text = new StringBuilder();
-            text.Append(StampManifestHeader).Append('\n');
+            text.Append(HotReloadConstants.SourceStampManifestHeader).Append('\n');
             foreach (string line in lines)
             {
                 text.Append(line).Append('\n');
             }
 
             File.WriteAllText(
-                Path.Combine(snapshotDirectory, StampManifestFileName),
+                Path.Combine(snapshotDirectory, HotReloadConstants.SourceStampManifestFileName),
                 text.ToString(),
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
