@@ -66,6 +66,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "fmt1" = generation of the file format, bumped the same way as PublicizedRefs.
         public const string ReferencedMethodsRelativeDirectory = "Library/UloopHotReload/ReferencedMethods/fmt1";
 
+        // The assemblies the hot reload runs of this project edited, most recent first. The
+        // warm-up after a domain reload reads it to choose what to load before the first run.
+        public const string WarmUpRelativeDirectory = "Library/UloopHotReload/WarmUp";
+        public const string WarmUpTargetsFileName = "targets.txt";
+
         // Package-relative directory of the out-of-process transform worker sources (tilde dir = Unity-ignored).
         public const string WorkerSourcePackageRelativePath =
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
@@ -674,12 +679,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
         public const string VibeLogTimingDetail = "hot_reload_timing_detail";
         public const string VibeLogCallSiteCacheEvicted = "hot_reload_call_site_cache_evicted";
+        public const string VibeLogWarmUpComplete = "hot_reload_warm_up_complete";
+        public const string VibeLogWarmUpSkipped = "hot_reload_warm_up_skipped";
+
+        // What stopped a running warm-up, as named in the cancelledBy field of hot_reload_warm_up_complete.
+        public const string WarmUpCancelledByRun = "run";
+        public const string WarmUpShutdownTriggerBeforeAssemblyReload = "beforeAssemblyReload";
+        public const string WarmUpShutdownTriggerCompilationStarted = "compilationStarted";
+        public const string WarmUpShutdownTriggerServicesReplaced = "services_replaced";
+        public const string WarmUpShutdownTriggerTestScope = "test_scope";
+        public const string WarmUpShutdownTriggerTestRun = "test_run";
 
         // Steps of an apply run outside the response's Timing phases, as named in the
         // hot_reload_timing_detail vibe entry. Steps that run once per group add up.
+        public const string TimingDetailStepWarmUpYield = "warm_up_yield";
         public const string TimingDetailStepMainThreadSwitch = "main_thread_switch";
         public const string TimingDetailStepPackageRoots = "package_roots";
         public const string TimingDetailStepResolveInputs = "resolve_inputs";
+        public const string TimingDetailStepWarmUpTargets = "warm_up_targets";
         public const string TimingDetailStepPlan = "plan";
         public const string TimingDetailStepActiveSiblings = "active_siblings";
         public const string TimingDetailStepMembershipValidate = "membership_validate";
