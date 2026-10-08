@@ -112,7 +112,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Not.Contain(pluginDirectory),
                 "Unity listed the plugin among the test assembly's own references, so the transitive walk is not what reaches it.");
 
-            Assert.That(HotReloadResolverSearchDirectories.Collect(Directory.GetCurrentDirectory(), testAssembly), Does.Contain(pluginDirectory));
+            Assert.That(HotReloadResolverSearchDirectories.Collect(
+                    Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                    testAssembly), Does.Contain(pluginDirectory));
         }
 
         /// <summary>

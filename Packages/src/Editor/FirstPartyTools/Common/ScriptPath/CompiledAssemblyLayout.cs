@@ -49,10 +49,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string fullRoot = Path.GetFullPath(projectRoot);
             // Why trim first: with a trailing separator, Path.GetDirectoryName returns the same
-            // directory, so every parent lookup below would land one level too low.
-            string trimmedRoot = fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            // A root made only of separators has nothing left after the trim; it stays as it was.
-            string root = trimmedRoot.Length == 0 ? fullRoot : trimmedRoot;
+            // directory, so every parent lookup below would land one level too low. A path root ("/"
+            // or "C:\") stays as it is, because trimming it would leave "" or the drive-relative "C:".
+            bool isPathRoot = string.Equals(Path.GetPathRoot(fullRoot), fullRoot, StringComparison.Ordinal);
+            string root = isPathRoot
+                ? fullRoot
+                : fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             string virtualPlayersDirectory = Path.GetDirectoryName(root);
             string libraryDirectory = string.IsNullOrEmpty(virtualPlayersDirectory)
                 ? null
