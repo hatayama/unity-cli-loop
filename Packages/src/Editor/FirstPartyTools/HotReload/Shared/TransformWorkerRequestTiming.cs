@@ -33,6 +33,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Number of conversations this request began with a worker process.</summary>
         public int Attempts { get; private set; }
 
+        /// <summary>
+        /// The stages the worker timed itself, from the output that decided the request; empty when
+        /// no output decided it or the worker wrote none.
+        /// </summary>
+        public IReadOnlyList<TransformWorkerTimingStepDto> WorkerSteps { get; private set; } =
+            Array.Empty<TransformWorkerTimingStepDto>();
+
         public void AddStep(string step, long milliseconds)
         {
             if (string.IsNullOrEmpty(step))
@@ -71,6 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public void MarkAttempt()
         {
             Attempts++;
+        }
+
+        public void RecordWorkerSteps(TransformWorkerTimingStepDto[] steps)
+        {
+            WorkerSteps = steps ?? Array.Empty<TransformWorkerTimingStepDto>();
         }
 
         private sealed class StepScope : IDisposable

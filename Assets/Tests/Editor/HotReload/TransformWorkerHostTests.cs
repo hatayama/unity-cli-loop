@@ -110,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(StepNames(first), Does.Contain(TransformWorkerRequestTiming.ProcessStartStep), "first steps");
             Assert.That(StepNames(first), Does.Contain(TransformWorkerRequestTiming.ResponseWaitStep), "first steps");
             Assert.That(StepNames(first), Does.Contain(TransformWorkerRequestTiming.ReadOutputStep), "first steps");
+            Assert.That(WorkerStepNames(first), Is.EqualTo(new[] { "read_input" }), "first worker steps");
             Assert.That(second.Kind, Is.EqualTo(TransformWorkerHostResultKind.Completed), second.ErrorMessage);
             Assert.That(second.Timing.WorkerStarted, Is.False, "second WorkerStarted");
             Assert.That(second.Timing.Attempts, Is.EqualTo(1), "second Attempts");
@@ -176,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: run-level parse errors in a valid output file are a final WorkerFailed result, not a
-        /// broken conversation, and the process is kept.
+        /// broken conversation, the process is kept, and the stages the worker timed are kept.
         /// </summary>
         [Test]
         public async Task RunAsync_OutputCarriesRunLevelParseErrors_IsWorkerFailed()
@@ -187,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.WorkerFailed));
             Assert.That(result.ErrorMessage, Does.Contain("run-level problem"));
+            Assert.That(WorkerStepNames(result), Is.EqualTo(new[] { "read_input" }), "worker steps");
             Assert.That(_host.LaunchCount, Is.EqualTo(1));
             Assert.That(_host.CurrentProcessId, Is.Not.Null);
         }
@@ -547,6 +549,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return result.Timing.Steps.Select(step => step.Key).ToArray();
         }
+
+        private static string[] WorkerStepNames(TransformWorkerHostResult result)
+        {
+            return result.Timing.WorkerSteps.Select(step => step.step).ToArray();
+        }
     }
 
     /// <summary>
@@ -823,7 +830,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 files[index] = new TransformWorkerFileOutputDto { projectRelativePath = rowPaths[index] };
             }
 
-            TransformWorkerOutputDto output = new TransformWorkerOutputDto { files = files, parseErrors = parseErrors };
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                files = files,
+                parseErrors = parseErrors,
+                timings = new[] { new TransformWorkerTimingStepDto { step = "read_input", ms = 3 } }
+            };
             File.WriteAllText(outputPath, JsonConvert.SerializeObject(output));
         }
 
