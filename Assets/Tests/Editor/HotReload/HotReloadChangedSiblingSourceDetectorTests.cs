@@ -511,7 +511,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a sibling that matched its snapshot is reported once it is rewritten with another
-        /// length and a later write time.
+        /// length while its write time stays the same, so the length alone triggers a new comparison.
         /// </summary>
         [Test]
         public void DetectFromSnapshotDirectory_SecondScanAfterRewriteWithNewLength_ReturnsSibling()
@@ -524,7 +524,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
                 Assert.That(ScanSibling(projectRoot, "Asm-mvid", siblingRelative), Is.Empty);
 
-                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA-longer", SecondWriteTimeUtc);
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA-longer", FirstWriteTimeUtc);
 
                 Assert.That(
                     ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
