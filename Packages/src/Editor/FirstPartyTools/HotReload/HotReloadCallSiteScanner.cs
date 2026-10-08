@@ -31,14 +31,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             /// </summary>
             public int ExaminedCallSiteCount;
 
+            /// <summary>
+            /// Assemblies of the scan set whose MemberRef table names none of the targets, so they
+            /// were not read; diagnostic, like ExaminedCallSiteCount.
+            /// </summary>
+            public List<string> SkippedScanAssemblyNames;
+
             public HotReloadCallSiteScanResult(
                 List<CallSiteHit> hits,
                 List<string> missingScanAssemblyNames,
-                int examinedCallSiteCount = 0)
+                int examinedCallSiteCount = 0,
+                List<string> skippedScanAssemblyNames = null)
             {
                 Hits = hits;
                 MissingScanAssemblyNames = missingScanAssemblyNames;
                 ExaminedCallSiteCount = examinedCallSiteCount;
+                SkippedScanAssemblyNames = skippedScanAssemblyNames ?? new List<string>();
             }
         }
 

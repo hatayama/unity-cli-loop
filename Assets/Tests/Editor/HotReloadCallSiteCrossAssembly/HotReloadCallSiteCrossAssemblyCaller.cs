@@ -1,3 +1,5 @@
+using System;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -14,6 +16,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public static int CallSameFullNameTarget()
         {
             return HotReloadCallSiteScannerFixture.CalledFromCrossAssembly();
+        }
+
+        public static int CallGenericHostTarget()
+        {
+            return new HotReloadCrossAssemblyGenericHost<int>().Target();
+        }
+
+        public static int CallGenericMethodTarget()
+        {
+            return HotReloadCallSiteScannerCrossAssemblyTarget.GenericMethod<int>();
+        }
+
+        public static Func<int> CaptureGenericMethodTarget()
+        {
+            return HotReloadCallSiteScannerCrossAssemblyTarget.GenericMethod<int>;
+        }
+
+        public static int CallNestedTarget()
+        {
+            return HotReloadCallSiteScannerCrossAssemblyTarget.Nested.CalledFromOtherAssembly();
         }
     }
 
