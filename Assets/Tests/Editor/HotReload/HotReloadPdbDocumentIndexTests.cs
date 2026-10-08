@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 
 using NUnit.Framework;
@@ -523,6 +525,117 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundSecond, Is.True);
             Assert.That(second.LoadCount, Is.EqualTo(1));
             Assert.That(second.PersistedLoadCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: the list read from the PDB holds the same documents, with the same url, hash algorithm
+        /// and hash, as a Cecil walk over the dll's types, methods and sequence points, and as many.
+        /// </summary>
+        [TestCase(TestAssemblyName)]
+        [TestCase(PausePointsRuntimeAssemblyName)]
+        public void ReadDocuments_MatchesTheCecilWalk_ForTheTestAssembly(string assemblyName)
+        {
+            string dllPath = DllPath(assemblyName);
+            string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
+
+            List<HotReloadPdbDocument> read = HotReloadPdbDocumentIndex.ReadDocuments(dllPath, pdbPath);
+            List<HotReloadPdbDocument> walked = WalkDocumentsWithCecil(dllPath, pdbPath);
+
+            Assert.That(read.Count, Is.GreaterThan(0));
+            Assert.That(read.Count, Is.EqualTo(walked.Count));
+            Assert.That(DocumentKeys(read), Is.EquivalentTo(DocumentKeys(walked)));
+        }
+
+        /// <summary>
+        /// What: a PDB of another build than the dll makes the read throw instead of returning a list,
+        /// the same contract as Cecil's symbol match check.
+        /// </summary>
+        [Test]
+        public void ReadDocuments_PdbOfAnotherBuild_Throws()
+        {
+            string directory = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-pdb-document-index-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                string dllPath = Path.Combine(directory, "X.dll");
+                string pdbPath = Path.Combine(directory, "X.pdb");
+                File.Copy(DllPath(TestAssemblyName), dllPath);
+                File.Copy(Path.ChangeExtension(DllPath(PausePointsRuntimeAssemblyName), ".pdb"), pdbPath);
+
+                Assert.Throws<InvalidOperationException>(() => HotReloadPdbDocumentIndex.ReadDocuments(dllPath, pdbPath));
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        private static HashSet<string> DocumentKeys(List<HotReloadPdbDocument> documents)
+        {
+            HashSet<string> keys = new HashSet<string>();
+            foreach (HotReloadPdbDocument document in documents)
+            {
+                string hash = document.Hash == null ? string.Empty : BitConverter.ToString(document.Hash);
+                keys.Add(document.Url + "|" + (int)document.HashAlgorithm + "|" + hash);
+            }
+
+            return keys;
+        }
+
+        // The walk the index used before it read the PDB alone: every distinct document a visible
+        // sequence point of a method body refers to.
+        private static List<HotReloadPdbDocument> WalkDocumentsWithCecil(string dllPath, string pdbPath)
+        {
+            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+            ReaderParameters readerParameters = new ReaderParameters
+            {
+                InMemory = true,
+                ReadSymbols = true,
+                SymbolReaderProvider = new PortablePdbReaderProvider(),
+                SymbolStream = pdbStream
+            };
+
+            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
+            List<HotReloadPdbDocument> documents = new List<HotReloadPdbDocument>();
+            HashSet<Document> seen = new HashSet<Document>();
+            foreach (TypeDefinition type in assemblyDefinition.MainModule.GetTypes())
+            {
+                foreach (MethodDefinition method in type.Methods)
+                {
+                    if (!method.HasBody)
+                    {
+                        continue;
+                    }
+
+                    MethodDebugInformation debugInformation = method.DebugInformation;
+                    if (debugInformation == null || !debugInformation.HasSequencePoints)
+                    {
+                        continue;
+                    }
+
+                    foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
+                    {
+                        if (sequencePoint.IsHidden || sequencePoint.Document == null)
+                        {
+                            continue;
+                        }
+
+                        if (seen.Add(sequencePoint.Document))
+                        {
+                            documents.Add(new HotReloadPdbDocument(
+                                sequencePoint.Document.Url,
+                                sequencePoint.Document.HashAlgorithm,
+                                sequencePoint.Document.Hash));
+                        }
+                    }
+                }
+            }
+
+            return documents;
         }
 
         private static string RewriteFirstDocumentField(string persisted, int fieldIndex, Func<string, string> rewrite)
