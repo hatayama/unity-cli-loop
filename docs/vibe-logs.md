@@ -50,8 +50,10 @@ command ran against:
   target's publicized copy, the artifact copies and the reference copies with their counts.
   `hot_reload_publicized_copy_written` appears only when a rewritten copy was written, with
   its rewrite and write time. `hot_reload_shim_compiler_timing` has the compile, the load and
-  the backend kind. `dynamic_code_shared_worker_started` appears only when the shared Roslyn
-  worker was started, with its source sync, worker assembly check and process spawn.
+  the backend kind. `dynamic_code_shared_worker_started` appears whenever no live shared Roslyn
+  worker could serve the compile and one had to be started, with its source sync, worker
+  assembly check and process spawn; `ready` is false when the start failed (no worker
+  assembly, or the process did not start).
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 using NUnit.Framework;
 
@@ -55,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a measured scope disposed twice records its step once.
+        /// What: a measured scope disposed twice records its span once; the second dispose adds
+        /// nothing to the step.
         /// </summary>
         [Test]
         public void Measure_DisposedTwice_AddsTheStepOnce()
@@ -63,12 +65,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerRequestTiming timing = new TransformWorkerRequestTiming();
 
             IDisposable scope = timing.Measure(TransformWorkerRequestTiming.ReadOutputStep);
+            // Why sleep: a span of 0 ms added twice would still read 0, hiding a double count.
+            Thread.Sleep(2);
             scope.Dispose();
+            long afterFirstDispose = timing.Steps[0].Value;
             scope.Dispose();
 
+            Assert.That(afterFirstDispose, Is.GreaterThanOrEqualTo(1), "first span");
             Assert.That(timing.Steps.Count, Is.EqualTo(1), "step count");
             Assert.That(timing.Steps[0].Key, Is.EqualTo(TransformWorkerRequestTiming.ReadOutputStep), "step");
-            Assert.That(timing.Steps[0].Value, Is.GreaterThanOrEqualTo(0), "ms");
+            Assert.That(timing.Steps[0].Value, Is.EqualTo(afterFirstDispose), "ms after second dispose");
         }
 
         /// <summary>
