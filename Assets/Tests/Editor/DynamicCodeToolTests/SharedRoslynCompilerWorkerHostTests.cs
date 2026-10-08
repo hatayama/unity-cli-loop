@@ -19,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public class SharedRoslynCompilerWorkerHostTests
     {
+        private const string WorkerSourceA = "// worker source A";
+        private const string WorkerSourceB = "// worker source B";
+
         /// <summary>
         /// Verifies lifecycle closure is returned as a non-error compile outcome.
         /// </summary>
@@ -702,6 +705,246 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(programSource, Does.Contain("HasValidBase64Padding"));
             Assert.That(programSource, Does.Contain("return RecoverRawRequestPath(requestPath);"));
             Assert.That(programSource, Does.Not.Contain("catch (FormatException)"));
+        }
+
+        /// <summary>
+        /// Verifies that the first ensure in an empty cache builds the assembly and publishes the same bytes to the cache.
+        /// </summary>
+        [Test]
+        public async Task EnsureWorkerAssemblyBuilt_FirstTime_BuildsAndPublishesToTheCache()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            fixture.SynchronizeSource(WorkerSourceA);
+
+            WorkerAssemblyEnsureResult result = await fixture.EnsureAsync(WorkerSourceA);
+
+            Assert.That(fixture.BuildCount, Is.EqualTo(1));
+            Assert.That(result.Result.IsReady, Is.True);
+            Assert.That(result.AssemblySource, Is.EqualTo("built"));
+            Assert.That(result.Publish.Kind, Is.EqualTo(CachePublishKind.Published));
+            string cachedAssemblyPath = fixture.ResolveCachedAssemblyPath(WorkerSourceA);
+            Assert.That(File.Exists(cachedAssemblyPath), Is.True);
+            Assert.That(
+                File.ReadAllBytes(cachedAssemblyPath),
+                Is.EqualTo(File.ReadAllBytes(fixture.WorkerPaths.AssemblyPath)));
+        }
+
+        /// <summary>
+        /// Verifies that a fresh worker directory, as after a domain reload, gets the cached assembly
+        /// copied without running the build again.
+        /// </summary>
+        [Test]
+        public async Task EnsureWorkerAssemblyBuilt_InAFreshWorkerDirectoryWithACachedAssembly_CopiesAndDoesNotBuild()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            fixture.SynchronizeSource(WorkerSourceA);
+            await fixture.EnsureAsync(WorkerSourceA);
+            File.Delete(fixture.WorkerPaths.AssemblyPath);
+
+            WorkerAssemblyEnsureResult result = await fixture.EnsureAsync(WorkerSourceA);
+
+            Assert.That(fixture.BuildCount, Is.EqualTo(1));
+            Assert.That(result.Result.IsReady, Is.True);
+            Assert.That(result.AssemblySource, Is.EqualTo("cache"));
+            Assert.That(result.Publish.Kind, Is.EqualTo(CachePublishKind.NotAttempted));
+            Assert.That(File.Exists(fixture.WorkerPaths.AssemblyPath), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that a changed worker source misses the cache, builds again, and is cached under a second key.
+        /// </summary>
+        [Test]
+        public async Task EnsureWorkerAssemblyBuilt_WhenTheSourceChanged_BuildsAgain()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            fixture.SynchronizeSource(WorkerSourceA);
+            await fixture.EnsureAsync(WorkerSourceA);
+            fixture.SynchronizeSource(WorkerSourceB);
+
+            WorkerAssemblyEnsureResult result = await fixture.EnsureAsync(WorkerSourceB);
+
+            Assert.That(fixture.BuildCount, Is.EqualTo(2));
+            Assert.That(result.AssemblySource, Is.EqualTo("built"));
+            Assert.That(Directory.GetDirectories(fixture.CacheRoot).Length, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Verifies that a build with errors fails the worker start and leaves nothing in the cache.
+        /// </summary>
+        [Test]
+        public async Task EnsureWorkerAssemblyBuilt_WhenTheBuildHasErrors_PublishesNothing()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            fixture.BuildFails = true;
+            fixture.SynchronizeSource(WorkerSourceA);
+
+            WorkerAssemblyEnsureResult result = await fixture.EnsureAsync(WorkerSourceA);
+
+            Assert.That(result.Result.IsReady, Is.False);
+            Assert.That(result.Result.FailureReason, Is.EqualTo("worker_build_failed"));
+            Assert.That(result.AssemblySource, Is.Empty);
+            Assert.That(result.Publish.Kind, Is.EqualTo(CachePublishKind.NotAttempted));
+            Assert.That(File.Exists(fixture.WorkerPaths.AssemblyPath), Is.False);
+            Assert.That(
+                !Directory.Exists(fixture.CacheRoot) || Directory.GetFileSystemEntries(fixture.CacheRoot).Length == 0,
+                Is.True,
+                "A failed build must not create a cache entry.");
+        }
+
+        /// <summary>
+        /// Verifies that shutdown deletes the per-process worker directory but keeps the cached assembly.
+        /// </summary>
+        [Test]
+        public async Task Shutdown_DeletesTheWorkerDirectoryAndKeepsTheCache()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            fixture.SynchronizeSource(WorkerSourceA);
+            await fixture.EnsureAsync(WorkerSourceA);
+
+            fixture.Session.Shutdown(fixture.WorkerPaths.DirectoryPath);
+
+            Assert.That(Directory.Exists(fixture.WorkerPaths.DirectoryPath), Is.False);
+            Assert.That(File.Exists(fixture.ResolveCachedAssemblyPath(WorkerSourceA)), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that a cache that cannot be written still lets the worker start with the assembly it built,
+        /// and that the failure is reported in the publish outcome.
+        /// </summary>
+        [Test]
+        public async Task EnsureWorkerAssemblyBuilt_WhenTheCachePublishFails_IsStillReady()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            string blockingFile = Path.Combine(fixture.WorkerPaths.DirectoryPath, "cache-root-is-a-file");
+            File.WriteAllText(blockingFile, "not a directory");
+            Func<string> previousResolver = fixture.Session.SwapWorkerAssemblyCacheRootForTests(() => blockingFile);
+            try
+            {
+                fixture.SynchronizeSource(WorkerSourceA);
+
+                WorkerAssemblyEnsureResult result = await fixture.EnsureAsync(WorkerSourceA);
+
+                Assert.That(fixture.BuildCount, Is.EqualTo(1));
+                Assert.That(result.Result.IsReady, Is.True);
+                Assert.That(result.AssemblySource, Is.EqualTo("built"));
+                Assert.That(result.Publish.Kind, Is.EqualTo(CachePublishKind.Failed));
+                Assert.That(result.Publish.Error, Is.Not.Empty);
+                Assert.That(File.Exists(fixture.WorkerPaths.AssemblyPath), Is.True);
+            }
+            finally
+            {
+                fixture.Session.SwapWorkerAssemblyCacheRootForTests(previousResolver);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that an assembly already in the worker directory is used as is: no build, and the
+        /// cache is neither read nor written, because nothing checked where that assembly came from.
+        /// </summary>
+        [Test]
+        public async Task EnsureWorkerAssemblyBuilt_WhenTheWorkerAssemblyExists_DoesNotTouchTheCache()
+        {
+            using WorkerAssemblyEnsureFixture fixture = new();
+            fixture.SynchronizeSource(WorkerSourceA);
+            File.WriteAllBytes(fixture.WorkerPaths.AssemblyPath, new byte[] { 0x4D, 0x5A, 0x07 });
+
+            WorkerAssemblyEnsureResult result = await fixture.EnsureAsync(WorkerSourceA);
+
+            Assert.That(fixture.BuildCount, Is.EqualTo(0));
+            Assert.That(result.AssemblySource, Is.EqualTo("existing"));
+            Assert.That(result.Publish.Kind, Is.EqualTo(CachePublishKind.NotAttempted));
+            Assert.That(Directory.Exists(fixture.CacheRoot), Is.False);
+        }
+
+        /// <summary>
+        /// A session with a fake csc, an empty test-owned cache, and a temp worker directory, for
+        /// driving the worker assembly ensure step directly.
+        /// </summary>
+        private sealed class WorkerAssemblyEnsureFixture : IDisposable
+        {
+            private readonly SharedRoslynCompilerWorkerCacheScope _cacheScope;
+            private readonly ExternalCompilerPaths _paths;
+
+            public SharedRoslynCompilerWorkerSession Session { get; }
+
+            public SharedRoslynCompilerWorkerHostProcess.WorkerPaths WorkerPaths { get; }
+
+            public int BuildCount { get; private set; }
+
+            public bool BuildFails { get; set; }
+
+            public string CacheRoot => _cacheScope.CacheRoot;
+
+            public WorkerAssemblyEnsureFixture()
+            {
+                _paths = ExternalCompilerPathResolver.Resolve();
+                Assert.That(_paths, Is.Not.Null, "Unity external compiler layout should be available.");
+                Session = new SharedRoslynCompilerWorkerSession();
+                _cacheScope = SharedRoslynCompilerWorkerCacheScope.ForSession(Session);
+                string workerDirectoryPath = Path.Combine(
+                    Path.GetTempPath(),
+                    "RoslynWorkerHostTests_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workerDirectoryPath);
+                WorkerPaths = new SharedRoslynCompilerWorkerHostProcess.WorkerPaths(
+                    workerDirectoryPath,
+                    Path.Combine(workerDirectoryPath, "RoslynCompilerWorker.cs"),
+                    Path.Combine(workerDirectoryPath, "RoslynCompilerWorker.dll"),
+                    Path.Combine(workerDirectoryPath, "RoslynCompilerWorker.rsp"));
+                Session.SwapWorkerAssemblyCompilerForTests(BuildWithFakeCompiler);
+            }
+
+            public void SynchronizeSource(string workerSource)
+            {
+                SharedRoslynCompilerWorkerHostProcess.SynchronizeWorkerSource(WorkerPaths, workerSource);
+            }
+
+            public Task<WorkerAssemblyEnsureResult> EnsureAsync(string workerSource)
+            {
+                return SharedRoslynCompilerWorkerHostProcess.EnsureWorkerAssemblyBuiltAsync(
+                    Session,
+                    _paths,
+                    WorkerPaths,
+                    workerSource);
+            }
+
+            public string ResolveCachedAssemblyPath(string workerSource)
+            {
+                return SharedRoslynCompilerWorkerAssemblyCache.ResolveCachedAssemblyPath(
+                    CacheRoot,
+                    SharedRoslynCompilerWorkerAssemblyCache.ComputeCacheKey(workerSource, _paths));
+            }
+
+            public void Dispose()
+            {
+                _cacheScope.Dispose();
+                if (Directory.Exists(WorkerPaths.DirectoryPath))
+                {
+                    Directory.Delete(WorkerPaths.DirectoryPath, true);
+                }
+            }
+
+            private CompilerMessage[] BuildWithFakeCompiler(
+                ExternalCompilerPaths paths,
+                string sourcePath,
+                string assemblyPath,
+                string responseFilePath)
+            {
+                BuildCount++;
+                if (BuildFails)
+                {
+                    return new[]
+                    {
+                        new CompilerMessage
+                        {
+                            type = CompilerMessageType.Error,
+                            message = "synthetic worker build failure"
+                        }
+                    };
+                }
+
+                File.WriteAllBytes(assemblyPath, new byte[] { 0x4D, 0x5A, 0x01 });
+                return Array.Empty<CompilerMessage>();
+            }
         }
     }
 }

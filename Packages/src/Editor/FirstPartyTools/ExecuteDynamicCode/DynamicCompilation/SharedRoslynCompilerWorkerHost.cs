@@ -272,6 +272,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ServiceValue.SwapWorkerAssemblyCompilerForTests(compiler);
         }
 
+        internal static Func<string> SwapWorkerAssemblyCacheRootForTests(Func<string> resolver)
+        {
+            return ServiceValue.SwapWorkerAssemblyCacheRootForTests(resolver);
+        }
+
         private static void Shutdown()
         {
             ServiceValue.Shutdown(SharedRoslynCompilerWorkerHostProcess.GetWorkerDirectoryPath());

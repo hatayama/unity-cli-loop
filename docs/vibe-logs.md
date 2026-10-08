@@ -53,7 +53,11 @@ command ran against:
   the backend kind. `dynamic_code_shared_worker_started` appears whenever no live shared Roslyn
   worker could serve the compile and one had to be started, with its source sync, worker
   assembly check and process spawn; `ready` is false when the start failed (no worker
-  assembly, or the process did not start).
+  assembly, or the process did not start). `workerAssemblySource` says where the worker
+  assembly came from: `existing` (already in this Editor's worker directory), `cache` (copied
+  from `<OS temp>/UnityCliLoopCompilation/RoslynWorkerCache/<key>/`, keyed by the worker source
+  and the compiler paths), or `built` (csc ran); `cachePublish` and `cachePublishError` say
+  whether a built assembly was added to that cache.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.
