@@ -414,7 +414,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Every distinct document a sequence point refers to, in the order a walk over types,
         // methods and sequence points first meets them. Why not the PDB's document table: it
         // also lists files without a method body, which the walk this replaces never returned.
-        private static List<HotReloadPdbDocument> ReadDocuments(string dllPath, string pdbPath)
+        internal static List<HotReloadPdbDocument> ReadDocuments(string dllPath, string pdbPath)
         {
             using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);

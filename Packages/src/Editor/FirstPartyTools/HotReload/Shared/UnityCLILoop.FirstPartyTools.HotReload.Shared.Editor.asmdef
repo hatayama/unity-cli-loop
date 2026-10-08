@@ -15,7 +15,10 @@
     "precompiledReferences": [
         "Mono.Cecil.dll",
         "Mono.Cecil.Pdb.dll",
-        "Newtonsoft.Json.dll"
+        "Newtonsoft.Json.dll",
+        "UnityCliLoop.System.Collections.Immutable.dll",
+        "UnityCliLoop.System.Runtime.CompilerServices.Unsafe.dll",
+        "UnityCliLoop.System.Reflection.Metadata.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [],
