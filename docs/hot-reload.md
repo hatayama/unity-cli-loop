@@ -75,10 +75,14 @@ Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`,
 `Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/` (with a `source-stamps.txt` that
 records each copied source's length and write time, so a run after a domain reload tells an
-unchanged sibling by a stat instead of reading it), and
+unchanged sibling by a stat instead of reading it),
 `Library/UloopHotReload/PdbDocuments/fmt1/<assemblyName>.txt` (the documents the PDB's sequence
 points refer to, stamped with the dll's and the PDB's length and write time and the MVID, so the
-first run after a domain reload does not walk the PDB again while they still match).
+first run after a domain reload does not walk the PDB again while they still match), and
+`Library/UloopHotReload/ReferencedMethods/fmt1/<assemblyName>.txt` (the methods of other
+assemblies the dll's MemberRef table names, stamped with the dll's length, write time and MVID,
+so the first run after a domain reload does not read an assembly that names none of the edited
+methods).
 The shim compile references a fully publicized copy of the edited assembly, and of every other
 project assembly that grants the edited one its internals through `InternalsVisibleTo`. Any other
 project assembly is referenced through a `PublicizedExternalRefs` copy that keeps its top-level

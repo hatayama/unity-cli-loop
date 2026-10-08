@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 
 using NUnit.Framework;
@@ -33,13 +34,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossAssemblyGenericHost`1";
 
         private string _temporaryDirectory;
+        private string _persistenceDirectory;
 
         [SetUp]
         public void SetUp()
         {
+            // Why a directory per test: a set persisted by an earlier test or domain would let a new
+            // index answer without reading the dll and break every LoadCount expectation.
             _temporaryDirectory = Path.Combine(
                 Path.GetTempPath(),
                 "uloop-referenced-method-index-" + Guid.NewGuid().ToString("N"));
+            _persistenceDirectory = Path.Combine(_temporaryDirectory, "persisted");
         }
 
         [TearDown]
@@ -57,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_MethodOfAnotherAssemblyTheDllCalls_IsTrue()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
 
             bool mentioned = index.MentionsAny(
                 CrossDll(),
@@ -72,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_MethodNobodyCalls_IsFalse()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
 
             bool mentioned = index.MentionsAny(
                 CrossDll(),
@@ -87,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_CallThroughConstructedGenericType_IsFiledUnderTheOpenType()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
 
             bool mentioned = index.MentionsAny(
                 CrossDll(),
@@ -103,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_NestedTypeKey_UsesTheMetadataSeparator()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
             const string methodName = "CalledFromOtherAssembly";
 
             bool metadataSpelling = index.MentionsAny(
@@ -128,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_OwnMethodDefCallee_IsFalse()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
 
             // The cross assembly defines its own type with the fixture's full name, and its
             // CallSameFullNameTarget calls this method.
@@ -145,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_SameDllTwice_ReadsOnce()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
             string[] keys = { Key(TestAssemblyName(), CrossAssemblyTargetTypeMetadataName, "Called") };
 
             index.MentionsAny(CrossDll(), keys);
@@ -160,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void MentionsAny_DllWriteTimeChanged_ReadsAgain()
         {
-            HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
+            HotReloadReferencedMethodIndex index = NewIndex();
             string copy = CopyCrossDllToTemp();
             string[] keys = { Key(TestAssemblyName(), CrossAssemblyTargetTypeMetadataName, "Called") };
 
@@ -171,6 +176,226 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(first, Is.True);
             Assert.That(second, Is.True);
             Assert.That(index.LoadCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a new index on the same directory answers from the set the first index persisted,
+        /// without reading the dll.
+        /// </summary>
+        [Test]
+        public void MentionsAny_NewIndexOnTheSameDirectory_AnswersFromThePersistedFileWithoutReadingTheDll()
+        {
+            HotReloadReferencedMethodIndex first = NewIndex();
+            bool mentionedFirst = first.MentionsAny(CrossDll(), CalledKeys());
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentionedSecond = second.MentionsAny(CrossDll(), CalledKeys());
+
+            Assert.That(mentionedFirst, Is.True);
+            Assert.That(first.LoadCount, Is.EqualTo(1));
+            Assert.That(mentionedSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(0));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a dll written after its set was persisted makes a new index read the dll again and
+        /// persist the set under the new stamp.
+        /// </summary>
+        [Test]
+        public void MentionsAny_DllWriteTimeChangedAfterTheFileWasPersisted_ReadsTheDllAgainAndPersistsTheNewFile()
+        {
+            string copy = CopyCrossDllToTemp();
+            bool mentionedFirst = NewIndex().MentionsAny(copy, CalledKeys());
+            DateTime newWriteTime = File.GetLastWriteTimeUtc(copy).AddMinutes(1);
+            File.SetLastWriteTimeUtc(copy, newWriteTime);
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentionedSecond = second.MentionsAny(copy, CalledKeys());
+
+            string[] stampFields = File.ReadAllText(PersistedPath(copy)).Split('\n')[1].Split('\t');
+            Assert.That(mentionedFirst, Is.True);
+            Assert.That(mentionedSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+            Assert.That(
+                stampFields[1],
+                Is.EqualTo(File.GetLastWriteTimeUtc(copy).Ticks.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        /// <summary>
+        /// What: an empty persisted file is treated as missing: the dll is read and the set is
+        /// written again.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileEmpty_ReadsTheDll()
+        {
+            NewIndex().MentionsAny(CrossDll(), CalledKeys());
+            File.WriteAllBytes(PersistedPath(CrossDll()), Array.Empty<byte>());
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentioned = second.MentionsAny(CrossDll(), CalledKeys());
+
+            Assert.That(mentioned, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+            Assert.That(new FileInfo(PersistedPath(CrossDll())).Length, Is.GreaterThan(0));
+        }
+
+        /// <summary>
+        /// What: a persisted file that lost its last key line, while still claiming the original
+        /// count, is treated as missing.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileMissingItsLastLine_ReadsTheDll()
+        {
+            AssertRewrittenFileIsNotUsed(persisted =>
+            {
+                string withoutTrailingNewline = persisted.Substring(0, persisted.Length - 1);
+                return withoutTrailingNewline.Substring(0, withoutTrailingNewline.LastIndexOf('\n') + 1);
+            });
+        }
+
+        /// <summary>
+        /// What: a persisted file with one key line more than its count, still ending with a
+        /// newline, is treated as missing.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileWithAnExtraLine_ReadsTheDll()
+        {
+            AssertRewrittenFileIsNotUsed(persisted =>
+            {
+                string withoutTrailingNewline = persisted.Substring(0, persisted.Length - 1);
+                string lastLine = withoutTrailingNewline.Substring(withoutTrailingNewline.LastIndexOf('\n') + 1);
+                return persisted + lastLine + "\n";
+            });
+        }
+
+        /// <summary>
+        /// What: a persisted file whose stamp names another MVID is not used, because it was written
+        /// for another build of the dll.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileWithAnotherStamp_ReadsTheDll()
+        {
+            AssertRewrittenFileIsNotUsed(persisted =>
+            {
+                string[] lines = persisted.Split('\n');
+                string[] stampFields = lines[1].Split('\t');
+                stampFields[2] = Guid.NewGuid().ToString("N");
+                lines[1] = string.Join("\t", stampFields);
+                return string.Join("\n", lines);
+            });
+        }
+
+        /// <summary>
+        /// What: a persisted file with text after its last newline is treated as missing, although
+        /// splitting it still yields the expected number of parts.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileWithTextAfterTheLastNewline_ReadsTheDll()
+        {
+            AssertRewrittenFileIsNotUsed(persisted => persisted + "x");
+        }
+
+        /// <summary>
+        /// What: a persisted file whose line endings became CRLF (a Windows checkout tool or editor)
+        /// is still read instead of the dll.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileWithCarriageReturns_StillAnswersFromIt()
+        {
+            NewIndex().MentionsAny(CrossDll(), CalledKeys());
+            string persisted = File.ReadAllText(PersistedPath(CrossDll()));
+            File.WriteAllText(PersistedPath(CrossDll()), persisted.Replace("\n", "\r\n"));
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentioned = second.MentionsAny(CrossDll(), CalledKeys());
+
+            Assert.That(mentioned, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(0));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a persisted file with three known keys answers for both its first and its last key,
+        /// so a key loop that drops the first or the last line fails here instead of returning a
+        /// set that is one key short.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedFileWithThreeKeys_AnswersForTheFirstAndTheLastKey()
+        {
+            string firstKey = Key(TestAssemblyName(), CrossAssemblyGenericHostTypeMetadataName, "Target");
+            string middleKey = CalledKeys()[0];
+            string lastKey = Key(
+                TestAssemblyName(),
+                CrossAssemblyTargetTypeMetadataName + "/Nested",
+                "CalledFromOtherAssembly");
+            NewIndex().MentionsAny(CrossDll(), CalledKeys());
+            string[] lines = File.ReadAllText(PersistedPath(CrossDll())).Split('\n');
+            string[] stampFields = lines[1].Split('\t');
+            stampFields[3] = "3";
+            File.WriteAllText(
+                PersistedPath(CrossDll()),
+                lines[0] + "\n" + string.Join("\t", stampFields) + "\n"
+                + firstKey + "\n" + middleKey + "\n" + lastKey + "\n");
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentionsFirst = second.MentionsAny(CrossDll(), new[] { firstKey });
+            bool mentionsLast = second.MentionsAny(CrossDll(), new[] { lastKey });
+
+            Assert.That(mentionsFirst, Is.True);
+            Assert.That(mentionsLast, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(0));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: when the persisted set cannot be moved into place, the question throws after the
+        /// dll was read and no temp file is left behind.
+        /// </summary>
+        [Test]
+        public void MentionsAny_PersistedPathBlocked_ThrowsAndLeavesNoTempFile()
+        {
+            HotReloadReferencedMethodIndex index = NewIndex();
+            // Why a directory: File.Exists is false for it, so the write skips the delete and the move throws.
+            Directory.CreateDirectory(PersistedPath(CrossDll()));
+            TestDelegate mention = () => index.MentionsAny(CrossDll(), CalledKeys());
+
+            Assert.That(mention, Throws.Exception);
+            Assert.That(Directory.GetFiles(_persistenceDirectory, "*.tmp-*"), Is.Empty);
+            Assert.That(index.LoadCount, Is.EqualTo(1));
+        }
+
+        // Persists the set with one index, rewrites the file, and asserts that a new index reads the
+        // dll instead of answering from the rewritten file.
+        private void AssertRewrittenFileIsNotUsed(Func<string, string> rewrite)
+        {
+            bool mentionedFirst = NewIndex().MentionsAny(CrossDll(), CalledKeys());
+            string persisted = File.ReadAllText(PersistedPath(CrossDll()));
+            Assert.That(persisted, Does.EndWith("\n"));
+            File.WriteAllText(PersistedPath(CrossDll()), rewrite(persisted));
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            bool mentionedSecond = second.MentionsAny(CrossDll(), CalledKeys());
+
+            Assert.That(mentionedFirst, Is.True);
+            Assert.That(mentionedSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(0));
+        }
+
+        private HotReloadReferencedMethodIndex NewIndex()
+        {
+            return new HotReloadReferencedMethodIndex(_persistenceDirectory);
+        }
+
+        private string PersistedPath(string dllPath)
+        {
+            return Path.Combine(_persistenceDirectory, Path.GetFileNameWithoutExtension(dllPath) + ".txt");
+        }
+
+        private static string[] CalledKeys()
+        {
+            return new[] { Key(TestAssemblyName(), CrossAssemblyTargetTypeMetadataName, "Called") };
         }
 
         private static string Key(string assemblyName, string openDeclaringTypeFullName, string methodName)
