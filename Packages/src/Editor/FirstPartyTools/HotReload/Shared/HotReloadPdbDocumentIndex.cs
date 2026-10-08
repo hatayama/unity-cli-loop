@@ -96,11 +96,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why a shared instance: the snapshot loader is static and has static callers in
         // several assemblies, like the compiled call-site cache this mirrors.
-        public static HotReloadPdbDocumentIndex Shared { get; } = new HotReloadPdbDocumentIndex();
+        public static HotReloadPdbDocumentIndex Shared { get; } = new HotReloadPdbDocumentIndex(
+            Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                HotReloadConstants.PdbDocumentsRelativeDirectory));
 
         private readonly object _gate = new object();
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        private readonly string _persistenceDirectory;
         private int _loadCount;
+        private int _persistedLoadCount;
+
+        internal HotReloadPdbDocumentIndex(string persistenceDirectory)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(persistenceDirectory), "persistenceDirectory must not be null or empty.");
+            _persistenceDirectory = persistenceDirectory;
+        }
 
         /// <summary>
         /// Number of times a dll and its PDB were read and walked.
@@ -112,6 +123,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 lock (_gate)
                 {
                     return _loadCount;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Number of times a list was read from its persisted file instead of walking the PDB.
+        /// </summary>
+        internal int PersistedLoadCount
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _persistedLoadCount;
                 }
             }
         }

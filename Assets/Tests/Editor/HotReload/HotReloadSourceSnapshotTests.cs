@@ -82,17 +82,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TryFindDocument_ReturnsTheSameDocumentAsTheWalk()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
-
-            AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), FixtureProjectRelativePath);
-            AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), CoreFixtureProjectRelativePath);
-            AssertIndexFindsTheWalkedDocument(
-                index,
-                Path.Combine(
-                    projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                    PredefinedEditorAssemblyName + HotReloadConstants.CompiledAssemblyExtension),
-                PredefinedEditorFixtureProjectRelativePath);
+            string persistenceDirectory = Path.Combine(Path.GetTempPath(), "uloop-pdb-documents-" + Guid.NewGuid().ToString("N"));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex(persistenceDirectory);
+            try
+            {
+                AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), FixtureProjectRelativePath);
+                AssertIndexFindsTheWalkedDocument(index, TestAssemblyDllPath(projectRoot), CoreFixtureProjectRelativePath);
+                AssertIndexFindsTheWalkedDocument(
+                    index,
+                    Path.Combine(
+                        projectRoot,
+                        HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                        PredefinedEditorAssemblyName + HotReloadConstants.CompiledAssemblyExtension),
+                    PredefinedEditorFixtureProjectRelativePath);
+            }
+            finally
+            {
+                if (Directory.Exists(persistenceDirectory))
+                {
+                    Directory.Delete(persistenceDirectory, recursive: true);
+                }
+            }
         }
 
         private static void AssertIndexFindsTheWalkedDocument(
@@ -331,22 +341,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void LoadVerifiedSnapshotSourceAt_TwoFilesOfOneAssembly_ReadsThePdbOnce()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+            string persistenceDirectory = Path.Combine(Path.GetTempPath(), "uloop-pdb-documents-" + Guid.NewGuid().ToString("N"));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex(persistenceDirectory);
+            try
+            {
+                string first = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                    projectRoot,
+                    FixtureProjectRelativePath,
+                    TestAssemblyDllPath(projectRoot),
+                    index);
+                string second = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                    projectRoot,
+                    CoreFixtureProjectRelativePath,
+                    TestAssemblyDllPath(projectRoot),
+                    index);
 
-            string first = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
-                projectRoot,
-                FixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot),
-                index);
-            string second = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
-                projectRoot,
-                CoreFixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot),
-                index);
-
-            Assert.That(first, Is.Not.Null);
-            Assert.That(second, Is.Not.Null);
-            Assert.That(index.LoadCount, Is.EqualTo(1));
+                Assert.That(first, Is.Not.Null);
+                Assert.That(second, Is.Not.Null);
+                Assert.That(index.LoadCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                if (Directory.Exists(persistenceDirectory))
+                {
+                    Directory.Delete(persistenceDirectory, recursive: true);
+                }
+            }
         }
 
         /// <summary>
@@ -356,22 +376,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void DescribeSnapshotMissAt_AfterALoadThatFoundNoDocument_DoesNotReadThePdbAgain()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex();
+            string persistenceDirectory = Path.Combine(Path.GetTempPath(), "uloop-pdb-documents-" + Guid.NewGuid().ToString("N"));
+            HotReloadPdbDocumentIndex index = new HotReloadPdbDocumentIndex(persistenceDirectory);
+            try
+            {
+                string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
+                    projectRoot,
+                    BodylessFixtureProjectRelativePath,
+                    TestAssemblyDllPath(projectRoot),
+                    index);
+                HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
+                    projectRoot,
+                    BodylessFixtureProjectRelativePath,
+                    TestAssemblyDllPath(projectRoot),
+                    index);
 
-            string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSourceAt(
-                projectRoot,
-                BodylessFixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot),
-                index);
-            HotReloadSnapshotMissReason reason = HotReloadSourceBaseline.DescribeSnapshotMissAt(
-                projectRoot,
-                BodylessFixtureProjectRelativePath,
-                TestAssemblyDllPath(projectRoot),
-                index);
-
-            Assert.That(loaded, Is.Null);
-            Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
-            Assert.That(index.LoadCount, Is.EqualTo(1));
+                Assert.That(loaded, Is.Null);
+                Assert.That(reason, Is.EqualTo(HotReloadSnapshotMissReason.NoDocumentInPdb));
+                Assert.That(index.LoadCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                if (Directory.Exists(persistenceDirectory))
+                {
+                    Directory.Delete(persistenceDirectory, recursive: true);
+                }
+            }
         }
 
         private static string TestAssemblyDllPath(string projectRoot)

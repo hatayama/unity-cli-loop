@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -36,12 +37,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string PackageSourceAssetPath =
             "Packages/io.github.hatayama.uloopmcp/Runtime/PausePoints/UloopPausePoint.cs";
 
+        private string _persistenceDirectory;
         private HotReloadPdbDocumentIndex _index;
 
         [SetUp]
         public void SetUp()
         {
-            _index = new HotReloadPdbDocumentIndex();
+            // Why a directory per test: a list persisted by an earlier test or domain would let a
+            // new index answer without reading the PDB and break every LoadCount expectation.
+            _persistenceDirectory = Path.Combine(Path.GetTempPath(), "uloop-pdb-documents-" + Guid.NewGuid().ToString("N"));
+            _index = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (Directory.Exists(_persistenceDirectory))
+            {
+                Directory.Delete(_persistenceDirectory, recursive: true);
+            }
         }
 
         /// <summary>
@@ -242,18 +256,155 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 bool foundBefore = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
                 // Why a shorter file: the length alone makes the files differ from the ones the list
                 // was read from, even if the new write time lands on the same tick as the old one.
+                string persistedBefore = File.ReadAllText(PersistedListPath(dllPath));
                 File.WriteAllBytes(pdbPath, new byte[] { 0x6E, 0x6F, 0x74, 0x20, 0x61, 0x20, 0x70, 0x64, 0x62 });
                 TestDelegate findAgain = () => Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+                HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+                TestDelegate findWithNewIndex = () => Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
 
                 Assert.That(foundBefore, Is.True);
                 Assert.That(findAgain, Throws.Exception, "The list read before the PDB changed must not answer.");
                 Assert.That(findAgain, Throws.Exception, "No list may be stored for a PDB that could not be read.");
                 Assert.That(_index.LoadCount, Is.EqualTo(1));
+                Assert.That(
+                    File.ReadAllText(PersistedListPath(dllPath)),
+                    Is.EqualTo(persistedBefore),
+                    "A walk that threw must not rewrite the persisted list.");
+                Assert.That(findWithNewIndex, Throws.Exception, "The persisted list of the earlier files must not answer.");
             }
             finally
             {
                 Directory.Delete(Path.GetDirectoryName(dllPath), recursive: true);
             }
+        }
+
+        /// <summary>
+        /// What: a new index on the same directory answers from the list the first index persisted,
+        /// without reading the dll and the PDB, and the document it returns is the same.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_NewIndexOnTheSameDirectory_AnswersFromThePersistedListWithoutReadingThePdb()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument firstDocument);
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument secondDocument);
+
+            Assert.That(foundFirst, Is.True);
+            Assert.That(foundSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(0));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(1));
+            Assert.That(secondDocument.Url, Is.EqualTo(firstDocument.Url));
+            Assert.That(secondDocument.HashAlgorithm, Is.EqualTo(firstDocument.HashAlgorithm));
+            Assert.That(secondDocument.Hash.SequenceEqual(firstDocument.Hash), Is.True);
+        }
+
+        /// <summary>
+        /// What: a dll written after its list was persisted makes a new index read the PDB again and
+        /// persist the new list, which the next new index then reads.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_DllWriteTimeChangedAfterTheListWasPersisted_ReadsThePdbAgainAndPersistsTheNewList()
+        {
+            string dllPath = CopyAssemblyToTemp(TestAssemblyName);
+            try
+            {
+                bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+                File.SetLastWriteTimeUtc(dllPath, File.GetLastWriteTimeUtc(dllPath).AddSeconds(2));
+                HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+                bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+                HotReloadPdbDocumentIndex third = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+                bool foundThird = Find(third, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+                Assert.That(foundFirst, Is.True);
+                Assert.That(foundSecond, Is.True);
+                Assert.That(foundThird, Is.True);
+                Assert.That(second.LoadCount, Is.EqualTo(1));
+                Assert.That(second.PersistedLoadCount, Is.EqualTo(0));
+                Assert.That(third.LoadCount, Is.EqualTo(0));
+                Assert.That(third.PersistedLoadCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                Directory.Delete(Path.GetDirectoryName(dllPath), recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: an empty persisted file is treated as missing: the PDB is read and the list is
+        /// written again, so the next new index reads it from the file.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedFileEmpty_ReadsThePdbAndWritesTheListAgain()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+            File.WriteAllBytes(PersistedListPath(dllPath), Array.Empty<byte>());
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+            long rewrittenLength = new FileInfo(PersistedListPath(dllPath)).Length;
+            HotReloadPdbDocumentIndex third = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+            bool foundThird = Find(third, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(foundFirst, Is.True);
+            Assert.That(foundSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+            Assert.That(rewrittenLength, Is.GreaterThan(0));
+            Assert.That(foundThird, Is.True);
+            Assert.That(third.LoadCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a persisted file that lost its last document line, while still claiming the
+        /// original count, is treated as missing rather than answered from the remaining lines.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedFileMissingItsLastDocumentLine_ReadsThePdb()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+            string persisted = File.ReadAllText(PersistedListPath(dllPath));
+            string withoutTrailingNewline = persisted.Substring(0, persisted.Length - 1);
+            File.WriteAllText(
+                PersistedListPath(dllPath),
+                withoutTrailingNewline.Substring(0, withoutTrailingNewline.LastIndexOf('\n') + 1));
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(foundFirst, Is.True);
+            Assert.That(persisted, Does.EndWith("\n"));
+            Assert.That(foundSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a persisted file whose stamp names another dll length is not used, because it was
+        /// written for other files.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedFileWithAnotherStamp_ReadsThePdb()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+            string[] lines = File.ReadAllText(PersistedListPath(dllPath)).Split('\n');
+            string[] stampFields = lines[1].Split('\t');
+            stampFields[0] = (long.Parse(stampFields[0], CultureInfo.InvariantCulture) + 1).ToString(CultureInfo.InvariantCulture);
+            lines[1] = string.Join("\t", stampFields);
+            File.WriteAllText(PersistedListPath(dllPath), string.Join("\n", lines));
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(foundFirst, Is.True);
+            Assert.That(foundSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+        }
+
+        private string PersistedListPath(string dllPath)
+        {
+            return Path.Combine(_persistenceDirectory, Path.GetFileNameWithoutExtension(dllPath) + ".txt");
         }
 
         private static string ProjectRoot()
