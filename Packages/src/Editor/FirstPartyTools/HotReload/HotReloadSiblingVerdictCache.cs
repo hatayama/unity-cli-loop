@@ -15,6 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<(string snapshotPath, string sourcePath), Entry> _entries =
             new Dictionary<(string snapshotPath, string sourcePath), Entry>();
 
+        // Why a lock: the rebind planner compares on a thread-pool continuation while
+        // compilationStarted clears the memo on the main thread.
+        private readonly object _gate = new object();
+
         /// <summary>
         /// Returns true with the remembered verdict when the pair was recorded with the same stamp.
         /// </summary>
@@ -32,10 +36,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(snapshotPath), "snapshotPath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(sourcePath), "sourcePath must not be null or empty.");
 
-            if (!_entries.TryGetValue((snapshotPath, sourcePath), out Entry entry))
+            Entry entry;
+            lock (_gate)
             {
-                matchesSnapshot = false;
-                return false;
+                if (!_entries.TryGetValue((snapshotPath, sourcePath), out entry))
+                {
+                    matchesSnapshot = false;
+                    return false;
+                }
             }
 
             if (entry.Length != length || entry.LastWriteTimeUtcTicks != lastWriteTimeUtcTicks)
@@ -61,15 +69,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(snapshotPath), "snapshotPath must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(sourcePath), "sourcePath must not be null or empty.");
 
-            _entries[(snapshotPath, sourcePath)] = new Entry(length, lastWriteTimeUtcTicks, matchesSnapshot);
+            lock (_gate)
+            {
+                _entries[(snapshotPath, sourcePath)] = new Entry(length, lastWriteTimeUtcTicks, matchesSnapshot);
+            }
         }
 
         internal void Clear()
         {
-            _entries.Clear();
+            lock (_gate)
+            {
+                _entries.Clear();
+            }
         }
 
-        internal int Count => _entries.Count;
+        internal int Count
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _entries.Count;
+                }
+            }
+        }
 
         private readonly struct Entry
         {
