@@ -32,9 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CrossAssemblyGenericHostTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossAssemblyGenericHost`1";
 
-        private const string CrossAssemblyCallerTypeMetadataName =
-            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteCrossAssemblyCaller";
-
         private string _temporaryDirectory;
 
         [SetUp]
@@ -125,17 +122,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a dll's own method is not named, because its calls to it are MethodDef operands
-        /// with no MemberRef row.
+        /// What: a method of the dll's own module that the dll calls is not named, because that call
+        /// is a MethodDef operand with no MemberRef row.
         /// </summary>
         [Test]
-        public void MentionsAny_OwnMethod_IsFalse()
+        public void MentionsAny_OwnMethodDefCallee_IsFalse()
         {
             HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex();
 
+            // The cross assembly defines its own type with the fixture's full name, and its
+            // CallSameFullNameTarget calls this method.
             bool mentioned = index.MentionsAny(
                 CrossDll(),
-                new[] { Key(CrossAssemblyCallerAssemblyName, CrossAssemblyCallerTypeMetadataName, "Call") });
+                new[] { Key(CrossAssemblyCallerAssemblyName, FixtureTypeMetadataName, "CalledFromCrossAssembly") });
 
             Assert.That(mentioned, Is.False);
         }
