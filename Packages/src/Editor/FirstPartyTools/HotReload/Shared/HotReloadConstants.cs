@@ -49,6 +49,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // affect the on-disk layout. Adoption is decided at use time by PDB document checksum.
         public const string SourceSnapshotRelativeDirectory = "Library/UloopHotReload/SourceSnapshot";
 
+        // Per-assembly lists of the documents a PDB's sequence points refer to, keyed by the dll's
+        // file name and stamped with the dll's and the PDB's length, write time and MVID. Lets the
+        // first hot reload run after a domain reload skip the walk over every sequence point.
+        // "fmt1" = generation of the file format, bumped the same way as PublicizedRefs.
+        public const string PdbDocumentsRelativeDirectory = "Library/UloopHotReload/PdbDocuments/fmt1";
+
         // Package-relative directory of the out-of-process transform worker sources (tilde dir = Unity-ignored).
         public const string WorkerSourcePackageRelativePath =
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
