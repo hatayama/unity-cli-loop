@@ -73,7 +73,9 @@ Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/PublicizedExternalRefs/fmt1/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`,
-`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`, and
+`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/` (with a `source-stamps.txt` that
+records each copied source's length and write time, so a run after a domain reload tells an
+unchanged sibling by a stat instead of reading it), and
 `Library/UloopHotReload/PdbDocuments/fmt1/<assemblyName>.txt` (the documents the PDB's sequence
 points refer to, stamped with the dll's and the PDB's length and write time and the MVID, so the
 first run after a domain reload does not walk the PDB again while they still match).

@@ -49,6 +49,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // affect the on-disk layout. Adoption is decided at use time by PDB document checksum.
         public const string SourceSnapshotRelativeDirectory = "Library/UloopHotReload/SourceSnapshot";
 
+        // The file inside a snapshot directory that records each copied source's length and last
+        // write time (UTC ticks), so a later domain tells an unchanged source by its stat alone.
+        public const string SourceStampManifestFileName = "source-stamps.txt";
+        public const string SourceStampManifestHeader = "uloop-source-stamps 1";
+
         // Per-assembly lists of the documents a PDB's sequence points refer to, keyed by the dll's
         // file name and stamped with the dll's and the PDB's length, write time and MVID. Lets the
         // first hot reload run after a domain reload skip the walk over every sequence point.

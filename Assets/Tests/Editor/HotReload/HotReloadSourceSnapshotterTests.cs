@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -103,9 +104,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(File.Exists(firstSnapshot), Is.True);
             Assert.That(File.Exists(secondSnapshot), Is.True);
             Assert.That(Directory.Exists(snapshotDirectory + ".tmp"), Is.False);
-            Assert.That(Directory.GetFiles(snapshotDirectory).Length, Is.EqualTo(2));
+            Assert.That(Directory.GetFiles(snapshotDirectory).Length, Is.EqualTo(3));
             Assert.That(File.ReadAllBytes(firstSnapshot), Is.EqualTo(firstBytes));
             Assert.That(File.ReadAllBytes(secondSnapshot), Is.EqualTo(secondBytes));
+        }
+
+        /// <summary>
+        /// Verifies that the capture writes one manifest line with the length and last write time of each copied source, in the order of the source list, and no line for a listed source that does not exist.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblySourcesAtomically_RecordsTheLengthAndWriteTimeOfEachCopiedSource()
+        {
+            string sourceDirectory = Path.Combine(_tempRoot, "Sources");
+            Directory.CreateDirectory(sourceDirectory);
+            DateTime firstWriteTimeUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            DateTime secondWriteTimeUtc = firstWriteTimeUtc.AddDays(1);
+            WriteSourceAt(Path.Combine(sourceDirectory, "First.cs"), new byte[] { 1, 2, 3, 4, 5, 6, 7 }, firstWriteTimeUtc);
+            WriteSourceAt(Path.Combine(sourceDirectory, "Second.cs"), new byte[] { 1, 2 }, secondWriteTimeUtc);
+            string snapshotDirectory = Path.Combine(_tempRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
+            string[] sourceFiles = { "Sources/First.cs", "Sources\\Second.cs", "Sources/Missing.cs" };
+
+            HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                _tempRoot,
+                snapshotDirectory,
+                sourceFiles,
+                "Fixture");
+
+            string expected = HotReloadConstants.SourceStampManifestHeader + "\n"
+                + HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs\t7\t"
+                + firstWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) + "\n"
+                + HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Second.cs") + ".cs\t2\t"
+                + secondWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) + "\n";
+            Assert.That(
+                File.ReadAllText(Path.Combine(snapshotDirectory, HotReloadConstants.SourceStampManifestFileName)),
+                Is.EqualTo(expected));
+            Assert.That(Directory.Exists(snapshotDirectory + ".tmp"), Is.False);
         }
 
         /// <summary>
@@ -129,10 +162,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Fixture");
 
             string[] publishedNames = Directory.GetFiles(snapshotDirectory).Select(Path.GetFileName).ToArray();
+            // Why EquivalentTo: the order GetFiles lists files in depends on the file system.
             Assert.That(
                 publishedNames,
-                Is.EqualTo(new[] { HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Fresh.cs") + ".cs" }));
+                Is.EquivalentTo(new[]
+                {
+                    HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Fresh.cs") + ".cs",
+                    HotReloadConstants.SourceStampManifestFileName,
+                }));
             Assert.That(Directory.Exists(leftoverDirectory), Is.False);
+        }
+
+        // Why a write time the test chooses: SetLastWriteTimeUtc stores microseconds while
+        // LastWriteTimeUtc reports 100 ns ticks, so only a chosen value can be put back exactly.
+        private static void WriteSourceAt(string path, byte[] bytes, DateTime lastWriteTimeUtc)
+        {
+            File.WriteAllBytes(path, bytes);
+            File.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
+            Assert.That(
+                new FileInfo(path).LastWriteTimeUtc,
+                Is.EqualTo(lastWriteTimeUtc),
+                "The write time must be settable exactly, or the stamp the capture records is not the one the test chose.");
         }
     }
 }

@@ -183,17 +183,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            string snapshotPath = Path.Combine(
+            string snapshotDirectory = Path.Combine(
                 projectRoot,
                 HotReloadConstants.SourceSnapshotRelativeDirectory,
-                assemblySnapshotDirectoryName,
+                assemblySnapshotDirectoryName);
+            string snapshotPath = Path.Combine(
+                snapshotDirectory,
                 HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/')) + ".cs");
             if (!File.Exists(snapshotPath))
             {
                 return false;
             }
 
-            return MatchesSnapshot(source, snapshotPath);
+            return MatchesSnapshot(
+                source,
+                snapshotPath,
+                new Lazy<HotReloadSourceStampManifest>(() => HotReloadSourceStampManifest.Load(snapshotDirectory)));
         }
 
         private static HotReloadChangedSourceScanResult DetectChangedFromSnapshotDirectory(
@@ -211,6 +216,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadChangedSourceScanResult(false, new List<string>(), string.Empty);
             }
 
+            // Why lazily: a run whose verdicts all come from the per-domain memo never opens the
+            // manifest, and a run that needs it reads it once for every source.
+            Lazy<HotReloadSourceStampManifest> manifest = new Lazy<HotReloadSourceStampManifest>(
+                () => HotReloadSourceStampManifest.Load(snapshotDirectory));
             List<string> changedProjectRelativePaths = new List<string>();
             if (sourceFiles == null || sourceFiles.Length == 0)
             {
@@ -223,7 +232,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     projectRoot,
                     snapshotDirectory,
                     sourceFiles[index],
-                    excludedProjectRelativePaths);
+                    excludedProjectRelativePaths,
+                    manifest);
                 if (changedPath != null)
                 {
                     changedProjectRelativePaths.Add(changedPath);
@@ -237,7 +247,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string snapshotDirectory,
             string projectRelativeSourcePath,
-            IReadOnlyCollection<string> excludedProjectRelativePaths)
+            IReadOnlyCollection<string> excludedProjectRelativePaths,
+            Lazy<HotReloadSourceStampManifest> manifest)
         {
             if (string.IsNullOrEmpty(projectRelativeSourcePath))
             {
@@ -265,7 +276,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            if (MatchesSnapshot(source, snapshotPath))
+            if (MatchesSnapshot(source, snapshotPath, manifest))
             {
                 return null;
             }
@@ -274,9 +285,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return normalizedRelativePath;
         }
 
-        // Compares an existing source with an existing snapshot file, reusing the last verdict while
-        // the source keeps its length and write time.
-        private static bool MatchesSnapshot(FileInfo source, string snapshotPath)
+        // Compares an existing source with an existing snapshot file: reuses the last verdict while
+        // the source keeps its length and write time, then trusts the stamp the capture recorded
+        // for the same length and write time, and only then reads both files.
+        private static bool MatchesSnapshot(
+            FileInfo source,
+            string snapshotPath,
+            Lazy<HotReloadSourceStampManifest> manifest)
         {
             long lastWriteTimeUtcTicks = source.LastWriteTimeUtc.Ticks;
             if (_verdicts.TryGetVerdict(
@@ -289,11 +304,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return matches;
             }
 
-            bool equal = BytesEqual(File.ReadAllBytes(source.FullName), File.ReadAllBytes(snapshotPath));
+            bool equal = HasRecordedStamp(manifest.Value, snapshotPath, source.Length, lastWriteTimeUtcTicks)
+                || BytesEqual(File.ReadAllBytes(source.FullName), File.ReadAllBytes(snapshotPath));
             // Why the stamp taken before reading: a write during the read moves the stamp on, so the
             // next scan reads the file again instead of trusting this verdict.
             _verdicts.Record(snapshotPath, source.FullName, source.Length, lastWriteTimeUtcTicks, equal);
             return equal;
+        }
+
+        // Why a stamp stands for the bytes: the capture recorded it from the same stat the copy was
+        // taken under, so a source that still shows it holds the copied bytes (the same proof the
+        // per-domain memo relies on), and the two reads can be skipped.
+        private static bool HasRecordedStamp(
+            HotReloadSourceStampManifest manifest,
+            string snapshotPath,
+            long length,
+            long lastWriteTimeUtcTicks)
+        {
+            return manifest.TryGetStamp(
+                    Path.GetFileName(snapshotPath),
+                    out long recordedLength,
+                    out long recordedTicks)
+                && recordedLength == length
+                && recordedTicks == lastWriteTimeUtcTicks;
         }
 
         private static HotReloadChangedSourceScanResult LimitChangedSources(

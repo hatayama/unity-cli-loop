@@ -218,15 +218,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Directory.CreateDirectory(temporaryDirectory);
             int skippedSourceCount = 0;
             string firstSkippedSourcePath = null;
+            List<string> manifestLines = new List<string>(sourceFiles.Length);
             foreach (string projectRelativeSourcePath in sourceFiles)
             {
-                if (!CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath))
+                if (!CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath, manifestLines))
                 {
                     skippedSourceCount++;
                     firstSkippedSourcePath ??= projectRelativeSourcePath;
                 }
             }
 
+            HotReloadSourceStampManifest.Write(temporaryDirectory, manifestLines);
             Directory.Move(temporaryDirectory, assemblySnapshotDirectory);
             if (skippedSourceCount > 0)
             {
@@ -239,22 +241,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool CopySourceFileByteExact(
             string projectRoot,
             string assemblySnapshotDirectory,
-            string projectRelativeSourcePath)
+            string projectRelativeSourcePath,
+            List<string> manifestLines)
         {
             string normalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
             string absoluteSourcePath = Path.Combine(projectRoot, normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar));
             string fileSystemSourcePath = HotReloadFileSystemPath.GetFileSystemPath(absoluteSourcePath);
-            if (!File.Exists(fileSystemSourcePath))
+            FileInfo sourceBefore = new FileInfo(fileSystemSourcePath);
+            if (!sourceBefore.Exists)
             {
                 return true;
             }
 
+            long length = sourceBefore.Length;
+            long lastWriteTimeUtcTicks = sourceBefore.LastWriteTimeUtc.Ticks;
             try
             {
                 string snapshotFileName = HashProjectRelativePath(normalizedRelativePath) + ".cs";
                 string destinationPath = Path.Combine(assemblySnapshotDirectory, snapshotFileName);
                 byte[] bytes = File.ReadAllBytes(fileSystemSourcePath);
                 File.WriteAllBytes(destinationPath, bytes);
+                // Why the stamp is taken before the read and checked again after it: a write during the
+                // read moves the stamp on, and a stamp recorded then could vouch for bytes the copy does
+                // not hold. Such a source gets no line and is compared by bytes until the next capture.
+                FileInfo sourceAfter = new FileInfo(fileSystemSourcePath);
+                if (sourceAfter.Exists
+                    && sourceAfter.Length == length
+                    && sourceAfter.LastWriteTimeUtc.Ticks == lastWriteTimeUtcTicks)
+                {
+                    manifestLines.Add(HotReloadSourceStampManifest.FormatLine(snapshotFileName, length, lastWriteTimeUtcTicks));
+                }
+
                 return true;
             }
             catch (Exception ex) when (IsSkippableSourceReadException(ex))

@@ -348,10 +348,12 @@ line each. A file with a declaration that hot reload refused to introduce (its
 `Warnings` line says the type requires a compile) gets no such line, because that
 compile also establishes its baseline. This also holds for an existing file that
 gains such a declaration, for example a nested type or a delegate.
-Within one Editor session, a source compared with its baseline once is compared again
-only when its length or last write time changes; a rewrite that keeps both (for example
-a copy that preserves timestamps) is noticed only after the next domain reload, such as
-`uloop compile`. This applies wherever a source is compared with its baseline: finding
+A source whose length and last write time still equal those recorded when its baseline
+was captured is taken to match it without being read, in later Editor sessions as well; a
+rewrite that keeps both (for example a copy that preserves timestamps) is noticed only once
+its assembly compiles again, which captures the baseline anew. A baseline captured by an
+earlier package version carries no such record and is compared by bytes once per Editor
+session. This applies wherever a source is compared with its baseline: finding
 drifted siblings, deciding which live patches to re-apply after a skip, and selecting
 files when `--files` is omitted.
 
