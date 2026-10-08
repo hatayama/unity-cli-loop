@@ -160,6 +160,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a preload reads the dll once, and a question afterwards is answered without reading it again.
+        /// </summary>
+        [Test]
+        public void Preload_ReadsTheDllOnce_AndMentionsAnyAfterwardsReadsNothing()
+        {
+            HotReloadReferencedMethodIndex index = NewIndex();
+
+            index.Preload(CrossDll());
+            int afterPreload = index.LoadCount;
+            bool mentioned = index.MentionsAny(CrossDll(), CalledKeys());
+
+            Assert.That(afterPreload, Is.EqualTo(1), "after preload");
+            Assert.That(index.LoadCount, Is.EqualTo(1), "after MentionsAny");
+            Assert.That(mentioned, Is.True, "mentioned");
+        }
+
+        /// <summary>
+        /// What: a preload with a persisted set on disk reads that file instead of the dll.
+        /// </summary>
+        [Test]
+        public void Preload_WithAPersistedSet_ReadsTheFileInsteadOfTheDll()
+        {
+            NewIndex().MentionsAny(CrossDll(), CalledKeys());
+            HotReloadReferencedMethodIndex second = NewIndex();
+
+            second.Preload(CrossDll());
+
+            Assert.That(second.LoadCount, Is.EqualTo(0), "dll reads");
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(1), "file reads");
+        }
+
+        /// <summary>
         /// What: a dll whose write time changed after it was read is read again.
         /// </summary>
         [Test]

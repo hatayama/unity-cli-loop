@@ -86,28 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             DllFingerprint fingerprint = HotReloadCompiledCallSiteCache.ReadFingerprint(fullPath);
             lock (_gate)
             {
-                if (!_entries.TryGetValue(fullPath, out Entry entry) || !entry.Fingerprint.Equals(fingerprint))
-                {
-                    // Why stored under the fingerprint read before the table: a dll replaced while
-                    // it is read shows another fingerprint next time and is read again.
-                    string persistedPath = PersistedSetPath(fullPath);
-                    HashSet<string> referenced = TryReadPersistedSet(persistedPath, fingerprint);
-                    if (referenced != null)
-                    {
-                        _persistedLoadCount++;
-                    }
-                    else
-                    {
-                        // Why the read before any write: a read that throws leaves no entry and no file.
-                        referenced = ReadReferencedMethodKeys(fullPath);
-                        _loadCount++;
-                        WritePersistedSet(persistedPath, fingerprint, referenced);
-                    }
-
-                    entry = new Entry(fingerprint, referenced);
-                    _entries[fullPath] = entry;
-                }
-
+                Entry entry = EnsureEntryLocked(fullPath, fingerprint);
                 foreach (string key in keys)
                 {
                     if (entry.Keys.Contains(key))
@@ -118,6 +97,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Reads the dll's set now so that a later MentionsAny in this domain reads nothing. The
+        /// file must exist.
+        /// </summary>
+        internal void Preload(string dllPath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(dllPath), "dllPath must not be null or empty.");
+
+            string fullPath = Path.GetFullPath(dllPath);
+            DllFingerprint fingerprint = HotReloadCompiledCallSiteCache.ReadFingerprint(fullPath);
+            lock (_gate)
+            {
+                EnsureEntryLocked(fullPath, fingerprint);
+            }
+        }
+
+        private Entry EnsureEntryLocked(string fullPath, DllFingerprint fingerprint)
+        {
+            if (_entries.TryGetValue(fullPath, out Entry entry) && entry.Fingerprint.Equals(fingerprint))
+            {
+                return entry;
+            }
+
+            // Why stored under the fingerprint read before the table: a dll replaced while
+            // it is read shows another fingerprint next time and is read again.
+            string persistedPath = PersistedSetPath(fullPath);
+            HashSet<string> referenced = TryReadPersistedSet(persistedPath, fingerprint);
+            if (referenced != null)
+            {
+                _persistedLoadCount++;
+            }
+            else
+            {
+                // Why the read before any write: a read that throws leaves no entry and no file.
+                referenced = ReadReferencedMethodKeys(fullPath);
+                _loadCount++;
+                WritePersistedSet(persistedPath, fingerprint, referenced);
+            }
+
+            entry = new Entry(fingerprint, referenced);
+            _entries[fullPath] = entry;
+            return entry;
         }
 
         private string PersistedSetPath(string fullDllPath)

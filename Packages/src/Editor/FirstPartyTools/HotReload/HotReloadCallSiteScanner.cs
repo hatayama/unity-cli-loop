@@ -205,6 +205,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return scanNames;
         }
 
+        /// <summary>
+        /// The compiled dlls of the other assemblies that reference <paramref name="targetAssemblyName"/>,
+        /// the ones a caller scan of its methods would consult the referenced-method index for.
+        /// Only dlls that exist are returned. Main thread only: it reads the compilation pipeline.
+        /// </summary>
+        internal static IReadOnlyList<string> CollectReferencingDllPaths(string projectRoot, string targetAssemblyName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(targetAssemblyName), "targetAssemblyName must not be null or empty.");
+
+            HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal)
+            {
+                targetAssemblyName + HotReloadConstants.CompiledAssemblyExtension
+            };
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
+            List<string> dllPaths = new List<string>();
+            foreach (KeyValuePair<string, string[]> assembly in GetReferencedDllFileNamesByAssembly())
+            {
+                if (string.Equals(assembly.Key, targetAssemblyName, StringComparison.Ordinal)
+                    || !ReferencesAnyTargetDll(assembly.Value, targetDllFileNames))
+                {
+                    continue;
+                }
+
+                string dllPath = layout.DllPath(assembly.Key);
+                if (File.Exists(dllPath))
+                {
+                    dllPaths.Add(dllPath);
+                }
+            }
+
+            return dllPaths;
+        }
+
         // Why cache per domain: CompilationPipeline.GetAssemblies() costs ~40 ms on a project with
         // ~100 assemblies, and the reference graph can only change through an asmdef or package
         // change, which recompiles and reloads the domain (resetting this field).

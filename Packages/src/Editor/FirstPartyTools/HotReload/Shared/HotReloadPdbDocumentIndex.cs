@@ -177,33 +177,58 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FileStamp stamp = ReadStamp(fullDllPath, pdbPath, moduleVersionId);
             lock (_gate)
             {
-                if (!_entries.TryGetValue(fullDllPath, out Entry entry) || !entry.Stamp.Equals(stamp))
-                {
-                    string persistedPath = PersistedListPath(fullDllPath);
-                    List<HotReloadPdbDocument> documents = TryReadPersistedList(persistedPath, stamp);
-                    if (documents != null)
-                    {
-                        _persistedLoadCount++;
-                    }
-                    else
-                    {
-                        // Why the walk before any write: a walk that throws leaves no entry and no
-                        // file, so the next lookup reads the files again instead of answering from
-                        // a list of other files.
-                        documents = ReadDocuments(fullDllPath, pdbPath);
-                        _loadCount++;
-                        WritePersistedList(persistedPath, stamp, documents);
-                    }
-
-                    // Why stored under the stamp read before the walk: if a file is replaced while
-                    // it is being read, the next lookup sees another stamp and reads again, so a
-                    // list is never served for files it was not read from.
-                    entry = new Entry(stamp, documents);
-                    _entries[fullDllPath] = entry;
-                }
-
+                Entry entry = EnsureEntryLocked(fullDllPath, pdbPath, stamp);
                 return TryFind(entry.Documents, projectRelativePath, out document);
             }
+        }
+
+        /// <summary>
+        /// Reads the dll's document list now so that a later TryFindDocument in this domain reads
+        /// nothing. Takes the same paths and MVID as TryFindDocument.
+        /// </summary>
+        internal void Preload(string dllPath, string pdbPath, string moduleVersionId)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(dllPath), "dllPath must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(pdbPath), "pdbPath must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(moduleVersionId), "moduleVersionId must not be null or empty.");
+
+            string fullDllPath = Path.GetFullPath(dllPath);
+            FileStamp stamp = ReadStamp(fullDllPath, pdbPath, moduleVersionId);
+            lock (_gate)
+            {
+                EnsureEntryLocked(fullDllPath, pdbPath, stamp);
+            }
+        }
+
+        private Entry EnsureEntryLocked(string fullDllPath, string pdbPath, FileStamp stamp)
+        {
+            if (_entries.TryGetValue(fullDllPath, out Entry entry) && entry.Stamp.Equals(stamp))
+            {
+                return entry;
+            }
+
+            string persistedPath = PersistedListPath(fullDllPath);
+            List<HotReloadPdbDocument> documents = TryReadPersistedList(persistedPath, stamp);
+            if (documents != null)
+            {
+                _persistedLoadCount++;
+            }
+            else
+            {
+                // Why the walk before any write: a walk that throws leaves no entry and no
+                // file, so the next lookup reads the files again instead of answering from
+                // a list of other files.
+                documents = ReadDocuments(fullDllPath, pdbPath);
+                _loadCount++;
+                WritePersistedList(persistedPath, stamp, documents);
+            }
+
+            // Why stored under the stamp read before the walk: if a file is replaced while
+            // it is being read, the next lookup sees another stamp and reads again, so a
+            // list is never served for files it was not read from.
+            entry = new Entry(stamp, documents);
+            _entries[fullDllPath] = entry;
+            return entry;
         }
 
         private string PersistedListPath(string fullDllPath)

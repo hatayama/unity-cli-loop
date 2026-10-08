@@ -36,6 +36,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Path.GetFullPath(Path.Combine(Application.dataPath, "..")));
             }
 
+            // Why after the capture and the sweep: the first run of this domain reads the snapshot
+            // the capture writes, and the warm-up only reads what a run would read; neither must
+            // wait for the other to be scheduled.
+            void StartWarmUpOnFirstUpdateTick()
+            {
+                EditorApplication.update -= StartWarmUpOnFirstUpdateTick;
+                HotReloadCompositionRoot.Services.WarmUp.Start();
+            }
+
             // The services are rebuilt here rather than on first use because the introduced type
             // resolver subscribes to AppDomain.AssemblyResolve when it is built, and that
             // subscription is lost on every domain reload.
@@ -53,14 +62,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // argument, so they have to read whichever services are installed when they fire.
             HotReloadAutoRefreshHold.GetServices = () => HotReloadCompositionRoot.Services;
             HotReloadPlayModeEntryDropRecorder.GetServices = () => HotReloadCompositionRoot.Services;
+            HotReloadWarmUpEditorHooks.GetServices = () => HotReloadCompositionRoot.Services;
             HotReloadUnityMessageForwardingEditorHooks.GetForwarding =
                 () => HotReloadCompositionRoot.Services.UnityMessageForwarding;
             HotReloadWiredValueEditorHooks.GetPersistence =
                 () => HotReloadCompositionRoot.Services.WiredValuePersistence;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             EditorApplication.update += SweepArtifactsOnFirstUpdateTick;
+            EditorApplication.update += StartWarmUpOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
+            HotReloadWarmUpEditorHooks.Initialize();
             HotReloadUnityMessageForwardingEditorHooks.Initialize();
             HotReloadWiredValueEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();

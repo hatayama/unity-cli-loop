@@ -43,9 +43,13 @@ command ran against:
   `steps`, so `unaccountedMs` keeps its meaning. `hot_reload_worker_request_timing` (one per
   request to the transform worker, prepare and transform) has the gate wait, launch target
   resolution, input write, process spawn, response wait and output read, whether the request
-  started the worker, and the stages the worker timed itself (`workerSteps`).
-  `hot_reload_signature_gate_timing` and `hot_reload_shim_first_compile_timing` (one per group)
-  have the main-thread switches, the signature gate, the membership check and the shim compile.
+  started the worker, and the stages the worker timed itself (`workerSteps`; empty when no
+  output decided the request, such as a non-zero exit code, but kept for a request that fails on
+  parse errors). `hot_reload_signature_gate_timing` (one per group that reaches the signature
+  gate) has the main-thread switch and the gate. `hot_reload_shim_first_compile_timing` (one per
+  group whose first-pass shim is compiled; none when the gate's retry already compiled it, when
+  the membership check fails, or when there is no method to compile) has the main-thread switch,
+  the membership check and the shim compile.
   `hot_reload_shim_references_timing` (one per shim compile) has the resolver directories, the
   target's publicized copy, the artifact copies and the reference copies with their counts.
   `hot_reload_publicized_copy_written` appears only when a rewritten copy was written, with
@@ -58,6 +62,14 @@ command ran against:
   from `<OS temp>/UnityCliLoopCompilation/RoslynWorkerCache/<key>/`, keyed by the worker source
   and the compiler paths), or `built` (csc ran); `cachePublish` and `cachePublishError` say
   whether a built assembly was added to that cache.
+  After a domain reload, the warm-up writes one `hot_reload_warm_up_complete` with the target
+  assemblies, each item's `outcome` (`done`, `cancelled` or `failed`) and time, and `cancelledBy`
+  (`run`, `beforeAssemblyReload`, `compilationStarted`, or null), or one
+  `hot_reload_warm_up_skipped` with its `reason` (`no_targets`, `compiling`, `updating`,
+  `no_compiled_assembly`, `run_started_first`). `cancelled` covers both an item that never started
+  (`ms` 0) and one stopped between its units (one dll each) with units left, with the time it ran.
+  A run's `steps` have `warm_up_yield`, the time it waited for the unit in flight, and `warm_up_targets`, the time it took to record its
+  assemblies for the next warm-up.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.

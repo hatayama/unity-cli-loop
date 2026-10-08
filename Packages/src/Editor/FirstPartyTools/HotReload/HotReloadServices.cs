@@ -26,7 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadUnityMessageForwarding unityMessageForwarding,
             HotReloadWiredValuePersistence wiredValuePersistence,
             HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh,
-            HotReloadSourceSnapshotCapture sourceSnapshotCapture)
+            HotReloadSourceSnapshotCapture sourceSnapshotCapture,
+            HotReloadWarmUp warmUp)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
@@ -50,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 wiredValueRestoreRefresh != null, "wiredValueRestoreRefresh must not be null.");
             Debug.Assert(sourceSnapshotCapture != null, "sourceSnapshotCapture must not be null.");
+            Debug.Assert(warmUp != null, "warmUp must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
@@ -68,6 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WiredValuePersistence = wiredValuePersistence;
             WiredValueRestoreRefresh = wiredValueRestoreRefresh;
             SourceSnapshotCapture = sourceSnapshotCapture;
+            WarmUp = warmUp;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -124,6 +127,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadSourceSnapshotCapture SourceSnapshotCapture { get; }
 
         /// <summary>
+        /// Loads, once per domain, what the first run would otherwise load cold. Shared by every
+        /// copy below, so the run that yields to it and the Editor hooks that stop it see one warm-up.
+        /// </summary>
+        internal HotReloadWarmUp WarmUp { get; }
+
+        /// <summary>
         /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
         /// other collaborator — including the domain, so installing the copy neither takes the
         /// resolver over nor disposes anything when it is put back.
@@ -148,7 +157,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityMessageForwarding,
                 WiredValuePersistence,
                 WiredValueRestoreRefresh,
-                SourceSnapshotCapture);
+                SourceSnapshotCapture,
+                WarmUp);
         }
 
         /// <summary>
@@ -175,7 +185,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityMessageForwarding,
                 WiredValuePersistence,
                 WiredValueRestoreRefresh,
-                SourceSnapshotCapture);
+                SourceSnapshotCapture,
+                WarmUp);
         }
 
         /// <summary>
@@ -203,7 +214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityMessageForwarding,
                 WiredValuePersistence,
                 WiredValueRestoreRefresh,
-                sourceSnapshotCapture);
+                sourceSnapshotCapture,
+                WarmUp);
         }
     }
 }

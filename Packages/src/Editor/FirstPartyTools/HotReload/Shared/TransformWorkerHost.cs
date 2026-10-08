@@ -372,6 +372,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (HasRunLevelParseErrors(output))
             {
+                // Why kept on this failure: the worker ran its stages and wrote their times, and the
+                // failed result carries no output for the timing entry to read them from.
+                timing.RecordWorkerSteps(output.timings);
                 return TransformWorkerConversationOutcome.Final(TransformWorkerHostResult.Failure(
                     TransformWorkerHostResultKind.WorkerFailed,
                     string.Join("\n", output.parseErrors)));
@@ -390,6 +393,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "worker output carried " + fileRowCount + " file rows for " + expectedFileCount + " sources");
             }
 
+            timing.RecordWorkerSteps(output.timings);
             return TransformWorkerConversationOutcome.Final(TransformWorkerHostResult.Completed(output));
         }
 
@@ -521,8 +525,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 steps.Add(new { step = step.Key, ms = step.Value });
             }
 
-            // A failed request carries no output, and an older worker writes no timings.
-            TransformWorkerTimingStepDto[] workerSteps = result.Output?.timings ?? Array.Empty<TransformWorkerTimingStepDto>();
+            // Empty when no output decided the request, such as a non-zero exit code, and when an
+            // older worker writes no timings.
+            IReadOnlyList<TransformWorkerTimingStepDto> workerSteps = timing.WorkerSteps;
             VibeLogger.LogInfo(
                 HotReloadConstants.VibeLogWorkerRequestTiming,
                 "Resident transform worker request timing.",
