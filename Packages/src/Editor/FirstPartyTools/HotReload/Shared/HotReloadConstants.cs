@@ -60,6 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // "fmt1" = generation of the file format, bumped the same way as PublicizedRefs.
         public const string PdbDocumentsRelativeDirectory = "Library/UloopHotReload/PdbDocuments/fmt1";
 
+        // Per-assembly sets of the methods of other assemblies the dll's MemberRef table names, keyed
+        // by the dll's file name and stamped with its length, write time and MVID. Lets the first hot
+        // reload run after a domain reload skip reading assemblies that name none of the edited methods.
+        // "fmt1" = generation of the file format, bumped the same way as PublicizedRefs.
+        public const string ReferencedMethodsRelativeDirectory = "Library/UloopHotReload/ReferencedMethods/fmt1";
+
         // Package-relative directory of the out-of-process transform worker sources (tilde dir = Unity-ignored).
         public const string WorkerSourcePackageRelativePath =
             "Editor/FirstPartyTools/HotReload/TransformWorker~";

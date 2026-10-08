@@ -20,11 +20,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadReferencedMethodIndex
     {
-        public static HotReloadReferencedMethodIndex Shared { get; } = new HotReloadReferencedMethodIndex();
+        public static HotReloadReferencedMethodIndex Shared { get; } = new HotReloadReferencedMethodIndex(
+            Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                HotReloadConstants.ReferencedMethodsRelativeDirectory));
 
         private readonly object _gate = new object();
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        private readonly string _persistenceDirectory;
         private int _loadCount;
+
+        internal HotReloadReferencedMethodIndex(string persistenceDirectory)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(persistenceDirectory), "persistenceDirectory must not be null or empty.");
+            _persistenceDirectory = persistenceDirectory;
+        }
 
         /// <summary>Number of times a dll's MemberRef table was read.</summary>
         internal int LoadCount
@@ -36,6 +46,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return _loadCount;
                 }
             }
+        }
+
+        /// <summary>Red stub: nothing is persisted yet.</summary>
+        internal int PersistedLoadCount
+        {
+            get { return 0; }
         }
 
         /// <summary>Key of a method as the index files it; the scan builds the same key from a target.</summary>
