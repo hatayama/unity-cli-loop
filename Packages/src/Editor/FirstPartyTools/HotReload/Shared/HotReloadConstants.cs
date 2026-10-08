@@ -740,7 +740,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the main Editor's project: a Virtual Player loads the script assemblies of the main
         // project, so only a compile there reaches it.
         public const string VirtualPlayerRecommendedNextAction =
-            "This Editor is a Multiplayer Play Mode Virtual Player, which hot reload cannot patch. Run 'uloop compile' against the main Editor's project; the compiled result reaches this player. A patch applied in the main Editor does not.";
+            "This Editor is a Multiplayer Play Mode Virtual Player and reads the compiled assemblies of the main Editor's project. Run 'uloop compile' against the main Editor's project; the compiled result reaches this player. Then rerun hot reload with this player's project path. A patch applied to the main Editor does not reach this player.";
 
         public const string CompiledAssemblyMissingRecommendedNextAction =
             "The compiled assembly for the file is missing, so there is nothing to fix in the source: run 'uloop compile'.";

@@ -25,13 +25,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     isVirtualPlayer: false);
             }
 
-            // Why a different reason: a Virtual Player has no compiled assemblies under its own
-            // root, so "compile first" gives the same answer however many times it is followed.
+            // Why a different reason: a Virtual Player cannot compile its own assemblies, so only a
+            // compile of the main Editor's project puts the missing assembly where it reads from.
             return HotReloadFailureDescription.CompiledAssemblyMissing(
                 "Compiled assembly not found at '" + dllPath + "'. This Editor is a Multiplayer Play Mode "
-                + "Virtual Player: it loads the script assemblies of the main Editor's project, so hot reload "
-                + "cannot patch it yet. The edit reaches this player through a compile; a patch applied to the "
-                + "main Editor does not reach it.",
+                + "Virtual Player: it loads the script assemblies of the main Editor's project at '"
+                + layout.MainProjectRoot + "', and that project has not compiled this assembly yet. Compile the "
+                + "main Editor's project first; a patch applied to the main Editor does not reach this player.",
                 isVirtualPlayer: true);
         }
     }
