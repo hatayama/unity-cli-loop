@@ -113,7 +113,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames);
             }
 
-            HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets);
+            HashSet<string> targetAssemblyNames = CollectTargetAssemblyNames(targets);
+            HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets, targetAssemblyNames);
+            HashSet<string> targetKeys = CollectTargetKeys(targets);
+            List<string> skippedScanAssemblyNames = new List<string>();
             int examinedCallSiteCount = 0;
             CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
             foreach (string assemblyName in scanAssemblyNames)
@@ -129,19 +132,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // Why a target assembly is always walked: its own call sites are MethodDef operands
+                // with no MemberRef row, so the table cannot vouch for them.
+                if (!targetAssemblyNames.Contains(assemblyName)
+                    && !HotReloadReferencedMethodIndex.Shared.MentionsAny(dllPath, targetKeys))
+                {
+                    skippedScanAssemblyNames.Add(assemblyName);
+                    continue;
+                }
+
                 examinedCallSiteCount += CollectHitsFromAssembly(assemblyName, dllPath, targets, hits);
             }
 
-            return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames, examinedCallSiteCount);
+            return new HotReloadCallSiteScanResult(
+                hits,
+                missingScanAssemblyNames,
+                examinedCallSiteCount,
+                skippedScanAssemblyNames);
         }
 
-        private static HashSet<string> CollectScanAssemblyNames(CompiledMethodIdentity[] targets)
+        private static HashSet<string> CollectTargetAssemblyNames(CompiledMethodIdentity[] targets)
         {
             HashSet<string> targetAssemblyNames = new HashSet<string>(StringComparer.Ordinal);
-            HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (CompiledMethodIdentity target in targets)
             {
                 targetAssemblyNames.Add(target.AssemblyName);
+            }
+
+            return targetAssemblyNames;
+        }
+
+        // Keys the referenced-method index files a MemberRef row under. The type name is the
+        // metadata name (nested types joined with '/'), the spelling Cecil's FullName uses.
+        private static HashSet<string> CollectTargetKeys(CompiledMethodIdentity[] targets)
+        {
+            HashSet<string> targetKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CompiledMethodIdentity target in targets)
+            {
+                targetKeys.Add(HotReloadReferencedMethodIndex.BuildKey(
+                    target.AssemblyName,
+                    target.TypeMetadataName.Value,
+                    target.MethodName));
+            }
+
+            return targetKeys;
+        }
+
+        private static HashSet<string> CollectScanAssemblyNames(
+            CompiledMethodIdentity[] targets,
+            HashSet<string> targetAssemblyNames)
+        {
+            HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CompiledMethodIdentity target in targets)
+            {
                 targetDllFileNames.Add(target.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
             }
 

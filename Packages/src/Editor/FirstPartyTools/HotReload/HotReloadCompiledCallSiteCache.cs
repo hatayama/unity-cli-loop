@@ -458,7 +458,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             evicted.Dispose();
         }
 
-        private static DllFingerprint ReadFingerprint(string fullPath)
+        // The referenced-method index reads the same identity, so both caches agree on when a dll changed.
+        internal static DllFingerprint ReadFingerprint(string fullPath)
         {
             FileInfo fileInfo = new FileInfo(fullPath);
             return new DllFingerprint(
