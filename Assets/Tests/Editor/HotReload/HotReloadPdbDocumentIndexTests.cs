@@ -433,6 +433,107 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(second.LoadCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: a persisted file with one document line more than its count, still ending with a
+        /// newline, is treated as missing rather than answered from its first count lines.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedFileWithAnExtraDocumentLine_ReadsThePdb()
+        {
+            AssertRewrittenListIsNotUsed(persisted =>
+            {
+                string withoutTrailingNewline = persisted.Substring(0, persisted.Length - 1);
+                string lastLine = withoutTrailingNewline.Substring(withoutTrailingNewline.LastIndexOf('\n') + 1);
+                return persisted + lastLine + "\n";
+            });
+        }
+
+        /// <summary>
+        /// What: a persisted file with text after its last newline is treated as missing, although
+        /// splitting it still yields the expected number of parts.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedFileWithTextAfterTheLastNewline_ReadsThePdb()
+        {
+            AssertRewrittenListIsNotUsed(persisted => persisted + "garbage");
+        }
+
+        /// <summary>
+        /// What: a document line whose hash algorithm is not a defined value makes the file missing.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedDocumentLineWithAnUndefinedHashAlgorithm_ReadsThePdb()
+        {
+            AssertRewrittenListIsNotUsed(persisted => RewriteFirstDocumentField(persisted, 0, field => "9"));
+        }
+
+        /// <summary>
+        /// What: a document line whose hash has an odd number of hex digits makes the file missing
+        /// instead of answering with a hash one byte short.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedDocumentLineWithAnOddLengthHash_ReadsThePdb()
+        {
+            AssertRewrittenListIsNotUsed(persisted => RewriteFirstDocumentField(persisted, 1, field =>
+            {
+                Assert.That(field.Length, Is.GreaterThan(0), "Precondition: the first document must have a hash.");
+                return field.Substring(0, field.Length - 1);
+            }));
+        }
+
+        /// <summary>
+        /// What: when the persisted list cannot be moved into place, the lookup throws after the walk,
+        /// no temp file is left behind, and a later index writes the list once the path is free.
+        /// </summary>
+        [Test]
+        public void TryFindDocument_PersistedListPathBlocked_ThrowsAndLeavesNoTempFile()
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            string persistedPath = PersistedListPath(dllPath);
+            // Why a directory: File.Exists is false for it, so the write skips the delete and the move throws.
+            Directory.CreateDirectory(persistedPath);
+            TestDelegate find = () => Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(find, Throws.Exception);
+            Assert.That(Directory.GetFiles(_persistenceDirectory, "*.tmp-*"), Is.Empty);
+            Assert.That(_index.LoadCount, Is.EqualTo(1));
+
+            Directory.Delete(persistedPath);
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(foundSecond, Is.True);
+            Assert.That(File.Exists(persistedPath), Is.True);
+        }
+
+        // Persists the list with _index, rewrites the file, and asserts that a new index walks the
+        // PDB instead of answering from the rewritten file.
+        private void AssertRewrittenListIsNotUsed(Func<string, string> rewrite)
+        {
+            string dllPath = DllPath(TestAssemblyName);
+            bool foundFirst = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+            string persisted = File.ReadAllText(PersistedListPath(dllPath));
+            Assert.That(persisted, Does.EndWith("\n"));
+            File.WriteAllText(PersistedListPath(dllPath), rewrite(persisted));
+            HotReloadPdbDocumentIndex second = new HotReloadPdbDocumentIndex(_persistenceDirectory);
+
+            bool foundSecond = Find(second, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
+
+            Assert.That(foundFirst, Is.True);
+            Assert.That(foundSecond, Is.True);
+            Assert.That(second.LoadCount, Is.EqualTo(1));
+            Assert.That(second.PersistedLoadCount, Is.EqualTo(0));
+        }
+
+        private static string RewriteFirstDocumentField(string persisted, int fieldIndex, Func<string, string> rewrite)
+        {
+            string[] lines = persisted.Split('\n');
+            string[] fields = lines[2].Split(new[] { '\t' }, 3);
+            fields[fieldIndex] = rewrite(fields[fieldIndex]);
+            lines[2] = string.Join("\t", fields);
+            return string.Join("\n", lines);
+        }
+
         private string PersistedListPath(string dllPath)
         {
             return Path.Combine(_persistenceDirectory, Path.GetFileNameWithoutExtension(dllPath) + ".txt");
