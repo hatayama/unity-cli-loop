@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text;
 
 using Mono.Cecil;
 
@@ -16,7 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// method reads and walks every assembly that references the method's assembly, although
     /// an assembly whose MemberRef table does not name the method cannot call it (a cross-assembly
     /// call site is a MemberRef row); the table is read in milliseconds, the walk in hundreds.
-    /// Kept while the dll's length, write time and MVID match, like the compiled call-site cache.
+    /// Kept while the dll's length, write time and MVID match, like the compiled call-site cache,
+    /// both in memory and in a file per dll so that a new domain does not read the dll again.
     /// </summary>
     internal sealed class HotReloadReferencedMethodIndex
     {
@@ -28,7 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly object _gate = new object();
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         private readonly string _persistenceDirectory;
+        private const string PersistedFormatHeader = "uloop-referenced-methods 1";
+
         private int _loadCount;
+        private int _persistedLoadCount;
 
         internal HotReloadReferencedMethodIndex(string persistenceDirectory)
         {
@@ -48,10 +54,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        /// <summary>Red stub: nothing is persisted yet.</summary>
+        /// <summary>Number of times a dll's set was read from its persisted file instead of the dll.</summary>
         internal int PersistedLoadCount
         {
-            get { return 0; }
+            get
+            {
+                lock (_gate)
+                {
+                    return _persistedLoadCount;
+                }
+            }
         }
 
         /// <summary>Key of a method as the index files it; the scan builds the same key from a target.</summary>
@@ -78,8 +90,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     // Why stored under the fingerprint read before the table: a dll replaced while
                     // it is read shows another fingerprint next time and is read again.
-                    HashSet<string> referenced = ReadReferencedMethodKeys(fullPath);
-                    _loadCount++;
+                    string persistedPath = PersistedSetPath(fullPath);
+                    HashSet<string> referenced = TryReadPersistedSet(persistedPath, fingerprint);
+                    if (referenced != null)
+                    {
+                        _persistedLoadCount++;
+                    }
+                    else
+                    {
+                        // Why the read before any write: a read that throws leaves no entry and no file.
+                        referenced = ReadReferencedMethodKeys(fullPath);
+                        _loadCount++;
+                        WritePersistedSet(persistedPath, fingerprint, referenced);
+                    }
+
                     entry = new Entry(fingerprint, referenced);
                     _entries[fullPath] = entry;
                 }
@@ -101,6 +125,116 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             lock (_gate)
             {
                 _entries.Clear();
+            }
+        }
+
+        private string PersistedSetPath(string fullDllPath)
+        {
+            return Path.Combine(_persistenceDirectory, Path.GetFileNameWithoutExtension(fullDllPath) + ".txt");
+        }
+
+        // File format: UTF-8 without a BOM, every line ends with "\n", fields are TAB-separated and
+        // numbers are invariant.
+        //   line 1: the format header
+        //   line 2: dll length, dll write time ticks, MVID ("N" format), count
+        //   then count lines: one key each
+        // Null for a missing file, another stamp, or any malformed part: a file cut short or edited
+        // by hand must not answer with part of a set, because a missing key would skip a caller.
+        private static HashSet<string> TryReadPersistedSet(string path, DllFingerprint fingerprint)
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            string[] lines = File.ReadAllText(path, Encoding.UTF8).Split('\n');
+            for (int index = 0; index < lines.Length; index++)
+            {
+                lines[index] = lines[index].TrimEnd('\r');
+            }
+
+            if (lines.Length < 3 || !string.Equals(lines[0], PersistedFormatHeader, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            if (!TryParseStampLine(lines[1], out DllFingerprint persisted, out int count)
+                || !persisted.Equals(fingerprint))
+            {
+                return null;
+            }
+
+            // The header, the stamp, count keys and the empty string after the last "\n".
+            if (lines.Length != 3 + count || lines[lines.Length - 1].Length != 0)
+            {
+                return null;
+            }
+
+            HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < count; index++)
+            {
+                string key = lines[2 + index];
+                if (key.Length == 0)
+                {
+                    return null;
+                }
+
+                keys.Add(key);
+            }
+
+            return keys;
+        }
+
+        private static bool TryParseStampLine(string line, out DllFingerprint fingerprint, out int count)
+        {
+            fingerprint = default;
+            count = 0;
+            string[] fields = line.Split('\t');
+            if (fields.Length != 4
+                || !long.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out long length)
+                || !long.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture, out long ticks)
+                || !Guid.TryParseExact(fields[2], "N", out Guid moduleVersionId)
+                || !int.TryParse(fields[3], NumberStyles.None, CultureInfo.InvariantCulture, out count))
+            {
+                return false;
+            }
+
+            fingerprint = new DllFingerprint(length, ticks, moduleVersionId);
+            return true;
+        }
+
+        private void WritePersistedSet(string path, DllFingerprint fingerprint, HashSet<string> keys)
+        {
+            Directory.CreateDirectory(_persistenceDirectory);
+            StringBuilder text = new StringBuilder();
+            text.Append(PersistedFormatHeader).Append('\n');
+            text.Append(fingerprint.Length.ToString(CultureInfo.InvariantCulture)).Append('\t')
+                .Append(fingerprint.LastWriteTimeUtcTicks.ToString(CultureInfo.InvariantCulture)).Append('\t')
+                .Append(fingerprint.ModuleVersionId.ToString("N")).Append('\t')
+                .Append(keys.Count.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            foreach (string key in keys)
+            {
+                text.Append(key).Append('\n');
+            }
+
+            // Why a temp file and a move: a reader in another domain never sees a half-written set.
+            string tempPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.WriteAllText(tempPath, text.ToString(), new UTF8Encoding(false));
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                File.Move(tempPath, path);
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
             }
         }
 
