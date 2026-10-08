@@ -661,6 +661,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogWorkerHostFallbackOneShot = "hot_reload_worker_fallback_one_shot";
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
+        public const string VibeLogWorkerRequestTiming = "hot_reload_worker_request_timing";
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
         public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
         public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";

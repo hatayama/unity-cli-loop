@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -111,20 +112,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // part of this request's latency, so a queued request must not be granted a fresh
             // response budget once it finally reaches the worker.
             Stopwatch deadline = Stopwatch.StartNew();
+            TransformWorkerRequestTiming timing = new TransformWorkerRequestTiming();
 
             // Why WaitAsync before the try: a cancel while queued must not release a gate this
             // request never acquired.
-            await _conversationGate.WaitAsync(ct).ConfigureAwait(false);
+            using (timing.Measure(TransformWorkerRequestTiming.GateWaitStep))
+            {
+                await _conversationGate.WaitAsync(ct).ConfigureAwait(false);
+            }
+
             try
             {
                 int generation = ReadGeneration();
-                TransformWorkerLaunchTarget target = await _resolveLaunchTarget(ct).ConfigureAwait(false);
-                if (!target.Success)
+                TransformWorkerLaunchTarget target;
+                using (timing.Measure(TransformWorkerRequestTiming.ResolveLaunchTargetStep))
                 {
-                    return TransformWorkerHostResult.Failure(TransformWorkerHostResultKind.BootstrapFailed, target.ErrorMessage);
+                    target = await _resolveLaunchTarget(ct).ConfigureAwait(false);
                 }
 
-                return await RunConversationsAsync(input, target, generation, deadline, ct).ConfigureAwait(false);
+                TransformWorkerHostResult result = target.Success
+                    ? await RunConversationsAsync(input, target, generation, deadline, timing, ct).ConfigureAwait(false)
+                    : TransformWorkerHostResult.Failure(TransformWorkerHostResultKind.BootstrapFailed, target.ErrorMessage);
+                LogRequestTiming(input, result, timing, deadline.ElapsedMilliseconds);
+                // Why one exit: results are built in many places, and attaching here gives every
+                // path a timing without touching each of them.
+                return result.WithTiming(timing);
             }
             finally
             {
@@ -169,11 +181,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerLaunchTarget target,
             int generation,
             Stopwatch deadline,
+            TransformWorkerRequestTiming timing,
             CancellationToken ct)
         {
             using (TransformWorkerRequestFiles requestFiles = new TransformWorkerRequestFiles())
             {
-                string inputJsonPath = requestFiles.WriteInputJson(input);
+                string inputJsonPath;
+                using (timing.Measure(TransformWorkerRequestTiming.WriteInputStep))
+                {
+                    inputJsonPath = requestFiles.WriteInputJson(input);
+                }
+
                 string outputJsonPath = requestFiles.OutputJsonPath;
                 string requestLine = TransformWorkerServeProtocol.EncodeRequestLine(inputJsonPath, outputJsonPath);
 
@@ -195,8 +213,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             + " ms before attempt " + attempt + " could start.");
                     }
 
+                    // Counted only here: a request that gave up before touching a process began none.
+                    timing.MarkAttempt();
                     TransformWorkerConversationOutcome outcome = await RunOneConversationAsync(
-                        target, requestLine, outputJsonPath, input.sources.Length, generation, deadline, ct).ConfigureAwait(false);
+                        target, requestLine, outputJsonPath, input.sources.Length, generation, deadline, timing, ct).ConfigureAwait(false);
                     if (outcome.Result != null)
                     {
                         return outcome.Result;
@@ -230,9 +250,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int expectedFileCount,
             int generation,
             Stopwatch deadline,
+            TransformWorkerRequestTiming timing,
             CancellationToken ct)
         {
-            ITransformWorkerChannel channel = EnsureChannel(target, generation, out string startFailure, out bool lifecycleClosed);
+            ITransformWorkerChannel channel = EnsureChannel(target, generation, timing, out string startFailure, out bool lifecycleClosed);
             if (channel == null)
             {
                 return lifecycleClosed
@@ -251,10 +272,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                channel.RequestWriter.WriteLine(requestLine);
-                channel.RequestWriter.Flush();
+                string header;
+                using (timing.Measure(TransformWorkerRequestTiming.ResponseWaitStep))
+                {
+                    channel.RequestWriter.WriteLine(requestLine);
+                    channel.RequestWriter.Flush();
+                    header = await ReadWithinDeadlineAsync(channel, deadline, ct).ConfigureAwait(false);
+                }
 
-                string header = await ReadWithinDeadlineAsync(channel, deadline, ct).ConfigureAwait(false);
+                // Why outside the measured scope: killing a hung process is not time spent waiting.
                 if (header == null)
                 {
                     return await HandleMissingLineAsync(channel, deadline, "response header").ConfigureAwait(false);
@@ -266,7 +292,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return TransformWorkerConversationOutcome.Broken("unrecognized response header: " + header);
                 }
 
-                string diagnosticsLine = await ReadWithinDeadlineAsync(channel, deadline, ct).ConfigureAwait(false);
+                string diagnosticsLine;
+                using (timing.Measure(TransformWorkerRequestTiming.ResponseWaitStep))
+                {
+                    diagnosticsLine = await ReadWithinDeadlineAsync(channel, deadline, ct).ConfigureAwait(false);
+                }
+
                 if (diagnosticsLine == null)
                 {
                     return await HandleMissingLineAsync(channel, deadline, "diagnostics line").ConfigureAwait(false);
@@ -285,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return TransformWorkerConversationOutcome.Final(LifecycleClosed("after receiving the response"));
                 }
 
-                return InterpretResponse(channel, exitCode, diagnostics, outputJsonPath, expectedFileCount);
+                return InterpretResponse(channel, exitCode, diagnostics, outputJsonPath, expectedFileCount, timing);
             }
             catch (IOException ex)
             {
@@ -311,7 +342,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int exitCode,
             string diagnostics,
             string outputJsonPath,
-            int expectedFileCount)
+            int expectedFileCount,
+            TransformWorkerRequestTiming timing)
         {
             if (exitCode != 0)
             {
@@ -323,7 +355,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "\nstderr:\n" + channel.ReadStandardErrorTail()));
             }
 
-            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryRead(outputJsonPath, out string readError);
+            TransformWorkerOutputDto output;
+            string readError;
+            using (timing.Measure(TransformWorkerRequestTiming.ReadOutputStep))
+            {
+                output = TransformWorkerOutputReader.TryRead(outputJsonPath, out readError);
+            }
+
             if (output == null)
             {
                 // Why broken and not WorkerFailed: exit 0 without a usable output file means the
@@ -400,6 +438,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private ITransformWorkerChannel EnsureChannel(
             TransformWorkerLaunchTarget target,
             int generation,
+            TransformWorkerRequestTiming timing,
             out string startFailure,
             out bool lifecycleClosed)
         {
@@ -424,7 +463,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _channelTermination.Terminate(stale);
             }
 
-            ITransformWorkerChannel started = _channelFactory(target.WorkerDirectory, target.DotnetHostPath);
+            ITransformWorkerChannel started;
+            // Only the spawn: the worker's start-up until it reads the request is in the response wait.
+            using (timing.Measure(TransformWorkerRequestTiming.ProcessStartStep))
+            {
+                started = _channelFactory(target.WorkerDirectory, target.DotnetHostPath);
+            }
+
             if (started == null)
             {
                 startFailure = "worker process could not be started from " + target.WorkerDirectory;
@@ -456,11 +501,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
+            timing.MarkWorkerStarted();
             VibeLogger.LogInfo(
                 restarted ? HotReloadConstants.VibeLogWorkerHostRestarted : HotReloadConstants.VibeLogWorkerHostStarted,
                 restarted ? "Resident transform worker restarted." : "Resident transform worker started.",
                 new { processId = started.Id, launchCount, workerDirectory = target.WorkerDirectory });
             return started;
+        }
+
+        private void LogRequestTiming(
+            TransformWorkerInputDto input,
+            TransformWorkerHostResult result,
+            TransformWorkerRequestTiming timing,
+            long totalMs)
+        {
+            List<object> steps = new List<object>(timing.Steps.Count);
+            foreach (KeyValuePair<string, long> step in timing.Steps)
+            {
+                steps.Add(new { step = step.Key, ms = step.Value });
+            }
+
+            // A failed request carries no output, and an older worker writes no timings.
+            TransformWorkerTimingStepDto[] workerSteps = result.Output?.timings ?? Array.Empty<TransformWorkerTimingStepDto>();
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogWorkerRequestTiming,
+                "Resident transform worker request timing.",
+                new
+                {
+                    operation = string.IsNullOrEmpty(input.operation) ? "transform" : input.operation,
+                    kind = result.Kind.ToString(),
+                    workerStarted = timing.WorkerStarted,
+                    attempts = timing.Attempts,
+                    launchCount = LaunchCount,
+                    totalMs,
+                    steps = steps.ToArray(),
+                    workerSteps
+                });
         }
 
         // Removes and terminates the channel only if it is still the current one; a concurrent
