@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadSnapshotAssemblyEnumerationTests
     {
         private const string SourceRelativePath = "Assets/Fixture.cs";
+        private static readonly DateTime CompileStartUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         private string _projectRoot;
         private string _snapshotRoot;
@@ -224,6 +225,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Directory.Delete(mainRoot, true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Verifies that the capture takes the recorded compile start as the start of the PDB check, so
+        /// a source saved after the compile started but before the DLL was written is checked and, with
+        /// no PDB document to confirm it, marked as edited after the compile.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblyIfNeeded_ASourceSavedAfterTheCompileStartedButBeforeTheDll_IsMarked()
+        {
+            string snapshotDirectory = CaptureWithSourceSavedBetweenStartAndDll(
+                HotReloadCompileStart.At(CompileStartUtc.Ticks));
+
+            HotReloadSourceStampManifest manifest = HotReloadSourceStampManifest.Load(snapshotDirectory);
+            Assert.That(manifest.IsEditedAfterCompile(SnapshotFileName()), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that without a recorded compile start the same source is not checked, because the
+        /// check then starts at the DLL write; the mark in the case above comes from the compile start.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblyIfNeeded_WithoutARecordedStart_LeavesASourceSavedBeforeTheDllUnmarked()
+        {
+            string snapshotDirectory = CaptureWithSourceSavedBetweenStartAndDll(HotReloadCompileStart.Unknown);
+
+            HotReloadSourceStampManifest manifest = HotReloadSourceStampManifest.Load(snapshotDirectory);
+            Assert.That(manifest.IsEditedAfterCompile(SnapshotFileName()), Is.False);
+            Assert.That(manifest.TryGetStamp(SnapshotFileName(), out long _, out long _), Is.True);
+        }
+
+        // Plants the compiled assembly and orders the write times as compile start < source < DLL.
+        // The fixture source has no document in the planted PDB, so a check cannot confirm it.
+        private string CaptureWithSourceSavedBetweenStartAndDll(HotReloadCompileStart compileStart)
+        {
+            string dllPath = PlantCompiledAssembly("Fixture");
+            File.SetLastWriteTimeUtc(dllPath, new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+            File.SetLastWriteTimeUtc(
+                Path.Combine(_projectRoot, "Assets", "Fixture.cs"),
+                new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+
+            HotReloadSourceSnapshotter.CaptureAssemblyIfNeeded(
+                _projectRoot,
+                _snapshotRoot,
+                CreateAssembly("Fixture"),
+                compileStart,
+                CreateDocumentIndex());
+
+            return Path.Combine(_snapshotRoot, "Fixture-" + mvid);
+        }
+
+        private static string SnapshotFileName()
+        {
+            return HotReloadSourceSnapshotter.HashProjectRelativePath(SourceRelativePath) + ".cs";
         }
 
         // Persists the PDB document lists under the temporary root, so a test never writes the
