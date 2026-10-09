@@ -10,9 +10,11 @@ release of each version tag. The `unity-package-sign` workflow produces that tar
 1. `release-please.yml` creates the `v<version>` release with `GITHUB_TOKEN`. That starts no
    release or tag-push workflow, so `unity-package-sign.yml` runs on `workflow_run` after every
    `release-please` run on `main` instead.
-2. The `plan` job runs `cli/release-automation/cmd/plan-unity-package-signing`. It signs only a
-   published release that has no non-empty `io.github.hatayama.uloopmcp-<version>.tgz` asset,
-   so most runs end here. A manual dry run signs any published release.
+2. The `plan` job runs `cli/release-automation/cmd/plan-unity-package-signing` on the commit the
+   triggering `release-please` run processed, not the newest `main` commit, so a release commit
+   that lands right after another cannot hide the earlier release. It signs only a published
+   release that has no non-empty `io.github.hatayama.uloopmcp-<version>.tgz` asset, so most runs
+   end here. A manual dry run signs any published release.
 3. The `sign` job checks out the release tag, installs the pinned UPM CLI, runs `upm pack`, and
    runs `cmd/stage-signed-unity-package`. Staging rejects a tarball without
    `package/.attestation.p7m`, with a different name or version, or missing any file of the

@@ -44,9 +44,14 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       asset-name: ${{ steps.plan.outputs.asset-name }}
     steps:
+      # A workflow_run job checks out the newest main commit by default. Reading
+      # the manifest there would let a later release commit hide the release the
+      # triggering release-please run just created, so the plan reads the commit
+      # that run processed.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
       - name: Setup Go
