@@ -94,10 +94,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Returns whether the snapshot file's line is marked as edited after the compile.
+        /// </summary>
+        internal bool IsEditedAfterCompile(string snapshotFileName)
+        {
+            return false;
+        }
+
+        /// <summary>
         /// Formats one manifest line. The file name is a hex hash plus ".cs", so it never holds a
         /// TAB or a line break.
         /// </summary>
-        internal static string FormatLine(string snapshotFileName, long length, long lastWriteTimeUtcTicks)
+        internal static string FormatLine(
+            string snapshotFileName,
+            long length,
+            long lastWriteTimeUtcTicks,
+            bool editedAfterCompile)
         {
             Debug.Assert(!string.IsNullOrEmpty(snapshotFileName), "snapshotFileName must not be null or empty.");
             Debug.Assert(length >= 0, "length must not be negative.");
@@ -105,7 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return snapshotFileName
                 + "\t" + length.ToString(CultureInfo.InvariantCulture)
-                + "\t" + lastWriteTimeUtcTicks.ToString(CultureInfo.InvariantCulture);
+                + "\t" + lastWriteTimeUtcTicks.ToString(CultureInfo.InvariantCulture)
+                + "\t" + (editedAfterCompile ? "1" : "0");
         }
 
         /// <summary>
@@ -137,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             fileName = null;
             stamp = default;
             string[] fields = line.Split('\t');
-            if (fields.Length != 3 || fields[0].Length == 0)
+            if (fields.Length != 4 || fields[0].Length == 0)
             {
                 return false;
             }

@@ -32,15 +32,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void CaptureAfterDomainReload()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            CaptureAssemblies(projectRoot, HotReloadCompilationAssemblies.Current());
+            CaptureAssemblies(
+                projectRoot,
+                HotReloadCompilationAssemblies.Current(),
+                HotReloadCompileStartRecord.Read(),
+                HotReloadPdbDocumentIndex.Shared);
         }
 
         // Why separate from CaptureAfterDomainReload: the project root and the compilation assemblies come
         // from Unity, so taking them as arguments lets tests drive the per-assembly loop in a temporary root.
-        internal static void CaptureAssemblies(string projectRoot, IEnumerable<UnityCompilationAssembly> assemblies)
+        internal static void CaptureAssemblies(
+            string projectRoot,
+            IEnumerable<UnityCompilationAssembly> assemblies,
+            HotReloadCompileStart compileStart,
+            HotReloadPdbDocumentIndex documentIndex)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(assemblies != null, "assemblies must not be null.");
+            Debug.Assert(documentIndex != null, "documentIndex must not be null.");
 
             string snapshotRoot = Path.Combine(projectRoot, HotReloadConstants.SourceSnapshotRelativeDirectory);
             Directory.CreateDirectory(snapshotRoot);
@@ -49,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 try
                 {
-                    CaptureAssemblyIfNeeded(projectRoot, snapshotRoot, assembly);
+                    CaptureAssemblyIfNeeded(projectRoot, snapshotRoot, assembly, compileStart, documentIndex);
                 }
                 catch (Exception ex) when (IsSkippableAssemblyCaptureException(ex))
                 {
@@ -75,7 +84,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void CaptureAssemblyIfNeeded(
             string projectRoot,
             string snapshotRoot,
-            UnityCompilationAssembly assembly)
+            UnityCompilationAssembly assembly,
+            HotReloadCompileStart compileStart,
+            HotReloadPdbDocumentIndex documentIndex)
         {
             string[] sourceFiles = assembly.sourceFiles;
             if (sourceFiles == null || sourceFiles.Length == 0)
@@ -115,11 +126,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblySnapshotDirectory = Path.Combine(snapshotRoot, assembly.name + "-" + mvid);
             if (!Directory.Exists(assemblySnapshotDirectory))
             {
+                HotReloadSnapshotSourceCheck check = new HotReloadSnapshotSourceCheck(
+                    compileStart.SuspectWritesFrom(dllMtimeTicks),
+                    dllPath,
+                    pdbPath,
+                    mvid,
+                    documentIndex);
                 CaptureAssemblySourcesAtomically(
                     projectRoot,
                     assemblySnapshotDirectory,
                     sourceFiles,
-                    assembly.name);
+                    assembly.name,
+                    check);
                 DeleteStaleSnapshotDirectories(snapshotRoot, assembly.name, assemblySnapshotDirectory);
             }
 
@@ -203,7 +221,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string assemblySnapshotDirectory,
             string[] sourceFiles,
-            string assemblyName)
+            string assemblyName,
+            HotReloadSnapshotSourceCheck check)
         {
             // Why temp + Move: Directory.Exists is the "complete" signal. Copying into the final
             // directory first would leave a partial tree on interrupt that later reloads treat as
@@ -221,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> manifestLines = new List<string>(sourceFiles.Length);
             foreach (string projectRelativeSourcePath in sourceFiles)
             {
-                if (!CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath, manifestLines))
+                if (!CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath, check, manifestLines))
                 {
                     skippedSourceCount++;
                     firstSkippedSourcePath ??= projectRelativeSourcePath;
@@ -242,6 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string assemblySnapshotDirectory,
             string projectRelativeSourcePath,
+            HotReloadSnapshotSourceCheck check,
             List<string> manifestLines)
         {
             string normalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
@@ -269,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     && sourceAfter.Length == length
                     && sourceAfter.LastWriteTimeUtc.Ticks == lastWriteTimeUtcTicks)
                 {
-                    manifestLines.Add(HotReloadSourceStampManifest.FormatLine(snapshotFileName, length, lastWriteTimeUtcTicks));
+                    manifestLines.Add(HotReloadSourceStampManifest.FormatLine(snapshotFileName, length, lastWriteTimeUtcTicks, false));
                 }
 
                 return true;
@@ -281,6 +301,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // invariant because PDB checksum validation rejects any missing baseline at use time.
                 return false;
             }
+        }
+
+        internal static HotReloadSnapshotCopyVerdict JudgeCopy(
+            bool stampHeldDuringRead,
+            long lastWriteTimeUtcTicks,
+            long suspectWritesFromUtcTicks,
+            Func<bool> copyIsCompiledSource)
+        {
+            return HotReloadSnapshotCopyVerdict.StampTrusted;
         }
 
         private static bool IsSkippableSourceReadException(Exception ex)

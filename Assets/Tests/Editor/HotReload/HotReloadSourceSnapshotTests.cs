@@ -480,6 +480,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
         }
 
+        // No source is written at or after the end of time, so the capture never reads a compiled assembly.
+        private static HotReloadSnapshotSourceCheck SuspectsNothing(string root)
+        {
+            return new HotReloadSnapshotSourceCheck(
+                DateTime.MaxValue.Ticks,
+                "unused.dll",
+                "unused.pdb",
+                "unused",
+                new HotReloadPdbDocumentIndex(Path.Combine(root, "PdbDocuments")));
+        }
+
         // Copies the fixture's real snapshot under a temporary root with its first byte flipped.
         private static string WriteTamperedSnapshotTree(string projectRoot, string dllPath)
         {
@@ -603,7 +614,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     root,
                     snapshotDirectory,
                     new[] { sourceRelativePath },
-                    "LongPathAssembly");
+                    "LongPathAssembly",
+                    SuspectsNothing(root));
 
                 string normalizedRelativePath = sourceRelativePath.Replace('\\', '/');
                 string snapshotPath = Path.Combine(
@@ -676,7 +688,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         root,
                         snapshotDirectory,
                         sourceRelativePaths,
-                        "LockedSourceAssembly");
+                        "LockedSourceAssembly",
+                        SuspectsNothing(root));
                 }
 
                 Assert.That(Directory.Exists(snapshotDirectory), Is.True);

@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The file inside a snapshot directory that records each copied source's length and last
         // write time (UTC ticks), so a later domain tells an unchanged source by its stat alone.
         public const string SourceStampManifestFileName = "source-stamps.txt";
-        public const string SourceStampManifestHeader = "uloop-source-stamps 1";
+        public const string SourceStampManifestHeader = "uloop-source-stamps 2";
 
         // Per-assembly lists of the documents a PDB's sequence points refer to, keyed by the dll's
         // file name and stamped with the dll's and the PDB's length, write time and MVID. Lets the
@@ -671,6 +671,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogShimFirstCompileTiming = "hot_reload_shim_first_compile_timing";
         public const string VibeLogShimReferencesTiming = "hot_reload_shim_references_timing";
         public const string VibeLogPublicizedCopyWritten = "hot_reload_publicized_copy_written";
+        public const string VibeLogSourceSnapshotChecked = "hot_reload_source_snapshot_checked";
         public const string VibeLogShimCompilerTiming = "hot_reload_shim_compiler_timing";
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
         public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
@@ -868,6 +869,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // reload does not forget them.
         public const string CompanionSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.companionSources";
+
+        // SessionState key for the time the latest compile started (UTC ticks). The snapshot capture
+        // checks sources written since then against the PDB. SessionState survives the compile's
+        // domain reload and is cleared when the Editor process exits.
+        public const string CompileStartedUtcTicksSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.compileStartedUtcTicks";
 
         // Format: remaining discarded identity count. Used only when --status active count is 0.
         public const string PlayModeEntryDropStatusMessageFormat =

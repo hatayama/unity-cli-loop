@@ -57,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 _tempRoot,
                 new[]
                 {
-                    HotReloadSourceStampManifest.FormatLine("a.cs", 7, FirstTicks),
-                    HotReloadSourceStampManifest.FormatLine("b.cs", 2, SecondTicks),
+                    HotReloadSourceStampManifest.FormatLine("a.cs", 7, FirstTicks, false),
+                    HotReloadSourceStampManifest.FormatLine("b.cs", 2, SecondTicks, false),
                 });
 
             HotReloadSourceStampManifest manifest = HotReloadSourceStampManifest.Load(_tempRoot);
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Load_WhenTheHeaderDiffers_IsEmpty()
         {
-            WriteRawManifest("uloop-source-stamps 2\n" + ValidLine() + "\n");
+            WriteRawManifest("uloop-source-stamps 99\n" + ValidLine() + "\n");
 
             AssertIgnoredAsAWhole();
         }
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Load_WhenALengthIsNotAnInteger_IsEmpty()
         {
-            WriteRawManifest(Header() + ValidLine() + "\n" + "a.cs\t7x\t1\n");
+            WriteRawManifest(Header() + ValidLine() + "\n" + "a.cs\t7x\t1\t0\n");
 
             AssertIgnoredAsAWhole();
         }
@@ -114,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Load_WhenAWriteTimeIsNegative_IsEmpty()
         {
-            WriteRawManifest(Header() + ValidLine() + "\n" + "a.cs\t7\t-1\n");
+            WriteRawManifest(Header() + ValidLine() + "\n" + "a.cs\t7\t-1\t0\n");
 
             AssertIgnoredAsAWhole();
         }
@@ -161,6 +161,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a line marked as edited after the compile reads back as marked and still
+        /// answers its stamp.
+        /// </summary>
+        [Test]
+        public void Load_ALineMarkedEditedAfterCompile_ReportsTheMarkAndKeepsTheStamp()
+        {
+            HotReloadSourceStampManifest.Write(
+                _tempRoot,
+                new[] { HotReloadSourceStampManifest.FormatLine("a.cs", 7, FirstTicks, true) });
+
+            HotReloadSourceStampManifest manifest = HotReloadSourceStampManifest.Load(_tempRoot);
+
+            Assert.That(manifest.IsEditedAfterCompile("a.cs"), Is.True);
+            Assert.That(manifest.TryGetStamp("a.cs", out long length, out long ticks), Is.True);
+            Assert.That(length, Is.EqualTo(7));
+            Assert.That(ticks, Is.EqualTo(FirstTicks));
+        }
+
+        /// <summary>
+        /// Verifies that a line written without the mark does not read back as edited after the compile.
+        /// </summary>
+        [Test]
+        public void Load_AnUnmarkedLine_IsNotEditedAfterCompile()
+        {
+            HotReloadSourceStampManifest.Write(
+                _tempRoot,
+                new[] { HotReloadSourceStampManifest.FormatLine("a.cs", 7, FirstTicks, false) });
+
+            HotReloadSourceStampManifest manifest = HotReloadSourceStampManifest.Load(_tempRoot);
+
+            Assert.That(manifest.IsEditedAfterCompile("a.cs"), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that a mark other than 0 or 1 makes the whole manifest ignored.
+        /// </summary>
+        [Test]
+        public void Load_WhenTheMarkIsNeitherZeroNorOne_AnswersEmpty()
+        {
+            WriteRawManifest(Header() + ValidLine() + "\n" + "a.cs\t7\t1\t2\n");
+
+            AssertIgnoredAsAWhole();
+        }
+
+        /// <summary>
+        /// Verifies that a line without the mark field, as the former format wrote, makes the whole
+        /// manifest ignored.
+        /// </summary>
+        [Test]
+        public void Load_ALineWithoutTheMark_AnswersEmpty()
+        {
+            WriteRawManifest(Header() + ValidLine() + "\n" + "a.cs\t7\t1\n");
+
+            AssertIgnoredAsAWhole();
+        }
+
+        /// <summary>
+        /// Verifies that a manifest under the former header is ignored, so its unmarked stamps are
+        /// not trusted.
+        /// </summary>
+        [Test]
+        public void Load_TheFormerHeader_AnswersEmpty()
+        {
+            WriteRawManifest("uloop-source-stamps 1\n" + ValidLine() + "\n");
+
+            AssertIgnoredAsAWhole();
+        }
+
+        /// <summary>
         /// Verifies that a file name the manifest has no line for answers no stamp.
         /// </summary>
         [Test]
@@ -182,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // instead of dropping the file would still answer this one, so the test tells them apart.
         private static string ValidLine()
         {
-            return HotReloadSourceStampManifest.FormatLine("b.cs", 2, SecondTicks);
+            return HotReloadSourceStampManifest.FormatLine("b.cs", 2, SecondTicks, false);
         }
 
         private void WriteRawManifest(string text)
