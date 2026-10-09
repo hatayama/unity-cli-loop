@@ -356,6 +356,9 @@ earlier package version carries no such record and is compared by bytes once per
 session. This applies wherever a source is compared with its baseline: finding
 drifted siblings, deciding which live patches to re-apply after a skip, and selecting
 files when `--files` is omitted.
+A file saved while the compile was running — after the compiler read it — is marked when
+the snapshot is captured: a run without `--files` selects it, and its methods are all
+patched with a warning, until the next compile.
 
 Property getters with a body (including expression-bodied properties) are patched
 like ordinary methods. Editing a compiled property's setter, init, or indexer accessor

@@ -54,7 +54,10 @@ command ran against:
   target's publicized copy, the artifact copies and the reference copies with their counts.
   `hot_reload_publicized_copy_written` appears only when a rewritten copy was written, with
   its rewrite and write time. The warm-up's `publicized_targets` item writes it too, before any
-  run. `hot_reload_shim_compiler_timing` has the compile, the load and
+  run. `hot_reload_source_snapshot_checked` appears when a capture checked sources written
+  since the compile started against the PDB: `suspect` sources checked, `editedAfterCompile`
+  of them marked as not the compiled source, and `checkMs`.
+  `hot_reload_shim_compiler_timing` has the compile, the load and
   the backend kind. `dynamic_code_shared_worker_started` appears whenever no live shared Roslyn
   worker could serve the compile and one had to be started, with its source sync, worker
   assembly check and process spawn; `ready` is false when the start failed (no worker
