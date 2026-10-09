@@ -656,6 +656,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // one reason. Points at Methods, which carries a row for every skipped method.
         public const string SkippedMethodsRemainderFormat = ", +{0} more (see Methods)";
 
+        // The operation of a transform worker request that prepares introduced types instead of
+        // transforming. The worker declares the same literal in its own sources.
+        public const string PrepareIntroducedTypesOperation = "prepareIntroducedTypes";
+
         public const string VibeLogWorkerHostStarted = "hot_reload_worker_started";
         public const string VibeLogWorkerHostRestarted = "hot_reload_worker_restarted";
         public const string VibeLogWorkerHostShutdown = "hot_reload_worker_shutdown";

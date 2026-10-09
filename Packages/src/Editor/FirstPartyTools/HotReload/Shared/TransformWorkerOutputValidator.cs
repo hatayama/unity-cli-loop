@@ -195,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerOutputDto output,
             out string errorMessage)
         {
-            if (!string.Equals(input.operation, "prepareIntroducedTypes", StringComparison.Ordinal))
+            if (!string.Equals(input.operation, HotReloadConstants.PrepareIntroducedTypesOperation, StringComparison.Ordinal))
             {
                 errorMessage = string.Empty;
                 return true;
