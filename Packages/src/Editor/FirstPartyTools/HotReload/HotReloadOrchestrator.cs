@@ -256,7 +256,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepCallerNotes))
             {
                 string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-                run.ApplyOneShotCallerNotes(projectRoot);
+                run.ApplyOneShotCallerNotes(projectRoot, correlationId);
             }
 
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))

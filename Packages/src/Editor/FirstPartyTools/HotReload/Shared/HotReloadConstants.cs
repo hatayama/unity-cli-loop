@@ -684,6 +684,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
         public const string VibeLogTimingDetail = "hot_reload_timing_detail";
         public const string VibeLogCallSiteCacheEvicted = "hot_reload_call_site_cache_evicted";
+        public const string VibeLogCallerNoteLoadBudgetExhausted = "hot_reload_caller_note_load_budget_exhausted";
         public const string VibeLogWarmUpComplete = "hot_reload_warm_up_complete";
         public const string VibeLogWarmUpSkipped = "hot_reload_warm_up_skipped";
         public const string VibeLogSourceSnapshotCaptured = "hot_reload_source_snapshot_captured";
@@ -892,6 +893,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "0 change(s) currently active. {0} change(s) were discarded by the domain reload when Play Mode was entered — hot-reloaded edits that were never compiled are not in effect. Re-apply 'uloop hot-reload', or edit the files and run 'uloop compile'.";
 
         public const int SiblingConstDriftScanFileLimit = 50;
+
+        // Why one: on the trial project one uncached dll costs about 0.5 s to read, and one is
+        // enough for a note whose callers sit in a single assembly the warm-up did not cache; the
+        // closure's deeper levels read several more and are not worth a cold run's time.
+        public const int CallerNoteUncachedDllLoadBudget = 1;
 
         // Format: scan file limit, total changed sibling count. Emitted when the scan
         // truncates so the cap is never silent.

@@ -37,16 +37,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             /// </summary>
             public List<string> SkippedScanAssemblyNames;
 
+            /// <summary>
+            /// Assemblies of the scan set that were not in the call-site cache and that the load
+            /// budget did not let this scan read; a result listing any is incomplete, like one with
+            /// a missing assembly.
+            /// </summary>
+            public List<string> UnreadScanAssemblyNames;
+
+            public bool IsIncomplete => MissingScanAssemblyNames.Count > 0 || UnreadScanAssemblyNames.Count > 0;
+
             public HotReloadCallSiteScanResult(
                 List<CallSiteHit> hits,
                 List<string> missingScanAssemblyNames,
                 int examinedCallSiteCount = 0,
-                List<string> skippedScanAssemblyNames = null)
+                List<string> skippedScanAssemblyNames = null,
+                List<string> unreadScanAssemblyNames = null)
             {
                 Hits = hits;
                 MissingScanAssemblyNames = missingScanAssemblyNames;
                 ExaminedCallSiteCount = examinedCallSiteCount;
                 SkippedScanAssemblyNames = skippedScanAssemblyNames ?? new List<string>();
+                UnreadScanAssemblyNames = unreadScanAssemblyNames ?? new List<string>();
             }
         }
 
@@ -98,10 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Finds compiled call / ldftn sites that reference any of <paramref name="targets"/>.
+        /// With a <paramref name="loadBudget"/>, assemblies that are not in the call-site cache are
+        /// read only while the budget has a load left; the rest are listed as unread. Null reads
+        /// without limit.
         /// </summary>
         public static HotReloadCallSiteScanResult FindCallSites(
             string projectRoot,
-            CompiledMethodIdentity[] targets)
+            CompiledMethodIdentity[] targets,
+            HotReloadCallSiteLoadBudget loadBudget = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(targets != null, "targets must not be null.");
