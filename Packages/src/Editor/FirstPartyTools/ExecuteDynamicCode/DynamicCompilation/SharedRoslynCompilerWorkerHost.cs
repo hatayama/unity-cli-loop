@@ -17,6 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class SharedRoslynCompilerWorkerHost
     {
         private const int SharedCompilerWorkerMaxAttempts = 2;
+        private const string WarmUpSourceFileName = "SharedWorkerWarmUp.cs";
+        private const string WarmUpAssemblyFileName = "SharedWorkerWarmUp.dll";
+        private const string WarmUpRequestFileName = "SharedWorkerWarmUp.worker";
+        private const string WarmUpSource = "internal sealed class UnityCliLoopSharedWorkerWarmUp { }";
 
         private static readonly SharedRoslynCompilerWorkerSession ServiceValue = new();
 
@@ -45,6 +49,107 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     markBuildFinished,
                     incrementBuildCount),
                 ct);
+        }
+
+        /// <summary>
+        /// Starts the shared worker when none runs and has it compile a tiny source against
+        /// <paramref name="references"/>, so a later compile finds the worker and those references
+        /// loaded. Any thread once the package path has been read on the main thread. Reports nothing
+        /// to the health monitor: a failure here is retried by the next real compile, which reports it.
+        /// </summary>
+        internal static Task<SharedWorkerWarmUpOutcome> WarmUpAsync(
+            IReadOnlyList<string> references,
+            ExternalCompilerPaths externalCompilerPaths)
+        {
+            return ServiceValue.RunSerializedCompileAsync(
+                _ => WarmUpInsideCompileGateAsync(references, externalCompilerPaths),
+                CancellationToken.None);
+        }
+
+        private static async Task<SharedWorkerWarmUpOutcome> WarmUpInsideCompileGateAsync(
+            IReadOnlyList<string> references,
+            ExternalCompilerPaths externalCompilerPaths)
+        {
+            int lifecycleGeneration = 0;
+            bool hasLiveProcess = false;
+            ServiceValue.ExecuteWithStateLock(() =>
+            {
+                lifecycleGeneration = ServiceValue.GetLifecycleGenerationLocked();
+                hasLiveProcess = ServiceValue.HasLiveProcessLocked();
+            });
+            // Why not compile again: a compile that got the gate first started the worker, and its
+            // session already paid the cold start this warm-up exists to move.
+            if (hasLiveProcess)
+            {
+                return SharedWorkerWarmUpOutcome.AlreadyRunning();
+            }
+
+            WorkerStartupResult startupResult = await SharedRoslynCompilerWorkerHostProcess.EnsureWorkerReadyAsync(
+                ServiceValue,
+                externalCompilerPaths,
+                lifecycleGeneration).ConfigureAwait(false);
+            if (!startupResult.IsReady)
+            {
+                ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
+                return SharedWorkerWarmUpOutcome.StartFailed(startupResult.FailureReason);
+            }
+
+            string directory = SharedRoslynCompilerWorkerHostProcess.GetWarmUpDirectoryPath();
+            Directory.CreateDirectory(directory);
+            try
+            {
+                string sourcePath = Path.Combine(directory, WarmUpSourceFileName);
+                string requestFilePath = Path.Combine(directory, WarmUpRequestFileName);
+                File.WriteAllText(sourcePath, WarmUpSource);
+                // Same options as the hot-reload shim compile, so the same compiler paths get compiled.
+                RoslynCompilerRequestFileWriter.WriteWorkerRequestFile(
+                    requestFilePath,
+                    sourcePath,
+                    Path.Combine(directory, WarmUpAssemblyFileName),
+                    references,
+                    Array.Empty<string>(),
+                    allowUnsafeCode: false,
+                    emitDebugCode: true);
+                // Why no token: cancelling a read kills the worker, and only a shutdown stops a warm-up.
+                WorkerAttemptResult attemptResult = await InvokeWorkerOnceAsync(
+                    requestFilePath,
+                    CancellationToken.None,
+                    NoOperation,
+                    NoOperation,
+                    NoOperation).ConfigureAwait(false);
+                if (!attemptResult.Succeeded)
+                {
+                    ServiceValue.ExecuteWithStateLock(ServiceValue.ShutdownProcessLocked);
+                    return SharedWorkerWarmUpOutcome.RequestFailed(attemptResult.FailureReason);
+                }
+
+                return SharedWorkerWarmUpOutcome.Answered(CountErrors(attemptResult.Messages));
+            }
+            finally
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
+        }
+
+        private static void NoOperation()
+        {
+        }
+
+        private static int CountErrors(CompilerMessage[] messages)
+        {
+            int errorCount = 0;
+            foreach (CompilerMessage message in messages)
+            {
+                if (message.type == CompilerMessageType.Error)
+                {
+                    errorCount++;
+                }
+            }
+
+            return errorCount;
         }
 
         private static async Task<SharedWorkerCompileOutcome> TryCompileWithRetriesAsync(

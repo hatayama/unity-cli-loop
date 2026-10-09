@@ -24,8 +24,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private readonly Lazy<RegistryDynamicCodeExecutorFactory> _executorFactoryValue;
 
-        internal DynamicCodeServicesRegistry()
+        private readonly SharedRoslynCompilerWorkerWarmUp _sharedWorkerWarmUp;
+
+        internal DynamicCodeServicesRegistry(SharedRoslynCompilerWorkerWarmUp sharedWorkerWarmUp)
         {
+            UnityEngine.Debug.Assert(sharedWorkerWarmUp != null, "sharedWorkerWarmUp must not be null.");
             _sourcePreparationServiceValue = new Lazy<IDynamicCodeSourcePreparationService>(
                 () => new DynamicCodeSourcePreparationService());
             _executorFactoryValue = new Lazy<RegistryDynamicCodeExecutorFactory>(
@@ -33,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new DynamicCodeCompilationServiceFactory(),
                     SourcePreparationService,
                     CommandEntryPointResolver));
+            _sharedWorkerWarmUp = sharedWorkerWarmUp;
         }
 
         internal RegistryDynamicCodeExecutorFactory ExecutorFactory => _executorFactoryValue.Value;
@@ -55,6 +59,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _serverScopedDrainTask,
                     ShutdownRuntimeAsync(runtimeFacade));
             }
+
+            // Why after the shutdown above: the reset has just stopped the shared worker, and the
+            // first compile of the new server session would otherwise start it cold.
+            _sharedWorkerWarmUp.Start();
         }
 
         internal void ResetServerScopedServicesBeforeDomainReload()
@@ -79,6 +87,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _runtimeFacade = runtimeFacade;
                 _serverScopedDrainTask = Task.CompletedTask;
             }
+        }
+
+        internal Task StopSharedWorkerWarmUpForTests()
+        {
+            return _sharedWorkerWarmUp.StopForTests();
+        }
+
+        internal Task GetSharedWorkerWarmUpTaskForTests()
+        {
+            return _sharedWorkerWarmUp.GetTaskForTests();
         }
 
         internal Task GetServerScopedDrainTaskForTests()
@@ -197,7 +215,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class DynamicCodeServices
     {
-        private static readonly DynamicCodeServicesRegistry RegistryValue = new DynamicCodeServicesRegistry();
+        private static readonly DynamicCodeServicesRegistry RegistryValue = new DynamicCodeServicesRegistry(
+            SharedRoslynCompilerWorkerWarmUp.CreateProduction());
 
         internal static DynamicCodeServicesRegistry GetRegistry()
         {

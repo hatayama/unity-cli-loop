@@ -58,6 +58,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // null delegate as "nothing to lose".
             HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount =
                 () => HotReloadCompositionRoot.Services.Domain.CountActiveChanges().RuntimeChangeTotal;
+            // Why here, like the count above: the dynamic-code tool reads it after each server
+            // reset, which can come before anything in this assembly is touched.
+            string warmUpProjectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadSharedCompilerWarmUpReferenceSource warmUpReferences = new HotReloadSharedCompilerWarmUpReferenceSource(
+                warmUpProjectRoot,
+                HotReloadWarmUpTargetLedger.Read,
+                HotReloadCompilationAssemblies.FindByName);
+            SharedCompilerWarmUpCoordination.CollectWarmUpReferencePaths = warmUpReferences.CollectAsync;
             // Why the same shape for these two: both run from Editor callbacks that take no
             // argument, so they have to read whichever services are installed when they fire.
             HotReloadAutoRefreshHold.GetServices = () => HotReloadCompositionRoot.Services;

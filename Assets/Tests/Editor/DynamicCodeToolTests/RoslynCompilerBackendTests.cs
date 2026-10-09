@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -18,6 +19,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     [TestFixture]
     public sealed class RoslynCompilerBackendTests
     {
+        /// <summary>
+        /// Waits for a shared-worker warm-up that started before the run.
+        /// </summary>
+        [UnitySetUp]
+        public IEnumerator WaitForSharedWorkerWarmUp()
+        {
+            Task warmUp = DynamicCodeServices.GetRegistry().GetSharedWorkerWarmUpTaskForTests();
+            while (!warmUp.IsCompleted)
+            {
+                yield return null;
+            }
+        }
+
         /// <summary>
         /// Verifies WriteCompilerResponseFile emits -debug:portable so the one-shot csc path keeps PDBs.
         /// </summary>

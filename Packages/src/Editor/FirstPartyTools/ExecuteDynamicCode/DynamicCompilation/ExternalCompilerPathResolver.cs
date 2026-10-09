@@ -31,16 +31,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static ExternalCompilerPaths Resolve()
         {
-            string editorPath = EditorApplication.applicationPath;
+            ExternalCompilerPathResolution resolution = ResolveFromEditorPath(EditorApplication.applicationPath);
+            resolution.ReportMissingComponents();
+            return resolution.Paths;
+        }
+
+        // Why a second entry: the shared-worker warm-up runs after every server reset, and a missing
+        // compiler must not log an Error there, nor use up the once-only report the first real compile
+        // gives.
+        internal static ExternalCompilerPaths ResolveWithoutReporting()
+        {
+            return ResolveFromEditorPath(EditorApplication.applicationPath).Paths;
+        }
+
+        internal static ExternalCompilerPathResolution ResolveFromEditorPath(string editorPath)
+        {
             if (string.IsNullOrEmpty(editorPath))
             {
-                return null;
+                return ExternalCompilerPathResolution.NoEditorLayout();
             }
 
             string contentsPath = ResolveEditorContentsPath(editorPath);
             if (string.IsNullOrEmpty(contentsPath))
             {
-                return null;
+                return ExternalCompilerPathResolution.NoEditorLayout();
             }
 
             string scriptingRootPath = ResolveScriptingRootPath(contentsPath);
@@ -126,14 +140,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (missingComponents.Count > 0)
             {
-                DynamicCompilationHealthMonitor.ReportFastPathUnavailable(
-                    editorPath,
-                    contentsPath,
-                    missingComponents);
-                return null;
+                return ExternalCompilerPathResolution.Missing(editorPath, contentsPath, missingComponents);
             }
 
-            return new ExternalCompilerPaths(
+            return ExternalCompilerPathResolution.Found(new ExternalCompilerPaths(
                 contentsPath,
                 scriptingRootPath,
                 dotnetHostPath,
@@ -143,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 codeAnalysisDllPath,
                 codeAnalysisCSharpDllPath,
                 netCoreRuntimeSharedDirectoryPath,
-                layoutKind);
+                layoutKind));
         }
 
         // Why NetCoreRuntime first: 6000.3/6000.5 already satisfy csc's required major from

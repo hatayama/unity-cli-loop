@@ -1,15 +1,18 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine.TestTools;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
@@ -21,6 +24,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     {
         private const string WorkerSourceA = "// worker source A";
         private const string WorkerSourceB = "// worker source B";
+
+        /// <summary>
+        /// Waits for a shared-worker warm-up that started before the run.
+        /// </summary>
+        [UnitySetUp]
+        public IEnumerator WaitForSharedWorkerWarmUp()
+        {
+            Task warmUp = DynamicCodeServices.GetRegistry().GetSharedWorkerWarmUpTaskForTests();
+            while (!warmUp.IsCompleted)
+            {
+                yield return null;
+            }
+
+            // Why shut it down: the warm-up leaves a worker running, and tests here count and
+            // replace the worker process.
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+        }
 
         /// <summary>
         /// Verifies lifecycle closure is returned as a non-error compile outcome.
@@ -854,6 +874,179 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(result.AssemblySource, Is.EqualTo("existing"));
             Assert.That(result.Publish.Kind, Is.EqualTo(CachePublishKind.NotAttempted));
             Assert.That(Directory.Exists(fixture.CacheRoot), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a warm-up whose worker cannot start logs nothing, and leaves the once-only error
+        /// report to the next real compile.
+        /// </summary>
+        [Test]
+        public async Task WarmUpAsync_WhenTheWorkerCannotStart_LogsNothingAndLeavesTheErrorToTheNextCompile()
+        {
+            ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(paths, Is.Not.Null);
+            string[] references = { typeof(object).Assembly.Location };
+            string directory = CreateTemporaryDirectory();
+            string requestFilePath = WriteWorkerRequest(directory, references);
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            DynamicCompilationHealthMonitor.ResetForTests();
+            using SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
+            Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousCompiler =
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
+                    (ExternalCompilerPaths _, string __, string ___, string ____) =>
+                        new[]
+                        {
+                            new CompilerMessage
+                            {
+                                type = CompilerMessageType.Error,
+                                message = "worker unavailable"
+                            }
+                        });
+            try
+            {
+                SharedWorkerWarmUpOutcome outcome = await Task.Run(
+                    () => SharedRoslynCompilerWorkerHost.WarmUpAsync(references, paths));
+
+                Assert.That(outcome.Outcome, Is.EqualTo(SharedWorkerWarmUpOutcome.OutcomeStartFailed));
+                LogAssert.NoUnexpectedReceived();
+
+                LogAssert.Expect(
+                    UnityEngine.LogType.Error,
+                    new System.Text.RegularExpressions.Regex(
+                        "execute-dynamic-code shared Roslyn worker failed to operate correctly; reason=worker_build_failed"));
+                SharedWorkerCompileOutcome compile = await Task.Run(
+                    () => SharedRoslynCompilerWorkerHost.TryCompileAsync(
+                        requestFilePath,
+                        paths,
+                        System.Threading.CancellationToken.None,
+                        () => { },
+                        () => { },
+                        () => { }));
+                Assert.That(compile.Succeeded, Is.False);
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousCompiler);
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                DynamicCompilationHealthMonitor.ResetForTests();
+                Directory.Delete(directory, true);
+            }
+        }
+
+        /// <summary>
+        /// Verifies a warm-up leaves the worker running, so the next compile reuses it instead of
+        /// starting another.
+        /// </summary>
+        [Test]
+        public async Task WarmUpAsync_LeavesARunningWorkerThatTheNextCompileReuses()
+        {
+            ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(paths, Is.Not.Null);
+            string[] references = { typeof(object).Assembly.Location };
+            string directory = CreateTemporaryDirectory();
+            string requestFilePath = WriteWorkerRequest(directory, references);
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            using SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
+            try
+            {
+                SharedWorkerWarmUpOutcome outcome = await Task.Run(
+                    () => SharedRoslynCompilerWorkerHost.WarmUpAsync(references, paths));
+                Assert.That(outcome.Outcome, Is.EqualTo(SharedWorkerWarmUpOutcome.OutcomeAnswered));
+                Assert.That(outcome.ErrorCount, Is.EqualTo(0));
+
+                VibeLogger.ClearMemoryLogs();
+                SharedWorkerCompileOutcome compile = await Task.Run(
+                    () => SharedRoslynCompilerWorkerHost.TryCompileAsync(
+                        requestFilePath,
+                        paths,
+                        System.Threading.CancellationToken.None,
+                        () => { },
+                        () => { },
+                        () => { }));
+
+                Assert.That(compile.Succeeded, Is.True);
+                Assert.That(
+                    JArray.Parse(VibeLogger.GetLogsForAi("dynamic_code_shared_worker_started")).Count,
+                    Is.EqualTo(0));
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                Directory.Delete(directory, true);
+            }
+        }
+
+        /// <summary>
+        /// Verifies a warm-up that finds the worker already running sends it nothing.
+        /// </summary>
+        [Test]
+        public async Task WarmUpAsync_WhenAWorkerAlreadyRuns_SendsNothing()
+        {
+            ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(paths, Is.Not.Null);
+            string[] references = { typeof(object).Assembly.Location };
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            using SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
+            try
+            {
+                await Task.Run(() => SharedRoslynCompilerWorkerHost.WarmUpAsync(references, paths));
+                SharedWorkerWarmUpOutcome second = await Task.Run(
+                    () => SharedRoslynCompilerWorkerHost.WarmUpAsync(references, paths));
+
+                Assert.That(second.Outcome, Is.EqualTo(SharedWorkerWarmUpOutcome.OutcomeAlreadyRunning));
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            }
+        }
+
+        /// <summary>
+        /// Verifies the warm-up deletes the source, request and assembly it wrote once the worker answered.
+        /// </summary>
+        [Test]
+        public async Task WarmUpAsync_RemovesItsFilesAfterTheWorkerAnswers()
+        {
+            ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(paths, Is.Not.Null);
+            string[] references = { typeof(object).Assembly.Location };
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            using SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
+            try
+            {
+                SharedWorkerWarmUpOutcome outcome = await Task.Run(
+                    () => SharedRoslynCompilerWorkerHost.WarmUpAsync(references, paths));
+
+                Assert.That(outcome.Outcome, Is.EqualTo(SharedWorkerWarmUpOutcome.OutcomeAnswered));
+                Assert.That(Directory.Exists(SharedRoslynCompilerWorkerHostProcess.GetWarmUpDirectoryPath()), Is.False);
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            }
+        }
+
+        private static string CreateTemporaryDirectory()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "shared-worker-warm-up-" + Path.GetRandomFileName());
+            Directory.CreateDirectory(directory);
+            return directory;
+        }
+
+        private static string WriteWorkerRequest(string directory, IReadOnlyList<string> references)
+        {
+            string sourcePath = Path.Combine(directory, "Probe.cs");
+            string requestFilePath = Path.Combine(directory, "Probe.worker");
+            File.WriteAllText(sourcePath, "internal static class SharedWorkerWarmUpProbe { }");
+            RoslynCompilerRequestFileWriter.WriteWorkerRequestFile(
+                requestFilePath,
+                sourcePath,
+                Path.Combine(directory, "Probe.dll"),
+                references,
+                Array.Empty<string>(),
+                allowUnsafeCode: false,
+                emitDebugCode: true);
+            return requestFilePath;
         }
 
         /// <summary>
