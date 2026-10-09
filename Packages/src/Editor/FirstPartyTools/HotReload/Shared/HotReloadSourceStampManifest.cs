@@ -12,6 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// The length and last write time each source had when its snapshot copy was taken, kept in
     /// the snapshot directory so a source that still has both is known to equal its copy without
     /// reading either file. A manifest that cannot be parsed in full answers no stamp at all.
+    /// A copy of a source written since the compile started that did not match the PDB carries a
+    /// mark; a marked copy is not the compiled source.
     /// </summary>
     internal sealed class HotReloadSourceStampManifest
     {
@@ -98,12 +100,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal bool IsEditedAfterCompile(string snapshotFileName)
         {
-            return false;
+            Debug.Assert(!string.IsNullOrEmpty(snapshotFileName), "snapshotFileName must not be null or empty.");
+
+            return _stamps.TryGetValue(snapshotFileName, out Stamp stamp) && stamp.EditedAfterCompile;
         }
 
         /// <summary>
-        /// Formats one manifest line. The file name is a hex hash plus ".cs", so it never holds a
-        /// TAB or a line break.
+        /// Formats one manifest line: "&lt;file name&gt;\t&lt;length&gt;\t&lt;ticks&gt;\t&lt;0 or 1&gt;", where 1
+        /// marks a copy edited after the compile. The file name is a hex hash plus ".cs", so it never
+        /// holds a TAB or a line break.
         /// </summary>
         internal static string FormatLine(
             string snapshotFileName,
@@ -165,8 +170,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            bool editedAfterCompile;
+            if (string.Equals(fields[3], "1", StringComparison.Ordinal))
+            {
+                editedAfterCompile = true;
+            }
+            else if (string.Equals(fields[3], "0", StringComparison.Ordinal))
+            {
+                editedAfterCompile = false;
+            }
+            else
+            {
+                return false;
+            }
+
             fileName = fields[0];
-            stamp = new Stamp(length, ticks);
+            stamp = new Stamp(length, ticks, editedAfterCompile);
             return true;
         }
 
@@ -174,11 +193,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             internal readonly long Length;
             internal readonly long LastWriteTimeUtcTicks;
+            internal readonly bool EditedAfterCompile;
 
-            internal Stamp(long length, long lastWriteTimeUtcTicks)
+            internal Stamp(long length, long lastWriteTimeUtcTicks, bool editedAfterCompile)
             {
                 Length = length;
                 LastWriteTimeUtcTicks = lastWriteTimeUtcTicks;
+                EditedAfterCompile = editedAfterCompile;
             }
         }
     }

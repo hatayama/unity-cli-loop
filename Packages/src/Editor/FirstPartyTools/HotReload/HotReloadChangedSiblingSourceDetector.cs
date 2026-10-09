@@ -287,7 +287,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Compares an existing source with an existing snapshot file: reuses the last verdict while
         // the source keeps its length and write time, then trusts the stamp the capture recorded
-        // for the same length and write time, and only then reads both files.
+        // for the same length and write time, and only then reads both files. A copy the capture
+        // marked as edited after the compile never matches.
         private static bool MatchesSnapshot(
             FileInfo source,
             string snapshotPath,
@@ -304,8 +305,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return matches;
             }
 
-            bool equal = HasRecordedStamp(manifest.Value, snapshotPath, source.Length, lastWriteTimeUtcTicks)
-                || BytesEqual(File.ReadAllBytes(source.FullName), File.ReadAllBytes(snapshotPath));
+            // Why the mark before the stamp and the bytes: a marked copy usually holds the save made after
+            // the compile, so it equals the current file by both and would answer "unchanged". The
+            // verdict cache may keep this false: the mark does not change within one MVID's snapshot.
+            bool equal = !manifest.Value.IsEditedAfterCompile(Path.GetFileName(snapshotPath))
+                && (HasRecordedStamp(manifest.Value, snapshotPath, source.Length, lastWriteTimeUtcTicks)
+                    || BytesEqual(File.ReadAllBytes(source.FullName), File.ReadAllBytes(snapshotPath)));
             // Why the stamp taken before reading: a write during the read moves the stamp on, so the
             // next scan reads the file again instead of trusting this verdict.
             _verdicts.Record(snapshotPath, source.FullName, source.Length, lastWriteTimeUtcTicks, equal);

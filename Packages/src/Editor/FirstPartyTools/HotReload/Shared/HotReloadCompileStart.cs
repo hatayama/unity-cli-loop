@@ -1,3 +1,5 @@
+using System;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -27,9 +29,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// was written at <paramref name="dllLastWriteTimeUtcTicks"/> may differ from what the
         /// compiler read.
         /// </summary>
+        /// <remarks>
+        /// Why the earlier of the two: a start later than the DLL write belongs to a compile after the
+        /// one that wrote the DLL (a failed one, or one that left this DLL as it was), and starting the
+        /// check there would miss a save made during the compile that did. Why the DLL write when no
+        /// start is known (the first compile after the Editor started): a source written after the DLL
+        /// cannot be in it, so at least those are still checked.
+        /// </remarks>
         internal long SuspectWritesFrom(long dllLastWriteTimeUtcTicks)
         {
-            return dllLastWriteTimeUtcTicks;
+            if (!_known)
+            {
+                return dllLastWriteTimeUtcTicks;
+            }
+
+            return Math.Min(_utcTicks, dllLastWriteTimeUtcTicks);
         }
     }
 }

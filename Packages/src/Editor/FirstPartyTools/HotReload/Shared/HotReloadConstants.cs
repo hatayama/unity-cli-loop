@@ -466,11 +466,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: file name, assembly name. Used instead of the warning above when the snapshot's
         // bytes do not match the checksum the compiled PDB recorded. Why "most often": a PDB
         // document with no checksum, or with an algorithm the check does not support, reports the
-        // same reason, but a file saved between the compile and the capture is the usual cause.
+        // same reason, but a file saved after the compile had read it is the usual cause.
         public const string NoVerifiedSourceSnapshotMismatchWarningFormat =
             "No verified source snapshot for {0} (assembly {1}): the snapshot does not match the "
-            + "compiled file (most often the file changed between the compile and the snapshot "
-            + "capture); patching all methods. Run 'uloop compile' to re-establish the baseline.";
+            + "compiled file (most often the file was saved after the compile had read it); "
+            + "patching all methods. Run 'uloop compile' to re-establish the baseline.";
 
         // Format: file name, assembly name. Used instead of the warnings above when the compiled
         // assembly or its PDB is not on disk, so there is nothing to verify a snapshot against.

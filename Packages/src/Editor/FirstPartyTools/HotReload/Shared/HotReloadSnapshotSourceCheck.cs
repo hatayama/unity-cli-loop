@@ -44,7 +44,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal bool IsCompiledSource(string projectRoot, string slashNormalizedRelativePath, byte[] sourceBytes)
         {
-            return true;
+            // Why NoDocumentInPdb counts as not compiled: a file without method bodies has no document,
+            // and a copy that cannot be confirmed is safer treated as edited than trusted.
+            return HotReloadSourceBaseline.CompareWithCompiledDocument(
+                    projectRoot,
+                    slashNormalizedRelativePath,
+                    _dllPath,
+                    _pdbPath,
+                    _moduleVersionId,
+                    sourceBytes,
+                    _documentIndex)
+                == HotReloadSnapshotMissReason.None;
         }
     }
 
