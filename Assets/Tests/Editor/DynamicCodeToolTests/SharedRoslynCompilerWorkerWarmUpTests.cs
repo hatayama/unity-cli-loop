@@ -25,6 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     {
         private const int WaitTimeoutMilliseconds = 30000;
 
+        private const int EarlyCompletionWindowMilliseconds = 2000;
+
         /// <summary>Waits for a shared-worker warm-up that started before the run.</summary>
         [UnitySetUp]
         public IEnumerator WaitForSharedWorkerWarmUp()
@@ -232,16 +234,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             SharedRoslynCompilerWorkerWarmUp warmUp = parts.Create();
             try
             {
+                // Why wait between the starts: the first warm-up must be the one holding `first`.
                 warmUp.Start();
+                yield return WaitUntil(() => parts.WarmCalls == 1);
                 warmUp.Start();
                 yield return WaitUntil(() => parts.WarmCalls == 2);
 
                 Task inFlight = warmUp.GetTaskForTests();
-                first.SetResult(SharedWorkerWarmUpOutcome.AlreadyRunning());
-                yield return null;
-                yield return null;
-                Assert.That(inFlight.IsCompleted, Is.False);
+                // Why finish the later warm-up first: a task that tracked only the latest start
+                // would then complete while the earlier one is still in flight.
                 second.SetResult(SharedWorkerWarmUpOutcome.AlreadyRunning());
+                yield return WaitAtMost(() => inFlight.IsCompleted, EarlyCompletionWindowMilliseconds);
+                Assert.That(inFlight.IsCompleted, Is.False);
+                first.SetResult(SharedWorkerWarmUpOutcome.AlreadyRunning());
                 yield return WaitUntilCompleted(inFlight);
             }
             finally
@@ -288,6 +293,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             finally
             {
                 SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            }
+        }
+
+        // Waits until the condition holds or the window ends, without failing either way.
+        private static IEnumerator WaitAtMost(Func<bool> condition, int windowMilliseconds)
+        {
+            Stopwatch watch = Stopwatch.StartNew();
+            while (!condition() && watch.ElapsedMilliseconds < windowMilliseconds)
+            {
+                yield return null;
             }
         }
 

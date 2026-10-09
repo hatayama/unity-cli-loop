@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [Test]
-        public async Task CollectAsync_SkipsANameUnityDoesNotList()
+        public async Task CollectAsync_SkipsANameWithNoDllWithoutAskingUnity()
         {
             List<string> askedForMissing = new List<string>();
             HotReloadSharedCompilerWarmUpReferenceSource source = new HotReloadSharedCompilerWarmUpReferenceSource(
@@ -153,6 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             IReadOnlyList<string> expected = await CollectFor(new[] { TestAssemblyName });
             Assert.That(listed, Is.EqualTo(expected));
+            Assert.That(askedForMissing, Is.Empty);
         }
 
         [Test]
