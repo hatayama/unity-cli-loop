@@ -123,8 +123,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies a stamp that is malformed, or records another mtime or length, does not short-circuit
-        /// the capture: the sources are captured again and the stamp is rewritten.
+        /// Verifies a stamp that is malformed, or records another mtime or length (older or newer than
+        /// the DLL's), does not short-circuit the capture: the sources are captured again and the stamp
+        /// is rewritten.
         /// </summary>
         [TestCase("{mvid},{mtime}")]
         [TestCase(",{mtime},{length}")]
@@ -132,6 +133,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("{mvid},{mtime},not-a-number")]
         [TestCase("{mvid},{mtime+1},{length}")]
         [TestCase("{mvid},{mtime},{length+1}")]
+        [TestCase("{mvid},{mtime-1},{length}")]
+        [TestCase("{mvid},{mtime},{length-1}")]
         public void CaptureAssemblies_WhenStampIsMalformedOrDiffers_CapturesAgain(string stampTemplate)
         {
             string dllPath = PlantCompiledAssembly("Fixture");
@@ -139,10 +142,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             FileInfo dllInfo = new FileInfo(dllPath);
             long mtime = dllInfo.LastWriteTimeUtc.Ticks;
             long length = dllInfo.Length;
-            // Why the "+1" placeholders go first: replacing "{mtime}" first would break "{mtime+1}" apart.
+            // Why the "+1" / "-1" placeholders go first: replacing "{mtime}" first would break "{mtime+1}" apart.
             string stamp = stampTemplate
                 .Replace("{mtime+1}", (mtime + 1).ToString(CultureInfo.InvariantCulture))
                 .Replace("{length+1}", (length + 1).ToString(CultureInfo.InvariantCulture))
+                .Replace("{mtime-1}", (mtime - 1).ToString(CultureInfo.InvariantCulture))
+                .Replace("{length-1}", (length - 1).ToString(CultureInfo.InvariantCulture))
                 .Replace("{mvid}", mvid)
                 .Replace("{mtime}", mtime.ToString(CultureInfo.InvariantCulture))
                 .Replace("{length}", length.ToString(CultureInfo.InvariantCulture));
