@@ -27,6 +27,11 @@ patch binds to the newest shim. Edit the file and reload again to apply new chan
   default for projects created before Unity 6.6), `uloop compile`, and the compile `uloop run-tests` runs first unless given `--skip-compile`. `uloop control-play-mode --action Play` warns with
   the counts when it is about to drop patches or pause points. There is no persistence
   and no automatic re-apply.
+  A compile Unity starts on its own ends them too: the hold that keeps a returning focus from
+  recompiling (`AutoRefreshHeld`) stops only Unity's Auto Refresh, so an editor script or
+  package that calls `AssetDatabase.Refresh()` itself — some do after every domain reload —
+  still imports the edits saved since the last compile, and Unity compiles them. The compiled
+  code then contains those edits, so behavior still converges.
 - Never reflected by hot reload: initializer changes on compiled fields and new
   types. Those always need `uloop compile`. Signature changes — return type,
   rename, parameter list — are handled through the added-member rules and the
