@@ -9,6 +9,8 @@ Editor-only dynamic code metadata validation pipeline:
 | UnityCliLoop.System.Reflection.Metadata.dll | System.Reflection.Metadata | 8.0.1 | 8.0.0.1 | lib/net462/System.Reflection.Metadata.dll |
 | UnityCliLoop.System.Runtime.CompilerServices.Unsafe.dll | System.Runtime.CompilerServices.Unsafe | 6.1.1 | 6.0.2.0 | lib/net462/System.Runtime.CompilerServices.Unsafe.dll |
 
+From Unity 6000.5 on, the Editor ships the same three assemblies as BCL extensions and references them from every script assembly. The bundled copies carry the define constraint `!UNITY_6000_5_OR_NEWER`, so on those Editors they are left out of compilation and the package binds to the Editor's copies instead.
+
 These assemblies are distributed under the MIT License.
 
 Package metadata also contains the copyright notice
