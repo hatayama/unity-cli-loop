@@ -39,6 +39,14 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 applicationServices.ToolSettingsUseCase,
                 applicationServices.SkillSetupUseCase,
                 applicationServices.ThirdPartyToolMigrationUseCase);
+            // Why last: a capture that throws stops nothing after it; Unity logs the exception and
+            // hot reload captures again on the first update tick. Why inside this
+            // InitializeOnLoadMethod and not afterAssemblyReload: the IPC listener opens in
+            // afterAssemblyReload, and every command except get-editor-status runs on the main
+            // thread's update or tick, so no command of this domain is answered before this
+            // returns — an edit made after `uloop compile` returns can no longer be captured as
+            // compiled source.
+            FirstPartyToolsEditorStartup.PrepareBeforeServingCommands();
         }
     }
 }
