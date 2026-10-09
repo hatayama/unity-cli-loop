@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// unmarked stamp.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_ASourceWrittenSinceTheStartThatMatchesThePdb_RecordsAnUnmarkedStamp()
+        public void CaptureAtomically_ASourceWrittenSinceTheStartThatMatchesThePdb_RecordsAnUnmarkedStamp()
         {
             PlantSource(FixtureProjectRelativePath, RealBytes(FixtureProjectRelativePath), SinceTheStartUtc);
 
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// marked, and that its copy is still written with the edited bytes.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_ASourceWrittenSinceTheStartThatDiffersFromThePdb_MarksItAndStillCopiesIt()
+        public void CaptureAtomically_ASourceWrittenSinceTheStartThatDiffersFromThePdb_MarksItAndStillCopiesIt()
         {
             byte[] editedBytes = EditedBytes(FixtureProjectRelativePath);
             PlantSource(FixtureProjectRelativePath, editedBytes, SinceTheStartUtc);
@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// so even bytes the PDB does not match stay unmarked.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_ASourceWrittenBeforeTheStart_IsNotCheckedAgainstThePdb()
+        public void CaptureAtomically_ASourceWrittenBeforeTheStart_IsNotCheckedAgainstThePdb()
         {
             PlantSource(FixtureProjectRelativePath, EditedBytes(FixtureProjectRelativePath), BeforeTheStartUtc);
 
@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// marked, because it cannot be confirmed as the compiled source.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_ASourceThePdbHasNoDocumentFor_MarksIt()
+        public void CaptureAtomically_ASourceThePdbHasNoDocumentFor_MarksIt()
         {
             PlantSource(
                 BodylessFixtureProjectRelativePath,
@@ -126,10 +126,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CompileStartUtcTicks,
                 dllPath,
                 Path.ChangeExtension(dllPath, ".pdb"),
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath),
+                HotReloadAssemblyMvid.Read(dllPath),
                 new HotReloadPdbDocumentIndex(Path.Combine(_tempRoot, "PdbDocuments")));
 
-            HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+            HotReloadSourceSnapshotCopier.CaptureAtomically(
                 _tempRoot,
                 _snapshotDirectory,
                 new[] { projectRelativePath },
@@ -161,7 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string SnapshotFileName(string projectRelativePath)
         {
-            return HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath) + ".cs";
+            return HotReloadSourceSnapshotLayout.SourceFileName(projectRelativePath);
         }
     }
 }

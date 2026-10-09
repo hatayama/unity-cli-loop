@@ -59,10 +59,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadChangedSiblingScanResult.Empty;
             }
 
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
             return DetectFromSnapshotDirectory(
                 projectRoot,
-                assemblyName + "-" + mvid,
+                HotReloadSourceSnapshotLayout.AssemblyDirectoryName(assemblyName, mvid),
                 sourceFiles,
                 editedProjectRelativePaths);
         }
@@ -154,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return SourceMatchesSnapshotDirectory(
                 projectRoot,
-                assemblyName + "-" + HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                HotReloadSourceSnapshotLayout.AssemblyDirectoryName(assemblyName, HotReloadAssemblyMvid.Read(targetDllPath)),
                 projectRelativePath,
                 sourcePath);
         }
@@ -184,12 +184,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string snapshotDirectory = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                HotReloadSourceSnapshotLayout.Root(projectRoot),
                 assemblySnapshotDirectoryName);
-            string snapshotPath = Path.Combine(
-                snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/')) + ".cs");
+            string snapshotPath = HotReloadSourceSnapshotLayout.SourcePath(snapshotDirectory, projectRelativePath);
             if (!File.Exists(snapshotPath))
             {
                 return false;
@@ -208,8 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyCollection<string> excludedProjectRelativePaths)
         {
             string snapshotDirectory = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                HotReloadSourceSnapshotLayout.Root(projectRoot),
                 assemblySnapshotDirectoryName);
             if (!Directory.Exists(snapshotDirectory))
             {
@@ -268,9 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            string snapshotPath = Path.Combine(
-                snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(normalizedRelativePath) + ".cs");
+            string snapshotPath = HotReloadSourceSnapshotLayout.SourcePath(snapshotDirectory, normalizedRelativePath);
             if (!File.Exists(snapshotPath))
             {
                 return null;

@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // assembly that owns its source, so every run has to name that generation even
                 // before it carries a record of its own.
                 targetAssemblyName = firstFile.AssemblyName,
-                targetAssemblyMvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(firstFile.Home.DllPath),
+                targetAssemblyMvid = HotReloadAssemblyMvid.Read(firstFile.Home.DllPath),
                 assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),

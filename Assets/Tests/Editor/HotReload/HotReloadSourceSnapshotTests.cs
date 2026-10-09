@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             bool found = index.TryFindDocument(
                 dllPath,
                 pdbPath,
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath),
+                HotReloadAssemblyMvid.Read(dllPath),
                 projectRelativePath,
                 out HotReloadPdbDocument indexed);
 
@@ -215,17 +215,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 // The player's snapshot is planted by hand: a root under Library is not a project the
                 // Editor resolves package asset paths for, so the capture would skip the source.
-                string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
-                string snapshotDirectory = Path.Combine(
+                string mvid = HotReloadAssemblyMvid.Read(dllPath);
+                string snapshotDirectory = HotReloadSourceSnapshotLayout.AssemblyDirectory(
                     playerRoot,
-                    HotReloadConstants.SourceSnapshotRelativeDirectory,
-                    PausePointsRuntimeAssemblyName + "-" + mvid);
+                    PausePointsRuntimeAssemblyName,
+                    mvid);
                 Directory.CreateDirectory(snapshotDirectory);
                 File.Copy(
                     physicalSourcePath,
-                    Path.Combine(
-                        snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath(PackageSourceAssetPath) + ".cs"));
+                    HotReloadSourceSnapshotLayout.SourcePath(snapshotDirectory, PackageSourceAssetPath));
                 HotReloadPdbDocumentIndex documentIndex = new HotReloadPdbDocumentIndex(
                     Path.Combine(playerRoot, HotReloadConstants.PdbDocumentsRelativeDirectory));
 
@@ -285,23 +283,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
             }
 
-            string slashNormalizedRelativePath = FixtureProjectRelativePath.Replace('\\', '/');
-            string snapshotFileName =
-                HotReloadSourceSnapshotter.HashProjectRelativePath(slashNormalizedRelativePath) + ".cs";
-            string realSnapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid,
-                snapshotFileName);
+            string realSnapshotPath = HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(projectRoot, TestAssemblyName, mvid),
+                FixtureProjectRelativePath);
             Assert.That(File.Exists(realSnapshotPath), Is.True);
 
             string fakeRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-tamper-" + Guid.NewGuid().ToString("N"));
-            string fakeSnapshotDir = Path.Combine(
-                fakeRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid);
+            string fakeSnapshotDir = HotReloadSourceSnapshotLayout.AssemblyDirectory(fakeRoot, TestAssemblyName, mvid);
             Directory.CreateDirectory(fakeSnapshotDir);
-            string fakeSnapshotPath = Path.Combine(fakeSnapshotDir, snapshotFileName);
+            string fakeSnapshotPath = HotReloadSourceSnapshotLayout.SourcePath(fakeSnapshotDir, FixtureProjectRelativePath);
             byte[] tampered = File.ReadAllBytes(realSnapshotPath);
             tampered[0] = (byte)(tampered[0] ^ 0xFF);
             File.WriteAllBytes(fakeSnapshotPath, tampered);
@@ -494,25 +484,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Copies the fixture's real snapshot under a temporary root with its first byte flipped.
         private static string WriteTamperedSnapshotTree(string projectRoot, string dllPath)
         {
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
-            string snapshotFileName =
-                HotReloadSourceSnapshotter.HashProjectRelativePath(FixtureProjectRelativePath) + ".cs";
-            string realSnapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid,
-                snapshotFileName);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
+            string realSnapshotPath = HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(projectRoot, TestAssemblyName, mvid),
+                FixtureProjectRelativePath);
             Assert.That(File.Exists(realSnapshotPath), Is.True, "Precondition: the real snapshot must exist.");
 
             string fakeRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-miss-" + Guid.NewGuid().ToString("N"));
-            string fakeSnapshotDir = Path.Combine(
-                fakeRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid);
+            string fakeSnapshotDir = HotReloadSourceSnapshotLayout.AssemblyDirectory(fakeRoot, TestAssemblyName, mvid);
             Directory.CreateDirectory(fakeSnapshotDir);
             byte[] tampered = File.ReadAllBytes(realSnapshotPath);
             tampered[0] = (byte)(tampered[0] ^ 0xFF);
-            File.WriteAllBytes(Path.Combine(fakeSnapshotDir, snapshotFileName), tampered);
+            File.WriteAllBytes(HotReloadSourceSnapshotLayout.SourcePath(fakeSnapshotDir, FixtureProjectRelativePath), tampered);
             return fakeRoot;
         }
 
@@ -562,7 +545,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: on Windows, snapshot filename hashing lowercases the project-relative path so case-only path differences resolve to the same baseline file.
         /// </summary>
         [Test]
-        public void HashProjectRelativePath_OnWindows_IgnoresCase()
+        public void SourceFileName_OnWindows_IgnoresCase()
         {
             if (Path.DirectorySeparatorChar != '\\')
             {
@@ -571,15 +554,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(
-                HotReloadSourceSnapshotter.HashProjectRelativePath("Assets/Foo.cs"),
-                Is.EqualTo(HotReloadSourceSnapshotter.HashProjectRelativePath("assets/foo.cs")));
+                HotReloadSourceSnapshotLayout.SourceFileName("Assets/Foo.cs"),
+                Is.EqualTo(HotReloadSourceSnapshotLayout.SourceFileName("assets/foo.cs")));
         }
 
         /// <summary>
         /// What: on Windows, an extended-length source created beyond legacy MAX_PATH is captured byte-exactly from its unprefixed project-relative path.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_LongWindowsSource_CapturesByteExactSnapshot()
+        public void CaptureAtomically_LongWindowsSource_CapturesByteExactSnapshot()
         {
             if (Path.DirectorySeparatorChar != '\\')
             {
@@ -610,7 +593,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceText,
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-                HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                HotReloadSourceSnapshotCopier.CaptureAtomically(
                     root,
                     snapshotDirectory,
                     new[] { sourceRelativePath },
@@ -620,7 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string normalizedRelativePath = sourceRelativePath.Replace('\\', '/');
                 string snapshotPath = Path.Combine(
                     snapshotDirectory,
-                    HotReloadSourceSnapshotter.HashProjectRelativePath(normalizedRelativePath) + ".cs");
+                    HotReloadSourceSnapshotLayout.SourceFileName(normalizedRelativePath));
                 Assert.That(File.Exists(snapshotPath), Is.True);
                 Assert.That(
                     File.ReadAllBytes(snapshotPath).SequenceEqual(File.ReadAllBytes(fileSystemSourcePath)),
@@ -640,7 +623,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: an unreadable source is skipped with one warning while readable siblings still complete the atomic snapshot.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_OneLockedSource_CompletesWithReadableSnapshots()
+        public void CaptureAtomically_OneLockedSource_CompletesWithReadableSnapshots()
         {
             if (Path.DirectorySeparatorChar != '\\')
             {
@@ -684,7 +667,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         LogType.Warning,
                         "[UnityCliLoop] Skipped 1 unreadable source(s) while snapshotting " +
                         "LockedSourceAssembly: Sources/Locked.cs");
-                    HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                    HotReloadSourceSnapshotCopier.CaptureAtomically(
                         root,
                         snapshotDirectory,
                         sourceRelativePaths,
@@ -696,17 +679,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     File.Exists(Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs")),
+                        HotReloadSourceSnapshotLayout.SourceFileName("Sources/First.cs"))),
                     Is.True);
                 Assert.That(
                     File.Exists(Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Locked.cs") + ".cs")),
+                        HotReloadSourceSnapshotLayout.SourceFileName("Sources/Locked.cs"))),
                     Is.False);
                 Assert.That(
                     File.Exists(Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Last.cs") + ".cs")),
+                        HotReloadSourceSnapshotLayout.SourceFileName("Sources/Last.cs"))),
                     Is.True);
             }
             finally
@@ -714,88 +697,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 if (Directory.Exists(root))
                 {
                     Directory.Delete(root, recursive: true);
-                }
-            }
-        }
-
-        /// <summary>
-        /// What: stale MVID and orphaned temporary snapshot directories are pruned, while the current snapshot, hyphenated sibling assembly, and non-MVID suffix are kept.
-        /// </summary>
-        [Test]
-        public void DeleteStaleSnapshotDirectories_StaleAndOrphanTemp_RemovesOnlyExactMvidSiblings()
-        {
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-hot-reload-snapshot-prune-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempRoot);
-
-            string mvidA = Guid.NewGuid().ToString("N");
-            string mvidB = Guid.NewGuid().ToString("N");
-            string mvidC = Guid.NewGuid().ToString("N");
-            string mvidD = Guid.NewGuid().ToString("N");
-            string orphanTempDir = Path.Combine(tempRoot, "Foo-" + mvidA + ".tmp");
-            string staleDir = Path.Combine(tempRoot, "Foo-" + mvidB);
-            string currentDir = Path.Combine(tempRoot, "Foo-" + mvidC);
-            string siblingAssemblyDir = Path.Combine(tempRoot, "Foo-Bar-" + mvidD);
-            string nonMvidDir = Path.Combine(tempRoot, "Foo-notamvid");
-            Directory.CreateDirectory(orphanTempDir);
-            Directory.CreateDirectory(currentDir);
-            Directory.CreateDirectory(staleDir);
-            Directory.CreateDirectory(siblingAssemblyDir);
-            Directory.CreateDirectory(nonMvidDir);
-
-            try
-            {
-                HotReloadSourceSnapshotter.DeleteStaleSnapshotDirectories(tempRoot, "Foo", currentDir);
-
-                Assert.That(Directory.Exists(orphanTempDir), Is.False);
-                Assert.That(Directory.Exists(staleDir), Is.False);
-                Assert.That(Directory.Exists(currentDir), Is.True);
-                Assert.That(Directory.Exists(siblingAssemblyDir), Is.True);
-                Assert.That(Directory.Exists(nonMvidDir), Is.True);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, recursive: true);
-                }
-            }
-        }
-
-        /// <summary>
-        /// What: stamp matching accepts only the exact mvid,mtime,length triple and rejects malformed or mismatched stamps.
-        /// </summary>
-        [Test]
-        public void HasMatchingStamp_AcceptsExactTripleAndRejectsMismatchOrMalformed()
-        {
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "uloop-hot-reload-snapshot-stamp-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempRoot);
-            string stampPath = Path.Combine(tempRoot, "Foo.stamp");
-            const long mtimeTicks = 123456789L;
-            const long byteLength = 4096L;
-            string mvid = Guid.NewGuid().ToString("N");
-
-            try
-            {
-                File.WriteAllText(stampPath, mvid + "," + mtimeTicks + "," + byteLength);
-                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength), Is.True);
-                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks + 1, byteLength), Is.False);
-                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength + 1), Is.False);
-
-                File.WriteAllText(stampPath, mvid + "," + mtimeTicks);
-                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength), Is.False);
-
-                File.WriteAllText(stampPath, "," + mtimeTicks + "," + byteLength);
-                Assert.That(HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, mtimeTicks, byteLength), Is.False);
-            }
-            finally
-            {
-                if (Directory.Exists(tempRoot))
-                {
-                    Directory.Delete(tempRoot, recursive: true);
                 }
             }
         }

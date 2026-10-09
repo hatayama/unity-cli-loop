@@ -1096,7 +1096,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string artifactPath = WriteIntroducedTypeArtifact();
             HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
                 assemblyName,
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(
+                HotReloadAssemblyMvid.Read(
                     typeof(HotReloadCrossFileE2ETests).Assembly.Location),
                 IntroducedTypeMetadataName,
                 projectRelativePath,
