@@ -31,15 +31,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// when it is captured, and marked in the manifest when it does not match, so the default file
         /// selection, the sibling scan and the skip check treat that file as changed. The method-diff
         /// baseline checks every copy against the PDB when it uses one.
+        /// Returns false when Unity listed no compilation assembly (as while it compiles).
         /// </summary>
-        internal static void CaptureAfterDomainReload()
+        internal static bool CaptureAfterDomainReload()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            IReadOnlyList<UnityCompilationAssembly> assemblies = HotReloadCompilationAssemblies.Current();
             CaptureAssemblies(
                 projectRoot,
-                HotReloadCompilationAssemblies.Current(),
+                assemblies,
                 HotReloadCompileStartRecord.Read(),
                 HotReloadPdbDocumentIndex.Shared);
+            return assemblies.Count > 0;
         }
 
         // Why separate from CaptureAfterDomainReload: the project root and the compilation assemblies come

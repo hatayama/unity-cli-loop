@@ -358,7 +358,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int captureCount = 0;
             using IDisposable captureScope = HotReloadServicesTestScope.BeginWithSourceSnapshotCapture(
-                new HotReloadSourceSnapshotCapture(() => captureCount++));
+                new HotReloadSourceSnapshotCapture(() => { captureCount++; return true; }));
             int captureCountAtDetection = -1;
             using IDisposable detectorScope = HotReloadServicesTestScope.BeginWithChangeDetector(
                 new HotReloadStubChangeDetector(() =>
@@ -387,7 +387,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int captureCount = 0;
             using IDisposable captureScope = HotReloadServicesTestScope.BeginWithSourceSnapshotCapture(
-                new HotReloadSourceSnapshotCapture(() => captureCount++));
+                new HotReloadSourceSnapshotCapture(() => { captureCount++; return true; }));
             int captureCountAtRun = -1;
             using IDisposable orchestratorScope = HotReloadServicesTestScope.BeginWithOrchestrator(
                 new HotReloadStubOrchestrator((files, ignoredCt) =>
@@ -409,7 +409,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int captureCount = 0;
             using IDisposable captureScope = HotReloadServicesTestScope.BeginWithSourceSnapshotCapture(
-                new HotReloadSourceSnapshotCapture(() => captureCount++));
+                new HotReloadSourceSnapshotCapture(() => { captureCount++; return true; }));
 
             HotReloadResponse response = await ExecuteAsync(new JObject { ["Status"] = true });
 

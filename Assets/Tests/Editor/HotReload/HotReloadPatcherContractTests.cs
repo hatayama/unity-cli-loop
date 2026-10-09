@@ -216,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     TransformWorkerHost.Shared,
                     HotReloadGroupProcessorDependencies.CreateProduction,
                     new HotReloadApplicationPlayModeQuery(),
-                    new HotReloadSourceSnapshotCapture(() => { }),
+                    new HotReloadSourceSnapshotCapture(() => true),
                     HotReloadWarmUpTestDoubles.CreateInert()));
         }
 
