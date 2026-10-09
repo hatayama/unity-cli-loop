@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Debug.Assert(loadBudget != null, "a load is refused only when a budget is in place.");
                     unreadScanAssemblyNames.Add(assemblyName);
-                    loadBudget.RefusedAssemblyNames.Add(assemblyName);
+                    loadBudget.Refuse(assemblyName);
                     continue;
                 }
 
@@ -339,9 +339,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        // Returns how many call sites of the assembly it compared against the targets.
-        // Returns false when the dll is not cached and the budget has no load left; then nothing
-        // was read and no hit was added.
+        // Outputs how many call sites of the assembly it compared against the targets in
+        // examinedCallSiteCount; returns false when the dll is not cached and the budget has no
+        // load left, in which case nothing was read and no hit was added.
         private static bool TryCollectHitsFromAssembly(
             string assemblyName,
             string dllPath,

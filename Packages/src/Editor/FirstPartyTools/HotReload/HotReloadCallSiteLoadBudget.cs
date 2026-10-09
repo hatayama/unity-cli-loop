@@ -10,15 +10,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadCallSiteLoadBudget
     {
+        private readonly List<string> _refusedAssemblyNames = new List<string>();
+
         public int RemainingLoads { get; private set; }
 
-        public List<string> RefusedAssemblyNames { get; }
+        /// <summary>
+        /// Each assembly the budget refused, once, however many scans asked for it.
+        /// </summary>
+        public IReadOnlyList<string> RefusedAssemblyNames => _refusedAssemblyNames;
 
         public HotReloadCallSiteLoadBudget(int loads)
         {
             Debug.Assert(loads >= 0, "loads must not be negative.");
             RemainingLoads = loads;
-            RefusedAssemblyNames = new List<string>();
         }
 
         /// <summary>
@@ -33,6 +37,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             RemainingLoads--;
             return true;
+        }
+
+        /// <summary>
+        /// Records that a scan could not read <paramref name="assemblyName"/> because no load was
+        /// left. Why deduplicated here: the direct scan and every closure level of one run may ask
+        /// for the same assembly, and the log should name each refused dll once.
+        /// </summary>
+        public void Refuse(string assemblyName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
+            if (_refusedAssemblyNames.Contains(assemblyName))
+            {
+                return;
+            }
+
+            _refusedAssemblyNames.Add(assemblyName);
         }
     }
 }

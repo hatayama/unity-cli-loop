@@ -666,6 +666,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an assembly that two scans of the same run both fail to read is listed once in
+        /// the budget's refused assemblies, so the vibe log names each refused dll once.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_AssemblyRefusedByTwoScans_IsListedOnceInTheBudget()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            HotReloadCallSiteLoadBudget budget = new HotReloadCallSiteLoadBudget(0);
+
+            ScanWithBudget(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                budget);
+            ScanWithBudget(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                budget);
+
+            Assert.That(
+                budget.RefusedAssemblyNames,
+                Is.EquivalentTo(new[] { GetTestAssemblyName(), CrossAssemblyCallerAssemblyName }));
+        }
+
+        /// <summary>
         /// What: assemblies already in the cache are served without consuming the budget, so a
         /// scan with no load left is still complete when every assembly it needs is cached.
         /// </summary>
