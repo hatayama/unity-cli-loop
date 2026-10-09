@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 NormalizeProjectRelativePath(projectRelativePath),
                 assemblyName,
                 Path.GetFullPath(targetDllPath),
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                HotReloadAssemblyMvid.Read(targetDllPath),
                 NormalizeProjectRelativePath(resolvedAssemblyDefinitionPath),
                 boundaries);
             return null;
@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 NormalizeProjectRelativePath(evidence.ProjectRelativePath),
                 evidence.AssemblyName,
                 Path.GetFullPath(targetDllPath),
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                HotReloadAssemblyMvid.Read(targetDllPath),
                 NormalizeProjectRelativePath(resolvedAssemblyDefinitionPath),
                 currentBoundaries);
             if (!EvidenceMatches(evidence, currentEvidence))
@@ -174,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why EditorNotReady: a new image means a compile rebuilt the assembly during the run,
             // which the commit boundary and the target-assembly drift check report the same way.
             if (!string.Equals(
-                    HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                    HotReloadAssemblyMvid.Read(targetDllPath),
                     evidence.TargetDllMvid,
                     StringComparison.Ordinal))
             {

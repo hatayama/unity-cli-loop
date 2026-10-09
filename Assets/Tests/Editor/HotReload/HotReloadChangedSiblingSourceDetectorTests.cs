@@ -992,7 +992,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(snapshotDirectory);
             string snapshotPath = Path.Combine(
                 snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/')) + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName(projectRelativePath.Replace('\\', '/')));
             File.WriteAllBytes(
                 snapshotPath,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(contents));
@@ -1025,8 +1025,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string StampLine(string projectRelativePath, long length, DateTime lastWriteTimeUtc)
         {
-            return HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/'))
-                + ".cs\t" + length.ToString(CultureInfo.InvariantCulture)
+            return HotReloadSourceSnapshotLayout.SourceFileName(projectRelativePath.Replace('\\', '/'))
+                + "\t" + length.ToString(CultureInfo.InvariantCulture)
                 + "\t" + lastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture)
                 + "\t0";
         }

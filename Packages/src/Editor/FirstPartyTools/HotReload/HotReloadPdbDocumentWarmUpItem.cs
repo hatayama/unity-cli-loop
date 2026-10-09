@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // Why throw rather than stop: an item that returns normally is reported done.
                 ct.ThrowIfCancellationRequested();
-                string moduleVersionId = HotReloadSourceSnapshotter.ReadAssemblyMvid(target.DllPath);
+                string moduleVersionId = HotReloadAssemblyMvid.Read(target.DllPath);
                 index.Preload(target.DllPath, target.PdbPath, moduleVersionId);
             }
         }

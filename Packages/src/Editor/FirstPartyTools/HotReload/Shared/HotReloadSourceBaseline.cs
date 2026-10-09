@@ -103,10 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadSnapshotMissReason.NoCompiledAssembly;
             }
 
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
             string assemblyName = Path.GetFileNameWithoutExtension(targetDllPath);
             string slashNormalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
-            string snapshotFileName = HotReloadSourceSnapshotter.HashProjectRelativePath(slashNormalizedRelativePath) + ".cs";
+            string snapshotFileName = HotReloadSourceSnapshotLayout.SourceFileName(slashNormalizedRelativePath);
             string snapshotPath = Path.Combine(
                 projectRoot,
                 HotReloadConstants.SourceSnapshotRelativeDirectory,

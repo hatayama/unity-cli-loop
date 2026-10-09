@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             bool found = index.TryFindDocument(
                 dllPath,
                 pdbPath,
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath),
+                HotReloadAssemblyMvid.Read(dllPath),
                 projectRelativePath,
                 out HotReloadPdbDocument indexed);
 
@@ -215,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 // The player's snapshot is planted by hand: a root under Library is not a project the
                 // Editor resolves package asset paths for, so the capture would skip the source.
-                string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+                string mvid = HotReloadAssemblyMvid.Read(dllPath);
                 string snapshotDirectory = Path.Combine(
                     playerRoot,
                     HotReloadConstants.SourceSnapshotRelativeDirectory,
@@ -225,7 +225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     physicalSourcePath,
                     Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath(PackageSourceAssetPath) + ".cs"));
+                        HotReloadSourceSnapshotLayout.SourceFileName(PackageSourceAssetPath)));
                 HotReloadPdbDocumentIndex documentIndex = new HotReloadPdbDocumentIndex(
                     Path.Combine(playerRoot, HotReloadConstants.PdbDocumentsRelativeDirectory));
 
@@ -287,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string slashNormalizedRelativePath = FixtureProjectRelativePath.Replace('\\', '/');
             string snapshotFileName =
-                HotReloadSourceSnapshotter.HashProjectRelativePath(slashNormalizedRelativePath) + ".cs";
+                HotReloadSourceSnapshotLayout.SourceFileName(slashNormalizedRelativePath);
             string realSnapshotPath = Path.Combine(
                 projectRoot,
                 HotReloadConstants.SourceSnapshotRelativeDirectory,
@@ -494,9 +494,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Copies the fixture's real snapshot under a temporary root with its first byte flipped.
         private static string WriteTamperedSnapshotTree(string projectRoot, string dllPath)
         {
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
             string snapshotFileName =
-                HotReloadSourceSnapshotter.HashProjectRelativePath(FixtureProjectRelativePath) + ".cs";
+                HotReloadSourceSnapshotLayout.SourceFileName(FixtureProjectRelativePath);
             string realSnapshotPath = Path.Combine(
                 projectRoot,
                 HotReloadConstants.SourceSnapshotRelativeDirectory,
@@ -562,7 +562,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: on Windows, snapshot filename hashing lowercases the project-relative path so case-only path differences resolve to the same baseline file.
         /// </summary>
         [Test]
-        public void HashProjectRelativePath_OnWindows_IgnoresCase()
+        public void SourceFileName_OnWindows_IgnoresCase()
         {
             if (Path.DirectorySeparatorChar != '\\')
             {
@@ -571,15 +571,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(
-                HotReloadSourceSnapshotter.HashProjectRelativePath("Assets/Foo.cs"),
-                Is.EqualTo(HotReloadSourceSnapshotter.HashProjectRelativePath("assets/foo.cs")));
+                HotReloadSourceSnapshotLayout.SourceFileName("Assets/Foo.cs"),
+                Is.EqualTo(HotReloadSourceSnapshotLayout.SourceFileName("assets/foo.cs")));
         }
 
         /// <summary>
         /// What: on Windows, an extended-length source created beyond legacy MAX_PATH is captured byte-exactly from its unprefixed project-relative path.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_LongWindowsSource_CapturesByteExactSnapshot()
+        public void CaptureAtomically_LongWindowsSource_CapturesByteExactSnapshot()
         {
             if (Path.DirectorySeparatorChar != '\\')
             {
@@ -610,7 +610,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     sourceText,
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-                HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                HotReloadSourceSnapshotCopier.CaptureAtomically(
                     root,
                     snapshotDirectory,
                     new[] { sourceRelativePath },
@@ -620,7 +620,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string normalizedRelativePath = sourceRelativePath.Replace('\\', '/');
                 string snapshotPath = Path.Combine(
                     snapshotDirectory,
-                    HotReloadSourceSnapshotter.HashProjectRelativePath(normalizedRelativePath) + ".cs");
+                    HotReloadSourceSnapshotLayout.SourceFileName(normalizedRelativePath));
                 Assert.That(File.Exists(snapshotPath), Is.True);
                 Assert.That(
                     File.ReadAllBytes(snapshotPath).SequenceEqual(File.ReadAllBytes(fileSystemSourcePath)),
@@ -640,7 +640,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: an unreadable source is skipped with one warning while readable siblings still complete the atomic snapshot.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_OneLockedSource_CompletesWithReadableSnapshots()
+        public void CaptureAtomically_OneLockedSource_CompletesWithReadableSnapshots()
         {
             if (Path.DirectorySeparatorChar != '\\')
             {
@@ -684,7 +684,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         LogType.Warning,
                         "[UnityCliLoop] Skipped 1 unreadable source(s) while snapshotting " +
                         "LockedSourceAssembly: Sources/Locked.cs");
-                    HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                    HotReloadSourceSnapshotCopier.CaptureAtomically(
                         root,
                         snapshotDirectory,
                         sourceRelativePaths,
@@ -696,17 +696,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     File.Exists(Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs")),
+                        HotReloadSourceSnapshotLayout.SourceFileName("Sources/First.cs"))),
                     Is.True);
                 Assert.That(
                     File.Exists(Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Locked.cs") + ".cs")),
+                        HotReloadSourceSnapshotLayout.SourceFileName("Sources/Locked.cs"))),
                     Is.False);
                 Assert.That(
                     File.Exists(Path.Combine(
                         snapshotDirectory,
-                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Last.cs") + ".cs")),
+                        HotReloadSourceSnapshotLayout.SourceFileName("Sources/Last.cs"))),
                     Is.True);
             }
             finally

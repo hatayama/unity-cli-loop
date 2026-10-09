@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadChangedSiblingScanResult.Empty;
             }
 
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
             return DetectFromSnapshotDirectory(
                 projectRoot,
                 assemblyName + "-" + mvid,
@@ -154,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return SourceMatchesSnapshotDirectory(
                 projectRoot,
-                assemblyName + "-" + HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                assemblyName + "-" + HotReloadAssemblyMvid.Read(targetDllPath),
                 projectRelativePath,
                 sourcePath);
         }
@@ -189,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblySnapshotDirectoryName);
             string snapshotPath = Path.Combine(
                 snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/')) + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName(projectRelativePath.Replace('\\', '/')));
             if (!File.Exists(snapshotPath))
             {
                 return false;
@@ -270,7 +270,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string snapshotPath = Path.Combine(
                 snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(normalizedRelativePath) + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName(normalizedRelativePath));
             if (!File.Exists(snapshotPath))
             {
                 return null;

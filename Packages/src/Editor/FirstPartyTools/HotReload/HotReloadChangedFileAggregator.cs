@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+                string mvid = HotReloadAssemblyMvid.Read(dllPath);
                 snapshotAssemblies.Add(
                     new HotReloadSnapshotAssembly(assembly.name + "-" + mvid, sourceFiles));
             }

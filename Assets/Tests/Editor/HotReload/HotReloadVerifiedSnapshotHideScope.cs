@@ -27,10 +27,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadConstants.ScriptAssembliesRelativeDirectory,
                 "UnityCLILoop.Tests.Editor.HotReload"
                 + HotReloadConstants.CompiledAssemblyExtension);
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
             string snapshotFileName =
-                HotReloadSourceSnapshotter.HashProjectRelativePath(
-                    projectRelativePath.Replace('\\', '/')) + ".cs";
+                HotReloadSourceSnapshotLayout.SourceFileName(
+                    projectRelativePath.Replace('\\', '/'));
             string snapshotPath = Path.Combine(
                 projectRoot,
                 HotReloadConstants.SourceSnapshotRelativeDirectory,

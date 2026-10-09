@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _index.Preload(
                 dllPath,
                 Path.ChangeExtension(dllPath, ".pdb"),
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath));
+                HotReloadAssemblyMvid.Read(dllPath));
             int afterPreload = _index.LoadCount;
             bool found = Find(_index, dllPath, FixtureProjectRelativePath, out HotReloadPdbDocument _);
 
@@ -695,7 +695,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             out HotReloadPdbDocument document)
         {
             string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
-            string moduleVersionId = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string moduleVersionId = HotReloadAssemblyMvid.Read(dllPath);
             return index.TryFindDocument(dllPath, pdbPath, moduleVersionId, projectRelativePath, out document);
         }
 

@@ -78,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// Verifies that the capture copies each existing source byte for byte under the hash of its slash-normalized path, skips a listed source that does not exist, and publishes the snapshot only under its final name.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_ExistingAndMissingSources_CopiesExistingByteExactUnderFinalDirectory()
+        public void CaptureAtomically_ExistingAndMissingSources_CopiesExistingByteExactUnderFinalDirectory()
         {
             string sourceDirectory = Path.Combine(_tempRoot, "Sources");
             Directory.CreateDirectory(sourceDirectory);
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string snapshotDirectory = Path.Combine(_tempRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
             string[] sourceFiles = { "Sources/First.cs", "Sources\\Second.cs", "Sources/Missing.cs" };
 
-            HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+            HotReloadSourceSnapshotCopier.CaptureAtomically(
                 _tempRoot,
                 snapshotDirectory,
                 sourceFiles,
@@ -98,10 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string firstSnapshot = Path.Combine(
                 snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName("Sources/First.cs"));
             string secondSnapshot = Path.Combine(
                 snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Second.cs") + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName("Sources/Second.cs"));
             Assert.That(File.Exists(firstSnapshot), Is.True);
             Assert.That(File.Exists(secondSnapshot), Is.True);
             Assert.That(Directory.Exists(snapshotDirectory + ".tmp"), Is.False);
@@ -114,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// Verifies that the capture writes one manifest line with the length and last write time of each copied source, in the order of the source list, and no line for a listed source that does not exist.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_RecordsTheLengthAndWriteTimeOfEachCopiedSource()
+        public void CaptureAtomically_RecordsTheLengthAndWriteTimeOfEachCopiedSource()
         {
             string sourceDirectory = Path.Combine(_tempRoot, "Sources");
             Directory.CreateDirectory(sourceDirectory);
@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string snapshotDirectory = Path.Combine(_tempRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
             string[] sourceFiles = { "Sources/First.cs", "Sources\\Second.cs", "Sources/Missing.cs" };
 
-            HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+            HotReloadSourceSnapshotCopier.CaptureAtomically(
                 _tempRoot,
                 snapshotDirectory,
                 sourceFiles,
@@ -133,9 +133,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 SuspectsNothing(_tempRoot));
 
             string expected = HotReloadConstants.SourceStampManifestHeader + "\n"
-                + HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs\t7\t"
+                + HotReloadSourceSnapshotLayout.SourceFileName("Sources/First.cs") + "\t7\t"
                 + firstWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) + "\t0\n"
-                + HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Second.cs") + ".cs\t2\t"
+                + HotReloadSourceSnapshotLayout.SourceFileName("Sources/Second.cs") + "\t2\t"
                 + secondWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) + "\t0\n";
             Assert.That(
                 File.ReadAllText(Path.Combine(snapshotDirectory, HotReloadConstants.SourceStampManifestFileName)),
@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// Verifies that a leftover temporary directory from an interrupted capture is discarded, so its stale files never reach the published snapshot.
         /// </summary>
         [Test]
-        public void CaptureAssemblySourcesAtomically_WhenTemporaryDirectoryIsLeftOver_PublishesOnlyFreshSources()
+        public void CaptureAtomically_WhenTemporaryDirectoryIsLeftOver_PublishesOnlyFreshSources()
         {
             string sourceDirectory = Path.Combine(_tempRoot, "Sources");
             Directory.CreateDirectory(sourceDirectory);
@@ -157,7 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(leftoverDirectory);
             File.WriteAllText(Path.Combine(leftoverDirectory, "stale.cs"), "stale\n");
 
-            HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+            HotReloadSourceSnapshotCopier.CaptureAtomically(
                 _tempRoot,
                 snapshotDirectory,
                 new[] { "Sources/Fresh.cs" },
@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 publishedNames,
                 Is.EquivalentTo(new[]
                 {
-                    HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Fresh.cs") + ".cs",
+                    HotReloadSourceSnapshotLayout.SourceFileName("Sources/Fresh.cs"),
                     HotReloadConstants.SourceStampManifestFileName,
                 }));
             Assert.That(Directory.Exists(leftoverDirectory), Is.False);
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int checks = 0;
 
-            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotCopier.JudgeCopy(
                 true,
                 99,
                 100,
@@ -206,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void JudgeCopy_ASourceWrittenAtTheStartThatDiffersFromThePdb_MarksIt()
         {
-            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(true, 100, 100, () => false);
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotCopier.JudgeCopy(true, 100, 100, () => false);
 
             Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.EditedAfterCompile));
         }
@@ -218,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void JudgeCopy_ASourceWrittenAfterTheStartThatMatchesThePdb_TrustsTheStamp()
         {
-            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(true, 101, 100, () => true);
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotCopier.JudgeCopy(true, 101, 100, () => true);
 
             Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.StampTrusted));
         }
@@ -229,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void JudgeCopy_ASourceWrittenAfterTheStartThatDiffersFromThePdb_MarksIt()
         {
-            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(true, 101, 100, () => false);
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotCopier.JudgeCopy(true, 101, 100, () => false);
 
             Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.EditedAfterCompile));
         }
@@ -243,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int checks = 0;
 
-            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotCopier.JudgeCopy(
                 false,
                 99,
                 100,
@@ -264,7 +264,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void JudgeCopy_ASourceThatChangedWhileReadAndDiffersFromThePdb_MarksIt()
         {
-            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(false, 99, 100, () => false);
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotCopier.JudgeCopy(false, 99, 100, () => false);
 
             Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.EditedAfterCompile));
         }

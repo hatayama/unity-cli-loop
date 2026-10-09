@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CaptureAssemblyIfNeeded_WithoutStamp_CapturesSourcesRemovesStaleSnapshotAndWritesStamp()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
             string staleDirectory = Path.Combine(_snapshotRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(staleDirectory);
 
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CaptureAssemblyIfNeeded_WhenStampMatches_SkipsCapture()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
             string stamp = ExpectedStamp(dllPath, mvid);
             File.WriteAllText(StampPath("Fixture"), stamp);
 
@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CaptureAssemblyIfNeeded_WhenMvidDirectoryExists_KeepsSnapshotsAndWritesStamp()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
             string currentDirectory = Path.Combine(_snapshotRoot, "Fixture-" + mvid);
             Directory.CreateDirectory(currentDirectory);
             string staleDirectory = Path.Combine(_snapshotRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
@@ -138,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.WriteAllText(brokenDllPath, "not an assembly");
             File.WriteAllText(Path.ChangeExtension(brokenDllPath, ".pdb"), "not a pdb");
             string dllPath = PlantCompiledAssembly("Fixture");
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
             LogAssert.Expect(LogType.Warning, new Regex("Snapshot capture failed for assembly Broken"));
 
             HotReloadSourceSnapshotter.CaptureAssemblies(
@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CollectSnapshotAssemblies_KeepsOnlyAssembliesWithSourcesAndCompiledOutput()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
             PlantCompiledAssembly("NoSources");
             File.Delete(Path.ChangeExtension(PlantCompiledAssembly("NoPdb"), ".pdb"));
 
@@ -202,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 // A source the compile read is older than the compiled assembly; keeping it so leaves
                 // it out of the capture's PDB check.
                 File.SetLastWriteTimeUtc(playerFixturePath, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-                string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+                string mvid = HotReloadAssemblyMvid.Read(dllPath);
 
                 HotReloadSourceSnapshotter.CaptureAssemblies(
                     playerRoot,
@@ -214,7 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     playerRoot,
                     HotReloadConstants.SourceSnapshotRelativeDirectory,
                     "Fixture-" + mvid,
-                    HotReloadSourceSnapshotter.HashProjectRelativePath(SourceRelativePath) + ".cs");
+                    HotReloadSourceSnapshotLayout.SourceFileName(SourceRelativePath));
                 Assert.That(File.Exists(playerSnapshotSource), Is.True);
                 Assert.That(Directory.Exists(Path.Combine(mainRoot, "Library", "UloopHotReload")), Is.False);
             }
@@ -265,7 +265,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             File.SetLastWriteTimeUtc(
                 Path.Combine(_projectRoot, "Assets", "Fixture.cs"),
                 new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath);
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
 
             HotReloadSourceSnapshotter.CaptureAssemblyIfNeeded(
                 _projectRoot,
@@ -279,7 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string SnapshotFileName()
         {
-            return HotReloadSourceSnapshotter.HashProjectRelativePath(SourceRelativePath) + ".cs";
+            return HotReloadSourceSnapshotLayout.SourceFileName(SourceRelativePath);
         }
 
         // Persists the PDB document lists under the temporary root, so a test never writes the
@@ -324,7 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Path.Combine(
                 _snapshotRoot,
                 assemblyName + "-" + mvid,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(SourceRelativePath) + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName(SourceRelativePath));
         }
 
         private string StampPath(string assemblyName)

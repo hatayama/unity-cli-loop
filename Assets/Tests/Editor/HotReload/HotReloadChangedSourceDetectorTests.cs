@@ -288,7 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(snapshotDirectory);
             string snapshotPath = Path.Combine(
                 snapshotDirectory,
-                HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/')) + ".cs");
+                HotReloadSourceSnapshotLayout.SourceFileName(projectRelativePath.Replace('\\', '/')));
             File.WriteAllBytes(
                 snapshotPath,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(contents));
