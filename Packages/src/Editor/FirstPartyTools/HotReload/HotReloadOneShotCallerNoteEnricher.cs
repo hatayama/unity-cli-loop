@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadCallSiteScanner.CompiledMethodIdentity[] identities = pair.Value.ConvertAll(
                     candidate => candidate.Identity).ToArray();
                 HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = scan(pair.Key, identities);
-                if (result.MissingScanAssemblyNames.Count > 0)
+                if (result.IsIncomplete)
                 {
                     continue;
                 }

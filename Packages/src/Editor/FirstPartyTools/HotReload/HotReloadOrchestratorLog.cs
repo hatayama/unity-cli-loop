@@ -177,5 +177,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 correlationId);
         }
+
+        internal static void LogHotReloadCallerNoteLoadBudgetExhausted(
+            int budgetLoads,
+            IReadOnlyList<string> refusedAssemblyNames,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogCallerNoteLoadBudgetExhausted,
+                "Caller-note resolution hit its uncached dll load budget; the note was omitted.",
+                new
+                {
+                    budgetLoads,
+                    refusedAssemblies = refusedAssemblyNames.ToArray()
+                },
+                correlationId);
+        }
     }
 }
