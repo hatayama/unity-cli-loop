@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadPublicizedTargetWarmUpItemTests
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
+
+        private const string MissingAssemblyName = "Uloop.NoSuchAssembly";
 
         private static readonly DateTime MarkerWriteTimeUtc = new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
 
@@ -86,28 +89,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
 
-            await new HotReloadPublicizedTargetWarmUpItem().RunAsync(ContextFor("Uloop.NoSuchAssembly"), CancellationToken.None);
+            await new HotReloadPublicizedTargetWarmUpItem().RunAsync(ContextFor(MissingAssemblyName), CancellationToken.None);
 
             Assert.That(File.Exists(ExpectedCopyPath()), Is.False);
         }
 
         /// <summary>
-        /// What: a cancellation seen before the first unit throws and writes no copy.
+        /// What: a cancellation seen before the first unit makes the item throw, through the token
+        /// it hands to its pool work, and no copy is written.
         /// </summary>
         [Test]
-        public void WritePublicizedCopies_WhenCancelledBeforeTheFirstUnit_ThrowsAndWritesNothing()
+        public async Task RunAsync_WhenCancelledBeforeTheFirstUnit_ThrowsAndWritesNothing()
         {
             PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
-            HotReloadPublicizedTargetRequest request = new HotReloadPublicizedTargetRequest(
-                RunHome(),
-                PublicizerTestSearchDirectories.ForHotReloadTestAssembly());
             using CancellationTokenSource cts = new CancellationTokenSource();
             cts.Cancel();
 
-            Assert.Throws<OperationCanceledException>(
-                () => HotReloadPublicizedTargetWarmUpItem.WritePublicizedCopies(new[] { request }, cts.Token));
+            // Why try/catch rather than Assert.ThrowsAsync: that blocks the main thread in this
+            // NUnit, and the test framework reports an async test that ends canceled as passed.
+            bool cancelled = false;
+            try
+            {
+                await new HotReloadPublicizedTargetWarmUpItem().RunAsync(ContextFor(TestAssemblyName), cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
 
-            Assert.That(File.Exists(ExpectedCopyPath()), Is.False);
+            Assert.That(cancelled, Is.True, "the item threw OperationCanceledException");
+            Assert.That(File.Exists(ExpectedCopyPath()), Is.False, "copy written");
+        }
+
+        /// <summary>
+        /// What: a cancellation that comes after the first unit throws before the next unit, after
+        /// the first copy was written.
+        /// </summary>
+        [Test]
+        public void WritePublicizedCopies_WhenCancelledBetweenUnits_ThrowsBeforeTheNextUnit()
+        {
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName, HotReloadConstants.PublicizedRefsRelativeDirectory);
+            HotReloadPublicizedTargetRequest first = new HotReloadPublicizedTargetRequest(
+                RunHome(),
+                PublicizerTestSearchDirectories.ForHotReloadTestAssembly());
+            // A dll that does not exist: a unit run for it would fail the test.
+            HotReloadPublicizedTargetRequest second = new HotReloadPublicizedTargetRequest(
+                HotReloadTypeHome.ScriptAssemblies(
+                    MissingAssemblyName,
+                    CompiledAssemblyLayout.Resolve(ProjectRoot()).DllPath(MissingAssemblyName)),
+                Array.Empty<string>());
+            using CancellationTokenSource cts = new CancellationTokenSource();
+
+            Assert.Throws<OperationCanceledException>(
+                () => HotReloadPublicizedTargetWarmUpItem.WritePublicizedCopies(
+                    new CancelBeforeTheSecondRequest(first, second, cts),
+                    cts.Token));
+
+            Assert.That(File.Exists(ExpectedCopyPath()), Is.True, "copy written by the first unit");
         }
 
         /// <summary>
@@ -159,6 +197,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static HotReloadTypeHome RunHome()
         {
             return HotReloadTypeHome.ScriptAssembliesUnderProject(ProjectRoot(), TestAssemblyName);
+        }
+
+        // Hands out the first request, then cancels before it hands out the second, the way a
+        // run's yield lands between two units. The indexer cancels too, so a for loop over the
+        // requests sees the same order.
+        private sealed class CancelBeforeTheSecondRequest : IReadOnlyList<HotReloadPublicizedTargetRequest>
+        {
+            private readonly HotReloadPublicizedTargetRequest _first;
+            private readonly HotReloadPublicizedTargetRequest _second;
+            private readonly CancellationTokenSource _cts;
+
+            internal CancelBeforeTheSecondRequest(
+                HotReloadPublicizedTargetRequest first,
+                HotReloadPublicizedTargetRequest second,
+                CancellationTokenSource cts)
+            {
+                _first = first;
+                _second = second;
+                _cts = cts;
+            }
+
+            public int Count => 2;
+
+            public HotReloadPublicizedTargetRequest this[int index]
+            {
+                get
+                {
+                    if (index > 0)
+                    {
+                        _cts.Cancel();
+                    }
+
+                    return index == 0 ? _first : _second;
+                }
+            }
+
+            public IEnumerator<HotReloadPublicizedTargetRequest> GetEnumerator()
+            {
+                yield return _first;
+                _cts.Cancel();
+                yield return _second;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
         }
     }
 }
