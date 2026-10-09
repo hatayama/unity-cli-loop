@@ -97,6 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(pluginIndex, Is.GreaterThan(ownIndex));
         }
 
+#if !UNITY_6000_5_OR_NEWER
         /// <summary>
         /// Verifies that for this project's hot-reload test assembly, whose asmdef overrides its
         /// references, the directories reach the code analysis plugins that only a referenced tool
@@ -116,6 +117,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
                     testAssembly), Does.Contain(pluginDirectory));
         }
+#else
+        /// <summary>
+        /// Verifies that from Unity 6000.5 on, where the bundled code analysis plugins step aside
+        /// (the define constraint in their .meta), the directories reach the Editor's stock
+        /// System.Reflection.Metadata through the test assembly's own references and no longer
+        /// list the plugin directory at all.
+        /// </summary>
+        [Test]
+        public void Collect_ForHotReloadTestAssembly_OnUnity6000_5OrNewer_ReachesTheStockMetadataDirectoryWithoutThePlugin()
+        {
+            UnityCompilationAssembly testAssembly = PublicizerTestSearchDirectories.HotReloadTestAssembly();
+            string pluginDirectory = Path.GetFullPath(Path.GetDirectoryName(CodeAnalysisPluginPath));
+            string stockMetadataDirectory = null;
+            foreach (string reference in testAssembly.compiledAssemblyReferences)
+            {
+                if (string.Equals(Path.GetFileName(reference), "System.Reflection.Metadata.dll", StringComparison.Ordinal))
+                {
+                    stockMetadataDirectory = Path.GetDirectoryName(Path.GetFullPath(reference));
+                    break;
+                }
+            }
+
+            Assert.That(stockMetadataDirectory, Is.Not.Null,
+                "Unity 6000.5+ lists the BCLExtensions System.Reflection.Metadata among every script assembly's compiled references.");
+            Assert.That(stockMetadataDirectory, Is.Not.EqualTo(pluginDirectory));
+
+            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                testAssembly);
+            Assert.That(directories, Does.Contain(stockMetadataDirectory));
+            Assert.That(directories, Does.Not.Contain(pluginDirectory),
+                "The define constraint keeps the bundled plugins out of every script assembly's references on 6000.5+.");
+        }
+#endif
 
         /// <summary>
         /// Verifies a publicized copy whose metadata needs an assembly that only a transitive
