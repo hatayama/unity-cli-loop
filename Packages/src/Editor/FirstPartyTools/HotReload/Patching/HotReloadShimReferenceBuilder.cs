@@ -470,33 +470,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string fullTarget = Path.GetFullPath(targetHome.DllPath);
             // The name another assembly's InternalsVisibleTo grant names the edited assembly by.
             string shimTargetAssemblyName = Path.GetFileNameWithoutExtension(fullTarget);
-            foreach (string reference in compilationAssembly.allReferences)
+            foreach (ShimCompileReference entry in ClassifyCompileReferences(
+                         compilationAssembly.allReferences,
+                         projectRoot,
+                         fullTarget,
+                         scriptAssembliesDirectory))
             {
-                if (string.IsNullOrEmpty(reference))
-                {
-                    continue;
-                }
-
-                // Resolved against the root for the same reason as in BuildWorkerReferencePaths.
-                string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
-                if (!File.Exists(fullReference))
-                {
-                    continue;
-                }
-                if (string.Equals(fullReference, fullTarget, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Replaced by the publicized copy above.
-                    continue;
-                }
-
-                string shimReference = PublicizeProjectReference(
-                    fullReference,
-                    scriptAssembliesDirectory,
-                    resolverSearchDirectories,
-                    shimTargetAssemblyName);
+                // A rewritten copy of a project assembly the shim may need non-public members of.
+                // Unless the reference grants its internals to the edited assembly, the copy keeps
+                // the reference's internal types and its private and internal members as they are
+                // and publicizes its protected ones, so the shim compile sees what the edited
+                // assembly's own compile saw.
+                string shimReference = entry.UsesRewrittenCopy
+                    ? ReferencePublicizer.GetOrCreateShimReferenceCopy(
+                        HotReloadTypeHome.ScriptAssemblies(
+                            Path.GetFileNameWithoutExtension(entry.FullPath),
+                            entry.FullPath),
+                        resolverSearchDirectories,
+                        shimTargetAssemblyName)
+                    : entry.FullPath;
                 references.Add(shimReference);
                 timing.ReferenceCount++;
-                if (!string.Equals(shimReference, fullReference, StringComparison.Ordinal))
+                if (!string.Equals(shimReference, entry.FullPath, StringComparison.Ordinal))
                 {
                     timing.CopiedReferenceCount++;
                 }
@@ -538,30 +533,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Returns the reference a shim compile binds against for one of Unity's compile
-        /// references: a publicized copy when the reference is a project assembly the shim may
-        /// need non-public members of, and the reference itself otherwise. Unless the reference
-        /// grants its internals to the edited assembly, the copy keeps the reference's internal
-        /// types and its private and internal members as they are and publicizes its protected
-        /// ones, so the shim compile sees what the edited assembly's own compile saw.
+        /// The compile references a shim compile of the assembly at fullTargetDllPath binds, in
+        /// Unity's order: empty entries, missing files and the target itself are left out; a
+        /// project assembly under the compiled-assemblies directory whose name may be publicized
+        /// is marked to be bound through a rewritten copy; every other reference is bound as it is.
+        /// Any thread.
         /// </summary>
-        private static string PublicizeProjectReference(
-            string fullReference,
-            string scriptAssembliesDirectory,
-            IReadOnlyCollection<string> resolverSearchDirectories,
-            string shimTargetAssemblyName)
+        internal static List<ShimCompileReference> ClassifyCompileReferences(
+            IReadOnlyList<string> allReferences,
+            string projectRoot,
+            string fullTargetDllPath,
+            string scriptAssembliesDirectory)
         {
-            string referenceFileName = Path.GetFileNameWithoutExtension(fullReference);
-            if (!IsUnderDirectory(fullReference, scriptAssembliesDirectory)
-                || !HotReloadConstants.IsPublicizableProjectAssemblyFileName(referenceFileName))
+            List<ShimCompileReference> classified = new List<ShimCompileReference>();
+            foreach (string reference in allReferences)
             {
-                return fullReference;
+                if (string.IsNullOrEmpty(reference))
+                {
+                    continue;
+                }
+
+                // Resolved against the root for the same reason as in BuildWorkerReferencePaths.
+                string fullReference = Path.GetFullPath(Path.Combine(projectRoot, reference));
+                if (!File.Exists(fullReference))
+                {
+                    continue;
+                }
+                if (string.Equals(fullReference, fullTargetDllPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Replaced by the publicized copy of the target.
+                    continue;
+                }
+
+                string referenceFileName = Path.GetFileNameWithoutExtension(fullReference);
+                bool usesRewrittenCopy = IsUnderDirectory(fullReference, scriptAssembliesDirectory)
+                    && HotReloadConstants.IsPublicizableProjectAssemblyFileName(referenceFileName);
+                classified.Add(new ShimCompileReference(fullReference, usesRewrittenCopy));
             }
 
-            return ReferencePublicizer.GetOrCreateShimReferenceCopy(
-                HotReloadTypeHome.ScriptAssemblies(referenceFileName, fullReference),
-                resolverSearchDirectories,
-                shimTargetAssemblyName);
+            return classified;
         }
 
         private static bool IsUnderDirectory(string fullPath, string directoryPath)
