@@ -61,7 +61,8 @@ jobs:
           echo "=== Changed files ==="
           echo "$CHANGED"
 
-          if echo "$CHANGED" | grep -qE '^(Packages/src/Editor/.*\.cs|Packages/src/Runtime/.*\.cs|Assets/.*\.cs|tests/.*\.cs|tests/.*\.csproj|Packages/.*\.asmdef|Assets/.*\.asmdef|Packages/manifest\.json|Packages/packages-lock\.json|ci/unity-projects/.*|\.github/workflows/unity-compile-check-and-test-runner\.yml)$'; then
+          # Plugin import settings decide which precompiled assemblies a script assembly references.
+          if echo "$CHANGED" | grep -qE '^(Packages/src/Editor/.*\.cs|Packages/src/Runtime/.*\.cs|Assets/.*\.cs|tests/.*\.cs|tests/.*\.csproj|Packages/.*\.asmdef|Assets/.*\.asmdef|Packages/src/.*\.dll\.meta|Packages/manifest\.json|Packages/packages-lock\.json|ci/unity-projects/.*|\.github/workflows/unity-compile-check-and-test-runner\.yml)$'; then
             echo "csharp=true" >> "$GITHUB_OUTPUT"
           else
             echo "csharp=false" >> "$GITHUB_OUTPUT"
