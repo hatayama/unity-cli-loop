@@ -592,6 +592,152 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: with a budget of one load and an empty cache, a scan reads the target assembly,
+        /// refuses the caller assembly, lists it as unread, and reports itself incomplete.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_WithLoadBudgetOfOne_ReadsOnlyTheTargetAssemblyAndRefusesTheCaller()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+            HotReloadCallSiteLoadBudget budget = new HotReloadCallSiteLoadBudget(1);
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = ScanWithBudget(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                budget);
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(1));
+            Assert.That(result.UnreadScanAssemblyNames, Is.EquivalentTo(new[] { CrossAssemblyCallerAssemblyName }));
+            Assert.That(result.Hits, Is.Empty);
+            Assert.That(result.IsIncomplete, Is.True);
+            Assert.That(budget.RemainingLoads, Is.EqualTo(0));
+            Assert.That(budget.RefusedAssemblyNames, Is.EquivalentTo(new[] { CrossAssemblyCallerAssemblyName }));
+        }
+
+        /// <summary>
+        /// What: with no load left and an empty cache, a scan reads nothing and lists both the
+        /// target assembly and the caller assembly as unread.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_WithExhaustedLoadBudget_ReadsNothingAndListsBothAsUnread()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+            HotReloadCallSiteLoadBudget budget = new HotReloadCallSiteLoadBudget(0);
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = ScanWithBudget(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                budget);
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(0));
+            Assert.That(
+                result.UnreadScanAssemblyNames,
+                Is.EquivalentTo(new[] { GetTestAssemblyName(), CrossAssemblyCallerAssemblyName }));
+            Assert.That(result.Hits, Is.Empty);
+            Assert.That(result.IsIncomplete, Is.True);
+        }
+
+        /// <summary>
+        /// What: an assembly whose MemberRef table names no target is skipped before the budget is
+        /// asked, so with no load left it is listed as skipped, not as unread; only the target
+        /// assembly, which is always walked, is unread.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_WithExhaustedLoadBudget_StillSkipsAssembliesThatNameNoTarget()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+            HotReloadCallSiteLoadBudget budget = new HotReloadCallSiteLoadBudget(0);
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = ScanWithBudget(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.NeverCalled),
+                budget);
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(0));
+            Assert.That(result.SkippedScanAssemblyNames, Does.Contain(CrossAssemblyCallerAssemblyName));
+            Assert.That(result.UnreadScanAssemblyNames, Does.Not.Contain(CrossAssemblyCallerAssemblyName));
+            Assert.That(result.UnreadScanAssemblyNames, Does.Contain(GetTestAssemblyName()));
+        }
+
+        /// <summary>
+        /// What: assemblies already in the cache are served without consuming the budget, so a
+        /// scan with no load left is still complete when every assembly it needs is cached.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_CachedAssembliesDoNotConsumeTheLoadBudget()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+            Scan(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                Array.Empty<string>(),
+                0);
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(2));
+            HotReloadCallSiteLoadBudget budget = new HotReloadCallSiteLoadBudget(0);
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = ScanWithBudget(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                budget);
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(2));
+            Assert.That(result.Hits.Count, Is.EqualTo(1));
+            Assert.That(result.IsIncomplete, Is.False);
+            Assert.That(result.UnreadScanAssemblyNames, Is.Empty);
+            Assert.That(budget.RemainingLoads, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: one run shares a single load budget across the candidate assemblies it scans, so
+        /// two candidates in different uncached assemblies read one dll in total and neither gets
+        /// a note. A budget created per scan call would read two.
+        /// </summary>
+        [Test]
+        public async Task ApplyOneShotCallerNotes_WithFreshCache_SharesOneLoadBudgetAcrossCandidateAssemblies()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                HotReloadCompositionRoot.Services.Domain,
+                HotReloadCompositionRoot.Services.Patcher,
+                HotReloadCompositionRoot.Services.UnityMessageForwarding,
+                false);
+            HotReloadMethodOutcome targetOutcome = HotReloadMethodOutcome.Patched("Type.Called", "Assets/Test.cs");
+            HotReloadMethodOutcome callerOutcome = HotReloadMethodOutcome.Patched("Type.Call", "Assets/Test2.cs");
+            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    GetTestAssemblyName(),
+                    new HotReloadMetadataTypeName(CrossAssemblyTargetTypeMetadataName),
+                    nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                    Array.Empty<string>(),
+                    0),
+                targetOutcome));
+            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    CrossAssemblyCallerAssemblyName,
+                    new HotReloadMetadataTypeName(CrossAssemblyCallerTypeMetadataName),
+                    "Call",
+                    Array.Empty<string>(),
+                    0),
+                callerOutcome));
+
+            run.ApplyOneShotCallerNotes(GetProjectRoot(), "test-correlation");
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(1));
+            Assert.That(targetOutcome.LifecycleNote, Is.Empty);
+            Assert.That(callerOutcome.LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
         /// What: the referencing dlls of the test assembly include the cross-assembly caller's dll
         /// and never the test assembly's own dll.
         /// </summary>
@@ -642,6 +788,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadCallSiteScanner.FindCallSites(
                 GetProjectRoot(),
                 new[] { target });
+        }
+
+        private static HotReloadCallSiteScanner.HotReloadCallSiteScanResult ScanWithBudget(
+            string typeMetadataName,
+            string methodName,
+            HotReloadCallSiteLoadBudget loadBudget)
+        {
+            HotReloadCallSiteScanner.CompiledMethodIdentity target =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    GetTestAssemblyName(),
+                    new HotReloadMetadataTypeName(typeMetadataName),
+                    methodName,
+                    Array.Empty<string>(),
+                    0);
+
+            return HotReloadCallSiteScanner.FindCallSites(
+                GetProjectRoot(),
+                new[] { target },
+                loadBudget);
         }
 
         // The same path FindCallSites reads, so the shared cache returns the entry the scan used.
