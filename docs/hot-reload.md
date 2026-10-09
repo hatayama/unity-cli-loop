@@ -72,8 +72,36 @@ added on one side alone fails a test rather than silently serializing to nothing
 Harmony ID: `io.github.hatayama.uloop.hot-reload` (distinct from the pause point's ID).
 Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/PublicizedExternalRefs/fmt1/<assemblyName>-<mvid>.dll`,
-`Library/UloopHotReload/Worker/<sourceHash>/`, and
-`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/`.
+`Library/UloopHotReload/Worker/<sourceHash>/`,
+`Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/` (with a `source-stamps.txt` that
+records each copied source's length and write time, so a run after a domain reload tells an
+unchanged sibling by a stat instead of reading it; a source written since the compile started
+whose bytes do not match the PDB checksum carries a mark that it was edited after the compile,
+and the default selection, the sibling scan and the skip check treat a marked source as
+changed),
+`Library/UloopHotReload/PdbDocuments/fmt1/<assemblyName>.txt` (the documents the PDB's sequence
+points refer to, stamped with the dll's and the PDB's length and write time and the MVID, so the
+first run after a domain reload does not walk the PDB again while they still match), and
+`Library/UloopHotReload/ReferencedMethods/fmt1/<assemblyName>.txt` (the methods of other
+assemblies the dll's MemberRef table names, stamped with the dll's length, write time and MVID,
+so the first run after a domain reload does not read an assembly that names none of the edited
+methods), and `Library/UloopHotReload/WarmUp/targets.txt` (the assemblies the runs of this project
+edited, most recent first, read by the warm-up after a domain reload).
+
+Warm-up after a domain reload: on the first Editor update tick after a reload, hot reload loads in
+the background what the first run would otherwise load cold, for the most recent assemblies in
+`targets.txt` (up to eight) whose dll and PDB exist: the publicized copy their shim compile
+references, their compiled call sites, the referenced-method sets of the assemblies that reference them, and their PDB document lists. It
+does not start while the Editor compiles or imports, and a domain reload or a compile start stops
+it. A run that arrives while it works waits only for the unit (one dll) in flight, whose result
+it reuses; that item and the remaining ones are dropped; a run that arrives before the tick keeps it from starting.
+`hot_reload_warm_up_complete` and `hot_reload_warm_up_skipped` show what it did, and the run's
+`warm_up_yield` step shows how long the run waited (see `docs/vibe-logs.md`). After each server
+reset (a domain reload or a manual server start), when `targets.txt` names a compiled assembly,
+the shared Roslyn worker is started in the background and compiles once against the references
+the shim compile binds as they are, so the first shim compile finds it running (see
+`dynamic_code_shared_worker_warm_up_complete`). The transform worker and the copies of the other
+project assemblies a shim compile references are not warmed up yet.
 The shim compile references a fully publicized copy of the edited assembly, and of every other
 project assembly that grants the edited one its internals through `InternalsVisibleTo`. Any other
 project assembly is referenced through a `PublicizedExternalRefs` copy that keeps its top-level

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -21,6 +22,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
         private string _tempDirectoryPath;
 
+        /// <summary>
+        /// Waits for a shared-worker warm-up that started before the run.
+        /// </summary>
+        [UnitySetUp]
+        public IEnumerator WaitForSharedWorkerWarmUp()
+        {
+            Task warmUp = DynamicCodeServices.GetRegistry().GetSharedWorkerWarmUpTaskForTests();
+            while (!warmUp.IsCompleted)
+            {
+                yield return null;
+            }
+        }
+
         [SetUp]
         public void SetUp()
         {
@@ -35,6 +49,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 Directory.Delete(_tempDirectoryPath, true);
             }
+        }
+
+        /// <summary>
+        /// Verifies resolving an Editor layout without the compiler lists the missing components
+        /// and logs nothing, leaving the report to the caller.
+        /// </summary>
+        [Test]
+        public void ResolveFromEditorPath_WithMissingComponents_ListsThemWithoutLogging()
+        {
+            string editorPath = Path.Combine(_tempDirectoryPath, "Fake.app");
+            Directory.CreateDirectory(Path.Combine(editorPath, "Contents"));
+
+            ExternalCompilerPathResolution resolution = ExternalCompilerPathResolver.ResolveFromEditorPath(editorPath);
+
+            Assert.That(resolution.Paths, Is.Null);
+            Assert.That(resolution.MissingComponents.Count, Is.GreaterThan(0));
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        /// <summary>
+        /// Verifies the entry that does not report resolves the same compiler as the one compiles use, so the warm-up starts the worker a compile would.
+        /// </summary>
+        [Test]
+        public void Resolve_ReturnsTheSamePathsAsResolveWithoutReporting()
+        {
+            ExternalCompilerPaths reported = ExternalCompilerPathResolver.Resolve();
+            ExternalCompilerPaths unreported = ExternalCompilerPathResolver.ResolveWithoutReporting();
+
+            Assert.That(reported, Is.Not.Null);
+            Assert.That(unreported, Is.Not.Null);
+            Assert.That(unreported.EditorContentsPath, Is.EqualTo(reported.EditorContentsPath));
+            Assert.That(unreported.ScriptingRootPath, Is.EqualTo(reported.ScriptingRootPath));
+            Assert.That(unreported.DotnetHostPath, Is.EqualTo(reported.DotnetHostPath));
+            Assert.That(unreported.CompilerDllPath, Is.EqualTo(reported.CompilerDllPath));
+            Assert.That(unreported.CompilerRuntimeConfigPath, Is.EqualTo(reported.CompilerRuntimeConfigPath));
+            Assert.That(unreported.CompilerDepsFilePath, Is.EqualTo(reported.CompilerDepsFilePath));
+            Assert.That(unreported.CodeAnalysisDllPath, Is.EqualTo(reported.CodeAnalysisDllPath));
+            Assert.That(unreported.CodeAnalysisCSharpDllPath, Is.EqualTo(reported.CodeAnalysisCSharpDllPath));
+            Assert.That(unreported.NetCoreRuntimeSharedDirectoryPath, Is.EqualTo(reported.NetCoreRuntimeSharedDirectoryPath));
+            Assert.That(unreported.LayoutKind, Is.EqualTo(reported.LayoutKind));
         }
 
         [Test]
@@ -360,6 +414,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new System.Text.RegularExpressions.Regex(
                     "execute-dynamic-code shared Roslyn worker is unavailable; falling back to one-shot compiler execution; reason=worker_unavailable"));
 
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousWorkerCompiler =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths paths, string workerSourcePath, string workerAssemblyPath, string workerCompileResponseFilePath) =>
@@ -398,6 +453,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorkerCompiler);
                 SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                cacheScope.Dispose();
             }
         }
 
@@ -427,6 +483,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             SharedRoslynCompilerWorkerHost.ShutdownForTests();
             LogAssert.NoUnexpectedReceived();
 
+            SharedRoslynCompilerWorkerCacheScope cacheScope = SharedRoslynCompilerWorkerCacheScope.ForHost();
             Func<ExternalCompilerPaths, string, string, string, CompilerMessage[]> previousWorkerCompiler =
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
                     (ExternalCompilerPaths paths, string workerSourcePath, string workerAssemblyPath, string workerCompileResponseFilePath) =>
@@ -462,6 +519,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorkerCompiler);
                 SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                cacheScope.Dispose();
             }
         }
 

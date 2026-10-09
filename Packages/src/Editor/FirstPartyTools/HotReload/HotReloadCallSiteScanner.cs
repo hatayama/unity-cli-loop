@@ -31,14 +31,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             /// </summary>
             public int ExaminedCallSiteCount;
 
+            /// <summary>
+            /// Assemblies of the scan set whose MemberRef table names none of the targets, so they
+            /// were not read; diagnostic, like ExaminedCallSiteCount.
+            /// </summary>
+            public List<string> SkippedScanAssemblyNames;
+
             public HotReloadCallSiteScanResult(
                 List<CallSiteHit> hits,
                 List<string> missingScanAssemblyNames,
-                int examinedCallSiteCount = 0)
+                int examinedCallSiteCount = 0,
+                List<string> skippedScanAssemblyNames = null)
             {
                 Hits = hits;
                 MissingScanAssemblyNames = missingScanAssemblyNames;
                 ExaminedCallSiteCount = examinedCallSiteCount;
+                SkippedScanAssemblyNames = skippedScanAssemblyNames ?? new List<string>();
             }
         }
 
@@ -105,14 +113,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames);
             }
 
-            HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets);
+            HashSet<string> targetAssemblyNames = CollectTargetAssemblyNames(targets);
+            HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets, targetAssemblyNames);
+            HashSet<string> targetKeys = CollectTargetKeys(targets);
+            List<string> skippedScanAssemblyNames = new List<string>();
             int examinedCallSiteCount = 0;
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
             foreach (string assemblyName in scanAssemblyNames)
             {
-                string dllPath = Path.Combine(
-                    projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                    assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+                string dllPath = layout.DllPath(assemblyName);
 
                 // Why skip (not assert): an assembly that has not been written to ScriptAssemblies
                 // cannot contain call sites, so it cannot be a caller. Missing here is "not compiled
@@ -123,19 +132,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // Why a target assembly is always walked: its own call sites are MethodDef operands
+                // with no MemberRef row, so the table cannot vouch for them.
+                if (!targetAssemblyNames.Contains(assemblyName)
+                    && !HotReloadReferencedMethodIndex.Shared.MentionsAny(dllPath, targetKeys))
+                {
+                    skippedScanAssemblyNames.Add(assemblyName);
+                    continue;
+                }
+
                 examinedCallSiteCount += CollectHitsFromAssembly(assemblyName, dllPath, targets, hits);
             }
 
-            return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames, examinedCallSiteCount);
+            return new HotReloadCallSiteScanResult(
+                hits,
+                missingScanAssemblyNames,
+                examinedCallSiteCount,
+                skippedScanAssemblyNames);
         }
 
-        private static HashSet<string> CollectScanAssemblyNames(CompiledMethodIdentity[] targets)
+        private static HashSet<string> CollectTargetAssemblyNames(CompiledMethodIdentity[] targets)
         {
             HashSet<string> targetAssemblyNames = new HashSet<string>(StringComparer.Ordinal);
-            HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (CompiledMethodIdentity target in targets)
             {
                 targetAssemblyNames.Add(target.AssemblyName);
+            }
+
+            return targetAssemblyNames;
+        }
+
+        // Keys the referenced-method index files a MemberRef row under. The type name is the
+        // metadata name (nested types joined with '/'), the spelling Cecil's FullName uses.
+        private static HashSet<string> CollectTargetKeys(CompiledMethodIdentity[] targets)
+        {
+            HashSet<string> targetKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CompiledMethodIdentity target in targets)
+            {
+                targetKeys.Add(HotReloadReferencedMethodIndex.BuildKey(
+                    target.AssemblyName,
+                    target.TypeMetadataName.Value,
+                    target.MethodName));
+            }
+
+            return targetKeys;
+        }
+
+        private static HashSet<string> CollectScanAssemblyNames(
+            CompiledMethodIdentity[] targets,
+            HashSet<string> targetAssemblyNames)
+        {
+            HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CompiledMethodIdentity target in targets)
+            {
                 targetDllFileNames.Add(target.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
             }
 
@@ -154,6 +203,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return scanNames;
+        }
+
+        /// <summary>
+        /// The compiled dlls of the other assemblies that reference <paramref name="targetAssemblyName"/>,
+        /// the ones a caller scan of its methods would consult the referenced-method index for.
+        /// Only dlls that exist are returned. Main thread only: it reads the compilation pipeline.
+        /// </summary>
+        internal static IReadOnlyList<string> CollectReferencingDllPaths(string projectRoot, string targetAssemblyName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(targetAssemblyName), "targetAssemblyName must not be null or empty.");
+
+            HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal)
+            {
+                targetAssemblyName + HotReloadConstants.CompiledAssemblyExtension
+            };
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
+            List<string> dllPaths = new List<string>();
+            foreach (KeyValuePair<string, string[]> assembly in GetReferencedDllFileNamesByAssembly())
+            {
+                if (string.Equals(assembly.Key, targetAssemblyName, StringComparison.Ordinal)
+                    || !ReferencesAnyTargetDll(assembly.Value, targetDllFileNames))
+                {
+                    continue;
+                }
+
+                string dllPath = layout.DllPath(assembly.Key);
+                if (File.Exists(dllPath))
+                {
+                    dllPaths.Add(dllPath);
+                }
+            }
+
+            return dllPaths;
         }
 
         // Why cache per domain: CompilationPipeline.GetAssemblies() costs ~40 ms on a project with
@@ -176,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Dictionary<string, string[]> graph = new Dictionary<string, string[]>(StringComparer.Ordinal);
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            foreach (UnityCompilationAssembly assembly in HotReloadCompilationAssemblies.Current())
             {
                 graph[assembly.name] = CollectReferenceFileNames(assembly.allReferences);
             }

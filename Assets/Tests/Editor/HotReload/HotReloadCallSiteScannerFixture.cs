@@ -161,6 +161,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return 7;
         }
+
+        public static int GenericMethod<T>()
+        {
+            return 10;
+        }
+
+        /// <summary>Nested target so a cross-assembly caller's key keeps the '/' separator.</summary>
+        public static class Nested
+        {
+            public static int CalledFromOtherAssembly()
+            {
+                return 11;
+            }
+        }
     }
 
     /// <summary>
@@ -193,6 +207,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Target()
         {
             return 1;
+        }
+    }
+
+    /// <summary>Open generic host whose constructed form is called from another assembly only.</summary>
+    public class HotReloadCrossAssemblyGenericHost<T>
+    {
+        public int Target()
+        {
+            return 12;
         }
     }
 

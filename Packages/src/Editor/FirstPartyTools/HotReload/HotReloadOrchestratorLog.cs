@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -41,6 +42,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     unchangedCount = output?.unchangedMethods?.Length ?? 0,
                     workerSuccess = workerResult.Success
                 },
+                correlationId);
+        }
+
+        internal static void LogHotReloadSignatureGateTiming(
+            long mainThreadSwitchMs,
+            long signatureGateMs,
+            bool usedWorkerRetry,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogSignatureGateTiming,
+                "Hot reload signature gate timing.",
+                new { mainThreadSwitchMs, signatureGateMs, usedWorkerRetry },
+                correlationId);
+        }
+
+        internal static void LogHotReloadShimFirstCompileTiming(
+            long mainThreadSwitchMs,
+            long membershipMs,
+            long compileShimMs,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogShimFirstCompileTiming,
+                "Hot reload shim first compile timing.",
+                new { mainThreadSwitchMs, membershipMs, compileShimMs },
                 correlationId);
         }
 
@@ -126,6 +153,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     addedCount,
                     staleCount,
                     success
+                },
+                correlationId);
+        }
+
+        // Why an anonymous array for the steps: the entry keys stay camelCase like the rest of the
+        // entry, which the step type's PascalCase properties would not.
+        internal static void LogHotReloadTimingDetail(HotReloadTimingDetailPayload payload, string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogTimingDetail,
+                "Hot reload timing detail.",
+                new
+                {
+                    totalMs = payload.TotalMs,
+                    analysisMs = payload.AnalysisMs,
+                    shimCompileMs = payload.ShimCompileMs,
+                    patchMs = payload.PatchMs,
+                    otherMs = payload.OtherMs,
+                    unaccountedMs = payload.UnaccountedMs,
+                    groupCount = payload.GroupCount,
+                    steps = payload.Steps.Select(step => new { step = step.Step, ms = step.Ms }).ToArray()
                 },
                 correlationId);
         }

@@ -300,6 +300,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // True when any emitted shim body rewrites an added-field access to HotReloadAddedFieldStore.
         // Drives ToolContracts assembly injection at both the first compile and isolation retry.
         public bool hasAddedFieldRewrites;
+
+        // Milliseconds of each stage inside the worker, in the order the worker ran them. Only the
+        // request timing vibe entry reads them. Output of an older worker has none, so null.
+        public TransformWorkerTimingStepDto[] timings;
+    }
+
+    /// <summary>
+    /// One stage inside the worker and the milliseconds it took.
+    /// </summary>
+    [Serializable]
+    internal sealed class TransformWorkerTimingStepDto
+    {
+        public string step;
+
+        // Why int and not long: the worker writes an int, and the DTO sync test maps int only.
+        public int ms;
     }
 
     [Serializable]

@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -22,14 +23,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private bool _disposed;
 
         internal HotReloadDomainTestScope()
+            : this(HotReloadCompositionRoot.CreateProductionServices())
         {
-            HotReloadServices services = HotReloadCompositionRoot.CreateProductionServices();
+        }
+
+        private HotReloadDomainTestScope(HotReloadServices services)
+        {
+            // Why stop the installed warm-up first: it reads the shared caches on a pool thread,
+            // and a test that counts their reads must not race it. The scope's own run yields to
+            // the scope's warm-up, never to the installed one.
+            InstalledWarmUpStopped = HotReloadCompositionRoot.Services.WarmUp.Shutdown(
+                HotReloadConstants.WarmUpShutdownTriggerTestScope);
 
             // The capture is main-thread only, and a run inside the scope normalizes script paths
             // against these roots on the background threads it switches to.
             services.PackageRootCapture.CaptureCurrent();
             _services = services;
             _replacement = HotReloadCompositionRoot.BeginReplacement(services);
+        }
+
+        /// <summary>
+        /// Completes once the warm-up that was installed before this scope has stopped. A test that
+        /// counts reads of a shared cache awaits it before it clears the cache.
+        /// </summary>
+        internal Task InstalledWarmUpStopped { get; }
+
+        /// <summary>A scope whose services run <paramref name="warmUp"/> instead of a production one.</summary>
+        internal static HotReloadDomainTestScope WithWarmUp(HotReloadWarmUp warmUp)
+        {
+            return new HotReloadDomainTestScope(HotReloadCompositionRoot.CreateProductionServicesWithWarmUp(warmUp));
         }
 
         public void Dispose()

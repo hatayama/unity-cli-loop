@@ -49,6 +49,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // affect the on-disk layout. Adoption is decided at use time by PDB document checksum.
         public const string SourceSnapshotRelativeDirectory = "Library/UloopHotReload/SourceSnapshot";
 
+        // The file inside a snapshot directory that records each copied source's length and last
+        // write time (UTC ticks), so a later domain tells an unchanged source by its stat alone.
+        public const string SourceStampManifestFileName = "source-stamps.txt";
+        public const string SourceStampManifestHeader = "uloop-source-stamps 2";
+
+        // Per-assembly lists of the documents a PDB's sequence points refer to, keyed by the dll's
+        // file name and stamped with the dll's and the PDB's length, write time and MVID. Lets the
+        // first hot reload run after a domain reload skip the walk over every sequence point.
+        // "fmt1" = generation of the file format, bumped the same way as PublicizedRefs.
+        public const string PdbDocumentsRelativeDirectory = "Library/UloopHotReload/PdbDocuments/fmt1";
+
+        // Per-assembly sets of the methods of other assemblies the dll's MemberRef table names, keyed
+        // by the dll's file name and stamped with its length, write time and MVID. Lets the first hot
+        // reload run after a domain reload skip reading assemblies that name none of the edited methods.
+        // "fmt1" = generation of the file format, bumped the same way as PublicizedRefs.
+        public const string ReferencedMethodsRelativeDirectory = "Library/UloopHotReload/ReferencedMethods/fmt1";
+
+        // The assemblies the hot reload runs of this project edited, most recent first. The
+        // warm-up after a domain reload reads it to choose what to load before the first run.
+        public const string WarmUpRelativeDirectory = "Library/UloopHotReload/WarmUp";
+        public const string WarmUpTargetsFileName = "targets.txt";
+
         // Package-relative directory of the out-of-process transform worker sources (tilde dir = Unity-ignored).
         public const string WorkerSourcePackageRelativePath =
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
@@ -444,11 +466,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: file name, assembly name. Used instead of the warning above when the snapshot's
         // bytes do not match the checksum the compiled PDB recorded. Why "most often": a PDB
         // document with no checksum, or with an algorithm the check does not support, reports the
-        // same reason, but a file saved between the compile and the capture is the usual cause.
+        // same reason, but a file saved after the compile had read it is the usual cause.
         public const string NoVerifiedSourceSnapshotMismatchWarningFormat =
             "No verified source snapshot for {0} (assembly {1}): the snapshot does not match the "
-            + "compiled file (most often the file changed between the compile and the snapshot "
-            + "capture); patching all methods. Run 'uloop compile' to re-establish the baseline.";
+            + "compiled file (most often the file was saved after the compile had read it); "
+            + "patching all methods. Run 'uloop compile' to re-establish the baseline.";
 
         // Format: file name, assembly name. Used instead of the warnings above when the compiled
         // assembly or its PDB is not on disk, so there is nothing to verify a snapshot against.
@@ -644,11 +666,60 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogWorkerHostFallbackOneShot = "hot_reload_worker_fallback_one_shot";
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
+        public const string VibeLogWorkerRequestTiming = "hot_reload_worker_request_timing";
+        public const string VibeLogSignatureGateTiming = "hot_reload_signature_gate_timing";
+        public const string VibeLogShimFirstCompileTiming = "hot_reload_shim_first_compile_timing";
+        public const string VibeLogShimReferencesTiming = "hot_reload_shim_references_timing";
+        public const string VibeLogPublicizedCopyWritten = "hot_reload_publicized_copy_written";
+        public const string VibeLogSourceSnapshotChecked = "hot_reload_source_snapshot_checked";
+        public const string VibeLogShimCompilerTiming = "hot_reload_shim_compiler_timing";
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
         public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
         public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";
         public const string VibeLogRevertFailed = "hot_reload_revert_failed";
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
+        public const string VibeLogTimingDetail = "hot_reload_timing_detail";
+        public const string VibeLogCallSiteCacheEvicted = "hot_reload_call_site_cache_evicted";
+        public const string VibeLogWarmUpComplete = "hot_reload_warm_up_complete";
+        public const string VibeLogWarmUpSkipped = "hot_reload_warm_up_skipped";
+        public const string VibeLogSourceSnapshotCaptured = "hot_reload_source_snapshot_captured";
+
+        // What captured the source snapshot of a domain, as named in the trigger field of
+        // hot_reload_source_snapshot_captured.
+        public const string SourceSnapshotCaptureTriggerDomainLoad = "domain_load";
+        public const string SourceSnapshotCaptureTriggerFirstUpdateTick = "first_update_tick";
+        public const string SourceSnapshotCaptureTriggerApply = "apply";
+
+        // What stopped a running warm-up, as named in the cancelledBy field of hot_reload_warm_up_complete.
+        public const string WarmUpCancelledByRun = "run";
+        public const string WarmUpShutdownTriggerBeforeAssemblyReload = "beforeAssemblyReload";
+        public const string WarmUpShutdownTriggerCompilationStarted = "compilationStarted";
+        public const string WarmUpShutdownTriggerServicesReplaced = "services_replaced";
+        public const string WarmUpShutdownTriggerTestScope = "test_scope";
+        public const string WarmUpShutdownTriggerTestRun = "test_run";
+
+        // Steps of an apply run outside the response's Timing phases, as named in the
+        // hot_reload_timing_detail vibe entry. Steps that run once per group add up.
+        public const string TimingDetailStepWarmUpYield = "warm_up_yield";
+        public const string TimingDetailStepMainThreadSwitch = "main_thread_switch";
+        public const string TimingDetailStepPackageRoots = "package_roots";
+        public const string TimingDetailStepResolveInputs = "resolve_inputs";
+        public const string TimingDetailStepWarmUpTargets = "warm_up_targets";
+        public const string TimingDetailStepPlan = "plan";
+        public const string TimingDetailStepActiveSiblings = "active_siblings";
+        public const string TimingDetailStepMembershipValidate = "membership_validate";
+        public const string TimingDetailStepSnapshotGroupState = "snapshot_group_state";
+        public const string TimingDetailStepActivePaths = "active_paths";
+        public const string TimingDetailStepSiblingDetect = "sibling_detect";
+        public const string TimingDetailStepWorkerInput = "worker_input";
+        public const string TimingDetailStepPreparationOutcome = "preparation_outcome";
+        public const string TimingDetailStepWorkerNotices = "worker_notices";
+        public const string TimingDetailStepRevalidateBeforeRevert = "revalidate_before_revert";
+        public const string TimingDetailStepApplyContext = "apply_context";
+        public const string TimingDetailStepIsolationSplit = "isolation_split";
+        public const string TimingDetailStepRecordSourceHashes = "record_source_hashes";
+        public const string TimingDetailStepRemovedMembers = "removed_members";
+        public const string TimingDetailStepCallerNotes = "caller_notes";
         public const string VibeLogShimCompileStageFirstPass = "first_pass";
         public const string VibeLogShimCompileStageRetry = "retry";
         public const string VibeLogIsolationTriggerShimCompileFailure = "shim_compile_failure";
@@ -717,7 +788,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the main Editor's project: a Virtual Player loads the script assemblies of the main
         // project, so only a compile there reaches it.
         public const string VirtualPlayerRecommendedNextAction =
-            "This Editor is a Multiplayer Play Mode Virtual Player, which hot reload cannot patch. Run 'uloop compile' against the main Editor's project; the compiled result reaches this player. A patch applied in the main Editor does not.";
+            "This Editor is a Multiplayer Play Mode Virtual Player and reads the compiled assemblies of the main Editor's project. Run 'uloop compile' against the main Editor's project; the compiled result reaches this player. Then rerun hot reload with this player's project path. A patch applied to the main Editor does not reach this player.";
 
         public const string CompiledAssemblyMissingRecommendedNextAction =
             "The compiled assembly for the file is missing, so there is nothing to fix in the source: run 'uloop compile'.";
@@ -805,6 +876,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // reload does not forget them.
         public const string CompanionSourcesSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.companionSources";
+
+        // SessionState key for the time the latest compile started (UTC ticks). The snapshot capture
+        // checks sources written since then against the PDB. SessionState survives the compile's
+        // domain reload and is cleared when the Editor process exits.
+        public const string CompileStartedUtcTicksSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.compileStartedUtcTicks";
 
         // Format: remaining discarded identity count. Used only when --status active count is 0.
         public const string PlayModeEntryDropStatusMessageFormat =

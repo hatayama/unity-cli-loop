@@ -58,7 +58,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void ResetServerScopedServicesBeforeDomainReload_ShouldSignalShutdownWithoutWaitingForRuntimeDrain()
         {
             // Tests that domain reload reset does not leave a pending drain task that can block Unity teardown.
-            DynamicCodeServicesRegistry registry = new();
+            DynamicCodeServicesRegistry registry = new DynamicCodeServicesRegistry(
+                new SharedRoslynCompilerWorkerWarmUp(
+                    () => null,
+                    () => null,
+                    () => "package",
+                    (references, paths) => Task.FromResult(SharedWorkerWarmUpOutcome.AlreadyRunning())));
             FakeShutdownAwareRuntime runtime = new();
             registry.SetRuntimeFacadeForTests(runtime);
 

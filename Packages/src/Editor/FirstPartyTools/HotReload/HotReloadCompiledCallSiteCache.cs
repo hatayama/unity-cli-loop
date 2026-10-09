@@ -8,6 +8,8 @@ using Mono.Cecil.Cil;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -20,12 +22,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadCompiledCallSiteCache
     {
-        // Why 64: an entry keeps the dll's bytes (InMemory) and its metadata only, because the
-        // methods' instruction lists are released once the call sites are collected. In a large
-        // project one run scanned the target assembly plus the 20 assemblies that reference it,
-        // and a cap of 8 made every scan read all 21 again. Within a run nothing is evicted
-        // whatever the cap (HoldEntriesForRun); the cap bounds what stays cached between runs.
-        internal const int DefaultCapacity = 64;
+        // Why a byte budget: an entry costs about its dll's length, because it keeps the dll's
+        // bytes (InMemory) and its metadata only; the methods' instruction lists are released
+        // once the call sites are collected. Dlls range from kilobytes to megabytes, so a count
+        // bounds neither memory nor a run: with a cap of 64, a run that scanned 68 assemblies
+        // (42 MB) evicted 9 of them (29 MB, the edited assembly among them) at every hold release
+        // and read them again on the next run, about 2 s per run. 256 MB keeps every assembly
+        // such a run touches and still bounds the Editor's memory. Within a run nothing is
+        // evicted whatever the budget (HoldEntriesForRun); the budget bounds what stays cached
+        // between runs. The budget counts file lengths, not the exact in-memory size.
+        internal const long DefaultBudgetBytes = 256L * 1024 * 1024;
 
         /// <summary>
         /// One compiled instruction that may reference a target method.
@@ -151,25 +157,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int MaxConsistentLoadAttempts = 2;
 
         public static HotReloadCompiledCallSiteCache Shared { get; } =
-            new HotReloadCompiledCallSiteCache(DefaultCapacity);
+            new HotReloadCompiledCallSiteCache(DefaultBudgetBytes);
 
         private readonly object _gate = new object();
-        private readonly int _capacity;
+        private readonly long _budgetBytes;
         private readonly LoadProbes _probes;
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         private long _accessSequence;
         private int _loadCount;
+        // Sum of the cached entries' dll lengths; kept in step with _entries under _gate.
+        private long _cachedBytes;
+        private int _lastHoldReleaseEvictedCount;
+        private long _lastHoldReleaseEvictedBytes;
         // Number of open holds; touched only under _gate.
         private int _holdDepth;
 
-        public HotReloadCompiledCallSiteCache(int capacity, LoadProbes probes = null)
+        public HotReloadCompiledCallSiteCache(long budgetBytes, LoadProbes probes = null)
         {
-            if (capacity <= 0)
+            if (budgetBytes <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(capacity), "capacity must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(budgetBytes), "budgetBytes must be positive.");
             }
 
-            _capacity = capacity;
+            _budgetBytes = budgetBytes;
             _probes = probes;
         }
 
@@ -202,6 +212,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Sum of the dll lengths of the entries currently held. It exceeds the budget only while
+        /// a hold is open, or when a single entry is larger than the budget.
+        /// </summary>
+        public long CachedBytes
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _cachedBytes;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Number of entries evicted when the outermost hold last ended; 0 before any hold ended.
+        /// </summary>
+        public int LastHoldReleaseEvictedCount
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _lastHoldReleaseEvictedCount;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sum of the dll lengths of the entries evicted when the outermost hold last ended.
+        /// </summary>
+        public long LastHoldReleaseEvictedBytes
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _lastHoldReleaseEvictedBytes;
+                }
+            }
+        }
+
+        /// <summary>
         /// Returns the cached view of <paramref name="dllPath"/> while the file's length, last
         /// write time, and module version id (MVID) all match the cached entry; otherwise reads the
         /// file and replaces the stale entry. This is a heuristic identity, not a content hash: it
@@ -229,6 +282,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
 
                     _entries.Remove(fullPath);
+                    _cachedBytes -= existing.Fingerprint.Length;
                     existing.Dispose();
                 }
 
@@ -238,18 +292,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // eviction inside the run turns one read per dll into one read per scan.
                 if (_holdDepth == 0)
                 {
-                    EvictLeastRecentlyUsedWhileOverCapacity();
+                    EvictLeastRecentlyUsedUntilFits(loaded.Fingerprint.Length);
                 }
 
                 _entries[fullPath] = loaded;
+                _cachedBytes += loaded.Fingerprint.Length;
                 return loaded;
             }
         }
 
         /// <summary>
         /// Keeps every entry until the returned hold is disposed, however many dlls are read in the
-        /// meantime; when the outermost hold ends, the least recently used entries are evicted down
-        /// to the capacity. Holds nest, and disposing one hold twice releases it once.
+        /// meantime; when the outermost hold ends, the least recently used entries are evicted until
+        /// the cached bytes fit the budget, keeping at least one entry. Holds nest, and disposing one hold twice releases it once.
         /// </summary>
         public IDisposable HoldEntriesForRun()
         {
@@ -274,6 +329,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 _entries.Clear();
+                _cachedBytes = 0;
             }
         }
 
@@ -298,11 +354,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return;
                 }
 
-                owner.ReleaseHold();
+                HoldRelease release = owner.ReleaseHold();
+                if (release.EvictedCount == 0)
+                {
+                    return;
+                }
+
+                // Why outside the lock: the vibe log writes a file, which must not block lookups.
+                // Only numbers are logged; dll paths may name the user's project.
+                VibeLogger.LogInfo(
+                    HotReloadConstants.VibeLogCallSiteCacheEvicted,
+                    "Hot reload call-site cache evicted entries at the end of a run.",
+                    new
+                    {
+                        evictedCount = release.EvictedCount,
+                        evictedBytes = release.EvictedBytes,
+                        cachedBytes = release.CachedBytes,
+                        budgetBytes = owner._budgetBytes
+                    });
             }
         }
 
-        private void ReleaseHold()
+        // What ending a hold evicted, read under the lock and logged after it is released.
+        private readonly struct HoldRelease
+        {
+            public readonly int EvictedCount;
+            public readonly long EvictedBytes;
+            public readonly long CachedBytes;
+
+            public HoldRelease(int evictedCount, long evictedBytes, long cachedBytes)
+            {
+                EvictedCount = evictedCount;
+                EvictedBytes = evictedBytes;
+                CachedBytes = cachedBytes;
+            }
+        }
+
+        private HoldRelease ReleaseHold()
         {
             lock (_gate)
             {
@@ -310,29 +398,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _holdDepth--;
                 if (_holdDepth > 0)
                 {
-                    return;
+                    return new HoldRelease(0, 0, _cachedBytes);
                 }
 
-                EvictLeastRecentlyUsedDownToCapacity();
+                EvictLeastRecentlyUsedDownToBudget();
+                return new HoldRelease(_lastHoldReleaseEvictedCount, _lastHoldReleaseEvictedBytes, _cachedBytes);
             }
         }
 
-        private void EvictLeastRecentlyUsedWhileOverCapacity()
+        private void EvictLeastRecentlyUsedUntilFits(long incomingBytes)
         {
-            // The new entry is added after this call, so make room for it.
-            while (_entries.Count >= _capacity)
+            // The new entry is added after this call, so make room for it. Stops once the cache is
+            // empty: an entry larger than the budget is still added, alone.
+            while (_entries.Count > 0 && _cachedBytes + incomingBytes > _budgetBytes)
             {
                 EvictEntry(FindLeastRecentlyUsedPath());
             }
         }
 
-        private void EvictLeastRecentlyUsedDownToCapacity()
+        private void EvictLeastRecentlyUsedDownToBudget()
         {
-            // Nothing is added after this call, so keep entries up to the capacity itself.
-            while (_entries.Count > _capacity)
+            // Nothing is added after this call, so evict down to the budget itself, but keep the
+            // last entry even when it alone exceeds the budget, as a lookup without a hold would.
+            int evictedCount = 0;
+            long evictedBytes = 0;
+            while (_cachedBytes > _budgetBytes && _entries.Count > 1)
             {
-                EvictEntry(FindLeastRecentlyUsedPath());
+                string path = FindLeastRecentlyUsedPath();
+                evictedBytes += _entries[path].Fingerprint.Length;
+                EvictEntry(path);
+                evictedCount++;
             }
+
+            _lastHoldReleaseEvictedCount = evictedCount;
+            _lastHoldReleaseEvictedBytes = evictedBytes;
         }
 
         private string FindLeastRecentlyUsedPath()
@@ -355,10 +454,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Entry evicted = _entries[path];
             _entries.Remove(path);
+            _cachedBytes -= evicted.Fingerprint.Length;
             evicted.Dispose();
         }
 
-        private static DllFingerprint ReadFingerprint(string fullPath)
+        // The referenced-method index reads the same identity, so both caches agree on when a dll changed.
+        internal static DllFingerprint ReadFingerprint(string fullPath)
         {
             FileInfo fileInfo = new FileInfo(fullPath);
             return new DllFingerprint(

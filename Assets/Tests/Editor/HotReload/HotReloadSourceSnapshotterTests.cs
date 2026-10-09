@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -92,7 +93,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 _tempRoot,
                 snapshotDirectory,
                 sourceFiles,
-                "Fixture");
+                "Fixture",
+                SuspectsNothing(_tempRoot));
 
             string firstSnapshot = Path.Combine(
                 snapshotDirectory,
@@ -103,9 +105,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(File.Exists(firstSnapshot), Is.True);
             Assert.That(File.Exists(secondSnapshot), Is.True);
             Assert.That(Directory.Exists(snapshotDirectory + ".tmp"), Is.False);
-            Assert.That(Directory.GetFiles(snapshotDirectory).Length, Is.EqualTo(2));
+            Assert.That(Directory.GetFiles(snapshotDirectory).Length, Is.EqualTo(3));
             Assert.That(File.ReadAllBytes(firstSnapshot), Is.EqualTo(firstBytes));
             Assert.That(File.ReadAllBytes(secondSnapshot), Is.EqualTo(secondBytes));
+        }
+
+        /// <summary>
+        /// Verifies that the capture writes one manifest line with the length and last write time of each copied source, in the order of the source list, and no line for a listed source that does not exist.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblySourcesAtomically_RecordsTheLengthAndWriteTimeOfEachCopiedSource()
+        {
+            string sourceDirectory = Path.Combine(_tempRoot, "Sources");
+            Directory.CreateDirectory(sourceDirectory);
+            DateTime firstWriteTimeUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            DateTime secondWriteTimeUtc = firstWriteTimeUtc.AddDays(1);
+            WriteSourceAt(Path.Combine(sourceDirectory, "First.cs"), new byte[] { 1, 2, 3, 4, 5, 6, 7 }, firstWriteTimeUtc);
+            WriteSourceAt(Path.Combine(sourceDirectory, "Second.cs"), new byte[] { 1, 2 }, secondWriteTimeUtc);
+            string snapshotDirectory = Path.Combine(_tempRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
+            string[] sourceFiles = { "Sources/First.cs", "Sources\\Second.cs", "Sources/Missing.cs" };
+
+            HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                _tempRoot,
+                snapshotDirectory,
+                sourceFiles,
+                "Fixture",
+                SuspectsNothing(_tempRoot));
+
+            string expected = HotReloadConstants.SourceStampManifestHeader + "\n"
+                + HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs\t7\t"
+                + firstWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) + "\t0\n"
+                + HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Second.cs") + ".cs\t2\t"
+                + secondWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture) + "\t0\n";
+            Assert.That(
+                File.ReadAllText(Path.Combine(snapshotDirectory, HotReloadConstants.SourceStampManifestFileName)),
+                Is.EqualTo(expected));
+            Assert.That(Directory.Exists(snapshotDirectory + ".tmp"), Is.False);
         }
 
         /// <summary>
@@ -126,13 +161,135 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 _tempRoot,
                 snapshotDirectory,
                 new[] { "Sources/Fresh.cs" },
-                "Fixture");
+                "Fixture",
+                SuspectsNothing(_tempRoot));
 
             string[] publishedNames = Directory.GetFiles(snapshotDirectory).Select(Path.GetFileName).ToArray();
+            // Why EquivalentTo: the order GetFiles lists files in depends on the file system.
             Assert.That(
                 publishedNames,
-                Is.EqualTo(new[] { HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Fresh.cs") + ".cs" }));
+                Is.EquivalentTo(new[]
+                {
+                    HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Fresh.cs") + ".cs",
+                    HotReloadConstants.SourceStampManifestFileName,
+                }));
             Assert.That(Directory.Exists(leftoverDirectory), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies that a source written before the compile started and unchanged while it was read
+        /// keeps its stamp without being checked against the PDB.
+        /// </summary>
+        [Test]
+        public void JudgeCopy_ASourceWrittenBeforeTheStartAndReadWhole_TrustsTheStampWithoutChecking()
+        {
+            int checks = 0;
+
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(
+                true,
+                99,
+                100,
+                () =>
+                {
+                    checks++;
+                    return false;
+                });
+
+            Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.StampTrusted));
+            Assert.That(checks, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a source written exactly when the compile started is checked, and marked when
+        /// it differs from the PDB.
+        /// </summary>
+        [Test]
+        public void JudgeCopy_ASourceWrittenAtTheStartThatDiffersFromThePdb_MarksIt()
+        {
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(true, 100, 100, () => false);
+
+            Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.EditedAfterCompile));
+        }
+
+        /// <summary>
+        /// Verifies that a source written after the compile started keeps an unmarked stamp when it
+        /// matches the PDB.
+        /// </summary>
+        [Test]
+        public void JudgeCopy_ASourceWrittenAfterTheStartThatMatchesThePdb_TrustsTheStamp()
+        {
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(true, 101, 100, () => true);
+
+            Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.StampTrusted));
+        }
+
+        /// <summary>
+        /// Verifies that a source written after the compile started is marked when it differs from the PDB.
+        /// </summary>
+        [Test]
+        public void JudgeCopy_ASourceWrittenAfterTheStartThatDiffersFromThePdb_MarksIt()
+        {
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(true, 101, 100, () => false);
+
+            Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.EditedAfterCompile));
+        }
+
+        /// <summary>
+        /// Verifies that a source that changed while it was read is checked even though its write time
+        /// is before the start, and gets no stamp when it matches the PDB.
+        /// </summary>
+        [Test]
+        public void JudgeCopy_ASourceThatChangedWhileReadAndMatchesThePdb_LeavesItUnstamped()
+        {
+            int checks = 0;
+
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(
+                false,
+                99,
+                100,
+                () =>
+                {
+                    checks++;
+                    return true;
+                });
+
+            Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.NoStamp));
+            Assert.That(checks, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies that a source that changed while it was read is marked when it differs from the PDB,
+        /// even though its write time is before the start.
+        /// </summary>
+        [Test]
+        public void JudgeCopy_ASourceThatChangedWhileReadAndDiffersFromThePdb_MarksIt()
+        {
+            HotReloadSnapshotCopyVerdict verdict = HotReloadSourceSnapshotter.JudgeCopy(false, 99, 100, () => false);
+
+            Assert.That(verdict, Is.EqualTo(HotReloadSnapshotCopyVerdict.EditedAfterCompile));
+        }
+
+        // No source is written at or after the end of time, so the capture never reads a compiled assembly.
+        private static HotReloadSnapshotSourceCheck SuspectsNothing(string root)
+        {
+            return new HotReloadSnapshotSourceCheck(
+                DateTime.MaxValue.Ticks,
+                "unused.dll",
+                "unused.pdb",
+                "unused",
+                new HotReloadPdbDocumentIndex(Path.Combine(root, "PdbDocuments")));
+        }
+
+        // Why a write time the test chooses: SetLastWriteTimeUtc stores microseconds while
+        // LastWriteTimeUtc reports 100 ns ticks, so only a chosen value can be put back exactly.
+        private static void WriteSourceAt(string path, byte[] bytes, DateTime lastWriteTimeUtc)
+        {
+            File.WriteAllBytes(path, bytes);
+            File.SetLastWriteTimeUtc(path, lastWriteTimeUtc);
+            Assert.That(
+                new FileInfo(path).LastWriteTimeUtc,
+                Is.EqualTo(lastWriteTimeUtc),
+                "The write time must be settable exactly, or the stamp the capture records is not the one the test chose.");
         }
     }
 }

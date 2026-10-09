@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,6 +10,7 @@ using Mono.Cecil;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -66,6 +68,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 }
 ";
+
+        // Why wait: GetOrCreatePublicizedCopy_DoesNotDeleteHyphenatedSiblingAssemblyCaches, for
+        // one, deletes the copy and then checks that this call writes it and deletes the stale
+        // ones. If the installed warm-up writes the copy in between, this call is a cache hit and
+        // the check cannot be made.
+        [UnitySetUp]
+        public IEnumerator WaitForTheInstalledWarmUpToStop()
+        {
+            Task stopped = PublicizedCopyTestCache.StopInstalledWarmUpAsync();
+            while (!stopped.IsCompleted)
+            {
+                yield return null;
+            }
+        }
 
         /// <summary>
         /// What: publicizing the test assembly exposes private fields/methods and reuses the

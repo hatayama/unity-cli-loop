@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.Home,
                 collaborators.Domain,
                 firstFile.ProjectRoot,
-                HotReloadResolverSearchDirectories.Collect(firstFile.CompilationAssembly),
+                HotReloadResolverSearchDirectories.Collect(firstFile.ProjectRoot, firstFile.CompilationAssembly),
                 collaborators.InternalAccessGrant.IsAvailable);
             if (!references.Success)
             {

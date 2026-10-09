@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 using NUnit.Framework;
 
@@ -33,6 +34,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string QualifiedCallerIdentityTargetTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadQualifiedCallerIdentityTarget";
+
+        private const string CrossAssemblyGenericHostTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossAssemblyGenericHost`1";
+
+        private const string CrossAssemblyNestedTargetTypeMetadataName =
+            CrossAssemblyTargetTypeMetadataName + "/Nested";
+
+        private const string CrossAssemblyCallerAssemblyName =
+            "UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly";
+
+        private const string CrossAssemblyCallerTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteCrossAssemblyCaller";
 
         /// <summary>
         /// What: a method called from an ordinary method is reported with that caller's method key.
@@ -465,6 +478,142 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 reversedHits[0].TargetMethodKey,
                 Is.EqualTo(FixtureTypeMetadataName + "::GenericParameterTarget`1(System.Int32)"));
+        }
+
+        /// <summary>
+        /// What: a call in another assembly through a constructed generic type is reported, so an
+        /// assembly whose MemberRef table names the method only via the instantiation is still read.
+        /// </summary>
+        [Test]
+        public void FindCallSites_CrossAssemblyGenericTypeInstantiation_ReportsCaller()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                CrossAssemblyGenericHostTypeMetadataName,
+                nameof(HotReloadCrossAssemblyGenericHost<int>.Target),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(hits[0].CallerAssemblyName, Is.EqualTo(CrossAssemblyCallerAssemblyName));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(CrossAssemblyCallerTypeMetadataName + "::CallGenericHostTarget()"));
+        }
+
+        /// <summary>
+        /// What: an instantiated generic method of another assembly is reported both via Call and via
+        /// Ldftn, so a MethodSpec operand is traced back to the MemberRef row it instantiates.
+        /// </summary>
+        [Test]
+        public void FindCallSites_CrossAssemblyGenericMethodInstantiation_ReportsCallAndLdftn()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.GenericMethod),
+                Array.Empty<string>(),
+                1);
+
+            Assert.That(hits.Count, Is.EqualTo(2));
+            HotReloadCallSiteScanner.CallSiteHit call = hits.Find(hit => !hit.IsFunctionPointerLoad);
+            HotReloadCallSiteScanner.CallSiteHit load = hits.Find(hit => hit.IsFunctionPointerLoad);
+            Assert.That(call.CallerAssemblyName, Is.EqualTo(CrossAssemblyCallerAssemblyName));
+            Assert.That(load.CallerAssemblyName, Is.EqualTo(CrossAssemblyCallerAssemblyName));
+            Assert.That(
+                call.CallerMethodKey,
+                Is.EqualTo(CrossAssemblyCallerTypeMetadataName + "::CallGenericMethodTarget()"));
+            Assert.That(
+                load.CallerMethodKey,
+                Is.EqualTo(CrossAssemblyCallerTypeMetadataName + "::CaptureGenericMethodTarget()"));
+        }
+
+        /// <summary>
+        /// What: a call in another assembly to a method of a nested type is reported, so the nested
+        /// type's metadata name with '/' finds the caller's MemberRef row.
+        /// </summary>
+        [Test]
+        public void FindCallSites_CrossAssemblyNestedTarget_ReportsCaller()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                CrossAssemblyNestedTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Nested.CalledFromOtherAssembly),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(CrossAssemblyCallerTypeMetadataName + "::CallNestedTarget()"));
+        }
+
+        /// <summary>
+        /// What: a scan of a method no other assembly names reads only the target assembly and
+        /// lists the referencing assembly as skipped.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_TargetNoOtherAssemblyMentions_ReadsOnlyTheTargetAssembly()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = Scan(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.NeverCalled),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(1));
+            Assert.That(result.SkippedScanAssemblyNames, Does.Contain(CrossAssemblyCallerAssemblyName));
+            Assert.That(result.Hits, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a scan of a method another assembly calls reads that assembly too and does not list
+        /// it as skipped.
+        /// </summary>
+        [Test]
+        public async Task FindCallSites_CrossAssemblyCaller_ReadsTheCallerAssembly()
+        {
+            await StopInstalledWarmUpAsync();
+            HotReloadCompiledCallSiteCache.Shared.Clear();
+            int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = Scan(
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(2));
+            Assert.That(
+                result.SkippedScanAssemblyNames,
+                Does.Not.Contain(CrossAssemblyCallerAssemblyName));
+            Assert.That(result.Hits.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: the referencing dlls of the test assembly include the cross-assembly caller's dll
+        /// and never the test assembly's own dll.
+        /// </summary>
+        [Test]
+        public void CollectReferencingDllPaths_ReturnsTheCrossAssemblyCallerAndNotTheTargetItself()
+        {
+            string projectRoot = GetProjectRoot();
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
+
+            IReadOnlyList<string> dllPaths = HotReloadCallSiteScanner.CollectReferencingDllPaths(
+                projectRoot,
+                GetTestAssemblyName());
+
+            Assert.That(dllPaths, Does.Contain(layout.DllPath(CrossAssemblyCallerAssemblyName)));
+            Assert.That(dllPaths, Does.Not.Contain(layout.DllPath(GetTestAssemblyName())));
+        }
+
+        // Why: the installed warm-up loads into the shared cache on a pool thread after a reload,
+        // and a read it makes between Clear and the scan would be counted as the scan's.
+        private static Task StopInstalledWarmUpAsync()
+        {
+            return HotReloadCompositionRoot.Services.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope);
         }
 
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(

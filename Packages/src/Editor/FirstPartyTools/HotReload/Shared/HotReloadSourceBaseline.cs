@@ -120,19 +120,67 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why read once: the verified bytes must be the exact payload decoded for the worker —
             // a second read could race with another writer and diverge from the checksummed content.
             byte[] snapshotBytes = File.ReadAllBytes(snapshotPath);
+            HotReloadSnapshotMissReason comparison = CompareWithCompiledDocument(
+                projectRoot,
+                slashNormalizedRelativePath,
+                targetDllPath,
+                pdbPath,
+                mvid,
+                snapshotBytes,
+                documentIndex);
+            if (comparison != HotReloadSnapshotMissReason.None)
+            {
+                return comparison;
+            }
+
+            using MemoryStream memoryStream = new MemoryStream(snapshotBytes, writable: false);
+            using StreamReader reader = new StreamReader(memoryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            source = reader.ReadToEnd();
+            return HotReloadSnapshotMissReason.None;
+        }
+
+        /// <summary>
+        /// Answers whether the bytes match the checksum the compiled assembly's PDB recorded for the
+        /// source: <see cref="HotReloadSnapshotMissReason.None"/>, or why they could not be confirmed
+        /// (<see cref="HotReloadSnapshotMissReason.NoDocumentInPdb"/> or
+        /// <see cref="HotReloadSnapshotMissReason.HashMismatch"/>). Main thread only, because it asks
+        /// the Package Manager for the source's physical path.
+        /// </summary>
+        internal static HotReloadSnapshotMissReason CompareWithCompiledDocument(
+            string projectRoot,
+            string slashNormalizedRelativePath,
+            string targetDllPath,
+            string pdbPath,
+            string moduleVersionId,
+            byte[] sourceBytes,
+            HotReloadPdbDocumentIndex documentIndex)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(slashNormalizedRelativePath), "slashNormalizedRelativePath must not be null or empty.");
+            Debug.Assert(sourceBytes != null, "sourceBytes must not be null.");
+            Debug.Assert(documentIndex != null, "documentIndex must not be null.");
+
             // Why the physical path here and the asset path for the snapshot file: the snapshot is keyed
             // by the asset path Unity reports for the file, but the PDB records the path the compiler was
             // given, which for an embedded or local package is the folder behind the virtual
             // Packages/<name> path. Why the Package Manager is asked rather than the package roots a
             // run captures: those live in the main hot-reload assembly, which this one cannot see, and
-            // every caller of the loader already runs on the Unity main thread the Package Manager
-            // requires: a run's group step, and the pause-point port, which the pause-point tools and a
-            // run's patch step call.
-            string pdbLookupPath = ScriptPackageRoots.ToPhysicalPath(projectRoot, slashNormalizedRelativePath);
+            // every caller already runs on the Unity main thread the Package Manager requires: a run's
+            // group step, the pause-point port, which the pause-point tools and a run's patch step call,
+            // and the snapshot capture after a domain reload.
+            // Why the root that compiled the assembly rather than the snapshot owner's: the PDB spells a
+            // source inside the compiling project as a path relative to that project's root (behind a
+            // leading "./"), which the lookup matches as the end of the url. A Multiplayer Play Mode
+            // Virtual Player reads the main project's assemblies from a root under the main project's
+            // Library, so a package folder of the main project lies outside the player's root, and
+            // relativizing against the player's root would hand the lookup an absolute path that no
+            // document ends with. For an ordinary project the two roots are the same.
+            string compiledProjectRoot = CompiledAssemblyLayout.Resolve(projectRoot).MainProjectRoot;
+            string pdbLookupPath = ScriptPackageRoots.ToPhysicalPath(compiledProjectRoot, slashNormalizedRelativePath);
             if (!documentIndex.TryFindDocument(
                     targetDllPath,
                     pdbPath,
-                    mvid,
+                    moduleVersionId,
                     pdbLookupPath,
                     out HotReloadPdbDocument document))
             {
@@ -146,15 +194,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadSnapshotMissReason.HashMismatch;
             }
 
-            byte[] actualHash = ComputeDocumentHash(document.HashAlgorithm, snapshotBytes);
+            byte[] actualHash = ComputeDocumentHash(document.HashAlgorithm, sourceBytes);
             if (actualHash == null || !actualHash.SequenceEqual(document.Hash))
             {
                 return HotReloadSnapshotMissReason.HashMismatch;
             }
 
-            using MemoryStream memoryStream = new MemoryStream(snapshotBytes, writable: false);
-            using StreamReader reader = new StreamReader(memoryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            source = reader.ReadToEnd();
             return HotReloadSnapshotMissReason.None;
         }
 

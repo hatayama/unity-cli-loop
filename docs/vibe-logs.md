@@ -31,6 +31,68 @@ command ran against:
 - Unity side: only when the `ULOOP_DEBUG` scripting define symbol is set in the project. Every
   log method is `[Conditional("ULOOP_DEBUG")]`, so without it nothing is written — not even
   errors. This repository's development project defines it for the Standalone build target.
+  Hot reload also writes one `hot_reload_timing_detail` per apply run, with the milliseconds of
+  each step outside the response's `Timing` phases (`steps`), the phases themselves, and
+  `unaccountedMs` — the part of `otherMs` no step covers. A negative `unaccountedMs` means a
+  step overlaps a phase.
+  When the end of a run evicted entries from the call-site cache, it also writes one
+  `hot_reload_call_site_cache_evicted` with the evicted count and bytes, the bytes still cached,
+  and the budget — a sign that the assemblies one run scans do not fit the cache and are read
+  again on the next run.
+  The time inside the analysis and shim-compile phases is split by separate entries, never by
+  `steps`, so `unaccountedMs` keeps its meaning. `hot_reload_worker_request_timing` (one per
+  request to the transform worker, prepare and transform) has the gate wait, launch target
+  resolution, input write, process spawn, response wait and output read, whether the request
+  started the worker, and the stages the worker timed itself (`workerSteps`; empty when no
+  output decided the request, such as a non-zero exit code, but kept for a request that fails on
+  parse errors). `hot_reload_signature_gate_timing` (one per group that reaches the signature
+  gate) has the main-thread switch and the gate. `hot_reload_shim_first_compile_timing` (one per
+  group whose first-pass shim is compiled; none when the gate's retry already compiled it, when
+  the membership check fails, or when there is no method to compile) has the main-thread switch,
+  the membership check and the shim compile.
+  `hot_reload_shim_references_timing` (one per shim compile) has the resolver directories, the
+  target's publicized copy, the artifact copies and the reference copies with their counts.
+  `hot_reload_publicized_copy_written` appears only when a rewritten copy was written, with
+  its rewrite and write time. The warm-up's `publicized_targets` item writes it too, before any
+  run. `hot_reload_source_snapshot_checked` appears when a capture checked sources written
+  since the compile started against the PDB: `suspect` sources checked, `editedAfterCompile`
+  of them marked as not the compiled source, and `checkMs`.
+  `hot_reload_shim_compiler_timing` has the compile, the load and
+  the backend kind. `dynamic_code_shared_worker_started` appears whenever no live shared Roslyn
+  worker could serve the compile and one had to be started, with its source sync, worker
+  assembly check and process spawn; `ready` is false when the start failed (no worker
+  assembly, or the process did not start). `workerAssemblySource` says where the worker
+  assembly came from: `existing` (already in this Editor's worker directory), `cache` (copied
+  from `<OS temp>/UnityCliLoopCompilation/RoslynWorkerCache/<key>/`, keyed by the worker source
+  and the compiler paths), or `built` (csc ran); `cachePublish` and `cachePublishError` say
+  whether a built assembly was added to that cache.
+  After each server reset, the shared-worker warm-up writes one
+  `dynamic_code_shared_worker_warm_up_skipped` with its `reason` (`no_hot_reload`: the hot-reload
+  tool has not initialized in this domain; `no_targets`: `targets.txt` names no assembly whose dll
+  exists and whose compilation assembly Unity lists; `compiler_unavailable`: the external compiler
+  is missing, which only the next real compile reports; `stopped_for_tests`), or one
+  `dynamic_code_shared_worker_warm_up_complete` with `ms` (the whole warm-up), `referencesMs`
+  (listing the references), `mainThreadMs` (reading the package path on the main thread),
+  `warmMs` (starting the worker and its compile), `referenceCount`, `outcome`, `failureReason`
+  and `errorCount`. `outcome` is `answered` (the worker answered the compile; `errorCount` is the
+  errors it reported), `already_running` (a compile had started the worker first, so nothing was
+  sent), `start_failed` or `request_failed` (with `failureReason`; the worker is stopped and the
+  next compile starts it again), or `failed` (an exception, with `failureReason` set to its type
+  and `exceptionMessage`, logged as a warning).
+  `hot_reload_source_snapshot_captured` appears once per domain when the source snapshot
+  capture ran to completion, with its `trigger` (`domain_load` normally; `first_update_tick` or
+  `apply` only when the capture at domain load threw or Unity listed no compilation assembly
+  yet) and `captureMs`.
+  After a domain reload, the warm-up writes one `hot_reload_warm_up_complete` with the target
+  assemblies, each item's `outcome` (`done`, `cancelled` or `failed`) and time, and `cancelledBy`
+  (`run`, `beforeAssemblyReload`, `compilationStarted`, or null), or one
+  `hot_reload_warm_up_skipped` with its `reason` (`no_targets`, `compiling`, `updating`,
+  `no_compiled_assembly`, `run_started_first`). `cancelled` covers both an item that never started
+  (`ms` 0) and one stopped between its units (one dll each) with units left, with the time it ran.
+  The items run in the order `publicized_targets`, `call_sites`, `referenced_method_sets`,
+  `pdb_documents`.
+  A run's `steps` have `warm_up_yield`, the time it waited for the unit in flight, and `warm_up_targets`, the time it took to record its
+  assemblies for the next warm-up.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
   `0`, or `false` (`cli/common/vibelog/cli_vibe.go`).
 - A missing line is evidence only when the define was set and the code path logs at all.
@@ -67,9 +129,9 @@ or `control-play-mode` that waits for a domain reload or a Play Mode change, and
 |---|---|---|
 | `cli_tool_request_sent` | before the request is sent | `command`, `correlation_id`, `project_identity`, `cli_version`, `param_keys` (sorted), `array_lengths` (element count of each array parameter) |
 | `cli_tool_response_received` | when Unity answered | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `result_bytes`, `exit_code` |
-| `cli_tool_request_failed` (`ERROR`) | when no answer came, or Unity answered with an error | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `error_kind` (`rpc:<error data type>`, `final_response_timeout`, or `other`) |
+| `cli_tool_request_failed` (`ERROR`) | when no answer came, or Unity answered with an error | `command`, `correlation_id`, `elapsed_ms`, `request_accepted`, `error_kind` (`rpc:<error data type>`, `final_response_timeout`, or `other`), `running_tool_name` (only when `error_kind` is `rpc:server_busy` and Unity named the tool that held the Editor) |
 | `cli_hot_reload_busy_wait_decided` | when the first `hot-reload` answer is `server_busy` (another uloop command holds the Editor; the preceding `cli_tool_request_failed` has `error_kind` `rpc:server_busy`) | `correlation_id` (the first request's), `running_tool_name`, `running_tool_phase`, `running_tool_elapsed_seconds`, `budget_ms`, `resend_interval_ms` |
-| `cli_hot_reload_busy_wait_complete` (`WARN` unless the Editor became ready and the request sent after the wait answered) | after the wait and the one request sent after it, on every way out of a wait that started (a cancel, a failed send, and a bad answer included) | `correlation_id` (the first request's), `second_correlation_id` (the request sent after the wait, or empty when none was sent), `waited_ms`, `ready`, `resends` (requests sent again during the wait while a cancelled `execute-dynamic-code` held the Editor; each also has its own `cli_tool_request_sent`), `second_result`, and that answer's `second_success` and `second_outcome` |
+| `cli_hot_reload_busy_wait_complete` (`WARN` unless the Editor became ready and the request sent after the wait answered) | after the wait and the one request sent after it, on every way out of a wait that started (a cancel, a failed send, and a bad answer included) | `correlation_id` (the first request's), `second_correlation_id` (the request sent after the wait, or empty when none was sent), `waited_ms`, `ready`, `resends` (requests sent again during the wait while a cancelled `execute-dynamic-code` held the Editor; each also has its own `cli_tool_request_sent`), `resend_correlation_ids` (the `correlation_id` of every request sent again during the wait, in order; its length is `resends`, and its last entry equals `second_correlation_id` when a resent request got in), `second_result`, and that answer's `second_success` and `second_outcome` |
 | `cli_hot_reload_editor_ready_retry_decided` | after every `hot-reload` answer (the one after a busy wait, when one ran), before the fallback decision | `correlation_id` (the request's), `requested`, `parse_error` |
 | `cli_hot_reload_editor_ready_retry_complete` (`WARN` unless the Editor settled and the second apply answered) | after the wait and the second apply, when a retry was requested | `correlation_id` (the first request's), `second_correlation_id` (the second request's, or empty when none was sent), `waited_ms`, `ready`, `second_result`, and the second answer's `second_success` and `second_outcome` |
 | `cli_hot_reload_compile_fallback_decided` | after every `hot-reload` answer the fallback decision sees: the second one after an editor-ready retry, and none when that retry ended the command (see `cli_hot_reload_editor_ready_retry_complete`) | `correlation_id` (the request's), `requested`, `parse_error`, and the answer's `success`, `outcome`, `warnings_count`, and `timing` (numbers only) |

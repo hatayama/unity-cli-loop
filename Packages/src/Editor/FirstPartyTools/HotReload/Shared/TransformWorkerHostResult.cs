@@ -43,24 +43,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerOutputDto Output { get; }
         public string ErrorMessage { get; }
 
-        private TransformWorkerHostResult(TransformWorkerHostResultKind kind, TransformWorkerOutputDto output, string errorMessage)
+        /// <summary>
+        /// Where the request spent its time. Set on every result the host returns; null only on a
+        /// result built outside the host.
+        /// </summary>
+        public TransformWorkerRequestTiming Timing { get; }
+
+        private TransformWorkerHostResult(
+            TransformWorkerHostResultKind kind,
+            TransformWorkerOutputDto output,
+            string errorMessage,
+            TransformWorkerRequestTiming timing)
         {
             Kind = kind;
             Output = output;
             ErrorMessage = errorMessage;
+            Timing = timing;
         }
 
         public static TransformWorkerHostResult Completed(TransformWorkerOutputDto output)
         {
             Debug.Assert(output != null, "output must not be null.");
-            return new TransformWorkerHostResult(TransformWorkerHostResultKind.Completed, output, string.Empty);
+            return new TransformWorkerHostResult(TransformWorkerHostResultKind.Completed, output, string.Empty, null);
         }
 
         public static TransformWorkerHostResult Failure(TransformWorkerHostResultKind kind, string errorMessage)
         {
             Debug.Assert(kind != TransformWorkerHostResultKind.Completed, "Completed must carry output.");
             Debug.Assert(!string.IsNullOrEmpty(errorMessage), "errorMessage must not be empty.");
-            return new TransformWorkerHostResult(kind, null, errorMessage);
+            return new TransformWorkerHostResult(kind, null, errorMessage, null);
+        }
+
+        /// <summary>The same result carrying the request's timing.</summary>
+        public TransformWorkerHostResult WithTiming(TransformWorkerRequestTiming timing)
+        {
+            Debug.Assert(timing != null, "timing must not be null.");
+            return new TransformWorkerHostResult(Kind, Output, ErrorMessage, timing);
         }
     }
 

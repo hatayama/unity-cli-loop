@@ -564,8 +564,7 @@ func TestRunCompileWithDomainReloadWaitWarnsWhenTimeoutExceedsRetention(t *testi
 	}
 
 	endpoint, serverErr := startCompileAcceptOnceServer(t)
-	// Why Success:false: Success:true triggers post-compile warmup against a live Editor
-	// and would hang this unit test. The warning is emitted before send/wait.
+	// The warning is emitted before send/wait.
 	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
 		return compileStatusResponse{
 			Ready:     true,
@@ -666,34 +665,6 @@ func TestShouldWaitForCompileStatusAllowsAcceptedFinalResponseTimeout(t *testing
 	unacceptedOutcome := unityipc.UnitySendOutcome{RequestDispatched: true}
 	if shouldWaitForCompileStatus(fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout"), unacceptedOutcome) {
 		t.Fatal("unaccepted timeout should not wait")
-	}
-}
-
-// Verifies compile readiness warmup only runs after confirmed successful results.
-func TestCompileResultReadinessWaitMode(t *testing.T) {
-	cases := map[string]compileReadinessWaitMode{
-		`{"Success":true}`: compileReadinessWaitWarmup,
-		`{"Success":false,"Errors":[{"Message":"boom"}]}`: compileReadinessWaitNone,
-		`{"Success":false,"Message":"indeterminate"}`:     compileReadinessWaitNone,
-		`{"Message":"indeterminate"}`:                     compileReadinessWaitNone,
-	}
-
-	for result, expected := range cases {
-		actual := compileResultReadinessWaitMode([]byte(result))
-		if actual != expected {
-			t.Fatalf("readiness wait mode mismatch for %s: %v", result, actual)
-		}
-	}
-}
-
-// Verifies that failed best-effort warmup reports a warning without taking over compile output.
-func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
-	var stderr bytes.Buffer
-
-	writePostCompileWarmupWarning(&stderr, fmt.Errorf("probe failed"))
-
-	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: probe failed") {
-		t.Fatalf("warning mismatch: %s", stderr.String())
 	}
 }
 
@@ -972,190 +943,6 @@ func TestWaitForCompileCompletionReturnsLastStatusOnTimeout(t *testing.T) {
 	}
 }
 
-// Verifies all-idle compile status past the start-stall threshold focuses Unity once
-// with reason compile_start_stall.
-func TestWaitForCompileCompletionFocusesOnceWhenStatusStaysIdle(t *testing.T) {
-	enableCliVibeLog(t)
-	connection := compileWaitTestConnection(t)
-	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		return compileStatusResponse{}, nil
-	})
-	probe := attachCompileWaitFocusProbe(&deps)
-
-	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
-		connection:   connection,
-		requestID:    "compile_start_stall_idle",
-		timeout:      200 * time.Millisecond,
-		pollInterval: 5 * time.Millisecond,
-	}, deps)
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if completed {
-		t.Fatal("idle compile wait should time out")
-	}
-	if probe.focusCount != 1 {
-		t.Fatalf("focus attempts mismatch: got %d want 1", probe.focusCount)
-	}
-
-	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
-	attemptEntries := cliVibeEntriesForOperation(t, logContent, "cli_connection_retry_focus_attempt")
-	if len(attemptEntries) != 1 {
-		t.Fatalf("expected exactly 1 focus attempt log, got %d:\n%s", len(attemptEntries), logContent)
-	}
-	reason := vibeLogContextString(t, attemptEntries[0], "reason")
-	expectedReason := "compile_start_stall"
-	if reason != expectedReason {
-		t.Fatalf("focus reason mismatch: got %q want %q", reason, expectedReason)
-	}
-}
-
-// Verifies observing IsCompiling before the threshold suppresses focus even when later polls fail.
-func TestWaitForCompileCompletionDoesNotFocusAfterActivityStarted(t *testing.T) {
-	connection := compileWaitTestConnection(t)
-	callCount := 0
-	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		callCount++
-		if callCount == 1 {
-			return compileStatusResponse{IsCompiling: true}, nil
-		}
-		return compileStatusResponse{}, fmt.Errorf("status poll failed")
-	})
-	probe := attachCompileWaitFocusProbe(&deps)
-
-	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
-		connection:   connection,
-		requestID:    "compile_start_stall_activity",
-		timeout:      200 * time.Millisecond,
-		pollInterval: 5 * time.Millisecond,
-	}, deps)
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if completed {
-		t.Fatal("compile wait should time out after activity then silence")
-	}
-	if probe.focusCount != 0 {
-		t.Fatalf("focus attempts mismatch: got %d want 0", probe.focusCount)
-	}
-}
-
-// Verifies probe errors alone past the threshold still focus Unity once.
-func TestWaitForCompileCompletionFocusesOnceWhenProbesKeepFailing(t *testing.T) {
-	connection := compileWaitTestConnection(t)
-	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		return compileStatusResponse{}, fmt.Errorf("status probe timeout")
-	})
-	probe := attachCompileWaitFocusProbe(&deps)
-
-	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
-		connection:   connection,
-		requestID:    "compile_start_stall_probe_error",
-		timeout:      200 * time.Millisecond,
-		pollInterval: 5 * time.Millisecond,
-	}, deps)
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if completed {
-		t.Fatal("probe-error compile wait should time out")
-	}
-	if probe.focusCount != 1 {
-		t.Fatalf("focus attempts mismatch: got %d want 1", probe.focusCount)
-	}
-}
-
-// Verifies a compile wait that focused Unity restores the previous front window on completion.
-func TestWaitForCompileCompletionRestoresFocusOnCompletion(t *testing.T) {
-	connection := compileWaitTestConnection(t)
-	callCount := 0
-	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		callCount++
-		if callCount < 8 {
-			return compileStatusResponse{}, nil
-		}
-		return compileStatusResponse{
-			Ready:     true,
-			HasResult: true,
-			Result:    json.RawMessage(`{"Success":true}`),
-		}, nil
-	})
-	probe := attachCompileWaitFocusProbe(&deps)
-
-	result, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
-		connection:   connection,
-		requestID:    "compile_start_stall_restore",
-		timeout:      200 * time.Millisecond,
-		pollInterval: 5 * time.Millisecond,
-	}, deps)
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if !completed {
-		t.Fatal("compile wait should complete after the stall")
-	}
-	if string(result) != `{"Success":true}` {
-		t.Fatalf("result mismatch: %s", result)
-	}
-	if probe.focusCount != 1 {
-		t.Fatalf("focus attempts mismatch: got %d want 1", probe.focusCount)
-	}
-	if probe.restoreCount != 1 {
-		t.Fatalf("restore calls mismatch: got %d want 1", probe.restoreCount)
-	}
-}
-
-// Verifies a status probe that returns after the wait deadline does not focus Unity.
-func TestWaitForCompileCompletionDoesNotFocusAfterDeadline(t *testing.T) {
-	connection := compileWaitTestConnection(t)
-	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
-		time.Sleep(250 * time.Millisecond)
-		return compileStatusResponse{}, nil
-	})
-	probe := attachCompileWaitFocusProbe(&deps)
-
-	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
-		connection:   connection,
-		requestID:    "compile_start_stall_after_deadline",
-		timeout:      200 * time.Millisecond,
-		pollInterval: 5 * time.Millisecond,
-	}, deps)
-	if err != nil {
-		t.Fatalf("waitForCompileCompletion failed: %v", err)
-	}
-	if completed {
-		t.Fatal("deadline-crossing probe should time out")
-	}
-	if probe.focusCount != 0 {
-		t.Fatalf("focus attempts mismatch: got %d want 0", probe.focusCount)
-	}
-}
-
-// Verifies compile activity is any of IsCompiling, IsUpdating, domain reload, or HasResult,
-// and that Ready alone does not count.
-func TestCompileActivityHasStarted(t *testing.T) {
-	cases := []struct {
-		name   string
-		status compileStatusResponse
-		want   bool
-	}{
-		{name: "all false", status: compileStatusResponse{}, want: false},
-		{name: "IsCompiling", status: compileStatusResponse{IsCompiling: true}, want: true},
-		{name: "IsUpdating", status: compileStatusResponse{IsUpdating: true}, want: true},
-		{name: "IsDomainReloadInProgress", status: compileStatusResponse{IsDomainReloadInProgress: true}, want: true},
-		{name: "HasResult", status: compileStatusResponse{HasResult: true}, want: true},
-		{name: "Ready alone is not activity", status: compileStatusResponse{Ready: true}, want: false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := compileActivityHasStarted(tc.status)
-			if got != tc.want {
-				t.Fatalf("compileActivityHasStarted mismatch: got %v want %v status=%#v", got, tc.want, tc.status)
-			}
-		})
-	}
-}
-
 // assertCompileWaitTimeoutEnvelopeDetails checks the run/attach wiring that passes
 // lastStatus and WaitedMs into the COMPILE_WAIT_TIMEOUT stderr envelope.
 func assertCompileWaitTimeoutEnvelopeDetails(t *testing.T, stderr []byte, wantCompiling bool) {
@@ -1207,28 +994,6 @@ func compileWaitTestDeps(
 		attachProbeInterval:    5 * time.Millisecond,
 		attachWaitPollInterval: 5 * time.Millisecond,
 	}
-}
-
-type compileWaitFocusProbe struct {
-	focusCount   int
-	restoreCount int
-}
-
-func attachCompileWaitFocusProbe(deps *compileWaitDeps) *compileWaitFocusProbe {
-	probe := &compileWaitFocusProbe{}
-	deps.startStallFocusThreshold = 20 * time.Millisecond
-	deps.focus = defaultConnectionRetryDeps()
-	deps.focus.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
-		return &clicore.UnityProcess{Pid: 4242}, nil
-	}
-	deps.focus.focusUnityProcess = func(context.Context, int) (clicore.RestoreFocusFunc, error) {
-		probe.focusCount++
-		return func(context.Context) error {
-			probe.restoreCount++
-			return nil
-		}, nil
-	}
-	return probe
 }
 
 func vibeLogContextString(t *testing.T, entry map[string]any, key string) string {

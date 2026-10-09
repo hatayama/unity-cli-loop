@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string pluginPath = CreateEmptyFile("plugins", "Plugin.dll");
             ReferenceGraph graph = CreateReferenceGraph(pluginPath, Array.Empty<string>());
 
-            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(graph.Tests);
+            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(_tempRoot, graph.Tests);
 
             Assert.That(directories, Does.Contain(FullDirectoryOf(graph.Tests.outputPath)));
             Assert.That(directories, Does.Contain(FullDirectoryOf(pluginPath)));
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string ownPath = CreateEmptyFile("own", "Own.dll");
             ReferenceGraph graph = CreateReferenceGraph(pluginPath, new[] { ownPath });
 
-            List<string> directories = new List<string>(HotReloadResolverSearchDirectories.Collect(graph.Tests));
+            List<string> directories = new List<string>(HotReloadResolverSearchDirectories.Collect(_tempRoot, graph.Tests));
 
             int ownIndex = directories.IndexOf(FullDirectoryOf(ownPath));
             int pluginIndex = directories.IndexOf(FullDirectoryOf(pluginPath));
@@ -97,6 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(pluginIndex, Is.GreaterThan(ownIndex));
         }
 
+#if !UNITY_6000_5_OR_NEWER
         /// <summary>
         /// Verifies that for this project's hot-reload test assembly, whose asmdef overrides its
         /// references, the directories reach the code analysis plugins that only a referenced tool
@@ -112,8 +113,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Not.Contain(pluginDirectory),
                 "Unity listed the plugin among the test assembly's own references, so the transitive walk is not what reaches it.");
 
-            Assert.That(HotReloadResolverSearchDirectories.Collect(testAssembly), Does.Contain(pluginDirectory));
+            Assert.That(HotReloadResolverSearchDirectories.Collect(
+                    Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                    testAssembly), Does.Contain(pluginDirectory));
         }
+#else
+        /// <summary>
+        /// Verifies that from Unity 6000.5 on, where the bundled code analysis plugins step aside
+        /// (the define constraint in their .meta), the directories reach the Editor's stock
+        /// System.Reflection.Metadata through the test assembly's own references and no longer
+        /// list the plugin directory at all.
+        /// </summary>
+        [Test]
+        public void Collect_ForHotReloadTestAssembly_OnUnity6000_5OrNewer_ReachesTheStockMetadataDirectoryWithoutThePlugin()
+        {
+            UnityCompilationAssembly testAssembly = PublicizerTestSearchDirectories.HotReloadTestAssembly();
+            string pluginDirectory = Path.GetFullPath(Path.GetDirectoryName(CodeAnalysisPluginPath));
+            string stockMetadataDirectory = null;
+            foreach (string reference in testAssembly.compiledAssemblyReferences)
+            {
+                if (string.Equals(Path.GetFileName(reference), "System.Reflection.Metadata.dll", StringComparison.Ordinal))
+                {
+                    stockMetadataDirectory = Path.GetDirectoryName(Path.GetFullPath(reference));
+                    break;
+                }
+            }
+
+            Assert.That(stockMetadataDirectory, Is.Not.Null,
+                "Unity 6000.5+ lists the BCLExtensions System.Reflection.Metadata among every script assembly's compiled references.");
+            Assert.That(stockMetadataDirectory, Is.Not.EqualTo(pluginDirectory));
+
+            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                testAssembly);
+            Assert.That(directories, Does.Contain(stockMetadataDirectory));
+            Assert.That(directories, Does.Not.Contain(pluginDirectory),
+                "The define constraint keeps the bundled plugins out of every script assembly's references on 6000.5+.");
+        }
+#endif
 
         /// <summary>
         /// Verifies a publicized copy whose metadata needs an assembly that only a transitive
@@ -140,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string publicized = ReferencePublicizer.GetOrCreatePublicizedCopy(
                 image.Home,
-                HotReloadResolverSearchDirectories.Collect(graph.Tests));
+                HotReloadResolverSearchDirectories.Collect(_tempRoot, graph.Tests));
 
             Assert.That(File.Exists(publicized), Is.True);
         }
@@ -172,6 +209,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.ErrorMessage, Is.Null);
             Assert.That(File.Exists(result.References[0]), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a reference Unity lists relative to a Virtual Player's root, as it does for the
+        /// main project's script assemblies, is resolved against that root and not the current
+        /// directory, so its directory becomes a search directory.
+        /// </summary>
+        [Test]
+        public void Collect_ResolvesARelativeReferenceAgainstTheProjectRoot()
+        {
+            const string relativeReference = "../../ScriptAssemblies/Fixture.Other.dll";
+            string scriptAssembliesPath = CreateEmptyFile(Path.Combine("Library", "ScriptAssemblies"), "Fixture.Other.dll");
+            string playerRoot = Path.Combine(_tempRoot, "Library", "VP", "mppm1");
+            Directory.CreateDirectory(playerRoot);
+            Assert.That(
+                File.Exists(relativeReference),
+                Is.False,
+                "The reference must not exist relative to the current directory, or the test cannot tell the two apart.");
+            UnityCompilationAssembly root = new UnityCompilationAssembly(
+                "Tests",
+                ScriptPath("Tests.dll"),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<UnityCompilationAssembly>(),
+                new[] { relativeReference },
+                AssemblyFlags.EditorAssembly);
+
+            IReadOnlyCollection<string> directories = HotReloadResolverSearchDirectories.Collect(playerRoot, root);
+
+            Assert.That(directories, Does.Contain(FullDirectoryOf(scriptAssembliesPath)));
         }
 
         // Tests -> Game -> Core -> plugin: two steps, so a walk that adds only the direct

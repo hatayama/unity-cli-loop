@@ -617,7 +617,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 home.DllPath,
                 Is.EqualTo(Path.Combine(
                     projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    "Library",
+                    "ScriptAssemblies",
                     ProjectAssemblyName + HotReloadConstants.CompiledAssemblyExtension)));
         }
 

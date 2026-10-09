@@ -23,11 +23,11 @@ internal static class WorkerGroupPipeline
 {
     internal const string PrepareIntroducedTypesOperation = "prepareIntroducedTypes";
 
-    internal static WorkerOutput Run(WorkerInput input)
+    internal static WorkerOutput Run(WorkerInput input, WorkerRequestTimings timings)
     {
         if (string.Equals(input.Operation, PrepareIntroducedTypesOperation, StringComparison.Ordinal))
         {
-            return IntroducedTypePreparation.Prepare(input);
+            return IntroducedTypePreparation.Prepare(input, timings);
         }
 
         if (!string.IsNullOrEmpty(input.Operation))
@@ -35,10 +35,10 @@ internal static class WorkerGroupPipeline
             return CreateRunFailureOutput("Unknown worker operation: " + input.Operation);
         }
 
-        return Transform(input);
+        return Transform(input, timings);
     }
 
-    internal static WorkerOutput Transform(WorkerInput input)
+    internal static WorkerOutput Transform(WorkerInput input, WorkerRequestTimings timings)
     {
         CSharpParseOptions parseOptions = new CSharpParseOptions(
             languageVersion: LanguageVersion.Latest,
@@ -48,6 +48,8 @@ internal static class WorkerGroupPipeline
         {
             units.Add(WorkerSourceLoader.Load(source, parseOptions));
         }
+
+        timings.Lap("parse_sources");
 
         List<WorkerSourceUnit> loadedUnits = new List<WorkerSourceUnit>(units.Count);
         foreach (WorkerSourceUnit unit in units)
@@ -70,6 +72,8 @@ internal static class WorkerGroupPipeline
             loadedUnit.ParseErrors.AddRange(referenceParseErrors);
         }
 
+        timings.Lap("collect_references");
+
         List<WorkerSourceUnit> transformUnits = SelectTransformableUnits(loadedUnits);
         List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(transformUnits.Count);
         foreach (WorkerSourceUnit transformUnit in transformUnits)
@@ -80,12 +84,14 @@ internal static class WorkerGroupPipeline
         // Why loaded before the compilation: a body of a partial type may name a member another
         // file declares, and only the parts of the type in those files let it bind.
         PartialTypeParts partialTypeParts = PartialTypePartLoader.Load(input, parseOptions, units, transformUnits);
+        timings.Lap("partial_type_parts");
 
         // Why collected before any compilation: the global usings other files of the assembly
         // declare must bind the edited files' signatures, not only reach the emitted shims.
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, editedRoots);
         SyntaxTree globalUsingTree = WorkerGlobalUsingBindingTree.Build(assemblyGlobalUsings, editedRoots, parseOptions);
+        timings.Lap("global_usings");
 
         // Why a run-level failure and not a per-file diagnostic: the orchestrator advances to
         // revert, gating and compile whenever the run succeeds, so a run that could not trust its
@@ -98,6 +104,7 @@ internal static class WorkerGroupPipeline
             targetTypesReference,
             parseOptions,
             globalUsingTree);
+        timings.Lap("prepare_binding_trees");
         if (artifactFailure != null)
         {
             return CreateRunFailureOutput(artifactFailure);
@@ -132,12 +139,14 @@ internal static class WorkerGroupPipeline
         WorkerTypeHome home = new WorkerTypeHome(
             input.TargetAssemblyName,
             WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference));
+        timings.Lap("create_compilation");
         List<string> siblingConstDriftWarnings = SiblingConstDriftCollector.CollectConstDriftWarnings(
             input.ChangedSiblingSourcePaths,
             parseOptions,
             references,
             home,
             assemblyGlobalUsings);
+        timings.Lap("sibling_const_drift");
 
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();

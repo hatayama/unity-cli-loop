@@ -65,6 +65,7 @@ func finishBusyRetry(
 
 func finishNonRetryableConnectionAttempt(
 	ctx context.Context,
+	connection unityipc.Connection,
 	currentAttempt sendAttempt,
 	lastAttempt sendAttempt,
 	responseTimeout time.Duration,
@@ -85,9 +86,17 @@ func finishNonRetryableConnectionAttempt(
 			return lastAttempt.outcome, lastAttempt.err
 		}
 	}
-	if reason, ok := connectionRetryFocusReasonForError(currentAttempt.err, currentAttempt.outcome, responseTimeout); ok {
+	reason, ok := connectionRetryFocusReasonForError(currentAttempt.err, currentAttempt.outcome, responseTimeout)
+	if ok {
 		focusController.tryFocus(ctx, reason, currentAttempt.err)
 		focusController.keepUnityFocusedAfterReturn()
+	}
+	if ok && reason == focusReasonPreAcceptTimeout {
+		// Why wrap here: the dial and the write succeeded, so a server was listening; what failed is
+		// its acknowledgement. The tool-failure writer maps this error, with a dispatched-but-unaccepted
+		// outcome, to UNITY_NOT_REACHABLE with Retryable true, where the raw timeout would read as an
+		// internal error that tells the caller to fix the environment.
+		return currentAttempt.outcome, newUnityServerNotRespondingError(connection, currentAttempt.err)
 	}
 	return currentAttempt.outcome, currentAttempt.err
 }

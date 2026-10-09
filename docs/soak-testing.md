@@ -169,7 +169,8 @@ mode at setup, switches it to Debug if needed, and restores the original mode
 when the run ends.
 
 The mode does **not** survive `uloop launch -r`: an editor restarted mid-soak
-comes back on the project's own setting, measured going from Debug to Release
+comes back on the per-user 'Code Optimization On Startup' preference (Unity's
+EditorPrefs, Release unless changed), measured going from Debug to Release
 across one restart. Debug is therefore re-applied after every scheduled and
 recovery restart, the same way the soak scene is rebuilt there. Both switches trigger a full recompile — the setup compile
 absorbs the first one by retrying past `Compilation is already in progress`,

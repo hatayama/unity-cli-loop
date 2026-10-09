@@ -105,17 +105,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadNewSourceMembershipEvidence evidence)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(evidence.AssemblyName);
+            UnityCompilationAssembly compilationAssembly = HotReloadCompilationAssemblies.FindByName(evidence.AssemblyName);
             if (compilationAssembly == null)
             {
                 return HotReloadFailureDescription.Declaration(
                     "The resolved assembly is no longer present in the compilation pipeline. Compile the project and retry hot reload.");
             }
 
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                evidence.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string targetDllPath = CompiledAssemblyLayout.Resolve(projectRoot).DllPath(evidence.AssemblyName);
             HotReloadFailureDescription compiledAssemblyChange = DescribeCompiledAssemblyChange(
                 evidence,
                 targetDllPath);
@@ -423,20 +420,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return true;
-        }
-
-        private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
-        {
-            UnityCompilationAssembly[] assemblies = CompilationPipeline.GetAssemblies();
-            for (int index = 0; index < assemblies.Length; index++)
-            {
-                if (assemblies[index].name == assemblyName)
-                {
-                    return assemblies[index];
-                }
-            }
-
-            return null;
         }
 
         private static string NormalizeProjectRelativePath(string path)

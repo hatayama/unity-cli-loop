@@ -1,4 +1,5 @@
 using UnityEditor.Compilation;
+using Debug = UnityEngine.Debug;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -128,6 +129,102 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 false,
                 SharedWorkerFailureReasons.LifecycleClosed,
                 new { reason = "lifecycle_generation_advanced" });
+        }
+    }
+
+    /// <summary>
+    /// Result of making sure the worker assembly exists: whether the worker can start, where its
+    /// assembly came from ("existing", "cache", "built", or empty on failure), and what happened
+    /// when a built assembly was offered to the cache.
+    /// </summary>
+    internal sealed class WorkerAssemblyEnsureResult
+    {
+        public WorkerStartupResult Result { get; }
+
+        public string AssemblySource { get; }
+
+        public CachePublishOutcome Publish { get; }
+
+        private WorkerAssemblyEnsureResult(
+            WorkerStartupResult result,
+            string assemblySource,
+            CachePublishOutcome publish)
+        {
+            Result = result;
+            AssemblySource = assemblySource;
+            Publish = publish;
+        }
+
+        public static WorkerAssemblyEnsureResult FromExistingAssembly()
+        {
+            return new WorkerAssemblyEnsureResult(
+                WorkerStartupResult.Ready(), "existing", CachePublishOutcome.NotAttempted);
+        }
+
+        public static WorkerAssemblyEnsureResult FromCache()
+        {
+            return new WorkerAssemblyEnsureResult(
+                WorkerStartupResult.Ready(), "cache", CachePublishOutcome.NotAttempted);
+        }
+
+        public static WorkerAssemblyEnsureResult Built(CachePublishOutcome publish)
+        {
+            return new WorkerAssemblyEnsureResult(WorkerStartupResult.Ready(), "built", publish);
+        }
+
+        public static WorkerAssemblyEnsureResult Failed(WorkerStartupResult failure)
+        {
+            Debug.Assert(failure != null && !failure.IsReady, "failure must not be ready");
+            return new WorkerAssemblyEnsureResult(failure, string.Empty, CachePublishOutcome.NotAttempted);
+        }
+    }
+
+    /// <summary>
+    /// What one shared-worker warm-up did.
+    /// </summary>
+    internal sealed class SharedWorkerWarmUpOutcome
+    {
+        // The worker answered the compile, whatever its exit code.
+        internal const string OutcomeAnswered = "answered";
+        // A compile had started the worker first; nothing was sent.
+        internal const string OutcomeAlreadyRunning = "already_running";
+        internal const string OutcomeStartFailed = "start_failed";
+        internal const string OutcomeRequestFailed = "request_failed";
+
+        private SharedWorkerWarmUpOutcome(string outcome, string failureReason, int errorCount)
+        {
+            Outcome = outcome;
+            FailureReason = failureReason;
+            ErrorCount = errorCount;
+        }
+
+        internal string Outcome { get; }
+
+        // Null unless the worker failed to start or to answer.
+        internal string FailureReason { get; }
+
+        // Errors the worker reported; 0 unless it answered.
+        internal int ErrorCount { get; }
+
+        internal static SharedWorkerWarmUpOutcome Answered(int errorCount)
+        {
+            Debug.Assert(errorCount >= 0, "errorCount must not be negative");
+            return new SharedWorkerWarmUpOutcome(OutcomeAnswered, null, errorCount);
+        }
+
+        internal static SharedWorkerWarmUpOutcome AlreadyRunning()
+        {
+            return new SharedWorkerWarmUpOutcome(OutcomeAlreadyRunning, null, 0);
+        }
+
+        internal static SharedWorkerWarmUpOutcome StartFailed(string failureReason)
+        {
+            return new SharedWorkerWarmUpOutcome(OutcomeStartFailed, failureReason, 0);
+        }
+
+        internal static SharedWorkerWarmUpOutcome RequestFailed(string failureReason)
+        {
+            return new SharedWorkerWarmUpOutcome(OutcomeRequestFailed, failureReason, 0);
         }
     }
 }

@@ -354,13 +354,7 @@ func runFreshCompileAttempt(
 		spinner.Stop()
 		return compileExecutionResult{}, freshCompileAttemptEditorBusy
 	}
-	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome), freshCompileAttemptFinal
-}
-
-func writePostCompileWarmupWarning(stderr io.Writer, err error) {
-	// Why: this warmup is a hidden optimization, so it must not turn a
-	// successful compile result into a user-visible command failure.
-	_, _ = fmt.Fprintf(stderr, "warning: post-compile warmup skipped: %v\n", err)
+	return completeCompileResult(result, stderr, spinner, startedAt, outcome), freshCompileAttemptFinal
 }
 
 func runList(ctx context.Context, connection unityipc.Connection, commandArgs []string, stdout io.Writer, stderr io.Writer) int {
@@ -432,29 +426,4 @@ func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 	}
 	clicore.WriteFormat(stdout, "Tools synced to %s\n", cachePath)
 	return 0
-}
-
-type compileResultStatus struct {
-	Success *bool `json:"Success"`
-}
-
-type compileReadinessWaitMode int
-
-const (
-	compileReadinessWaitNone compileReadinessWaitMode = iota
-	compileReadinessWaitWarmup
-)
-
-func compileResultReadinessWaitMode(result json.RawMessage) compileReadinessWaitMode {
-	var status compileResultStatus
-	if json.Unmarshal(result, &status) != nil {
-		return compileReadinessWaitNone
-	}
-	if status.Success == nil {
-		return compileReadinessWaitNone
-	}
-	if *status.Success {
-		return compileReadinessWaitWarmup
-	}
-	return compileReadinessWaitNone
 }

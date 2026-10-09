@@ -24,19 +24,6 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
-// Verifies the default busy-stall focus threshold fires before the bounded busy retry window ends.
-func TestDefaultBusyFocusStallThresholdFitsWithinBusyRetryWindow(t *testing.T) {
-	deps := defaultConnectionRetryDeps()
-	threshold := busyFocusStallThresholdFor(deps)
-	if threshold >= deps.retryTimeout {
-		t.Fatalf(
-			"busy focus stall threshold must stay below the busy retry window: threshold=%s window=%s",
-			threshold,
-			deps.retryTimeout,
-		)
-	}
-}
-
 // Verifies connection-retry focus rescue bounds the focus external command with a deadline.
 func TestConnectionRetryFocusControllerBoundsFocusContext(t *testing.T) {
 	var receivedContext context.Context
@@ -50,7 +37,7 @@ func TestConnectionRetryFocusControllerBoundsFocusContext(t *testing.T) {
 		"get-logs",
 		deps,
 	)
-	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("busy"))
 
 	if receivedContext == nil {
 		t.Fatal("expected focus attempt context")
@@ -228,7 +215,7 @@ func TestConnectionRetryFocusControllerLogsRestoreSuccessWithAttemptCorrelation(
 		deps,
 	)
 
-	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("busy"))
 	controller.restore(context.Background())
 
 	if restoreCallCount != 1 {
@@ -253,7 +240,7 @@ func TestConnectionRetryFocusControllerLogsRestoreSuccessWithAttemptCorrelation(
 	for _, expected := range []string{
 		`"command":"get-logs"`,
 		`"pid":123`,
-		`"reason":"busy_stall"`,
+		`"reason":"pre_accept_timeout"`,
 	} {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
@@ -360,7 +347,7 @@ func TestConnectionRetryFocusControllerLogsMissingRestorerAtFocusTime(t *testing
 		deps,
 	)
 
-	controller.tryFocusProcess(context.Background(), 123, focusReasonBusyStall, errors.New("busy"))
+	controller.tryFocusProcess(context.Background(), 123, focusReasonPreAcceptTimeout, errors.New("busy"))
 	controller.restore(context.Background())
 
 	logContent := readOnlyCliVibeLog(t, projectRoot)
@@ -1013,6 +1000,13 @@ func TestSendWithTransientConnectionRetryKeepsUnityFocusedAfterPreAcceptTimeout(
 	if err == nil {
 		t.Fatal("expected pre-accept timeout")
 	}
+	var notResponding clierrors.UnityServerNotRespondingError
+	if !errors.As(err, &notResponding) {
+		t.Fatalf("err = %v, want UnityServerNotRespondingError wrapping the pre-accept timeout", err)
+	}
+	if !clierrors.IsFinalResponseTimeoutError(err) {
+		t.Fatalf("err = %v, want it to still read as a timeout", err)
+	}
 	if focusCallCount != 1 {
 		t.Fatalf("expected one focus attempt, got %d", focusCallCount)
 	}
@@ -1080,8 +1074,8 @@ func TestSendWithTransientConnectionRetryRetriesBusyResponses(t *testing.T) {
 	}
 }
 
-// Verifies that returnBusyWithoutRetry hands the first busy answer back at once: no resend
-// and no busy-stall focus, because hot reload waits for the Editor on its status instead.
+// Verifies that returnBusyWithoutRetry hands the first busy answer back at once without a
+// resend, because hot reload waits for the Editor on its status instead.
 func TestSendWithTransientConnectionRetryReturnsTheFirstBusyAnswerWhenAsked(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
@@ -1090,7 +1084,6 @@ func TestSendWithTransientConnectionRetryReturnsTheFirstBusyAnswerWhenAsked(t *t
 	deps := defaultConnectionRetryDeps()
 	deps.returnBusyWithoutRetry = true
 	deps.retryPoll = 5 * time.Millisecond
-	deps.busyFocusStallThreshold = time.Nanosecond
 	processLookups := 0
 	focusCalls := 0
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
@@ -1319,10 +1312,10 @@ func TestSendWithTransientConnectionRetryReturnsBusyAfterRetryWindow(t *testing.
 	}
 }
 
-// TDD repro for B-7a: before busy_stall focus rescue, persistent server_busy never called
-// focusUnityProcess (focusCallCount stayed 0). This assertion was Red on pre-fix
-// connection_retry.go and turns Green after the busy stall threshold hook.
-func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testing.T) {
+// Verifies persistent server_busy answers never bring the Editor to the front: the request
+// never ran, and the running command holds the activity (ADR 0012), so there is nothing to
+// rescue.
+func TestSendWithTransientConnectionRetryNeverFocusesWhileBusy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("TCP endpoint injection is only used by this non-Windows client test")
 	}
@@ -1330,7 +1323,6 @@ func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testi
 	deps := defaultConnectionRetryDeps()
 	deps.retryTimeout = 500 * time.Millisecond
 	deps.retryPoll = 5 * time.Millisecond
-	deps.busyFocusStallThreshold = 30 * time.Millisecond
 	focusCallCount := 0
 	restoreCallCount := 0
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
@@ -1390,11 +1382,11 @@ func TestSendWithTransientConnectionRetryFocusesOnceAfterPersistentBusy(t *testi
 	if err == nil {
 		t.Fatal("expected busy error after retry window")
 	}
-	if focusCallCount != 1 {
-		t.Fatalf("expected one busy-stall focus attempt, got %d", focusCallCount)
+	if focusCallCount != 0 {
+		t.Fatalf("expected no focus attempt while Unity answered busy, got %d", focusCallCount)
 	}
-	if restoreCallCount != 1 {
-		t.Fatalf("expected focus restore after busy retry exit, got %d", restoreCallCount)
+	if restoreCallCount != 0 {
+		t.Fatalf("expected no focus restore while Unity answered busy, got %d", restoreCallCount)
 	}
 }
 
@@ -1810,6 +1802,10 @@ func TestSendWithTransientConnectionRetrySurfacesAnUnansweredRequestAfterBusy(t 
 	}
 	if !clierrors.IsFinalResponseTimeoutError(err) {
 		t.Fatalf("err = %v, want a response timeout", err)
+	}
+	var notResponding clierrors.UnityServerNotRespondingError
+	if !errors.As(err, &notResponding) {
+		t.Fatalf("err = %v, want UnityServerNotRespondingError wrapping the pre-accept timeout", err)
 	}
 	if !outcome.RequestDispatched || outcome.RequestAccepted {
 		t.Fatalf("outcome = %+v, want a dispatched request that was never accepted", outcome)

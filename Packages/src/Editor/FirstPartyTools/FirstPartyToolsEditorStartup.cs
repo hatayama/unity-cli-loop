@@ -1,3 +1,5 @@
+using UnityEditor;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     // Keeps bundled tool initialization inside the bundled-tool assembly.
@@ -29,6 +31,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateMouseInputEditorStartup.Initialize();
             SimulateMouseUiEditorStartup.Initialize();
 #endif
+        }
+
+        /// <summary>
+        /// Runs the first-party tool work that has to finish before this domain answers its first
+        /// uloop command. Called once, at the end of the Editor startup.
+        /// </summary>
+        public static void PrepareBeforeServingCommands()
+        {
+            // Why not in an import worker: it never serves commands (the server does not start
+            // there) and it shares Library with the main Editor, so a capture there would only
+            // race the main Editor's own.
+            if (AssetDatabase.IsAssetImportWorkerProcess())
+            {
+                return;
+            }
+
+            HotReloadEditorStartup.CaptureSourceSnapshotBeforeServingCommands();
         }
 
         public static void ResetServerScopedServices()

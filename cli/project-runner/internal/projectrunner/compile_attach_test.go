@@ -242,6 +242,83 @@ func TestRunCompileAttachReturnsStoredResultAndClearsRecord(t *testing.T) {
 	}
 }
 
+// Verifies a successful stored result is returned as soon as it is read, with exit code 0 and
+// without a post-compile warm-up.
+func TestRunCompileAttachReturnsAStoredSuccessAtOnce(t *testing.T) {
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_stored_success",
+		TimedOutAtUtc: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":true,"ErrorCount":0}`),
+		}, nil
+	})
+
+	assertAttachedSuccessReturnsAtOnce(t, projectRoot, deps)
+}
+
+// Verifies a successful result that an attached wait sees once the in-flight compile finishes is
+// returned as soon as it arrives, with exit code 0 and without a post-compile warm-up.
+func TestRunCompileAttachReturnsAWaitedSuccessAtOnce(t *testing.T) {
+	projectRoot := t.TempDir()
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     "compile_attach_waited_success",
+		TimedOutAtUtc: time.Now().UTC().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+	callCount := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		callCount++
+		if callCount == 1 {
+			return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+		}
+		return compileStatusResponse{
+			Ready:     true,
+			HasResult: true,
+			Result:    json.RawMessage(`{"Success":true,"ErrorCount":0}`),
+		}, nil
+	})
+
+	assertAttachedSuccessReturnsAtOnce(t, projectRoot, deps)
+}
+
+// assertAttachedSuccessReturnsAtOnce runs compile against a pending record whose result is a
+// success and checks the result is written to stdout with exit code 0 well within the time a
+// readiness probe would take.
+func assertAttachedSuccessReturnsAtOnce(t *testing.T, projectRoot string, deps compileWaitDeps) {
+	t.Helper()
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: "127.0.0.1:1"},
+		ProjectRoot: projectRoot,
+	}
+	var stdout, stderr bytes.Buffer
+	startedAt := time.Now()
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, map[string]any{}, &stdout, &stderr, deps)
+
+	// Why a time limit: the post-compile warm-up this command no longer runs would wait 180 s for a
+	// readiness a temp project never reaches.
+	if elapsed := time.Since(startedAt); elapsed >= 30*time.Second {
+		t.Fatalf("compile took %s after a successful answer, want under 30s", elapsed)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"Success": true`) && !strings.Contains(stdout.String(), `"Success":true`) {
+		t.Fatalf("the successful result missing from stdout: %s", stdout.String())
+	}
+	if strings.Contains(stderr.String(), "warning") {
+		t.Fatalf("a successful compile must not warn:\n%s", stderr.String())
+	}
+}
+
 // Verifies ForceRecompile clears the pending record and starts a new compile.
 func TestRunCompileAttachForceRecompileClearsRecordAndStartsNewCompile(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -717,17 +794,13 @@ func TestRunCompileAttachReportsCancellationDuringWait(t *testing.T) {
 	}
 }
 
-// Verifies a successful compile whose post-compile warmup fails still returns the compile
-// result and only warns about the skipped warmup.
-func TestCompleteCompileResultWarnsWhenWarmupFails(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+// Verifies a successful compile answer becomes the command's result as it is, with exit code 0
+// and no warning.
+func TestCompleteCompileResultReturnsTheAnswerAsIs(t *testing.T) {
 	var stderr bytes.Buffer
 	result := json.RawMessage(`{"Success":true,"ErrorCount":0}`)
 
 	execution := completeCompileResult(
-		ctx,
-		unityipc.Connection{ProjectRoot: t.TempDir()},
 		result,
 		&stderr,
 		clicore.NewToolSpinner(&stderr, clicore.CompileCommandName),
@@ -738,8 +811,8 @@ func TestCompleteCompileResultWarnsWhenWarmupFails(t *testing.T) {
 	if execution.exitCode != 0 || string(execution.result) != string(result) {
 		t.Fatalf("unexpected execution: %#v", execution)
 	}
-	if !strings.Contains(stderr.String(), "warning: post-compile warmup skipped: context canceled") {
-		t.Fatalf("stderr must warn about the skipped warmup:\n%s", stderr.String())
+	if strings.Contains(stderr.String(), "warning") {
+		t.Fatalf("a successful compile must not warn:\n%s", stderr.String())
 	}
 }
 

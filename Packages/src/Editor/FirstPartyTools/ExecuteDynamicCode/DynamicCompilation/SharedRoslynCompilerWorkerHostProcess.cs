@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string RoslynWorkerSourceFileName = "RoslynCompilerWorker.cs";
         private const string RoslynWorkerAssemblyFileName = "RoslynCompilerWorker.dll";
         private const string RoslynWorkerCompileResponseFileName = "RoslynCompilerWorker.rsp";
+        private const string VibeLogSharedWorkerStarted = "dynamic_code_shared_worker_started";
 
         /// <summary>
         /// Provides Worker Paths behavior for Unity CLI Loop.
@@ -52,6 +53,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 $"RoslynWorker-{Process.GetCurrentProcess().Id}");
         }
 
+        // One per Editor process, outside the worker directory: a reload that drops a warm-up midway
+        // leaves only this, which the next warm-up overwrites, and the worker-directory cleanup must
+        // not delete a warm-up's files under it.
+        internal static string GetWarmUpDirectoryPath()
+        {
+            return Path.Combine(
+                Path.GetTempPath(),
+                "UnityCliLoopCompilation",
+                $"SharedWorkerWarmUp-{Process.GetCurrentProcess().Id}");
+        }
+
         internal static WorkerPaths CreateWorkerPaths(SharedRoslynCompilerWorkerSession session)
         {
             string workerDirectoryPath = GetWorkerDirectoryPath();
@@ -65,9 +77,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Path.Combine(workerDirectoryPath, RoslynWorkerCompileResponseFileName));
         }
 
-        internal static void SynchronizeWorkerSource(WorkerPaths workerPaths)
+        internal static void SynchronizeWorkerSource(WorkerPaths workerPaths, string workerSource)
         {
-            string workerSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
             if (File.Exists(workerPaths.SourcePath) && File.ReadAllText(workerPaths.SourcePath) == workerSource)
             {
                 return;
@@ -132,33 +143,95 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return earlyResult;
             }
 
+            Stopwatch watch = Stopwatch.StartNew();
             WorkerPaths workerPaths = CreateWorkerPaths(session);
-            SynchronizeWorkerSource(workerPaths);
+            // Why one string for both: the source written to disk and the source in the cache key
+            // must be the same text.
+            string workerSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
+            SynchronizeWorkerSource(workerPaths, workerSource);
+            long sourceSyncMs = watch.ElapsedMilliseconds;
 
-            WorkerStartupResult workerAssemblyResult = await EnsureWorkerAssemblyBuiltAsync(
+            watch.Restart();
+            WorkerAssemblyEnsureResult workerAssemblyResult = await EnsureWorkerAssemblyBuiltAsync(
                 session,
                 externalCompilerPaths,
-                workerPaths).ConfigureAwait(false);
-            if (!workerAssemblyResult.IsReady)
+                workerPaths,
+                workerSource).ConfigureAwait(false);
+            long assemblyEnsureMs = watch.ElapsedMilliseconds;
+            if (!workerAssemblyResult.Result.IsReady)
             {
-                return workerAssemblyResult;
+                LogWorkerStarted(
+                    sourceSyncMs,
+                    assemblyEnsureMs,
+                    0,
+                    workerAssemblyResult,
+                    workerAssemblyResult.Result);
+                return workerAssemblyResult.Result;
             }
 
-            return StartWorkerProcess(
+            watch.Restart();
+            WorkerStartupResult startResult = StartWorkerProcess(
                 session,
                 externalCompilerPaths,
                 workerPaths,
                 lifecycleGenerationAtStart);
+            // Only the spawn: the worker's start-up until it answers lands in the first compile.
+            LogWorkerStarted(
+                sourceSyncMs,
+                assemblyEnsureMs,
+                watch.ElapsedMilliseconds,
+                workerAssemblyResult,
+                startResult);
+            return startResult;
         }
 
-        internal static async Task<WorkerStartupResult> EnsureWorkerAssemblyBuiltAsync(
+        // Written only when no live process could serve the request, which after a domain reload
+        // is the first compile, so the cold cost of the shared worker shows apart from compiles.
+        private static void LogWorkerStarted(
+            long sourceSyncMs,
+            long assemblyEnsureMs,
+            long processStartMs,
+            WorkerAssemblyEnsureResult assemblyResult,
+            WorkerStartupResult result)
+        {
+            VibeLogger.LogInfo(
+                VibeLogSharedWorkerStarted,
+                "Shared Roslyn compiler worker started.",
+                new
+                {
+                    sourceSyncMs,
+                    assemblyEnsureMs,
+                    processStartMs,
+                    ready = result.IsReady,
+                    workerAssemblySource = assemblyResult.AssemblySource,
+                    cachePublish = assemblyResult.Publish.ToVibeValue(),
+                    cachePublishError = assemblyResult.Publish.Error
+                });
+        }
+
+        internal static async Task<WorkerAssemblyEnsureResult> EnsureWorkerAssemblyBuiltAsync(
             SharedRoslynCompilerWorkerSession session,
             ExternalCompilerPaths externalCompilerPaths,
-            WorkerPaths workerPaths)
+            WorkerPaths workerPaths,
+            string workerSource)
         {
+            // Why never publish an existing assembly: nothing checked where it came from, and a csc
+            // run that timed out can leave a partly written assembly behind.
             if (File.Exists(workerPaths.AssemblyPath))
             {
-                return WorkerStartupResult.Ready();
+                return WorkerAssemblyEnsureResult.FromExistingAssembly();
+            }
+
+            string cachedAssemblyPath = SharedRoslynCompilerWorkerAssemblyCache.ResolveCachedAssemblyPath(
+                session.ResolveWorkerAssemblyCacheRoot(),
+                SharedRoslynCompilerWorkerAssemblyCache.ComputeCacheKey(workerSource, externalCompilerPaths));
+            // Why a synchronous copy even on the main thread: the assembly is a few megabytes and
+            // copying takes milliseconds, against hundreds for a csc run.
+            if (SharedRoslynCompilerWorkerAssemblyCache.TryCopyCachedAssembly(
+                    cachedAssemblyPath,
+                    workerPaths.AssemblyPath))
+            {
+                return WorkerAssemblyEnsureResult.FromCache();
             }
 
             // Why outside state lock: worker DLL compile can take seconds; shutdown must still kill
@@ -174,24 +247,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     workerPaths.CompileResponseFilePath).ConfigureAwait(false);
             if (!buildResult.StartedSuccessfully)
             {
-                return WorkerStartupResult.Failure(
+                return WorkerAssemblyEnsureResult.Failed(WorkerStartupResult.Failure(
                     buildResult.FailureReason,
-                    buildResult.FailureContext);
+                    buildResult.FailureContext));
             }
 
-            if (!HasErrors(buildResult.Messages))
+            if (HasErrors(buildResult.Messages))
             {
-                return WorkerStartupResult.Ready();
+                SharedRoslynCompilerWorkerAssemblyBuilder.DeleteWorkerAssemblyIfPresent(workerPaths.AssemblyPath);
+                return WorkerAssemblyEnsureResult.Failed(WorkerStartupResult.Failure(
+                    "worker_build_failed",
+                    new
+                    {
+                        first_error = FindFirstErrorMessage(buildResult.Messages),
+                        worker_source_path = workerPaths.SourcePath
+                    }));
             }
 
-            SharedRoslynCompilerWorkerAssemblyBuilder.DeleteWorkerAssemblyIfPresent(workerPaths.AssemblyPath);
-            return WorkerStartupResult.Failure(
-                "worker_build_failed",
-                new
-                {
-                    first_error = FindFirstErrorMessage(buildResult.Messages),
-                    worker_source_path = workerPaths.SourcePath
-                });
+            // Only an assembly this run's csc finished without errors goes to the cache.
+            CachePublishOutcome publish = SharedRoslynCompilerWorkerAssemblyCache.PublishBuiltAssembly(
+                workerPaths.AssemblyPath,
+                cachedAssemblyPath);
+            return WorkerAssemblyEnsureResult.Built(publish);
         }
 
         internal static WorkerStartupResult StartWorkerProcess(

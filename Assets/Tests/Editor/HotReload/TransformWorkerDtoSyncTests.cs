@@ -47,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 { typeof(TransformWorkerUnchangedMethodDto), "WorkerUnchangedMethod" },
                 { typeof(TransformWorkerEntryDto), "WorkerEntry" },
                 { typeof(TransformWorkerSkippedDto), "WorkerSkipped" },
-                { typeof(TransformWorkerReasonDto), "WorkerReason" }
+                { typeof(TransformWorkerReasonDto), "WorkerReason" },
+                { typeof(TransformWorkerTimingStepDto), "WorkerTimingStep" }
             };
 
         /// <summary>

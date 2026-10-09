@@ -685,7 +685,8 @@ func TestPausePointExpiredErrorUsesFileLineNextActions(t *testing.T) {
 	}
 }
 
-// Verifies recovery details use the marker lifetime instead of the wait deadline.
+// Verifies recovery details carry the marker lifetime as MarkerTimeoutSeconds while
+// TimeoutSeconds stays the wait's own --timeout-seconds.
 func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 	response := pausePointStatusResponse{
 		Id:             "jump",
@@ -700,8 +701,11 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 		timeoutSeconds: 5,
 	}, response, pausePointWaitStateExpired, false, false, nil)
 
-	if cliErr.Details["TimeoutSeconds"] != 30 {
-		t.Fatalf("timeoutSeconds detail mismatch: %#v", cliErr.Details)
+	if cliErr.Details["MarkerTimeoutSeconds"] != 30 {
+		t.Fatalf("MarkerTimeoutSeconds detail mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["TimeoutSeconds"] != 5 {
+		t.Fatalf("TimeoutSeconds detail mismatch: %#v", cliErr.Details)
 	}
 }
 

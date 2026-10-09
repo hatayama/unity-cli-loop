@@ -57,35 +57,60 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadGroupFile firstFile = files[0];
             // Application.dataPath and the ledgers require the Unity main thread.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            if (!_dependencies.ValidateNewSourceMembership(files))
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
             {
-                return _fileEntryApplier.BuildUnappliedGroupResults(files);
+                await MainThreadSwitcher.SwitchToMainThread(ct);
             }
 
-            SnapshotGroupState(files);
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMembershipValidate))
+            {
+                if (!_dependencies.ValidateNewSourceMembership(files))
+                {
+                    return _fileEntryApplier.BuildUnappliedGroupResults(files);
+                }
+            }
+
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepSnapshotGroupState))
+            {
+                SnapshotGroupState(files);
+            }
+
             // Why here and not at the leave-out decision: the ledgers need the main thread, which
             // the worker await leaves, and nothing changes which files hold changes before the
             // decision — the domain changes only after it, and a prepared type is not active.
-            HashSet<string> activePaths = new HotReloadDomainCarriedInLookup(_domain).ListActivePaths();
+            HashSet<string> activePaths;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepActivePaths))
+            {
+                activePaths = new HotReloadDomainCarriedInLookup(_domain).ListActivePaths();
+            }
 
-            HotReloadChangedSiblingScanResult siblingScan = HotReloadChangedSiblingSourceDetector.Detect(
-                firstFile.ProjectRoot,
-                firstFile.AssemblyName,
-                firstFile.TargetDllPath,
-                firstFile.CompilationAssembly.sourceFiles,
-                CollectProjectRelativePaths(files));
+            HotReloadChangedSiblingScanResult siblingScan;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepSiblingDetect))
+            {
+                siblingScan = HotReloadChangedSiblingSourceDetector.Detect(
+                    firstFile.ProjectRoot,
+                    firstFile.AssemblyName,
+                    firstFile.TargetDllPath,
+                    firstFile.CompilationAssembly.sourceFiles,
+                    HotReloadGroupFileLists.CollectProjectRelativePaths(files));
+            }
+
             if (!string.IsNullOrEmpty(siblingScan.ScanLimitWarning))
             {
                 firstFile.Sinks.SiblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
             }
 
-            TransformWorkerInputDto workerInput = HotReloadGroupWorkerInputBuilder.BuildWorkerInput(files, siblingScan, _domain);
-            workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
-                _domain.IntroducedTypes,
-                workerInput.targetAssemblyName,
-                workerInput.targetAssemblyMvid,
-                FindFullyAppliedSourceHash).ToArray();
+            TransformWorkerInputDto workerInput;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWorkerInput))
+            {
+                workerInput = HotReloadGroupWorkerInputBuilder.BuildWorkerInput(files, siblingScan, _domain);
+                workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
+                    _domain.IntroducedTypes,
+                    workerInput.targetAssemblyName,
+                    workerInput.targetAssemblyMvid,
+                    FindFullyAppliedSourceHash).ToArray();
+            }
+
             Stopwatch preparationWatch = Stopwatch.StartNew();
             HotReloadIntroducedTypePreparationResult preparation = await _dependencies
                 .PrepareIntroducedTypes(files, workerInput, ct)
@@ -98,36 +123,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // declaration bound from a retained artifact introduces nothing, so no artifact of
             // this run publishes it and a run whose only change is such a declaration never
             // reaches an activation at all.
-            HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.AlreadyActiveTypes);
-            HotReloadIntroducedTypeOutcomeSink.AppendNotices(files, preparation.Notices);
-
-            if (!preparation.Success)
+            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepPreparationOutcome))
             {
-                // Why the two failures part ways here: a refused declaration is reported as the
-                // type it refused, while a preparation that could not run at all refused no
-                // declaration and stays a run-level failure of every file of the group.
-                if (preparation.Failures.Count > 0)
+                HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.AlreadyActiveTypes);
+                HotReloadIntroducedTypeOutcomeSink.AppendNotices(files, preparation.Notices);
+
+                if (!preparation.Success)
                 {
-                    HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.Failures);
-                    // Why here: the transform run that reports these for a run that continues
-                    // never runs, and an added enum member is a likely cause of the refusal.
-                    HotReloadIntroducedTypeOutcomeSink.AppendDeclarationDriftWarnings(
-                        files,
-                        preparation.DeclarationDriftWarnings);
-                }
-                else
-                {
-                    HotReloadGroupOutcomeRouter.AppendGroupFailure(
-                        files,
-                        "(file)",
-                        HotReloadFailureDescription.Declaration(preparation.ErrorMessage));
+                    // Why the two failures part ways here: a refused declaration is reported as the
+                    // type it refused, while a preparation that could not run at all refused no
+                    // declaration and stays a run-level failure of every file of the group.
+                    if (preparation.Failures.Count > 0)
+                    {
+                        HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.Failures);
+                        // Why here: the transform run that reports these for a run that continues
+                        // never runs, and an added enum member is a likely cause of the refusal.
+                        HotReloadIntroducedTypeOutcomeSink.AppendDeclarationDriftWarnings(
+                            files,
+                            preparation.DeclarationDriftWarnings);
+                    }
+                    else
+                    {
+                        HotReloadGroupOutcomeRouter.AppendGroupFailure(
+                            files,
+                            "(file)",
+                            HotReloadFailureDescription.Declaration(preparation.ErrorMessage));
+                    }
+
+                    return _fileEntryApplier.BuildUnappliedGroupResults(files);
                 }
 
-                return _fileEntryApplier.BuildUnappliedGroupResults(files);
+                refusedTypes = HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             }
 
-            IReadOnlyList<HotReloadRefusedIntroducedType> refusedTypes =
-                HotReloadRefusedIntroducedType.CollectFrom(preparation.Notices);
             if (preparation.Prepared == null)
             {
                 return await TransformAndApplyGroupAsync(files, workerInput, null, refusedTypes, activePaths, correlationId, timing, ct)
@@ -171,13 +200,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
             HotReloadIntroducedTypeRegistry registry = _domain.IntroducedTypes;
-            List<TransformWorkerIntroducedTypeArtifactDto> records =
-                new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
-            TransformWorkerIntroducedTypeArtifactDto preparedRecord =
-                HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact);
-            preparedRecord.preparedByThisRun = true;
-            records.Add(preparedRecord);
-            workerInput.introducedTypeArtifacts = records.ToArray();
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWorkerInput))
+            {
+                List<TransformWorkerIntroducedTypeArtifactDto> records =
+                    new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
+                TransformWorkerIntroducedTypeArtifactDto preparedRecord =
+                    HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact);
+                preparedRecord.preparedByThisRun = true;
+                records.Add(preparedRecord);
+                workerInput.introducedTypeArtifacts = records.ToArray();
+            }
 
             // The scope answers binds for the prepared assembly while nothing has activated it, so
             // the shim compilation and the reflection it drives can already reach the new types.
@@ -238,10 +270,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 workerOutput.files.Length == files.Count,
                 "A group worker run must return one per-file output per edited file.");
-            IReadOnlyList<string> leftOutPaths = _leaveOut.FindLeftOutPaths(
-                DescribeLeaveOutFiles(files),
-                workerOutput,
-                activePaths);
+            IReadOnlyList<string> leftOutPaths;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepIsolationSplit))
+            {
+                leftOutPaths = _leaveOut.FindLeftOutPaths(
+                    HotReloadGroupFileLists.DescribeLeaveOutFiles(files),
+                    workerOutput,
+                    activePaths);
+            }
+
             if (leftOutPaths.Count == 0)
             {
                 return await ApplyTransformedGroupAsync(files, workerInput, workerOutput, prepared, refusedTypes, correlationId, timing, ct)
@@ -250,9 +287,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why the rerun input first: it refuses a leave-out the sources do not match before
             // anything is written to the left-out files.
-            TransformWorkerInputDto retryInput = _leaveOut.BuildRetryInput(workerInput, leftOutPaths);
-            HotReloadGroupLeaveOutSplit split = new HotReloadGroupLeaveOutSplit(files, leftOutPaths);
-            List<HotReloadFileProcessResult> leftOutResults = BuildLeftOutResults(split, files, workerOutput);
+            TransformWorkerInputDto retryInput;
+            HotReloadGroupLeaveOutSplit split;
+            List<HotReloadFileProcessResult> leftOutResults;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepIsolationSplit))
+            {
+                retryInput = _leaveOut.BuildRetryInput(workerInput, leftOutPaths);
+                split = new HotReloadGroupLeaveOutSplit(files, leftOutPaths);
+                leftOutResults = BuildLeftOutResults(split, files, workerOutput);
+            }
+
             TransformWorkerClientResult retryResult = await RunWorkerAsync(retryInput, correlationId, timing, ct)
                 .ConfigureAwait(false);
             IReadOnlyList<HotReloadFileProcessResult> remainingResults = retryResult.Success
@@ -293,22 +337,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _fileEntryApplier.BuildUnappliedGroupResults(files);
         }
 
-        // Why a file that declares a new type never counts as enum-only: its artifact is prepared
-        // against the whole group, and leaving its owner out would drop it from the commit.
-        private static List<HotReloadLeaveOutFile> DescribeLeaveOutFiles(IReadOnlyList<HotReloadGroupFile> files)
-        {
-            List<HotReloadLeaveOutFile> leaveOutFiles = new List<HotReloadLeaveOutFile>(files.Count);
-            foreach (HotReloadGroupFile file in files)
-            {
-                leaveOutFiles.Add(new HotReloadLeaveOutFile(
-                    file.ProjectRelativePath,
-                    file.IsDefaultSelected,
-                    file.DeclaresIntroducedType || file.DeclaresRefusedIntroducedType));
-            }
-
-            return leaveOutFiles;
-        }
-
         // Why the first run's rows: the left-out file gets the notices, hash and counts it would
         // have had in the run, so only the added members of the other files change.
         private List<HotReloadFileProcessResult> BuildLeftOutResults(
@@ -318,7 +346,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadWorkerRowsByFile firstRows = HotReloadWorkerRowsByFile.Build(
                 firstOutput,
-                CollectProjectRelativePaths(files));
+                HotReloadGroupFileLists.CollectProjectRelativePaths(files));
             HotReloadGroupNotices.AppendPerFileWorkerNotices(split.LeftOutFiles, firstRows);
             List<HotReloadFileProcessResult> results = new List<HotReloadFileProcessResult>(split.LeftOutFiles.Count);
             foreach (HotReloadGroupFile file in split.LeftOutFiles)
@@ -346,15 +374,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 workerOutput.files.Length == files.Count,
                 "A group worker run must return one per-file output per edited file.");
-            HotReloadWorkerRowsByFile rows = HotReloadWorkerRowsByFile.Build(
-                workerOutput,
-                CollectProjectRelativePaths(files));
-            HotReloadGroupNotices.AppendPerFileWorkerNotices(files, rows);
-            // Why once for the group: the worker scans the assembly's unedited siblings for const
-            // drift as a whole, so flowing them per file would repeat the same texts.
-            if (workerOutput.siblingConstDriftWarnings != null)
+            HotReloadWorkerRowsByFile rows;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWorkerNotices))
             {
-                firstFile.Sinks.SiblingDerivedWarnings.AddRange(workerOutput.siblingConstDriftWarnings);
+                rows = HotReloadWorkerRowsByFile.Build(
+                    workerOutput,
+                    HotReloadGroupFileLists.CollectProjectRelativePaths(files));
+                HotReloadGroupNotices.AppendPerFileWorkerNotices(files, rows);
+                // Why once for the group: the worker scans the assembly's unedited siblings for const
+                // drift as a whole, so flowing them per file would repeat the same texts.
+                if (workerOutput.siblingConstDriftWarnings != null)
+                {
+                    firstFile.Sinks.SiblingDerivedWarnings.AddRange(workerOutput.siblingConstDriftWarnings);
+                }
             }
 
             // Why before the empty-entries return: all-unchanged runs exit there, and those are
@@ -366,27 +398,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // marks a file unapplied runs later, so the only mark a file can carry at this point
             // is a parse error, and the worker drops a unit with parse errors before the transform
             // that reports unchanged methods, leaving such a file no row to peel either way.
-            if (!_collaborators.CommitPolicy.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
-                && !await RevalidateBeforeRevertAsync(
-                    files,
-                    ct,
-                    () => _entryApplier.RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepRevalidateBeforeRevert))
             {
-                return _fileEntryApplier.BuildUnappliedGroupResults(files);
+                if (!_collaborators.CommitPolicy.CommitsIntroducedTypes(prepared, files[0].AssemblyName)
+                    && !await RevalidateBeforeRevertAsync(
+                        files,
+                        ct,
+                        () => _entryApplier.RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
+                {
+                    return _fileEntryApplier.BuildUnappliedGroupResults(files);
+                }
             }
 
-            HotReloadApplyContext context = new HotReloadApplyContext(
-                firstFile.ProjectRoot,
-                firstFile.AssemblyName,
-                correlationId,
-                firstFile.CompilationAssembly,
-                firstFile.Home,
-                firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
-                workerInput,
-                workerOutput,
-                files,
-                prepared,
-                new HotReloadCompileFailureNoteSources(workerOutput.skipped, refusedTypes));
+            HotReloadApplyContext context;
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepApplyContext))
+            {
+                context = new HotReloadApplyContext(
+                    firstFile.ProjectRoot,
+                    firstFile.AssemblyName,
+                    correlationId,
+                    firstFile.CompilationAssembly,
+                    firstFile.Home,
+                    firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
+                    workerInput,
+                    workerOutput,
+                    files,
+                    prepared,
+                    new HotReloadCompileFailureNoteSources(workerOutput.skipped, refusedTypes));
+            }
+
             Stopwatch gateWatch = Stopwatch.StartNew();
             HotReloadGroupGateAndCompileResult gateAndCompile = await _dependencies
                 .GateAndCompile(context, ct)
@@ -421,14 +461,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(collaborators != null, "collaborators must not be null.");
             // The worker-bound continuation after the pre-revert check is not guaranteed to
             // resume on Unity's context, while the signature gate reads compilation state.
+            Stopwatch switchWatch = Stopwatch.StartNew();
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            long mainThreadSwitchMs = switchWatch.ElapsedMilliseconds;
             ct.ThrowIfCancellationRequested();
             IReadOnlyList<HotReloadGroupFile> files = context.Files;
             HotReloadGroupFile gateWarningSink = files[0];
+            Stopwatch gateWatch = Stopwatch.StartNew();
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
                 collaborators,
                 context,
                 ct).ConfigureAwait(false);
+            HotReloadOrchestratorLog.LogHotReloadSignatureGateTiming(
+                mainThreadSwitchMs, gateWatch.ElapsedMilliseconds, gateResult.UsedWorkerRetry, context.CorrelationId);
             HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(
                 gateWarningSink.Sinks.SiblingDerivedWarnings,
                 gateResult.Isolation);
@@ -594,17 +639,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : HotReloadSnapshotMissReason.None;
             }
         }
-
-        private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)
-        {
-            List<string> projectRelativePaths = new List<string>(files.Count);
-            foreach (HotReloadGroupFile file in files)
-            {
-                projectRelativePaths.Add(file.ProjectRelativePath);
-            }
-
-            return projectRelativePaths;
-        }
-
     }
 }

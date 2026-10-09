@@ -28,8 +28,7 @@ const (
 )
 
 // hotReloadBusyWaitSendDeps sends without the bounded busy retry. Why: hot reload waits for the
-// Editor on its status instead of resending every second, which would also bring the Editor to the
-// front after the busy-stall threshold.
+// Editor on its status instead of resending every second.
 func hotReloadBusyWaitSendDeps() connectionRetryDeps {
 	deps := defaultConnectionRetryDeps()
 	deps.returnBusyWithoutRetry = true
@@ -113,6 +112,8 @@ type hotReloadBusyWait struct {
 	outcome  unityipc.UnitySendOutcome
 	sendErr  error
 	resends  int
+	// resendCorrelationIDs holds the correlation id of every resent request, in order.
+	resendCorrelationIDs []string
 }
 
 // waitForBusyEditor polls the Editor status until it is ready, the budget runs out, or ctx is
@@ -143,6 +144,7 @@ func waitForBusyEditor(
 			answer, outcome, err := sendPlainTool(ctx, connection, hotReloadCommandName, params, stderr, deps)
 			lastResend = time.Now()
 			wait.resends++
+			wait.resendCorrelationIDs = append(wait.resendCorrelationIDs, answer.correlationID)
 			if !isUnityServerBusyRPCError(err) {
 				wait.waited, wait.ready, wait.answered = time.Since(startedAt), err == nil, true
 				wait.answer, wait.outcome, wait.sendErr = answer, outcome, err
@@ -171,17 +173,11 @@ func isHeldByExecuteDynamicCode(status editorStatusResponse) bool {
 
 // hotReloadBusyRunningToolName names the command that held the Editor, from the busy answer's data.
 func hotReloadBusyRunningToolName(err error) string {
-	var rpcErr *unityipc.RPCError
-	if !errors.As(err, &rpcErr) {
+	name, ok := serverBusyRunningToolName(err)
+	if !ok {
 		return hotReloadBusyUnknownToolName
 	}
-	data := struct {
-		RunningToolName string `json:"runningToolName"`
-	}{}
-	if json.Unmarshal(rpcErr.Data, &data) != nil || data.RunningToolName == "" {
-		return hotReloadBusyUnknownToolName
-	}
-	return data.RunningToolName
+	return name
 }
 
 func hotReloadBusyWaitNote(runningToolName string, waited time.Duration, ready bool) string {
@@ -242,6 +238,14 @@ func logHotReloadBusyWaitDecided(connection unityipc.Connection, correlationID s
 	})
 }
 
+// Why never nil: a nil slice is written as null, and an empty wait should read as [].
+func resendCorrelationIDsOrEmpty(wait hotReloadBusyWait) []string {
+	if wait.resendCorrelationIDs == nil {
+		return []string{}
+	}
+	return wait.resendCorrelationIDs
+}
+
 // Written once on every way out of a wait that started. second is nil when no request was sent
 // after the wait.
 func logHotReloadBusyWaitComplete(
@@ -252,12 +256,13 @@ func logHotReloadBusyWaitComplete(
 ) {
 	writePlainToolVibeLog(connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
 		entryContext := map[string]any{
-			"correlation_id":        correlationID,
-			"second_correlation_id": "",
-			"waited_ms":             wait.waited.Milliseconds(),
-			"ready":                 wait.ready,
-			"resends":               wait.resends,
-			"second_result":         false,
+			"correlation_id":         correlationID,
+			"second_correlation_id":  "",
+			"waited_ms":              wait.waited.Milliseconds(),
+			"ready":                  wait.ready,
+			"resends":                wait.resends,
+			"resend_correlation_ids": resendCorrelationIDsOrEmpty(wait),
+			"second_result":          false,
 		}
 		if second != nil {
 			entryContext["second_correlation_id"] = second.correlationID

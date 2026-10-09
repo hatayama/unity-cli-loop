@@ -89,6 +89,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         [Test]
+        public void CodeAnalysisPlugins_WhenLoaded_StepAsideOnUnity6000_5OrNewer()
+        {
+            // Tests that Editors from 6000.5 on, which ship these assemblies as BCL extensions and
+            // reference them from every script assembly, do not also reference the bundled copies.
+            for (int assemblyIndex = 0; assemblyIndex < PrivateAssemblies.Length; assemblyIndex++)
+            {
+                PrivateAssembly assembly = PrivateAssemblies[assemblyIndex];
+                PluginImporter importer = AssetImporter.GetAtPath(assembly.AssetPath) as PluginImporter;
+
+                Assert.That(importer, Is.Not.Null, assembly.AssetPath);
+                Assert.That(importer!.DefineConstraints, Is.EqualTo(new[] { "!UNITY_6000_5_OR_NEWER" }), assembly.AssetPath);
+            }
+        }
+
+        [Test]
         public void CodeAnalysisPlugins_WhenInspected_UsePrivateAssemblyIdentities()
         {
             // Tests that private DLL file names also match the managed assembly identities and references.

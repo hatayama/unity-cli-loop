@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -91,6 +92,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the request that starts the worker reports the start and its spawn step; the next
+        /// request on the same process reports reuse, with no spawn step but a response wait and an
+        /// output read. Each began one conversation.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_FirstRequestStartsTheWorker_ReportsTheStartAndTheSecondReportsReuse()
+        {
+            _factory.Enqueue(ScriptStep.Succeed, ScriptStep.Succeed);
+
+            TransformWorkerHostResult first = await _host.RunAsync(CreateInput(1), CancellationToken.None);
+            TransformWorkerHostResult second = await _host.RunAsync(CreateInput(1), CancellationToken.None);
+
+            Assert.That(first.Kind, Is.EqualTo(TransformWorkerHostResultKind.Completed), first.ErrorMessage);
+            Assert.That(first.Timing.WorkerStarted, Is.True, "first WorkerStarted");
+            Assert.That(first.Timing.Attempts, Is.EqualTo(1), "first Attempts");
+            Assert.That(StepNames(first), Does.Contain(TransformWorkerRequestTiming.ProcessStartStep), "first steps");
+            Assert.That(StepNames(first), Does.Contain(TransformWorkerRequestTiming.ResponseWaitStep), "first steps");
+            Assert.That(StepNames(first), Does.Contain(TransformWorkerRequestTiming.ReadOutputStep), "first steps");
+            Assert.That(WorkerStepNames(first), Is.EqualTo(new[] { "read_input" }), "first worker steps");
+            Assert.That(second.Kind, Is.EqualTo(TransformWorkerHostResultKind.Completed), second.ErrorMessage);
+            Assert.That(second.Timing.WorkerStarted, Is.False, "second WorkerStarted");
+            Assert.That(second.Timing.Attempts, Is.EqualTo(1), "second Attempts");
+            Assert.That(StepNames(second), Does.Not.Contain(TransformWorkerRequestTiming.ProcessStartStep), "second steps");
+            Assert.That(StepNames(second), Does.Contain(TransformWorkerRequestTiming.ResponseWaitStep), "second steps");
+            Assert.That(StepNames(second), Does.Contain(TransformWorkerRequestTiming.ReadOutputStep), "second steps");
+        }
+
+        /// <summary>
+        /// What: a request whose first process dies without answering reports two conversations and
+        /// that it started a worker, the fresh one that answered the retry.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_FirstConversationBreaks_ReportsTwoAttemptsAndAStart()
+        {
+            _factory.Enqueue(ScriptStep.Crash);
+            _factory.Enqueue(ScriptStep.Succeed);
+
+            TransformWorkerHostResult result = await _host.RunAsync(CreateInput(1), CancellationToken.None);
+
+            Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.Completed), result.ErrorMessage);
+            Assert.That(result.Timing.Attempts, Is.EqualTo(2), "Attempts");
+            Assert.That(result.Timing.WorkerStarted, Is.True, "WorkerStarted");
+            Assert.That(_host.LaunchCount, Is.EqualTo(2), "LaunchCount");
+        }
+
+        /// <summary>
         /// What: two consecutive broken conversations end the request as RetryExhausted; no third
         /// process is started and the failure names the last reason.
         /// </summary>
@@ -130,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: run-level parse errors in a valid output file are a final WorkerFailed result, not a
-        /// broken conversation, and the process is kept.
+        /// broken conversation, the process is kept, and the stages the worker timed are kept.
         /// </summary>
         [Test]
         public async Task RunAsync_OutputCarriesRunLevelParseErrors_IsWorkerFailed()
@@ -141,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.WorkerFailed));
             Assert.That(result.ErrorMessage, Does.Contain("run-level problem"));
+            Assert.That(WorkerStepNames(result), Is.EqualTo(new[] { "read_input" }), "worker steps");
             Assert.That(_host.LaunchCount, Is.EqualTo(1));
             Assert.That(_host.CurrentProcessId, Is.Not.Null);
         }
@@ -306,6 +354,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_factory.Channels[0].HasExited, Is.True);
             Assert.That(_factory.Channels[0].QuitRequested, Is.True, "The old process must be asked to quit gracefully first.");
             Assert.That(_factory.Channels[1].WorkerDirectory, Is.EqualTo("/worker/b"));
+            Assert.That(second.Timing.WorkerStarted, Is.True, "A restart registers a new process.");
         }
 
         /// <summary>
@@ -356,6 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.BootstrapFailed));
             Assert.That(result.ErrorMessage, Does.Contain("bootstrap failed for test"));
             Assert.That(_host.LaunchCount, Is.EqualTo(0));
+            Assert.That(result.Timing.Attempts, Is.EqualTo(0), "Attempts");
         }
 
         /// <summary>
@@ -372,6 +422,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.RetryExhausted));
             Assert.That(result.ErrorMessage, Does.Contain("could not be started"));
             Assert.That(_host.LaunchCount, Is.EqualTo(0));
+            Assert.That(result.Timing.Attempts, Is.EqualTo(2), "Attempts");
+            Assert.That(result.Timing.WorkerStarted, Is.False, "WorkerStarted");
         }
 
         /// <summary>
@@ -388,6 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.LifecycleClosed), result.ErrorMessage);
             Assert.That(_host.LaunchCount, Is.EqualTo(0));
+            Assert.That(result.Timing.WorkerStarted, Is.False, "A discarded process was never registered.");
             Assert.That(_host.CurrentProcessId, Is.Null);
             Assert.That(_factory.Channels.Count, Is.EqualTo(1));
             Assert.That(_factory.Channels[0].HasExited, Is.True);
@@ -416,6 +469,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(firstResult.Kind, Is.EqualTo(TransformWorkerHostResultKind.TimedOut), firstResult.ErrorMessage);
             Assert.That(queuedResult.Kind, Is.EqualTo(TransformWorkerHostResultKind.TimedOut), queuedResult.ErrorMessage);
             Assert.That(queuedResult.ErrorMessage, Does.Contain("before attempt 1"));
+            Assert.That(queuedResult.Timing.Attempts, Is.EqualTo(0), "Attempts");
             Assert.That(_host.LaunchCount, Is.EqualTo(1));
             Assert.That(_factory.Channels.Count, Is.EqualTo(1));
         }
@@ -489,6 +543,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return new TransformWorkerInputDto { sources = sources };
+        }
+
+        private static string[] StepNames(TransformWorkerHostResult result)
+        {
+            return result.Timing.Steps.Select(step => step.Key).ToArray();
+        }
+
+        private static string[] WorkerStepNames(TransformWorkerHostResult result)
+        {
+            return result.Timing.WorkerSteps.Select(step => step.step).ToArray();
         }
     }
 
@@ -766,7 +830,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 files[index] = new TransformWorkerFileOutputDto { projectRelativePath = rowPaths[index] };
             }
 
-            TransformWorkerOutputDto output = new TransformWorkerOutputDto { files = files, parseErrors = parseErrors };
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                files = files,
+                parseErrors = parseErrors,
+                timings = new[] { new TransformWorkerTimingStepDto { step = "read_input", ms = 3 } }
+            };
             File.WriteAllText(outputPath, JsonConvert.SerializeObject(output));
         }
 

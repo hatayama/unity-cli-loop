@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies C# does not add, remove, or rename get-compile-status fields without updating the
             // shared CLI contract. Result must come from a real CompileResponse serialization because that
-            // is what CompileStatusBridgeCommand restores from ResultJson for Go compileResultStatus.Success.
+            // is what CompileStatusBridgeCommand restores from ResultJson for the Go CLI, which reads
+            // Result.Success as the compile's exit code.
             JObject expected = ReadSharedContractFieldShape();
             JObject compileResultJson = SerializeCompileResponseResult();
             GetCompileStatusResponse response = new()
@@ -47,8 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void CompileResponse_WhenSerializedForCompileStatusResult_IncludesSuccessProperty()
         {
-            // Verifies the wire Result payload still exposes Success under the name Go unmarshals into
-            // compileResultStatus — a rename on CompileResponse must fail this test.
+            // Verifies the wire Result payload still exposes Success under the name the Go CLI reads for
+            // the exit code (toolEnvelopeExitCode) — a rename on CompileResponse must fail this test.
             JObject compileResultJson = SerializeCompileResponseResult();
             Assert.That(compileResultJson.Property("Success"), Is.Not.Null);
             Assert.That(compileResultJson["Success"]!.Type, Is.EqualTo(JTokenType.Boolean));

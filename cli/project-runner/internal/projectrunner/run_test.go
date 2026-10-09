@@ -341,10 +341,3 @@ func TestRunListPrintsLiveCatalog(t *testing.T) {
 		t.Fatalf("stdout must list the live tool:\n%s", stdout.String())
 	}
 }
-
-// Verifies that an undecodable compile result never triggers the post-compile readiness wait.
-func TestCompileResultReadinessWaitModeIgnoresMalformedResult(t *testing.T) {
-	if mode := compileResultReadinessWaitMode([]byte("not json")); mode != compileReadinessWaitNone {
-		t.Fatalf("mode = %v, want compileReadinessWaitNone", mode)
-	}
-}

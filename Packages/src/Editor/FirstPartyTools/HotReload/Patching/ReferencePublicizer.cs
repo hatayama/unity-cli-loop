@@ -6,9 +6,12 @@ using Mono.Cecil;
 
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -21,6 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string InternalsVisibleToAttributeFullName =
             "System.Runtime.CompilerServices.InternalsVisibleToAttribute";
+
+        // Why one gate for every rewritten copy: two writers of the same copy both miss the cache,
+        // and the later File.Move throws because the earlier one already put the file there. A run
+        // never overlaps the warm-up, which it waits for, but a test run starts while the warm-up
+        // installed at the domain load may still be writing, and tests call this class directly.
+        private static readonly object CopyWriteGate = new object();
 
         /// <summary>
         /// Collects distinct directory paths of existing DLL references for Cecil
@@ -173,58 +182,69 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName = assemblyDefinition.Name.Name;
             string mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
             string outputDirectory = ResolveOutputDirectory(outputRelativeDirectory);
-            Directory.CreateDirectory(outputDirectory);
-
-            string outputDllPath = Path.Combine(
-                outputDirectory,
-                assemblyName + "-" + mvid + HotReloadConstants.CompiledAssemblyExtension);
-            if (File.Exists(outputDllPath) && new FileInfo(outputDllPath).Length > 0)
+            lock (CopyWriteGate)
             {
+                Directory.CreateDirectory(outputDirectory);
+
+                string outputDllPath = Path.Combine(
+                    outputDirectory,
+                    assemblyName + "-" + mvid + HotReloadConstants.CompiledAssemblyExtension);
+                if (File.Exists(outputDllPath) && new FileInfo(outputDllPath).Length > 0)
+                {
+                    return outputDllPath;
+                }
+
+                // Why: older versions wrote the publicized DLL in place; a failed Write could leave
+                // a 0-byte file that File.Exists alone treated as a valid cache hit. Delete it so
+                // this call regenerates instead of poisoning later shim compiles.
+                if (File.Exists(outputDllPath))
+                {
+                    File.Delete(outputDllPath);
+                }
+
+                // An Mvid change means the assembly already reloaded; no in-flight compile can still
+                // need the previous publicized copy, so drop stale siblings before writing the new one.
+                DeleteStaleCopies(outputDirectory, assemblyName, outputDllPath);
+
+                Stopwatch watch = Stopwatch.StartNew();
+                foreach (ModuleDefinition module in assemblyDefinition.Modules)
+                {
+                    foreach (TypeDefinition type in module.GetTypes())
+                    {
+                        // <Module> is a metadata artifact; rewriting its visibility breaks the module.
+                        if (type.Name == "<Module>")
+                        {
+                            continue;
+                        }
+
+                        rewriteType(type);
+                    }
+                }
+
+                long rewriteMs = watch.ElapsedMilliseconds;
+                watch.Restart();
+                // Write to a temp path then Move so a thrown Write cannot leave a 0-byte final cache.
+                string tempDllPath = outputDllPath + ".tmp-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    assemblyDefinition.Write(tempDllPath);
+                    File.Move(tempDllPath, outputDllPath);
+                }
+                finally
+                {
+                    if (File.Exists(tempDllPath))
+                    {
+                        File.Delete(tempDllPath);
+                    }
+                }
+
+                // Only on a miss: a copy written is the cold cost of a rebuilt assembly.
+                VibeLogger.LogInfo(
+                    HotReloadConstants.VibeLogPublicizedCopyWritten,
+                    "Hot reload wrote a rewritten reference copy.",
+                    new { assemblyName, variant = outputRelativeDirectory, rewriteMs, writeMs = watch.ElapsedMilliseconds });
                 return outputDllPath;
             }
-
-            // Why: older versions wrote the publicized DLL in place; a failed Write could leave
-            // a 0-byte file that File.Exists alone treated as a valid cache hit. Delete it so
-            // this call regenerates instead of poisoning later shim compiles.
-            if (File.Exists(outputDllPath))
-            {
-                File.Delete(outputDllPath);
-            }
-
-            // An Mvid change means the assembly already reloaded; no in-flight compile can still
-            // need the previous publicized copy, so drop stale siblings before writing the new one.
-            DeleteStaleCopies(outputDirectory, assemblyName, outputDllPath);
-
-            foreach (ModuleDefinition module in assemblyDefinition.Modules)
-            {
-                foreach (TypeDefinition type in module.GetTypes())
-                {
-                    // <Module> is a metadata artifact; rewriting its visibility breaks the module.
-                    if (type.Name == "<Module>")
-                    {
-                        continue;
-                    }
-
-                    rewriteType(type);
-                }
-            }
-
-            // Write to a temp path then Move so a thrown Write cannot leave a 0-byte final cache.
-            string tempDllPath = outputDllPath + ".tmp-" + Guid.NewGuid().ToString("N");
-            try
-            {
-                assemblyDefinition.Write(tempDllPath);
-                File.Move(tempDllPath, outputDllPath);
-            }
-            finally
-            {
-                if (File.Exists(tempDllPath))
-                {
-                    File.Delete(tempDllPath);
-                }
-            }
-
-            return outputDllPath;
         }
 
         private static void DeleteStaleCopies(
@@ -276,31 +296,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
             string normalizedSource = NormalizePathForComparison(fullSourceDllPath);
-            bool underAcceptedDirectory = IsUnderProjectDirectory(
+            bool underAcceptedDirectory = IsUnderDirectory(
                     normalizedSource,
-                    projectRoot,
-                    HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                    CompiledAssemblyLayout.Resolve(projectRoot).CompiledAssembliesDirectory,
                     comparison)
-                || IsUnderProjectDirectory(
+                || IsUnderDirectory(
                     normalizedSource,
-                    projectRoot,
-                    HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory,
+                    Path.Combine(projectRoot, HotReloadConstants.IntroducedTypeArtifactsRelativeDirectory),
                     comparison);
 
             Debug.Assert(
                 underAcceptedDirectory,
-                "ReferencePublicizer only accepts DLLs under Library/ScriptAssemblies/ or "
+                "ReferencePublicizer only accepts DLLs under the compiled assemblies directory or "
                 + "Library/UloopHotReload/IntroducedTypes/.");
         }
 
-        private static bool IsUnderProjectDirectory(
+        private static bool IsUnderDirectory(
             string normalizedSourcePath,
-            string projectRoot,
-            string relativeDirectory,
+            string absoluteDirectory,
             StringComparison comparison)
         {
-            string normalizedDirectory = NormalizePathForComparison(
-                Path.GetFullPath(Path.Combine(projectRoot, relativeDirectory)));
+            string normalizedDirectory = NormalizePathForComparison(Path.GetFullPath(absoluteDirectory));
             return normalizedSourcePath.StartsWith(normalizedDirectory + "/", comparison);
         }
 
@@ -320,8 +336,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             resolver.AddSearchDirectory(Path.GetDirectoryName(sourceDllPath));
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            resolver.AddSearchDirectory(
-                Path.Combine(projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
+            resolver.AddSearchDirectory(CompiledAssemblyLayout.Resolve(projectRoot).CompiledAssembliesDirectory);
 
             foreach (string searchDirectory in resolverSearchDirectories)
             {

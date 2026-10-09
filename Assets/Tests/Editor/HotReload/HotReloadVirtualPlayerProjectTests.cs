@@ -7,8 +7,8 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// EditMode coverage for recognizing a Multiplayer Play Mode Virtual Player by its project root,
-    /// and for the missing-assembly reason worded for it.
+    /// EditMode coverage for the missing-assembly reason worded for an ordinary project and for a
+    /// Multiplayer Play Mode Virtual Player.
     /// </summary>
     public class HotReloadVirtualPlayerProjectTests
     {
@@ -18,130 +18,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static readonly string OrdinaryProjectRoot = Path.Combine("workspace", "project");
 
         /// <summary>
-        /// What: a player directory directly under Library/VP is recognized as a Virtual Player root.
+        /// What: for a Virtual Player, the reason says the main Editor's project has not compiled the
+        /// assembly and asks for that project to be compiled, instead of this one, and the failure is
+        /// marked as a Virtual Player's so the next step names the main Editor's project.
         /// </summary>
         [Test]
-        public void IsVirtualPlayerProjectRoot_PlayerDirectoryUnderLibraryVP_ReturnsTrue()
+        public void DescribeMissingCompiledAssembly_VirtualPlayerRoot_SaysTheMainProjectHasNotCompiledTheAssembly()
         {
-            Assert.That(HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(VirtualPlayerRoot), Is.True);
-        }
-
-        /// <summary>
-        /// What: a trailing separator does not shift the parent lookup up by one directory.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_TrailingSeparator_ReturnsTrue()
-        {
-            string rootWithTrailingSeparator = VirtualPlayerRoot + Path.DirectorySeparatorChar;
-
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(rootWithTrailingSeparator),
-                Is.True);
-        }
-
-        /// <summary>
-        /// What: an ordinary project root is not taken for a Virtual Player.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_OrdinaryProjectRoot_ReturnsFalse()
-        {
-            Assert.That(HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(OrdinaryProjectRoot), Is.False);
-        }
-
-        /// <summary>
-        /// What: the Library/VP directory itself is not a Virtual Player root.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_TheVPDirectoryItself_ReturnsFalse()
-        {
-            string virtualPlayersDirectory = Path.Combine("workspace", "project", "Library", "VP");
-
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(virtualPlayersDirectory),
-                Is.False);
-        }
-
-        /// <summary>
-        /// What: a directory under Library whose parent is not named VP is not a Virtual Player root.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_ParentIsNotVP_ReturnsFalse()
-        {
-            string projectRoot = Path.Combine("workspace", "project", "Library", "Other", "mppm0a1b2c3d");
-
-            Assert.That(HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(projectRoot), Is.False);
-        }
-
-        /// <summary>
-        /// What: a directory under a VP directory that is not inside Library is not a Virtual Player root.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_GrandparentIsNotLibrary_ReturnsFalse()
-        {
-            string projectRoot = Path.Combine("workspace", "project", "Other", "VP", "mppm0a1b2c3d");
-
-            Assert.That(HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(projectRoot), Is.False);
-        }
-
-        /// <summary>
-        /// What: a path without a parent or without a grandparent, including one made only of a
-        /// separator, is answered false instead of throwing.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_PathTooShortToHaveAGrandparent_ReturnsFalse()
-        {
-            string playerDirectoryOnly = "mppm0a1b2c3d";
-            string virtualPlayersAndPlayerDirectory = Path.Combine("VP", "mppm0a1b2c3d");
-            string separatorOnly = Path.DirectorySeparatorChar.ToString();
-
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(playerDirectoryOnly),
-                Is.False,
-                "A path without a parent must not be taken for a Virtual Player root.");
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(virtualPlayersAndPlayerDirectory),
-                Is.False,
-                "A path without a grandparent must not be taken for a Virtual Player root.");
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(separatorOnly),
-                Is.False,
-                "A path made only of a separator must not be taken for a Virtual Player root.");
-        }
-
-        /// <summary>
-        /// What: on Windows, a Virtual Player root is recognized with backslashes and with forward slashes.
-        /// </summary>
-        [Test]
-        public void IsVirtualPlayerProjectRoot_WindowsSeparators_ReturnsTrue()
-        {
-            if (Path.DirectorySeparatorChar != '\\')
-            {
-                Assert.Pass("Windows separator handling applies only on Windows.");
-                return;
-            }
-
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot(@"C:\workspace\project\Library\VP\mppm0a1b2c3d"),
-                Is.True,
-                "Backslash separators must be recognized.");
-            Assert.That(
-                HotReloadVirtualPlayerProject.IsVirtualPlayerProjectRoot("C:/workspace/project/Library/VP/mppm0a1b2c3d"),
-                Is.True,
-                "Forward-slash separators must be recognized.");
-        }
-
-        /// <summary>
-        /// What: for a Virtual Player, the reason says hot reload cannot patch it and that a compile
-        /// brings the edit in, instead of asking for a compile first, and the failure is marked as a
-        /// Virtual Player's so the next step names the main Editor's project.
-        /// </summary>
-        [Test]
-        public void DescribeMissingCompiledAssembly_VirtualPlayerRoot_SaysHotReloadCannotPatchAVirtualPlayer()
-        {
-            string dllPath = Path.Combine(VirtualPlayerRoot, "Library", "ScriptAssemblies", "Sample.dll");
+            CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(VirtualPlayerRoot);
+            string dllPath = layout.DllPath("Sample");
 
             HotReloadFailureDescription failure =
-                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(VirtualPlayerRoot, dllPath);
+                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(layout, dllPath);
             string reason = failure.Message;
 
             Assert.That(
@@ -152,6 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(reason, Does.Contain("main Editor"));
             Assert.That(reason, Does.Contain("compile"));
             Assert.That(reason, Does.Not.Contain("Compile the project first"));
+            Assert.That(reason, Does.Contain("Compile the main Editor's project first"));
+            Assert.That(reason, Does.Contain("has not compiled"));
         }
 
         /// <summary>
@@ -164,7 +54,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string dllPath = Path.Combine(OrdinaryProjectRoot, "Library", "ScriptAssemblies", "Sample.dll");
 
             HotReloadFailureDescription failure =
-                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(OrdinaryProjectRoot, dllPath);
+                HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(
+                    CompiledAssemblyLayout.Resolve(OrdinaryProjectRoot),
+                    dllPath);
 
             Assert.That(failure.Kinds, Is.EqualTo(HotReloadFailureKinds.CompiledAssemblyMissing));
             Assert.That(

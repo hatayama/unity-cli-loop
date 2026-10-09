@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-            UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(assemblyName);
+            UnityCompilationAssembly compilationAssembly = HotReloadCompilationAssemblies.FindByName(assemblyName);
             // Why gate on compilationAssembly == null: the unimported-asmdef flag is only
             // consumed on that branch, and walking ancestor directories on every successful
             // resolve (including loose Assembly-CSharp scripts) is wasted disk I/O.
@@ -97,16 +97,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadTypeHome home = domain.ResolveTypeHome(projectRoot, assemblyName);
+            CompiledAssemblyLayout layout =
+                CompiledAssemblyLayout.Resolve(Path.GetFullPath(Path.Combine(Application.dataPath, "..")));
+            HotReloadTypeHome home = domain.ResolveTypeHome(layout.ProjectRoot, assemblyName);
 
             if (!File.Exists(home.DllPath))
             {
                 outcomes.Add(
                     HotReloadMethodOutcome.FailedBecause(
                         "(file)",
-                        HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(projectRoot, home.DllPath),
+                        HotReloadVirtualPlayerProject.DescribeMissingCompiledAssembly(layout, home.DllPath),
                         assemblyResolvePath));
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
+            }
+
+            HotReloadFailureDescription outputPathFailure = HotReloadCompiledAssemblyPathCheck.DescribeOutputPathMismatch(
+                layout,
+                assemblyName,
+                compilationAssembly.outputPath);
+            if (outputPathFailure != null)
+            {
+                outcomes.Add(HotReloadMethodOutcome.FailedBecause("(file)", outputPathFailure, assemblyResolvePath));
                 return HotReloadPatchTargetResolution.EarlyExit(
                     new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
@@ -124,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 HotReloadFailureDescription membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
                     editorStateSnapshotCapture,
-                    projectRoot,
+                    layout.ProjectRoot,
                     projectRelativePath,
                     assemblyName,
                     compilationAssembly,
@@ -174,7 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName,
                 compilationAssembly,
                 home,
-                projectRoot,
+                layout.ProjectRoot,
                 unchangedDecision,
                 newSourceMembershipEvidence);
         }
@@ -194,19 +206,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return editorStateSnapshotCapture.CaptureCurrent().GetBusyFailure();
-        }
-
-        private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
-        {
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
-            {
-                if (assembly.name == assemblyName)
-                {
-                    return assembly;
-                }
-            }
-
-            return null;
         }
 
         // Why Path.Combine then GetFullPath: Unity Assembly.sourceFiles are project-relative
