@@ -13,13 +13,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Loads, once per domain and before the first hot reload run, what that run would otherwise
-    /// load cold: the publicized copies, call sites, referenced-method sets and PDB document lists
-    /// of the assemblies earlier runs of this project edited. Each kind of work is one item, run in
-    /// order.
+    /// load cold: the publicized copies, call sites, referenced-method sets, the transform worker
+    /// and PDB document lists of the assemblies earlier runs of this project edited. Each kind of
+    /// work is one item, run in order.
     /// When a run comes while the warm-up is running, the run waits until the item in flight
-    /// finishes its current unit (one dll), whose result it then finds in the caches; that item is
-    /// reported cancelled when it had units left, and the remaining items are dropped. When a run comes
-    /// before the warm-up starts, the warm-up never starts.
+    /// finishes its current unit (one dll, or one transform worker request), whose result it then
+    /// finds in the caches; that item is reported cancelled when it had units left, and the
+    /// remaining items are dropped. When a run comes before the warm-up starts, the warm-up never
+    /// starts.
     /// Why no macOS activity is held while it runs: an activity is held only while a command is
     /// handled, and the warm-up is not one. The Editor is not throttled for the first half minute
     /// after a reload, and a run that comes takes an activity that speeds up the item in flight too.

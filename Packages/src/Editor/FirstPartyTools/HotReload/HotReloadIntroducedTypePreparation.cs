@@ -203,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return new TransformWorkerInputDto
             {
-                operation = "prepareIntroducedTypes",
+                operation = HotReloadConstants.PrepareIntroducedTypesOperation,
                 sources = transformInput.sources,
                 defines = transformInput.defines,
                 referencePaths = transformInput.referencePaths,

@@ -1,8 +1,10 @@
+using System.Collections;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -15,6 +17,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const int ProcessExitWaitMilliseconds = 10_000;
         private const int ExitPollIntervalMilliseconds = 50;
+
+        // Why wait: the installed warm-up may still be sending its transform worker requests,
+        // which no cancel stops, to the shared host this test starts and stops a worker on.
+        [UnitySetUp]
+        public IEnumerator WaitForTheInstalledWarmUpToStop()
+        {
+            Task stopped = PublicizedCopyTestCache.StopInstalledWarmUpAsync();
+            while (!stopped.IsCompleted)
+            {
+                yield return null;
+            }
+        }
 
         /// <summary>
         /// After a real resident run, the reload callback kills the worker process and clears

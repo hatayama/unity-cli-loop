@@ -91,17 +91,19 @@ edited, most recent first, read by the warm-up after a domain reload).
 Warm-up after a domain reload: on the first Editor update tick after a reload, hot reload loads in
 the background what the first run would otherwise load cold, for the most recent assemblies in
 `targets.txt` (up to eight) whose dll and PDB exist: the publicized copy their shim compile
-references, their compiled call sites, the referenced-method sets of the assemblies that reference them, and their PDB document lists. It
+references, their compiled call sites, the referenced-method sets of the assemblies that reference them, the transform worker (started
+with one prepare and one transform request for the first of them Unity lists), and their PDB document lists. It
 does not start while the Editor compiles or imports, and a domain reload or a compile start stops
-it. A run that arrives while it works waits only for the unit (one dll) in flight, whose result
+it. A run that arrives while it works waits only for the unit (one dll, or one transform worker request) in flight, whose result
 it reuses; that item and the remaining ones are dropped; a run that arrives before the tick keeps it from starting.
 `hot_reload_warm_up_complete` and `hot_reload_warm_up_skipped` show what it did, and the run's
 `warm_up_yield` step shows how long the run waited (see `docs/vibe-logs.md`). After each server
 reset (a domain reload or a manual server start), when `targets.txt` names a compiled assembly,
 the shared Roslyn worker is started in the background and compiles once against the references
 the shim compile binds as they are, so the first shim compile finds it running (see
-`dynamic_code_shared_worker_warm_up_complete`). The transform worker and the copies of the other
-project assemblies a shim compile references are not warmed up yet.
+`dynamic_code_shared_worker_warm_up_complete`). The copies of the other project assemblies a shim
+compile references are not warmed up yet. The transform worker exits after five idle minutes, so a
+first run later than that starts it again.
 The shim compile references a fully publicized copy of the edited assembly, and of every other
 project assembly that grants the edited one its internals through `InternalsVisibleTo`. Any other
 project assembly is referenced through a `PublicizedExternalRefs` copy that keeps its top-level

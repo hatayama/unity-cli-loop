@@ -53,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after the real warm-up finished, the run reads no compiled assembly the warm-up
-        /// already loaded for the edited assembly.
+        /// already loaded for the edited assembly, and starts no transform worker: the warm-up
+        /// started it with a prepare and a transform request that both completed.
         /// </summary>
         [Test]
         public async Task Run_AfterTheWarmUpFinished_ReadsNoCompiledAssemblyForTheEditedAssembly()
@@ -74,6 +75,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // when the warm-up loaded nothing.
             HotReloadCompiledCallSiteCache.Shared.Clear();
             int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
+            // Why stop the worker: one an earlier test started would let the run find a worker
+            // even when the warm-up started none.
+            TransformWorkerHostLifecycle.ShutdownForReload();
 
             warmUp.Start();
             await warmUp.Completion;
@@ -84,13 +88,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount, Is.EqualTo(afterWarmUp), "the warm-up loaded the test dll");
             Assert.That(
                 HotReloadWarmUpTestDoubles.ReadCompletedOutcomes(),
-                Is.EqualTo(new[] { "publicized_targets:done", "call_sites:done", "referenced_method_sets:done", "pdb_documents:done" }));
+                Is.EqualTo(new[]
+                {
+                    "publicized_targets:done",
+                    "call_sites:done",
+                    "referenced_method_sets:done",
+                    "transform_worker:done",
+                    "pdb_documents:done"
+                }));
             Assert.That(CountTargetCopiesWritten(), Is.EqualTo(1), "copies the warm-up wrote for the edited assembly");
+            // Why the kinds too: a worker that answers a request with a non-zero exit code stays
+            // alive, so a run that finds the worker started does not show that the warm-up's
+            // requests completed.
+            Assert.That(
+                ReadWorkerRequests(),
+                Is.EqualTo(new[]
+                {
+                    HotReloadConstants.PrepareIntroducedTypesOperation + ":" + nameof(TransformWorkerHostResultKind.Completed),
+                    "transform:" + nameof(TransformWorkerHostResultKind.Completed)
+                }),
+                "the warm-up's transform worker requests");
             VibeLogger.ClearMemoryLogs();
 
             await RunWithReadReturningAsync(2);
 
             Assert.That(CountTargetCopiesWritten(), Is.EqualTo(0), "copies the run wrote again for the edited assembly");
+            List<bool> runWorkerStarts = ReadWorkerStarts();
+            Assert.That(runWorkerStarts, Is.Not.Empty, "the run's transform worker requests");
+            Assert.That(
+                runWorkerStarts,
+                Is.All.False,
+                "the run started the transform worker that the warm-up should have started");
 
             Assert.That(HotReloadCompiledCallSiteCache.Shared.GetOrLoad(testDll), Is.SameAs(entry), "the run read the dll again");
         }
@@ -245,6 +273,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return count;
+        }
+
+        // "operation:kind" of each transform worker request logged since the logs were last cleared.
+        private static List<string> ReadWorkerRequests()
+        {
+            List<string> requests = new List<string>();
+            foreach (JToken entry in ReadEntries(HotReloadConstants.VibeLogWorkerRequestTiming))
+            {
+                requests.Add((string)entry["context"]["operation"] + ":" + (string)entry["context"]["kind"]);
+            }
+
+            return requests;
+        }
+
+        // Whether each transform worker request logged since the logs were last cleared started a
+        // worker process.
+        private static List<bool> ReadWorkerStarts()
+        {
+            List<bool> starts = new List<bool>();
+            foreach (JToken entry in ReadEntries(HotReloadConstants.VibeLogWorkerRequestTiming))
+            {
+                starts.Add((bool)entry["context"]["workerStarted"]);
+            }
+
+            return starts;
         }
 
         private static JArray ReadEntries(string operation)

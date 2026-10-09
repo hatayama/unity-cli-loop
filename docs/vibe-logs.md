@@ -88,9 +88,11 @@ command ran against:
   (`run`, `beforeAssemblyReload`, `compilationStarted`, or null), or one
   `hot_reload_warm_up_skipped` with its `reason` (`no_targets`, `compiling`, `updating`,
   `no_compiled_assembly`, `run_started_first`). `cancelled` covers both an item that never started
-  (`ms` 0) and one stopped between its units (one dll each) with units left, with the time it ran.
-  The items run in the order `publicized_targets`, `call_sites`, `referenced_method_sets`,
-  `pdb_documents`.
+  (`ms` 0) and one stopped between its units (one dll or one transform worker request each) with
+  units left, with the time it ran. The items run in the order `publicized_targets`, `call_sites`,
+  `referenced_method_sets`, `transform_worker`, `pdb_documents`. The warm-up's transform worker
+  requests write `hot_reload_worker_request_timing` too: the ones between a domain reload and its
+  `hot_reload_warm_up_complete` are the warm-up's.
   A run's `steps` have `warm_up_yield`, the time it waited for the unit in flight, and `warm_up_targets`, the time it took to record its
   assemblies for the next warm-up.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
