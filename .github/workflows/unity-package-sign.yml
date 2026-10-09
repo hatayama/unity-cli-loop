@@ -1,0 +1,159 @@
+name: unity-package-sign
+
+# Signs the Unity package with the Unity organization's service account and
+# attaches the tarball to the package's GitHub release, which OpenUPM republishes
+# unchanged (docs/unity-package-signing.md). release-please.yml creates that
+# release with GITHUB_TOKEN, which starts no release or tag-push workflow, so
+# this follows every release-please run instead and signs only a published
+# release that still lacks the tarball.
+on:
+  workflow_run:
+    workflows:
+      - release-please
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Unity package release tag to sign (default: the manifest version on the selected branch)"
+        type: string
+        required: false
+      dry-run:
+        description: "Keep the signed tarball as a workflow artifact instead of attaching it to the release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unity-package-sign
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    # A release-please run that fails after its release sync step has still
+    # published the release, so only a cancelled run is ignored.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sign: ${{ steps.plan.outputs.sign }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      asset-name: ${{ steps.plan.outputs.asset-name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Decide whether the package release needs its signed tarball
+        id: plan
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: go run ./cmd/plan-unity-package-signing --repo "$GITHUB_REPOSITORY" --tag "$INPUT_TAG" >> "$GITHUB_OUTPUT"
+
+  # The UPM CLI is a third-party binary that sees the signing credentials, so it
+  # runs in a job whose token cannot write to the repository.
+  sign:
+    needs: plan
+    if: needs.plan.outputs.sign == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Pinned to a release that had been public for weeks, and verified against
+      # a checksum recorded in this file rather than the one served beside the
+      # zip, so a later change on the CDN fails the run instead of running.
+      UPM_CLI_VERSION: v9.32.0
+      UPM_CLI_LINUX_X64_SHA256: 1de355a1bd5daf134a4dc7b6f97194e0db89cfedd0f98b5d8204603f7d009c21
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # The signing tooling comes from the workflow ref above, but the package
+      # contents must be exactly what the release tag points at.
+      - name: Checkout the package release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/tags/${{ needs.plan.outputs.tag }}
+          path: release-source
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Install the pinned UPM CLI
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/upm-cli.zip" "https://cdn.packages.unity.com/upm-cli/releases/${UPM_CLI_VERSION}/upm-linux-x64.zip"
+          echo "${UPM_CLI_LINUX_X64_SHA256}  ${RUNNER_TEMP}/upm-cli.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/upm-cli.zip" -d "$RUNNER_TEMP/upm-cli"
+          chmod +x "$RUNNER_TEMP/upm-cli/UnityPackageManager"
+          "$RUNNER_TEMP/upm-cli/UnityPackageManager" --version
+
+      - name: Sign the package
+        env:
+          UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
+          UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
+          UPM_ORG_ID: ${{ secrets.UPM_ORG_ID }}
+        run: |
+          "$RUNNER_TEMP/upm-cli/UnityPackageManager" pack release-source/Packages/src \
+            --organization-id "$UPM_ORG_ID" \
+            --destination "$RUNNER_TEMP/signed"
+
+      - name: Check and stage the signed tarball
+        id: stage
+        working-directory: cli/release-automation
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.version }}
+        run: go run ./cmd/stage-signed-unity-package --dir "$RUNNER_TEMP/signed" --version "$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: List the signed tarball contents
+        env:
+          ARCHIVE: ${{ steps.stage.outputs.archive }}
+        run: tar -tzvf "$ARCHIVE"
+
+      - name: Upload the signed tarball as a workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: signed-unity-package
+          path: ${{ steps.stage.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [plan, sign]
+    if: needs.plan.outputs.sign == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry-run)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the signed tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: signed-unity-package
+          path: ${{ runner.temp }}/signed
+
+      # --clobber replaces an empty asset left by an interrupted upload; the plan
+      # job only asks for a signature when no non-empty tarball is attached.
+      - name: Attach the signed tarball to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          ASSET_NAME: ${{ needs.plan.outputs.asset-name }}
+        run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/signed/$ASSET_NAME" --repo "$GITHUB_REPOSITORY" --clobber
