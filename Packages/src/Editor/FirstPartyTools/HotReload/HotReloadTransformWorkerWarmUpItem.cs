@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Main thread only: reads the compilation assembly. Returns the request material of the
-        /// first target Unity lists with at least one source file, or null when there is none.
+        /// first target Unity lists, or null when Unity lists none of them.
         /// </summary>
         internal static HotReloadTransformWorkerWarmUpRequest GatherOnMainThread(HotReloadWarmUpContext context)
         {
@@ -81,12 +81,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // Why no check for an assembly without sources: Unity lists none, and one would
+                // give no source on disk, which the prepare input already ends on.
                 string[] sourceFiles = assembly.sourceFiles;
-                if (sourceFiles == null || sourceFiles.Length == 0)
-                {
-                    continue;
-                }
-
                 HotReloadTypeHome home = HotReloadTypeHome.ScriptAssemblies(target.AssemblyName, target.DllPath);
                 return new HotReloadTransformWorkerWarmUpRequest(
                     target.AssemblyName,

@@ -18,9 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// sends for which target, with which token, and what it does when the prepare does not
     /// complete or the warm-up is stopped. The requests go to a fake that records them;
     /// <see cref="HotReloadWarmUpE2ETests"/> sends them to the real worker.
-    /// Not covered: a target Unity lists with no source files. Unity lists no compilation assembly
-    /// without sources, and the item looks the assembly up in Unity's own list, so no test can
-    /// make one.
+    /// Not covered: a target Unity lists with no source files, which would take the path of a
+    /// target with no source on disk. Unity lists no compilation assembly without sources, and the
+    /// item looks the assembly up in Unity's own list, so no test can make one.
     /// </summary>
     public class HotReloadTransformWorkerWarmUpItemTests
     {
