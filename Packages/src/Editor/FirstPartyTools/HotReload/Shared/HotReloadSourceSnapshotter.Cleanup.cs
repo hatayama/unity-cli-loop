@@ -7,7 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     // snapshot is complete.
     internal static partial class HotReloadSourceSnapshotter
     {
-        internal static void DeleteStaleSnapshotDirectories(
+        private static void DeleteStaleSnapshotDirectories(
             string snapshotRoot,
             string assemblyName,
             string currentSnapshotDirectory)

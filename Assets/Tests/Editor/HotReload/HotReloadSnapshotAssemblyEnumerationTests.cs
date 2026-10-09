@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 
@@ -57,17 +58,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// snapshot of the same assembly, and writes the stamp.
         /// </summary>
         [Test]
-        public void CaptureAssemblyIfNeeded_WithoutStamp_CapturesSourcesRemovesStaleSnapshotAndWritesStamp()
+        public void CaptureAssemblies_WithoutStamp_CapturesSourcesRemovesStaleSnapshotAndWritesStamp()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
             string mvid = HotReloadAssemblyMvid.Read(dllPath);
             string staleDirectory = Path.Combine(_snapshotRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(staleDirectory);
 
-            HotReloadSourceSnapshotter.CaptureAssemblyIfNeeded(
+            HotReloadSourceSnapshotter.CaptureAssemblies(
                 _projectRoot,
-                _snapshotRoot,
-                CreateAssembly("Fixture"),
+                new[] { CreateAssembly("Fixture") },
                 HotReloadCompileStart.Unknown,
                 CreateDocumentIndex());
 
@@ -80,17 +80,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// Verifies a stamp matching the compiled assembly's mtime and length skips the capture entirely.
         /// </summary>
         [Test]
-        public void CaptureAssemblyIfNeeded_WhenStampMatches_SkipsCapture()
+        public void CaptureAssemblies_WhenStampMatches_SkipsCapture()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
             string mvid = HotReloadAssemblyMvid.Read(dllPath);
             string stamp = ExpectedStamp(dllPath, mvid);
             File.WriteAllText(StampPath("Fixture"), stamp);
 
-            HotReloadSourceSnapshotter.CaptureAssemblyIfNeeded(
+            HotReloadSourceSnapshotter.CaptureAssemblies(
                 _projectRoot,
-                _snapshotRoot,
-                CreateAssembly("Fixture"),
+                new[] { CreateAssembly("Fixture") },
                 HotReloadCompileStart.Unknown,
                 CreateDocumentIndex());
 
@@ -103,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// only the stamp is rewritten.
         /// </summary>
         [Test]
-        public void CaptureAssemblyIfNeeded_WhenMvidDirectoryExists_KeepsSnapshotsAndWritesStamp()
+        public void CaptureAssemblies_WhenMvidDirectoryExists_KeepsSnapshotsAndWritesStamp()
         {
             string dllPath = PlantCompiledAssembly("Fixture");
             string mvid = HotReloadAssemblyMvid.Read(dllPath);
@@ -112,16 +111,150 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string staleDirectory = Path.Combine(_snapshotRoot, "Fixture-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(staleDirectory);
 
-            HotReloadSourceSnapshotter.CaptureAssemblyIfNeeded(
+            HotReloadSourceSnapshotter.CaptureAssemblies(
                 _projectRoot,
-                _snapshotRoot,
-                CreateAssembly("Fixture"),
+                new[] { CreateAssembly("Fixture") },
                 HotReloadCompileStart.Unknown,
                 CreateDocumentIndex());
 
             Assert.That(Directory.GetFiles(currentDirectory), Is.Empty);
             Assert.That(Directory.Exists(staleDirectory), Is.True);
             Assert.That(File.ReadAllText(StampPath("Fixture")), Is.EqualTo(ExpectedStamp(dllPath, mvid)));
+        }
+
+        /// <summary>
+        /// Verifies a stamp that is malformed, or records another mtime or length, does not short-circuit
+        /// the capture: the sources are captured again and the stamp is rewritten.
+        /// </summary>
+        [TestCase("{mvid},{mtime}")]
+        [TestCase(",{mtime},{length}")]
+        [TestCase("{mvid},not-a-number,{length}")]
+        [TestCase("{mvid},{mtime},not-a-number")]
+        [TestCase("{mvid},{mtime+1},{length}")]
+        [TestCase("{mvid},{mtime},{length+1}")]
+        public void CaptureAssemblies_WhenStampIsMalformedOrDiffers_CapturesAgain(string stampTemplate)
+        {
+            string dllPath = PlantCompiledAssembly("Fixture");
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
+            FileInfo dllInfo = new FileInfo(dllPath);
+            long mtime = dllInfo.LastWriteTimeUtc.Ticks;
+            long length = dllInfo.Length;
+            // Why the "+1" placeholders go first: replacing "{mtime}" first would break "{mtime+1}" apart.
+            string stamp = stampTemplate
+                .Replace("{mtime+1}", (mtime + 1).ToString(CultureInfo.InvariantCulture))
+                .Replace("{length+1}", (length + 1).ToString(CultureInfo.InvariantCulture))
+                .Replace("{mvid}", mvid)
+                .Replace("{mtime}", mtime.ToString(CultureInfo.InvariantCulture))
+                .Replace("{length}", length.ToString(CultureInfo.InvariantCulture));
+            File.WriteAllText(StampPath("Fixture"), stamp);
+
+            HotReloadSourceSnapshotter.CaptureAssemblies(
+                _projectRoot,
+                new[] { CreateAssembly("Fixture") },
+                HotReloadCompileStart.Unknown,
+                CreateDocumentIndex());
+
+            Assert.That(Directory.Exists(HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "Fixture", mvid)), Is.True);
+            Assert.That(File.ReadAllText(StampPath("Fixture")), Is.EqualTo(ExpectedStamp(dllPath, mvid)));
+        }
+
+        /// <summary>
+        /// Verifies a capture removes only this assembly's older MVID directories and leftover temporary
+        /// directories, and leaves a hyphenated sibling assembly's directory and a non-MVID directory alone.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblies_RemovesOnlyThisAssemblysStaleMvidDirectories()
+        {
+            string dllPath = PlantCompiledAssembly("Fixture");
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
+            string orphanTemporary =
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "Fixture", Guid.NewGuid().ToString("N"))
+                + HotReloadSourceSnapshotLayout.IncompleteDirectorySuffix;
+            string stale = HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "Fixture", Guid.NewGuid().ToString("N"));
+            string sibling = HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "Fixture-Bar", Guid.NewGuid().ToString("N"));
+            string nonMvid = Path.Combine(_snapshotRoot, "Fixture-notamvid");
+            Directory.CreateDirectory(orphanTemporary);
+            Directory.CreateDirectory(stale);
+            Directory.CreateDirectory(sibling);
+            Directory.CreateDirectory(nonMvid);
+
+            HotReloadSourceSnapshotter.CaptureAssemblies(
+                _projectRoot,
+                new[] { CreateAssembly("Fixture") },
+                HotReloadCompileStart.Unknown,
+                CreateDocumentIndex());
+
+            Assert.That(Directory.Exists(orphanTemporary), Is.False);
+            Assert.That(Directory.Exists(stale), Is.False);
+            Assert.That(Directory.Exists(sibling), Is.True);
+            Assert.That(Directory.Exists(nonMvid), Is.True);
+            Assert.That(Directory.Exists(HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "Fixture", mvid)), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies an assembly without sources is skipped before anything is written: no snapshot directory and no stamp.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblies_WhenAssemblyHasNoSources_WritesNothing()
+        {
+            string dllPath = PlantCompiledAssembly("NoSources");
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
+
+            HotReloadSourceSnapshotter.CaptureAssemblies(
+                _projectRoot,
+                new[] { CreateAssemblyWithSources("NoSources", Array.Empty<string>()) },
+                HotReloadCompileStart.Unknown,
+                CreateDocumentIndex());
+
+            Assert.That(Directory.Exists(HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "NoSources", mvid)), Is.False);
+            Assert.That(File.Exists(StampPath("NoSources")), Is.False);
+        }
+
+        /// <summary>
+        /// Verifies an assembly whose compiled DLL or PDB is missing is skipped without a warning: no snapshot directory and no stamp.
+        /// </summary>
+        [TestCase(".dll")]
+        [TestCase(".pdb")]
+        public void CaptureAssemblies_WhenCompiledOutputIsMissing_WritesNothingAndDoesNotWarn(string missingExtension)
+        {
+            string dllPath = PlantCompiledAssembly("Fixture");
+            File.Delete(Path.ChangeExtension(dllPath, missingExtension));
+
+            HotReloadSourceSnapshotter.CaptureAssemblies(
+                _projectRoot,
+                new[] { CreateAssembly("Fixture") },
+                HotReloadCompileStart.Unknown,
+                CreateDocumentIndex());
+
+            Assert.That(Directory.GetDirectories(_snapshotRoot, "Fixture-*"), Is.Empty);
+            Assert.That(File.Exists(StampPath("Fixture")), Is.False);
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        /// <summary>
+        /// Verifies a matching stamp returns before the compiled assembly is opened: a DLL whose bytes are no
+        /// longer an assembly, behind a stamp that matches its current mtime and length, is neither read
+        /// (no warning) nor captured.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblies_WhenStampMatches_DoesNotOpenTheCompiledAssembly()
+        {
+            string dllPath = PlantCompiledAssembly("Fixture");
+            string mvid = HotReloadAssemblyMvid.Read(dllPath);
+            File.WriteAllBytes(dllPath, new byte[16]);
+            // Why the stamp is taken after the overwrite: it must match the bytes now on disk.
+            string stamp = ExpectedStamp(dllPath, mvid);
+            File.WriteAllText(StampPath("Fixture"), stamp);
+
+            HotReloadSourceSnapshotter.CaptureAssemblies(
+                _projectRoot,
+                new[] { CreateAssembly("Fixture") },
+                HotReloadCompileStart.Unknown,
+                CreateDocumentIndex());
+
+            Assert.That(Directory.Exists(HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, "Fixture", mvid)), Is.False);
+            Assert.That(File.ReadAllText(StampPath("Fixture")), Is.EqualTo(stamp));
+            LogAssert.NoUnexpectedReceived();
         }
 
         /// <summary>
@@ -231,7 +364,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// no PDB document to confirm it, marked as edited after the compile.
         /// </summary>
         [Test]
-        public void CaptureAssemblyIfNeeded_ASourceSavedAfterTheCompileStartedButBeforeTheDll_IsMarked()
+        public void CaptureAssemblies_ASourceSavedAfterTheCompileStartedButBeforeTheDll_IsMarked()
         {
             string snapshotDirectory = CaptureWithSourceSavedBetweenStartAndDll(
                 HotReloadCompileStart.At(CompileStartUtc.Ticks));
@@ -245,7 +378,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// check then starts at the DLL write; the mark in the case above comes from the compile start.
         /// </summary>
         [Test]
-        public void CaptureAssemblyIfNeeded_WithoutARecordedStart_LeavesASourceSavedBeforeTheDllUnmarked()
+        public void CaptureAssemblies_WithoutARecordedStart_LeavesASourceSavedBeforeTheDllUnmarked()
         {
             string snapshotDirectory = CaptureWithSourceSavedBetweenStartAndDll(HotReloadCompileStart.Unknown);
 
@@ -265,10 +398,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
             string mvid = HotReloadAssemblyMvid.Read(dllPath);
 
-            HotReloadSourceSnapshotter.CaptureAssemblyIfNeeded(
+            HotReloadSourceSnapshotter.CaptureAssemblies(
                 _projectRoot,
-                _snapshotRoot,
-                CreateAssembly("Fixture"),
+                new[] { CreateAssembly("Fixture") },
                 compileStart,
                 CreateDocumentIndex());
 

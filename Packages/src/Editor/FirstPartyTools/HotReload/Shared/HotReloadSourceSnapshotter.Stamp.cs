@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Path.Combine(snapshotRoot, assemblyName + StampFileExtension);
         }
 
-        internal static bool HasMatchingStamp(string stampPath, long dllMtimeTicks, long dllByteLength)
+        private static bool HasMatchingStamp(string stampPath, long dllMtimeTicks, long dllByteLength)
         {
             if (!File.Exists(stampPath))
             {

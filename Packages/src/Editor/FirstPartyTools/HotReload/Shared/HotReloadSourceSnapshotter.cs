@@ -80,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                    ex is BadImageFormatException;
         }
 
-        internal static void CaptureAssemblyIfNeeded(
+        private static void CaptureAssemblyIfNeeded(
             string projectRoot,
             string snapshotRoot,
             UnityCompilationAssembly assembly,

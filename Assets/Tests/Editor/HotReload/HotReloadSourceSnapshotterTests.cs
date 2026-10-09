@@ -34,47 +34,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that a stamp file that does not exist never matches, instead of failing to read it.
-        /// </summary>
-        [Test]
-        public void HasMatchingStamp_WhenStampFileIsMissing_ReturnsFalse()
-        {
-            string stampPath = Path.Combine(_tempRoot, "Missing.stamp");
-
-            bool matches = HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, 1L, 2L);
-
-            Assert.That(matches, Is.False);
-        }
-
-        /// <summary>
-        /// Verifies that a stamp whose mtime field is not an integer is rejected.
-        /// </summary>
-        [Test]
-        public void HasMatchingStamp_WhenMtimeFieldIsNotAnInteger_ReturnsFalse()
-        {
-            string stampPath = Path.Combine(_tempRoot, "Foo.stamp");
-            File.WriteAllText(stampPath, Guid.NewGuid().ToString("N") + ",not-a-number,4096");
-
-            bool matches = HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, 0L, 4096L);
-
-            Assert.That(matches, Is.False);
-        }
-
-        /// <summary>
-        /// Verifies that a stamp whose byte-length field is not an integer is rejected.
-        /// </summary>
-        [Test]
-        public void HasMatchingStamp_WhenByteLengthFieldIsNotAnInteger_ReturnsFalse()
-        {
-            string stampPath = Path.Combine(_tempRoot, "Foo.stamp");
-            File.WriteAllText(stampPath, Guid.NewGuid().ToString("N") + ",123,not-a-number");
-
-            bool matches = HotReloadSourceSnapshotter.HasMatchingStamp(stampPath, 123L, 0L);
-
-            Assert.That(matches, Is.False);
-        }
-
-        /// <summary>
         /// Verifies that the capture copies each existing source byte for byte under the hash of its slash-normalized path, skips a listed source that does not exist, and publishes the snapshot only under its final name.
         /// </summary>
         [Test]
