@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string WarmUpSourceFileName = "SharedWorkerWarmUp.cs";
         private const string WarmUpAssemblyFileName = "SharedWorkerWarmUp.dll";
         private const string WarmUpRequestFileName = "SharedWorkerWarmUp.worker";
-        private const string WarmUpSource = "internal static class UnityCliLoopSharedWorkerWarmUp { }";
+        private const string WarmUpSource = "internal sealed class UnityCliLoopSharedWorkerWarmUp { }";
 
         private static readonly SharedRoslynCompilerWorkerSession ServiceValue = new();
 
