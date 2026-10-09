@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// Verifies only the first usable name is listed. The hot-reload tool comes first because
         /// its references bound as they are are a subset of the test assembly's, so a union of
-        /// both would add the test runner assemblies only the test assembly references.
+        /// both differs from the first name's list only in that order.
         /// </summary>
         [Test]
         public async Task CollectAsync_UsesOnlyTheFirstUsableName()
@@ -198,13 +198,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             IReadOnlyList<string> listed = await CollectFor(new[] { HotReloadEditorAssemblyName, TestAssemblyName });
 
             IReadOnlyList<string> expected = await CollectFor(new[] { HotReloadEditorAssemblyName });
-            Assert.That(listed, Is.EqualTo(expected));
-            foreach (string reference in listed)
+            IReadOnlyList<string> testAssemblyOnly = await CollectFor(new[] { TestAssemblyName });
+            HashSet<string> expectedReferences = new HashSet<string>(expected, StringComparer.Ordinal);
+            bool testAssemblyAddsAReference = false;
+            foreach (string reference in testAssemblyOnly)
             {
-                string fileName = Path.GetFileName(reference);
-                Assert.That(fileName, Is.Not.EqualTo("UnityEngine.TestRunner.dll"));
-                Assert.That(fileName, Is.Not.EqualTo("UnityEditor.TestRunner.dll"));
+                testAssemblyAddsAReference |= !expectedReferences.Contains(reference);
             }
+
+            // Why a precondition: without a reference only the test assembly binds as it is, a
+            // union of both names would equal the first name's list and this test could not tell.
+            Assert.That(testAssemblyAddsAReference, Is.True, "the test assembly binds no extra reference as it is");
+            Assert.That(listed, Is.EqualTo(expected));
         }
 
         [Test]
