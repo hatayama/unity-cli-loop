@@ -829,6 +829,89 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a sibling the capture marked as edited after the compile is reported as changed,
+        /// even though its bytes and stamp equal the snapshot.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_ASiblingMarkedEditedAfterCompile_ReportsItThoughItsBytesMatch()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", MarkedStampLine(siblingRelative, 12, FirstWriteTimeUtc));
+
+                Assert.That(
+                    ScanSibling(projectRoot, "Asm-mvid", siblingRelative),
+                    Is.EqualTo(new[] { AbsoluteProjectPath(projectRoot, siblingRelative) }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: the re-apply check after a skip does not take a file marked as edited after the
+        /// compile to be back at its compiled source, even though its bytes and stamp equal the snapshot.
+        /// </summary>
+        [Test]
+        public void SourceMatchesSnapshotDirectory_AFileMarkedEditedAfterCompile_IsFalseThoughItsBytesMatch()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", MarkedStampLine(siblingRelative, 12, FirstWriteTimeUtc));
+
+                bool matches = HotReloadChangedSiblingSourceDetector.SourceMatchesSnapshotDirectory(
+                    projectRoot,
+                    "Asm-mvid",
+                    siblingRelative,
+                    AbsoluteProjectPath(projectRoot, siblingRelative));
+
+                Assert.That(matches, Is.False);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: the default file selection picks a file marked as edited after the compile, even
+        /// though its bytes and stamp equal the snapshot.
+        /// </summary>
+        [Test]
+        public void DetectAllChangedFromSnapshotDirectory_AFileMarkedEditedAfterCompile_SelectsItThoughItsBytesMatch()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-AAAA");
+                WriteProjectFileAt(projectRoot, siblingRelative, "sibling-AAAA", FirstWriteTimeUtc);
+                WriteStampManifest(projectRoot, "Asm-mvid", MarkedStampLine(siblingRelative, 12, FirstWriteTimeUtc));
+
+                HotReloadChangedSourceScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectAllChangedFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        new[] { siblingRelative });
+
+                Assert.That(result.ChangedProjectRelativePaths, Is.EqualTo(new[] { siblingRelative }));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
         /// What: sibling-derived warnings are ordinal-deduped among themselves and skipped
         /// when the own-file list already contains the exact string, without collapsing
         /// duplicates that were already in the own-file list.
@@ -916,7 +999,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Plants a stamp manifest as the capture would write it: the header line, then one
-        // "<snapshot file name>\t<length>\t<ticks>" line per entry, "\n" after every line.
+        // "<snapshot file name>\t<length>\t<ticks>\t<edited after compile>" line per entry, "\n" after every line.
         private static void WriteStampManifest(
             string projectRoot,
             string assemblySnapshotDirectoryName,
@@ -944,7 +1027,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return HotReloadSourceSnapshotter.HashProjectRelativePath(projectRelativePath.Replace('\\', '/'))
                 + ".cs\t" + length.ToString(CultureInfo.InvariantCulture)
-                + "\t" + lastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture);
+                + "\t" + lastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture)
+                + "\t0";
+        }
+
+        // A stamp line the capture marked as edited after the compile.
+        private static string MarkedStampLine(string projectRelativePath, long length, DateTime lastWriteTimeUtc)
+        {
+            string unmarked = StampLine(projectRelativePath, length, lastWriteTimeUtc);
+            return unmarked.Substring(0, unmarked.Length - 1) + "1";
         }
 
         private static string AbsoluteProjectPath(string projectRoot, string projectRelativePath)

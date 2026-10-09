@@ -8,6 +8,8 @@ using Mono.Cecil;
 
 using UnityEditor.PackageManager;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 using UnityEngine;
 
 using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
@@ -25,25 +27,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Captures snapshots for project assemblies that have adjacent portable PDBs.
-        /// Why: adoption is decided at use time by PDB document checksum, so a racy capture
-        /// (edit between compile and this call) can only fail closed into "no baseline" —
-        /// never into a silently wrong method diff.
+        /// A copy of a source written since the compile started is checked against the PDB checksum
+        /// when it is captured, and marked in the manifest when it does not match, so the default file
+        /// selection, the sibling scan and the skip check treat that file as changed. The method-diff
+        /// baseline checks every copy against the PDB when it uses one.
         /// Returns false when Unity listed no compilation assembly (as while it compiles).
         /// </summary>
         internal static bool CaptureAfterDomainReload()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             IReadOnlyList<UnityCompilationAssembly> assemblies = HotReloadCompilationAssemblies.Current();
-            CaptureAssemblies(projectRoot, assemblies);
+            CaptureAssemblies(
+                projectRoot,
+                assemblies,
+                HotReloadCompileStartRecord.Read(),
+                HotReloadPdbDocumentIndex.Shared);
             return assemblies.Count > 0;
         }
 
         // Why separate from CaptureAfterDomainReload: the project root and the compilation assemblies come
         // from Unity, so taking them as arguments lets tests drive the per-assembly loop in a temporary root.
-        internal static void CaptureAssemblies(string projectRoot, IEnumerable<UnityCompilationAssembly> assemblies)
+        internal static void CaptureAssemblies(
+            string projectRoot,
+            IEnumerable<UnityCompilationAssembly> assemblies,
+            HotReloadCompileStart compileStart,
+            HotReloadPdbDocumentIndex documentIndex)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(assemblies != null, "assemblies must not be null.");
+            Debug.Assert(documentIndex != null, "documentIndex must not be null.");
 
             string snapshotRoot = Path.Combine(projectRoot, HotReloadConstants.SourceSnapshotRelativeDirectory);
             Directory.CreateDirectory(snapshotRoot);
@@ -52,14 +64,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 try
                 {
-                    CaptureAssemblyIfNeeded(projectRoot, snapshotRoot, assembly);
+                    CaptureAssemblyIfNeeded(projectRoot, snapshotRoot, assembly, compileStart, documentIndex);
                 }
                 catch (Exception ex) when (IsSkippableAssemblyCaptureException(ex))
                 {
                     // Approved deviation from the no-try-catch rule: one assembly's transient IO
                     // or Cecil read failure must not deprive every remaining assembly of a baseline.
-                    // Continuing preserves the fail-closed invariant because missing snapshots are
-                    // rejected by PDB checksum validation rather than used for an incorrect diff.
+                    // Continuing preserves the fail-closed invariant because the method-diff baseline
+                    // rejects missing snapshots by PDB checksum rather than using them for an incorrect diff.
                     UnityEngine.Debug.LogWarning(
                         $"[UnityCliLoop] Snapshot capture failed for assembly {assembly.name}: {ex.Message}");
                 }
@@ -78,7 +90,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void CaptureAssemblyIfNeeded(
             string projectRoot,
             string snapshotRoot,
-            UnityCompilationAssembly assembly)
+            UnityCompilationAssembly assembly,
+            HotReloadCompileStart compileStart,
+            HotReloadPdbDocumentIndex documentIndex)
         {
             string[] sourceFiles = assembly.sourceFiles;
             if (sourceFiles == null || sourceFiles.Length == 0)
@@ -118,17 +132,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblySnapshotDirectory = Path.Combine(snapshotRoot, assembly.name + "-" + mvid);
             if (!Directory.Exists(assemblySnapshotDirectory))
             {
+                HotReloadSnapshotSourceCheck check = new HotReloadSnapshotSourceCheck(
+                    compileStart.SuspectWritesFrom(dllMtimeTicks),
+                    dllPath,
+                    pdbPath,
+                    mvid,
+                    documentIndex);
                 CaptureAssemblySourcesAtomically(
                     projectRoot,
                     assemblySnapshotDirectory,
                     sourceFiles,
-                    assembly.name);
+                    assembly.name,
+                    check);
                 DeleteStaleSnapshotDirectories(snapshotRoot, assembly.name, assemblySnapshotDirectory);
             }
 
             // Write the stamp even when individual sources were skipped: retrying every domain
             // reload would only repeat IO and warning spam. The partial snapshot remains fail-closed
-            // because PDB checksum validation requires a matching baseline, and a changed DLL
+            // because the method-diff baseline requires a PDB checksum match, and a changed DLL
             // invalidates this stamp through its mtime or length before the next capture.
             WriteStamp(stampPath, mvid, dllMtimeTicks, dllByteLength);
         }
@@ -206,7 +227,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string assemblySnapshotDirectory,
             string[] sourceFiles,
-            string assemblyName)
+            string assemblyName,
+            HotReloadSnapshotSourceCheck check)
         {
             // Why temp + Move: Directory.Exists is the "complete" signal. Copying into the final
             // directory first would leave a partial tree on interrupt that later reloads treat as
@@ -221,18 +243,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Directory.CreateDirectory(temporaryDirectory);
             int skippedSourceCount = 0;
             string firstSkippedSourcePath = null;
+            int suspectSourceCount = 0;
+            int editedAfterCompileCount = 0;
+            long checkTicks = 0;
             List<string> manifestLines = new List<string>(sourceFiles.Length);
             foreach (string projectRelativeSourcePath in sourceFiles)
             {
-                if (!CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath, manifestLines))
+                SourceCopyOutcome outcome = CopySourceFileByteExact(
+                    projectRoot,
+                    temporaryDirectory,
+                    projectRelativeSourcePath,
+                    check,
+                    manifestLines);
+                if (outcome.Kind == SourceCopyKind.Unreadable)
                 {
                     skippedSourceCount++;
                     firstSkippedSourcePath ??= projectRelativeSourcePath;
+                    continue;
+                }
+
+                if (outcome.Kind == SourceCopyKind.Checked || outcome.Kind == SourceCopyKind.CheckedEditedAfterCompile)
+                {
+                    suspectSourceCount++;
+                    checkTicks += outcome.CheckTicks;
+                }
+
+                if (outcome.Kind == SourceCopyKind.CheckedEditedAfterCompile)
+                {
+                    editedAfterCompileCount++;
                 }
             }
 
             HotReloadSourceStampManifest.Write(temporaryDirectory, manifestLines);
             Directory.Move(temporaryDirectory, assemblySnapshotDirectory);
+            if (suspectSourceCount > 0)
+            {
+                VibeLogger.LogInfo(
+                    HotReloadConstants.VibeLogSourceSnapshotChecked,
+                    "Hot reload checked the sources written since the compile started against the PDB.",
+                    new
+                    {
+                        assemblyName,
+                        suspect = suspectSourceCount,
+                        editedAfterCompile = editedAfterCompileCount,
+                        checkMs = (long)TimeSpan.FromTicks(checkTicks).TotalMilliseconds
+                    });
+            }
+
             if (skippedSourceCount > 0)
             {
                 UnityEngine.Debug.LogWarning(
@@ -241,10 +298,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static bool CopySourceFileByteExact(
+        private static SourceCopyOutcome CopySourceFileByteExact(
             string projectRoot,
             string assemblySnapshotDirectory,
             string projectRelativeSourcePath,
+            HotReloadSnapshotSourceCheck check,
             List<string> manifestLines)
         {
             string normalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
@@ -253,37 +311,124 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FileInfo sourceBefore = new FileInfo(fileSystemSourcePath);
             if (!sourceBefore.Exists)
             {
-                return true;
+                return new SourceCopyOutcome(SourceCopyKind.NotFound, 0);
             }
 
             long length = sourceBefore.Length;
             long lastWriteTimeUtcTicks = sourceBefore.LastWriteTimeUtc.Ticks;
+            string snapshotFileName = HashProjectRelativePath(normalizedRelativePath) + ".cs";
+            if (!TryCopySource(
+                    fileSystemSourcePath,
+                    Path.Combine(assemblySnapshotDirectory, snapshotFileName),
+                    length,
+                    lastWriteTimeUtcTicks,
+                    out byte[] bytes,
+                    out bool stampHeldDuringRead))
+            {
+                return new SourceCopyOutcome(SourceCopyKind.Unreadable, 0);
+            }
+
+            // Why the PDB check stays outside TryCopySource's catch: that catch counts an IO failure as
+            // an unreadable source, and a PDB read failure would make that warning name the wrong file.
+            // The assembly-level catch in CaptureAssemblies handles it instead.
+            System.Diagnostics.Stopwatch checkWatch = null;
+            HotReloadSnapshotCopyVerdict verdict = JudgeCopy(
+                stampHeldDuringRead,
+                lastWriteTimeUtcTicks,
+                check.SuspectWritesFromUtcTicks,
+                () =>
+                {
+                    checkWatch = System.Diagnostics.Stopwatch.StartNew();
+                    bool isCompiledSource = check.IsCompiledSource(projectRoot, normalizedRelativePath, bytes);
+                    checkWatch.Stop();
+                    return isCompiledSource;
+                });
+            if (verdict != HotReloadSnapshotCopyVerdict.NoStamp)
+            {
+                manifestLines.Add(HotReloadSourceStampManifest.FormatLine(
+                    snapshotFileName,
+                    length,
+                    lastWriteTimeUtcTicks,
+                    verdict == HotReloadSnapshotCopyVerdict.EditedAfterCompile));
+            }
+
+            if (checkWatch == null)
+            {
+                return new SourceCopyOutcome(SourceCopyKind.Trusted, 0);
+            }
+
+            SourceCopyKind checkedKind = verdict == HotReloadSnapshotCopyVerdict.EditedAfterCompile
+                ? SourceCopyKind.CheckedEditedAfterCompile
+                : SourceCopyKind.Checked;
+            return new SourceCopyOutcome(checkedKind, checkWatch.Elapsed.Ticks);
+        }
+
+        // Copies the source and reports whether its stamp held while it was read. Returns false when the
+        // source could not be read or the copy could not be written.
+        private static bool TryCopySource(
+            string fileSystemSourcePath,
+            string destinationPath,
+            long length,
+            long lastWriteTimeUtcTicks,
+            out byte[] bytes,
+            out bool stampHeldDuringRead)
+        {
             try
             {
-                string snapshotFileName = HashProjectRelativePath(normalizedRelativePath) + ".cs";
-                string destinationPath = Path.Combine(assemblySnapshotDirectory, snapshotFileName);
-                byte[] bytes = File.ReadAllBytes(fileSystemSourcePath);
+                bytes = File.ReadAllBytes(fileSystemSourcePath);
                 File.WriteAllBytes(destinationPath, bytes);
                 // Why the stamp is taken before the read and checked again after it: a write during the
                 // read moves the stamp on, and a stamp recorded then could vouch for bytes the copy does
-                // not hold. Such a source gets no line and is compared by bytes until the next capture.
+                // not hold. Such a source is checked against the PDB: it gets no line when it matches,
+                // so readers compare it by bytes until the next capture, and a marked line when it does not.
                 FileInfo sourceAfter = new FileInfo(fileSystemSourcePath);
-                if (sourceAfter.Exists
+                stampHeldDuringRead = sourceAfter.Exists
                     && sourceAfter.Length == length
-                    && sourceAfter.LastWriteTimeUtc.Ticks == lastWriteTimeUtcTicks)
-                {
-                    manifestLines.Add(HotReloadSourceStampManifest.FormatLine(snapshotFileName, length, lastWriteTimeUtcTicks));
-                }
-
+                    && sourceAfter.LastWriteTimeUtc.Ticks == lastWriteTimeUtcTicks;
                 return true;
             }
             catch (Exception ex) when (IsSkippableSourceReadException(ex))
             {
                 // Approved deviation from the no-try-catch rule: source IO can fail independently
                 // while an assembly is being snapshotted. Skipping preserves the fail-closed
-                // invariant because PDB checksum validation rejects any missing baseline at use time.
+                // invariant because the method-diff baseline rejects any missing snapshot by PDB
+                // checksum at use time.
+                bytes = null;
+                stampHeldDuringRead = false;
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Decides what the manifest records for a copied source. Only a source that may have been
+        /// saved after the compiler read it is checked against the PDB: one written at or after the
+        /// start of the suspect window, or one that changed while it was read.
+        /// </summary>
+        internal static HotReloadSnapshotCopyVerdict JudgeCopy(
+            bool stampHeldDuringRead,
+            long lastWriteTimeUtcTicks,
+            long suspectWritesFromUtcTicks,
+            Func<bool> copyIsCompiledSource)
+        {
+            // Why a source that changed while read is checked whatever its write time: the stat before
+            // the read can be old while the copy holds bytes written during the read.
+            bool suspect = !stampHeldDuringRead || lastWriteTimeUtcTicks >= suspectWritesFromUtcTicks;
+            if (!suspect)
+            {
+                // Written before the compile started and unchanged while read: what the compiler read.
+                return HotReloadSnapshotCopyVerdict.StampTrusted;
+            }
+
+            if (copyIsCompiledSource())
+            {
+                // Why a matching source that changed while read still gets no line: its stamp does not
+                // vouch for the copy's bytes, so readers compare by bytes as before.
+                return stampHeldDuringRead
+                    ? HotReloadSnapshotCopyVerdict.StampTrusted
+                    : HotReloadSnapshotCopyVerdict.NoStamp;
+            }
+
+            return HotReloadSnapshotCopyVerdict.EditedAfterCompile;
         }
 
         private static bool IsSkippableSourceReadException(Exception ex)
@@ -365,6 +510,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Capture and cleanup run serially on the main thread, and cleanup starts only
                 // after the current capture's Move succeeds, so no active .tmp can be removed here.
                 Directory.Delete(candidateDirectory, recursive: true);
+            }
+        }
+
+        private enum SourceCopyKind
+        {
+            NotFound,
+            Unreadable,
+            // Copied and recorded without a PDB check.
+            Trusted,
+            // Checked against the PDB and confirmed.
+            Checked,
+            // Checked against the PDB and marked as edited after the compile.
+            CheckedEditedAfterCompile
+        }
+
+        private readonly struct SourceCopyOutcome
+        {
+            internal readonly SourceCopyKind Kind;
+            internal readonly long CheckTicks;
+
+            internal SourceCopyOutcome(SourceCopyKind kind, long checkTicks)
+            {
+                Kind = kind;
+                CheckTicks = checkTicks;
             }
         }
     }

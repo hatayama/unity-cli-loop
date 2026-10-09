@@ -75,7 +75,10 @@ Caches: `Library/UloopHotReload/PublicizedRefs/fmt2/<assemblyName>-<mvid>.dll`,
 `Library/UloopHotReload/Worker/<sourceHash>/`,
 `Library/UloopHotReload/SourceSnapshot/<assemblyName>-<mvid>/` (with a `source-stamps.txt` that
 records each copied source's length and write time, so a run after a domain reload tells an
-unchanged sibling by a stat instead of reading it),
+unchanged sibling by a stat instead of reading it; a source written since the compile started
+whose bytes do not match the PDB checksum carries a mark that it was edited after the compile,
+and the default selection, the sibling scan and the skip check treat a marked source as
+changed),
 `Library/UloopHotReload/PdbDocuments/fmt1/<assemblyName>.txt` (the documents the PDB's sequence
 points refer to, stamped with the dll's and the PDB's length and write time and the MVID, so the
 first run after a domain reload does not walk the PDB again while they still match), and

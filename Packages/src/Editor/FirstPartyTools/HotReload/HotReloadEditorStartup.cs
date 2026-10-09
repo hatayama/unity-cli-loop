@@ -73,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
             HotReloadWarmUpEditorHooks.Initialize();
+            HotReloadCompileStartRecord.Initialize();
             HotReloadUnityMessageForwardingEditorHooks.Initialize();
             HotReloadWiredValueEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();
