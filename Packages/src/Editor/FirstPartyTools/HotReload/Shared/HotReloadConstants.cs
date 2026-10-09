@@ -681,6 +681,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogCallSiteCacheEvicted = "hot_reload_call_site_cache_evicted";
         public const string VibeLogWarmUpComplete = "hot_reload_warm_up_complete";
         public const string VibeLogWarmUpSkipped = "hot_reload_warm_up_skipped";
+        public const string VibeLogSourceSnapshotCaptured = "hot_reload_source_snapshot_captured";
+
+        // What captured the source snapshot of a domain, as named in the trigger field of
+        // hot_reload_source_snapshot_captured.
+        public const string SourceSnapshotCaptureTriggerDomainLoad = "domain_load";
+        public const string SourceSnapshotCaptureTriggerFirstUpdateTick = "first_update_tick";
+        public const string SourceSnapshotCaptureTriggerApply = "apply";
 
         // What stopped a running warm-up, as named in the cancelledBy field of hot_reload_warm_up_complete.
         public const string WarmUpCancelledByRun = "run";

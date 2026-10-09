@@ -17,13 +17,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // "Scripts have compiler errors" dialog never flushes delayCall again for the rest of
             // that process's lifetime, even for later registrations — while
             // EditorApplication.update keeps ticking (see SetupWizardWindow.cs:56-70). The
-            // hot-reload apply entry makes sure of the capture through the same gate before it
-            // reads a snapshot; this tick still captures as early as it can when no request comes
-            // first, because a file edited before the capture is snapshotted with that edit.
+            // snapshot is captured at the end of the domain load; this tick retries only when that
+            // capture threw or Unity listed no compilation assembly yet, and the gate does nothing
+            // when it already succeeded.
             void CaptureOnFirstUpdateTick()
             {
                 EditorApplication.update -= CaptureOnFirstUpdateTick;
-                HotReloadCompositionRoot.Services.SourceSnapshotCapture.EnsureCaptured();
+                HotReloadCompositionRoot.Services.SourceSnapshotCapture.EnsureCaptured(HotReloadConstants.SourceSnapshotCaptureTriggerFirstUpdateTick);
             }
 
             // Why a callback of its own rather than a line in the capture above: an exception in
@@ -76,6 +76,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadUnityMessageForwardingEditorHooks.Initialize();
             HotReloadWiredValueEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();
+        }
+
+        /// <summary>
+        /// Captures the source snapshot of the current compile before this domain answers any uloop
+        /// command, so an edit made after the compile returned is never captured as compiled source.
+        /// </summary>
+        internal static void CaptureSourceSnapshotBeforeServingCommands()
+        {
+            HotReloadCompositionRoot.Services.SourceSnapshotCapture.EnsureCaptured(
+                HotReloadConstants.SourceSnapshotCaptureTriggerDomainLoad);
         }
     }
 }
