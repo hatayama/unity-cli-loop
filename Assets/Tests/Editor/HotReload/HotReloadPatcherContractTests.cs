@@ -217,7 +217,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadGroupProcessorDependencies.CreateProduction,
                     new HotReloadApplicationPlayModeQuery(),
                     new HotReloadSourceSnapshotCapture(() => true),
-                    HotReloadWarmUpTestDoubles.CreateInert()));
+                    HotReloadWarmUpTestDoubles.CreateInert(),
+                    HotReloadCompositionRoot.CreateProductionCallSiteBackfill()));
         }
 
         private static MethodInfo GetPatchTarget()

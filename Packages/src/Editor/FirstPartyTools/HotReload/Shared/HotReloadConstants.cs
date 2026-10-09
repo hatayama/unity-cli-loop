@@ -687,6 +687,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogCallerNoteLoadBudgetExhausted = "hot_reload_caller_note_load_budget_exhausted";
         public const string VibeLogWarmUpComplete = "hot_reload_warm_up_complete";
         public const string VibeLogWarmUpSkipped = "hot_reload_warm_up_skipped";
+        public const string VibeLogCallerNoteBackfillComplete = "hot_reload_caller_note_backfill_complete";
         public const string VibeLogSourceSnapshotCaptured = "hot_reload_source_snapshot_captured";
 
         // What captured the source snapshot of a domain, as named in the trigger field of
@@ -695,7 +696,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string SourceSnapshotCaptureTriggerFirstUpdateTick = "first_update_tick";
         public const string SourceSnapshotCaptureTriggerApply = "apply";
 
-        // What stopped a running warm-up, as named in the cancelledBy field of hot_reload_warm_up_complete.
+        // What stopped a running warm-up or caller-note backfill, as named in the cancelledBy field
+        // of hot_reload_warm_up_complete and hot_reload_caller_note_backfill_complete.
         public const string WarmUpCancelledByRun = "run";
         public const string WarmUpShutdownTriggerBeforeAssemblyReload = "beforeAssemblyReload";
         public const string WarmUpShutdownTriggerCompilationStarted = "compilationStarted";

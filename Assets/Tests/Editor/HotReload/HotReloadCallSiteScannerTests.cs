@@ -667,7 +667,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an assembly that two scans of the same run both fail to read is listed once in
-        /// the budget's refused assemblies, so the vibe log names each refused dll once.
+        /// the budget's refused assemblies, so the vibe log names each refused dll once, and its
+        /// dll path is kept beside the name for the backfill.
         /// </summary>
         [Test]
         public async Task FindCallSites_AssemblyRefusedByTwoScans_IsListedOnceInTheBudget()
@@ -688,6 +689,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 budget.RefusedAssemblyNames,
                 Is.EquivalentTo(new[] { GetTestAssemblyName(), CrossAssemblyCallerAssemblyName }));
+            List<string> refusedDllFileNames = new List<string>();
+            foreach (string dllPath in budget.RefusedDllPaths)
+            {
+                refusedDllFileNames.Add(Path.GetFileName(dllPath));
+            }
+
+            Assert.That(
+                refusedDllFileNames,
+                Is.EquivalentTo(new[] { GetTestAssemblyName() + ".dll", CrossAssemblyCallerAssemblyName + ".dll" }));
         }
 
         /// <summary>
@@ -778,11 +788,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(dllPaths, Does.Not.Contain(layout.DllPath(GetTestAssemblyName())));
         }
 
-        // Why: the installed warm-up loads into the shared cache on a pool thread after a reload,
-        // and a read it makes between Clear and the scan would be counted as the scan's.
+        // Why: the installed warm-up and the caller-note backfill load into the shared cache on a
+        // pool thread, and a read they make between Clear and the scan would be counted as the scan's.
         private static Task StopInstalledWarmUpAsync()
         {
-            return HotReloadCompositionRoot.Services.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope);
+            HotReloadServices installed = HotReloadCompositionRoot.Services;
+            return Task.WhenAll(
+                installed.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope),
+                installed.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope));
         }
 
         private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
