@@ -66,6 +66,19 @@ command ran against:
   from `<OS temp>/UnityCliLoopCompilation/RoslynWorkerCache/<key>/`, keyed by the worker source
   and the compiler paths), or `built` (csc ran); `cachePublish` and `cachePublishError` say
   whether a built assembly was added to that cache.
+  After each server reset, the shared-worker warm-up writes one
+  `dynamic_code_shared_worker_warm_up_skipped` with its `reason` (`no_hot_reload`: the hot-reload
+  tool has not initialized in this domain; `no_targets`: `targets.txt` names no assembly whose dll
+  exists and whose compilation assembly Unity lists; `compiler_unavailable`: the external compiler
+  is missing, which only the next real compile reports; `stopped_for_tests`), or one
+  `dynamic_code_shared_worker_warm_up_complete` with `ms` (the whole warm-up), `referencesMs`
+  (listing the references), `mainThreadMs` (reading the package path on the main thread),
+  `warmMs` (starting the worker and its compile), `referenceCount`, `outcome`, `failureReason`
+  and `errorCount`. `outcome` is `answered` (the worker answered the compile; `errorCount` is the
+  errors it reported), `already_running` (a compile had started the worker first, so nothing was
+  sent), `start_failed` or `request_failed` (with `failureReason`; the worker is stopped and the
+  next compile starts it again), or `failed` (an exception, with `failureReason` set to its type
+  and `exceptionMessage`, logged as a warning).
   `hot_reload_source_snapshot_captured` appears once per domain when the source snapshot
   capture ran to completion, with its `trigger` (`domain_load` normally; `first_update_tick` or
   `apply` only when the capture at domain load threw or Unity listed no compilation assembly

@@ -96,9 +96,12 @@ does not start while the Editor compiles or imports, and a domain reload or a co
 it. A run that arrives while it works waits only for the unit (one dll) in flight, whose result
 it reuses; that item and the remaining ones are dropped; a run that arrives before the tick keeps it from starting.
 `hot_reload_warm_up_complete` and `hot_reload_warm_up_skipped` show what it did, and the run's
-`warm_up_yield` step shows how long the run waited (see `docs/vibe-logs.md`). The transform
-worker, the shared Roslyn worker and the copies of the other project assemblies a shim compile
-references are not warmed up yet.
+`warm_up_yield` step shows how long the run waited (see `docs/vibe-logs.md`). After each server
+reset (a domain reload or a manual server start), when `targets.txt` names a compiled assembly,
+the shared Roslyn worker is started in the background and compiles once against the references
+the shim compile binds as they are, so the first shim compile finds it running (see
+`dynamic_code_shared_worker_warm_up_complete`). The transform worker and the copies of the other
+project assemblies a shim compile references are not warmed up yet.
 The shim compile references a fully publicized copy of the edited assembly, and of every other
 project assembly that grants the edited one its internals through `InternalsVisibleTo`. Any other
 project assembly is referenced through a `PublicizedExternalRefs` copy that keeps its top-level
