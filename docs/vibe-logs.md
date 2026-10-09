@@ -63,6 +63,10 @@ command ran against:
   from `<OS temp>/UnityCliLoopCompilation/RoslynWorkerCache/<key>/`, keyed by the worker source
   and the compiler paths), or `built` (csc ran); `cachePublish` and `cachePublishError` say
   whether a built assembly was added to that cache.
+  `hot_reload_source_snapshot_captured` appears once per domain when the source snapshot
+  capture ran to completion, with its `trigger` (`domain_load` normally; `first_update_tick` or
+  `apply` only when the capture at domain load threw or Unity listed no compilation assembly
+  yet) and `captureMs`.
   After a domain reload, the warm-up writes one `hot_reload_warm_up_complete` with the target
   assemblies, each item's `outcome` (`done`, `cancelled` or `failed`) and time, and `cancelledBy`
   (`run`, `beforeAssemblyReload`, `compilationStarted`, or null), or one
