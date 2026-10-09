@@ -63,6 +63,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new FixedContextSource(CreateTestAssemblyCapture(testDll)),
                 HotReloadWarmUpItems.CreateProduction());
             await BeginScope(warmUp);
+            // Why clear again once the installed warm-up stopped: its unit in flight can log a copy
+            // written and its completion after the clear in SetUp.
+            VibeLogger.ClearMemoryLogs();
+            // Why delete: a copy left by an earlier test would make the run hit the cache even
+            // when the warm-up wrote nothing.
+            PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName(), HotReloadConstants.PublicizedRefsRelativeDirectory);
             // Why clear and require a read: the run loads the edited assembly's dll itself, and
             // the entry outlives the run's hold, so "the run read nothing" alone would pass even
             // when the warm-up loaded nothing.
@@ -78,9 +84,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount, Is.EqualTo(afterWarmUp), "the warm-up loaded the test dll");
             Assert.That(
                 HotReloadWarmUpTestDoubles.ReadCompletedOutcomes(),
-                Is.EqualTo(new[] { "call_sites:done", "referenced_method_sets:done", "pdb_documents:done" }));
+                Is.EqualTo(new[] { "publicized_targets:done", "call_sites:done", "referenced_method_sets:done", "pdb_documents:done" }));
+            Assert.That(CountTargetCopiesWritten(), Is.EqualTo(1), "copies the warm-up wrote for the edited assembly");
+            VibeLogger.ClearMemoryLogs();
 
             await RunWithReadReturningAsync(2);
+
+            Assert.That(CountTargetCopiesWritten(), Is.EqualTo(0), "copies the run wrote again for the edited assembly");
 
             Assert.That(HotReloadCompiledCallSiteCache.Shared.GetOrLoad(testDll), Is.SameAs(entry), "the run read the dll again");
         }
@@ -217,6 +227,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(new HotReloadCallSiteCacheE2EFixture().Read(), Is.EqualTo(value), "Precondition: the run must apply.");
             return result;
+        }
+
+        // The publicized copies of the edited assembly written since the logs were last cleared.
+        private static int CountTargetCopiesWritten()
+        {
+            JArray entries = ReadEntries(HotReloadConstants.VibeLogPublicizedCopyWritten);
+            int count = 0;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                JToken context = entries[i]["context"];
+                if ((string)context["assemblyName"] == TestAssemblyName()
+                    && (string)context["variant"] == HotReloadConstants.PublicizedRefsRelativeDirectory)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static JArray ReadEntries(string operation)
