@@ -62,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 new SharedRoslynCompilerWorkerWarmUp(
                     () => null,
                     () => null,
+                    () => "package",
                     (references, paths) => Task.FromResult(SharedWorkerWarmUpOutcome.AlreadyRunning())));
             FakeShutdownAwareRuntime runtime = new();
             registry.SetRuntimeFacadeForTests(runtime);

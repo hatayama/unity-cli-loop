@@ -149,11 +149,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies the compiler paths are resolved on the main thread even when the reference
-        /// list completes on a pool thread.
+        /// Verifies the package path is read on the main thread even when the reference list
+        /// completes on a pool thread.
         /// </summary>
         [UnityTest]
-        public IEnumerator Start_ResolvesCompilerPathsOnTheMainThread()
+        public IEnumerator Start_ReadsThePackagePathOnTheMainThread()
         {
             TaskCompletionSource<IReadOnlyList<string>> references = new TaskCompletionSource<IReadOnlyList<string>>();
             WarmUpParts parts = new WarmUpParts();
@@ -167,13 +167,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 yield return WaitUntilCompleted(completion);
                 yield return WaitUntilCompleted(warmUp.GetTaskForTests());
 
-                Assert.That(parts.ResolveCalls, Is.EqualTo(1));
-                Assert.That(parts.ResolvedOnMainThread, Is.True);
+                Assert.That(parts.PackagePathReads, Is.EqualTo(1));
+                Assert.That(parts.PackagePathReadOnMainThread, Is.True);
             }
             finally
             {
                 references.TrySetResult(Array.Empty<string>());
             }
+        }
+
+        /// <summary>
+        /// Verifies the compiler paths are resolved on a pool thread. The reference list completes
+        /// synchronously, so everything outside a pool hand-off runs on the main thread.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Start_ResolvesCompilerPathsOffTheMainThread()
+        {
+            WarmUpParts parts = new WarmUpParts();
+            SharedRoslynCompilerWorkerWarmUp warmUp = parts.Create();
+
+            warmUp.Start();
+            yield return WaitUntilCompleted(warmUp.GetTaskForTests());
+
+            Assert.That(parts.ResolveCalls, Is.EqualTo(1));
+            Assert.That(parts.ResolvedOnMainThread, Is.False);
         }
 
         [UnityTest]
@@ -345,6 +362,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             internal bool ResolvedOnMainThread { get; private set; }
 
+            internal int PackagePathReads { get; private set; }
+
+            internal bool PackagePathReadOnMainThread { get; private set; }
+
             internal IReadOnlyList<string> WarmedReferences { get; private set; }
 
             internal ExternalCompilerPaths WarmedPaths { get; private set; }
@@ -354,6 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 return new SharedRoslynCompilerWorkerWarmUp(
                     GetCollector,
                     ResolvePaths,
+                    ReadPackagePath,
                     WarmWorker);
             }
 
@@ -376,6 +398,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 ResolvedOnMainThread = MainThreadSwitcher.IsMainThread;
                 Interlocked.Increment(ref _resolveCalls);
                 return Paths;
+            }
+
+            private string ReadPackagePath()
+            {
+                PackagePathReadOnMainThread = MainThreadSwitcher.IsMainThread;
+                PackagePathReads++;
+                return "package";
             }
 
             private Task<SharedWorkerWarmUpOutcome> WarmWorker(

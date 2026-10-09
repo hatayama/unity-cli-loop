@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly object _lock = new object();
         private readonly Func<Func<CancellationToken, Task<IReadOnlyList<string>>>> _getReferenceCollector;
         private readonly Func<ExternalCompilerPaths> _resolveCompilerPaths;
+        private readonly Func<string> _readPackagePath;
         private readonly Func<IReadOnlyList<string>, ExternalCompilerPaths, Task<SharedWorkerWarmUpOutcome>> _warmWorker;
         private Task _inFlight = Task.CompletedTask;
         private bool _stopped;
@@ -35,13 +36,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal SharedRoslynCompilerWorkerWarmUp(
             Func<Func<CancellationToken, Task<IReadOnlyList<string>>>> getReferenceCollector,
             Func<ExternalCompilerPaths> resolveCompilerPaths,
+            Func<string> readPackagePath,
             Func<IReadOnlyList<string>, ExternalCompilerPaths, Task<SharedWorkerWarmUpOutcome>> warmWorker)
         {
             Debug.Assert(getReferenceCollector != null, "getReferenceCollector must not be null.");
             Debug.Assert(resolveCompilerPaths != null, "resolveCompilerPaths must not be null.");
+            Debug.Assert(readPackagePath != null, "readPackagePath must not be null.");
             Debug.Assert(warmWorker != null, "warmWorker must not be null.");
             _getReferenceCollector = getReferenceCollector;
             _resolveCompilerPaths = resolveCompilerPaths;
+            _readPackagePath = readPackagePath;
             _warmWorker = warmWorker;
         }
 
@@ -50,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new SharedRoslynCompilerWorkerWarmUp(
                 () => SharedCompilerWarmUpCoordination.CollectWarmUpReferencePaths,
                 ExternalCompilerPathResolver.ResolveWithoutReporting,
+                () => UnityCliLoopConstants.PackageResolvedPath,
                 SharedRoslynCompilerWorkerHost.WarmUpAsync);
         }
 
@@ -122,18 +127,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 await MainThreadSwitcher.SwitchToMainThread();
                 watch.Restart();
-                ExternalCompilerPaths paths = _resolveCompilerPaths();
+                // Why read it here: the worker's program source needs the package path, whose first
+                // read calls a main-thread-only Unity API, and the worker starts on a pool thread below.
+                string packagePath = _readPackagePath();
+                Debug.Assert(!string.IsNullOrEmpty(packagePath), "package path must resolve on the main thread.");
+                long mainThreadMs = watch.ElapsedMilliseconds;
+
+                // Why a pool thread: the resolver reads only values Unity reads thread-safely, and
+                // walks the Editor's folders on every call.
+                ExternalCompilerPaths paths = await Task.Run(_resolveCompilerPaths).ConfigureAwait(false);
                 if (paths == null)
                 {
                     LogSkipped(SkipReasonCompilerUnavailable);
                     return;
                 }
-
-                // Why read it here: the worker's program source needs the package path, whose first
-                // read calls a main-thread-only Unity API, and the worker starts on a pool thread below.
-                string packagePath = UnityCliLoopConstants.PackageResolvedPath;
-                Debug.Assert(!string.IsNullOrEmpty(packagePath), "package path must resolve on the main thread.");
-                long mainThreadMs = watch.ElapsedMilliseconds;
 
                 watch.Restart();
                 SharedWorkerWarmUpOutcome outcome =
