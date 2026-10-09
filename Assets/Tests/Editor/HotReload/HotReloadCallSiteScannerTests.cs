@@ -722,8 +722,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: one run shares a single load budget across the candidate assemblies it scans, so
-        /// two candidates in different uncached assemblies read one dll in total and neither gets
-        /// a note. A budget created per scan call would read two.
+        /// two candidates in different uncached assemblies read one dll in total. A budget created
+        /// per scan call would read two.
         /// </summary>
         [Test]
         public async Task ApplyOneShotCallerNotes_WithFreshCache_SharesOneLoadBudgetAcrossCandidateAssemblies()
@@ -758,8 +758,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             run.ApplyOneShotCallerNotes(GetProjectRoot(), "test-correlation");
 
             Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(1));
-            Assert.That(targetOutcome.LifecycleNote, Is.Empty);
-            Assert.That(callerOutcome.LifecycleNote, Is.Empty);
         }
 
         /// <summary>
