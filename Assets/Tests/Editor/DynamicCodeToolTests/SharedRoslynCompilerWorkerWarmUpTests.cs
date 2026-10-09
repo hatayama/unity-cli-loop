@@ -40,6 +40,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             VibeLogger.ClearMemoryLogs();
         }
 
+        /// <summary>
+        /// Verifies none of the warm-up runs inside Start, so a server reset that starts it never waits for or fails on it.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_ReturnsBeforeAskingForReferences()
         {
@@ -53,6 +56,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(parts.CollectCalls, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies a warm-up stopped for tests stays stopped: a later start logs a skip and touches nothing.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_AfterStopForTests_SkipsWithoutAskingForReferences()
         {
@@ -67,6 +73,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(ReadSkipReason(), Is.EqualTo(SharedRoslynCompilerWorkerWarmUp.SkipReasonStoppedForTests));
         }
 
+        /// <summary>
+        /// Verifies a domain where the hot-reload tool has not wired its reference list starts no worker.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_WithoutAReferenceProvider_SkipsAsNoHotReload()
         {
@@ -82,6 +91,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(ReadSkipReason(), Is.EqualTo(SharedRoslynCompilerWorkerWarmUp.SkipReasonNoHotReload));
         }
 
+        /// <summary>
+        /// Verifies a project with no compiled hot-reload target starts no worker and does not even look for the compiler.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_WhenTheProviderListsNothing_SkipsWithoutResolvingCompilerPaths()
         {
@@ -97,6 +109,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(ReadSkipReason(), Is.EqualTo(SharedRoslynCompilerWorkerWarmUp.SkipReasonNoTargets));
         }
 
+        /// <summary>
+        /// Verifies a missing compiler only skips the warm-up, leaving the error to the next real compile.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_WhenCompilerPathsAreMissing_SkipsWithoutWarmingOrLogging()
         {
@@ -112,6 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             LogAssert.NoUnexpectedReceived();
         }
 
+        /// <summary>
+        /// Verifies an exception in the warm-up is logged and recorded as failed instead of faulting a task nobody awaits.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_WhenTheProviderThrows_LogsTheExceptionAndCompletes()
         {
@@ -130,6 +148,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That((string)complete["failureReason"], Is.EqualTo(nameof(InvalidOperationException)));
         }
 
+        /// <summary>
+        /// Verifies the worker warms exactly the listed references with the resolved compiler, and that the log reports what it answered.
+        /// </summary>
         [UnityTest]
         public IEnumerator Start_HandsTheReferencesAndPathsToTheWorker()
         {
@@ -195,6 +216,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(parts.ResolvedOnMainThread, Is.False);
         }
 
+        /// <summary>
+        /// Verifies stopping for tests hands back a task that completes only when the warm-up in flight ends.
+        /// </summary>
         [UnityTest]
         public IEnumerator StopForTests_ReturnsTheWarmUpStillInFlight()
         {
@@ -218,6 +242,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Verifies that when the later of two warm-ups ends first, the task tests wait for does not complete until the earlier one ends too.
+        /// </summary>
         [UnityTest]
         public IEnumerator GetTaskForTests_CoversEveryStartedWarmUp()
         {
@@ -256,6 +283,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Verifies a server reset starts a warm-up but returns before any of it runs.
+        /// </summary>
         [UnityTest]
         public IEnumerator ResetServerScopedServices_StartsAWarmUpWithoutRunningItInline()
         {
@@ -275,6 +305,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
         }
 
+        /// <summary>
+        /// Verifies the reset before a domain reload starts no warm-up, whose worker the reload would kill.
+        /// </summary>
         [UnityTest]
         public IEnumerator ResetServerScopedServicesBeforeDomainReload_StartsNoWarmUp()
         {

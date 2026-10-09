@@ -131,6 +131,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// Verifies a ledger name whose dll is gone is skipped before Unity is asked about it, and the next name is used.
+        /// </summary>
         [Test]
         public async Task CollectAsync_SkipsANameWithNoDllWithoutAskingUnity()
         {
@@ -156,6 +159,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(askedForMissing, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a name Unity no longer lists, as during a compile, gives nothing to warm.
+        /// </summary>
         [Test]
         public async Task CollectAsync_SkipsANameWhoseCompilationAssemblyIsGone()
         {
@@ -169,6 +175,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(listed, Is.Empty);
         }
 
+        /// <summary>
+        /// Verifies a project that never ran a hot reload gives nothing to warm without asking Unity anything.
+        /// </summary>
         [Test]
         public async Task CollectAsync_WithAnEmptyLedger_ReturnsEmptyWithoutAskingUnity()
         {
@@ -213,6 +222,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(listed, Is.EqualTo(expected));
         }
 
+        /// <summary>
+        /// Verifies the compilation pipeline is asked on the main thread even when the list is requested from a pool thread.
+        /// </summary>
         [Test]
         public async Task CollectAsync_AsksUnityOnTheMainThreadWhenCalledFromAPoolThread()
         {
@@ -231,6 +243,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(askedOnMainThread, Is.EqualTo(new[] { true }));
         }
 
+        /// <summary>
+        /// Verifies the hot-reload startup publishes its reference list to the dynamic-code tool in every domain.
+        /// </summary>
         [Test]
         public void HotReloadStartup_WiresTheWarmUpReferenceCollector()
         {

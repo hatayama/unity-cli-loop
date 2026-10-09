@@ -68,6 +68,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             LogAssert.NoUnexpectedReceived();
         }
 
+        /// <summary>
+        /// Verifies the entry that does not report resolves the same compiler as the one compiles use, so the warm-up starts the worker a compile would.
+        /// </summary>
         [Test]
         public void Resolve_ReturnsTheSamePathsAsResolveWithoutReporting()
         {
