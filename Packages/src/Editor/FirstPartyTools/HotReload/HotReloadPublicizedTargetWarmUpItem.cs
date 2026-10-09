@@ -4,10 +4,14 @@ using System.Threading.Tasks;
 
 using UnityEngine;
 
+using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Writes the publicized copy of each target assembly.
+    /// Writes the publicized copy of each target assembly. It makes the same copy a run asks
+    /// <see cref="ReferencePublicizer.GetOrCreatePublicizedCopy"/> for after the reload, so the run
+    /// reuses it.
     /// </summary>
     internal sealed class HotReloadPublicizedTargetWarmUpItem : IHotReloadWarmUpItem
     {
@@ -15,14 +19,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public Task RunAsync(HotReloadWarmUpContext context, CancellationToken ct)
         {
-            return Task.CompletedTask;
+            // Why gather every target here first: the compilation assembly lookup may only run on
+            // the main thread, and the search directories are collected where the run collects
+            // them. Only the rewrite and the write, the costly part, go to the pool.
+            List<HotReloadPublicizedTargetRequest> requests = new List<HotReloadPublicizedTargetRequest>();
+            foreach (HotReloadWarmUpTarget target in context.Targets)
+            {
+                UnityCompilationAssembly assembly = HotReloadCompilationAssemblies.FindByName(target.AssemblyName);
+                // A name left in the ledger from an older layout, or an empty list during a
+                // compile. A run does not ask for a copy of that name either.
+                if (assembly == null)
+                {
+                    continue;
+                }
+
+                IReadOnlyCollection<string> resolverSearchDirectories =
+                    HotReloadResolverSearchDirectories.Collect(context.ProjectRoot, assembly);
+                requests.Add(new HotReloadPublicizedTargetRequest(
+                    HotReloadTypeHome.ScriptAssemblies(target.AssemblyName, target.DllPath),
+                    resolverSearchDirectories));
+            }
+
+            return Task.Run(() => WritePublicizedCopies(requests, ct));
         }
 
-        /// <summary>Writes the publicized copy of each request; throws before the next request once cancelled.</summary>
+        /// <summary>
+        /// Writes the publicized copy of each request, or reuses the one in place; throws before the
+        /// next request once cancelled. Runs on a pool thread: the publicizer reads only
+        /// Application.dataPath and Application.platform, which Unity reads thread-safely.
+        /// </summary>
         internal static void WritePublicizedCopies(
             IReadOnlyList<HotReloadPublicizedTargetRequest> requests,
             CancellationToken ct)
         {
+            foreach (HotReloadPublicizedTargetRequest request in requests)
+            {
+                // Why throw rather than stop: an item that returns normally is reported done.
+                ct.ThrowIfCancellationRequested();
+                ReferencePublicizer.GetOrCreatePublicizedCopy(request.Home, request.ResolverSearchDirectories);
+            }
         }
     }
 
