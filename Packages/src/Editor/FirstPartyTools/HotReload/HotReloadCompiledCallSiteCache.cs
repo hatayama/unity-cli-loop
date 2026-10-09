@@ -265,7 +265,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <exception cref="IOException">The file kept changing while it was being read.</exception>
         public Entry GetOrLoad(string dllPath)
         {
-            TryGetOrLoad(dllPath, true, out Entry entry, out bool ignored);
+            TryGetOrLoad(dllPath, true, out Entry entry, out _);
             return entry;
         }
 
