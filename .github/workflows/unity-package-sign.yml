@@ -61,14 +61,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.tag }}
-        run: go run ./cmd/plan-unity-package-signing --repo "$GITHUB_REPOSITORY" --tag "$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+        run: go run ./cmd/plan-unity-package-signing --repo "$GITHUB_REPOSITORY" --tag "$INPUT_TAG" --dry-run="$DRY_RUN" >> "$GITHUB_OUTPUT"
 
   # The UPM CLI is a third-party binary that sees the signing credentials, so it
-  # runs in a job whose token cannot write to the repository.
+  # runs in a job whose token cannot write to the repository. The credentials
+  # live in the upm-signing environment, which only main may deploy to: a manual
+  # run on another branch would otherwise run that branch's edited steps with
+  # the secrets.
   sign:
     needs: plan
     if: needs.plan.outputs.sign == 'true'
     runs-on: ubuntu-latest
+    environment: upm-signing
     permissions:
       contents: read
     env:
@@ -121,7 +126,7 @@ jobs:
         working-directory: cli/release-automation
         env:
           PACKAGE_VERSION: ${{ needs.plan.outputs.version }}
-        run: go run ./cmd/stage-signed-unity-package --dir "$RUNNER_TEMP/signed" --version "$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+        run: go run ./cmd/stage-signed-unity-package --dir "$RUNNER_TEMP/signed" --version "$PACKAGE_VERSION" --source "$GITHUB_WORKSPACE/release-source/Packages/src" >> "$GITHUB_OUTPUT"
 
       - name: List the signed tarball contents
         env:

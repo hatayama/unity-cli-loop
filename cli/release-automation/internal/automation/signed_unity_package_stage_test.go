@@ -4,23 +4,51 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// validSignedUnityPackageEntries is the smallest tarball the staging step accepts: the manifest,
-// a non-empty signature, a Unity .meta file, and a skill under the tilde-suffixed CLI-only folder.
-func validSignedUnityPackageEntries() map[string]string {
-	return map[string]string{
-		"package/package.json":                               `{"name": "io.github.hatayama.uloopmcp", "version": "3.14.0"}`,
-		"package/package.json.meta":                          "fileFormatVersion: 2",
-		"package/.attestation.p7m":                           "signature",
-		"package/Editor/CliOnlyTools~/Launch/Skill/SKILL.md": "# launch",
-	}
+// signedUnityPackageSourceFiles is a package source tree with an asset and its .meta file beside
+// package.json.meta, and a skill under the tilde-suffixed CLI-only folder.
+var signedUnityPackageSourceFiles = map[string]string{
+	"package.json":        `{"name": "io.github.hatayama.uloopmcp", "version": "3.14.0"}`,
+	"package.json.meta":   "fileFormatVersion: 2",
+	"Editor.meta":         "fileFormatVersion: 2",
+	"Editor/Tool.cs":      "class Tool {}",
+	"Editor/Tool.cs.meta": "fileFormatVersion: 2",
+	"Editor/CliOnlyTools~/Launch/Skill/SKILL.md": "# launch",
 }
 
+func writeSignedUnityPackageSource(t *testing.T) string {
+	t.Helper()
+	sourceDirectory := t.TempDir()
+	for relativePath, content := range signedUnityPackageSourceFiles {
+		path := filepath.Join(sourceDirectory, filepath.FromSlash(relativePath))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create source directory: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write source file: %v", err)
+		}
+	}
+	return sourceDirectory
+}
+
+// validSignedUnityPackageEntries is what upm pack produces for signedUnityPackageSourceFiles: every
+// source file under package/ plus a non-empty signature.
+func validSignedUnityPackageEntries() map[string]string {
+	entries := map[string]string{"package/.attestation.p7m": "signature"}
+	for relativePath, content := range signedUnityPackageSourceFiles {
+		entries["package/"+relativePath] = content
+	}
+	return entries
+}
+
+// writeSignedUnityPackageArchive writes entries as a gzip tar archive; a name ending in "/" becomes a
+// directory entry.
 func writeSignedUnityPackageArchive(t *testing.T, directory string, fileName string, entries map[string]string) {
 	t.Helper()
 	var buffer bytes.Buffer
@@ -28,6 +56,9 @@ func writeSignedUnityPackageArchive(t *testing.T, directory string, fileName str
 	tarWriter := tar.NewWriter(gzipWriter)
 	for name, content := range entries {
 		header := &tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}
+		if strings.HasSuffix(name, "/") {
+			header = &tar.Header{Name: name, Mode: 0o755, Typeflag: tar.TypeDir}
+		}
 		if err := tarWriter.WriteHeader(header); err != nil {
 			t.Fatalf("write tar header: %v", err)
 		}
@@ -46,10 +77,12 @@ func writeSignedUnityPackageArchive(t *testing.T, directory string, fileName str
 	}
 }
 
-func runStageSignedUnityPackageForTest(directory string, version string) (int, string, string) {
+func runStageSignedUnityPackageForTest(t *testing.T, directory string, version string) (int, string, string) {
+	t.Helper()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunStageSignedUnityPackage(&stdout, &stderr, []string{"--dir", directory, "--version", version})
+	sourceDirectory := writeSignedUnityPackageSource(t)
+	code := RunStageSignedUnityPackage(&stdout, &stderr, []string{"--dir", directory, "--version", version, "--source", sourceDirectory})
 	return code, stdout.String(), stderr.String()
 }
 
@@ -59,7 +92,7 @@ func TestStageSignedUnityPackageRenamesValidTarball(t *testing.T) {
 	directory := t.TempDir()
 	writeSignedUnityPackageArchive(t, directory, "upm-output.tgz", validSignedUnityPackageEntries())
 
-	code, stdout, stderr := runStageSignedUnityPackageForTest(directory, "3.14.0")
+	code, stdout, stderr := runStageSignedUnityPackageForTest(t, directory, "3.14.0")
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 	}
@@ -118,16 +151,17 @@ func TestStageSignedUnityPackageRejectsDefectiveTarballs(t *testing.T) {
 			wantErr: "3.14.0",
 		},
 		{
-			name:    "no Unity meta files",
-			edit:    func(entries map[string]string) { delete(entries, "package/package.json.meta") },
-			wantErr: ".meta",
+			name:    "asset meta file dropped while package.json.meta is kept",
+			edit:    func(entries map[string]string) { delete(entries, "package/Editor/Tool.cs.meta") },
+			wantErr: "Editor/Tool.cs.meta",
 		},
 		{
-			name: "CLI-only skills folder dropped",
+			name: "CLI-only skill replaced by its bare directory",
 			edit: func(entries map[string]string) {
 				delete(entries, "package/Editor/CliOnlyTools~/Launch/Skill/SKILL.md")
+				entries["package/Editor/CliOnlyTools~/"] = ""
 			},
-			wantErr: "CliOnlyTools~",
+			wantErr: "Editor/CliOnlyTools~/Launch/Skill/SKILL.md",
 		},
 	}
 
@@ -142,7 +176,7 @@ func TestStageSignedUnityPackageRejectsDefectiveTarballs(t *testing.T) {
 				version = "3.14.0"
 			}
 
-			code, stdout, stderr := runStageSignedUnityPackageForTest(directory, version)
+			code, stdout, stderr := runStageSignedUnityPackageForTest(t, directory, version)
 			if code == 0 {
 				t.Fatalf("exit code = 0, stdout = %q; want a failure", stdout)
 			}
@@ -160,7 +194,7 @@ func TestStageSignedUnityPackageRejectsDefectiveTarballs(t *testing.T) {
 // more than one.
 func TestStageSignedUnityPackageRequiresExactlyOneTarball(t *testing.T) {
 	t.Run("none", func(t *testing.T) {
-		code, _, stderr := runStageSignedUnityPackageForTest(t.TempDir(), "3.14.0")
+		code, _, stderr := runStageSignedUnityPackageForTest(t, t.TempDir(), "3.14.0")
 		if code == 0 || !strings.Contains(stderr, "found 0") {
 			t.Fatalf("exit code = %d, stderr = %q; want a failure reporting 0 tarballs", code, stderr)
 		}
@@ -169,7 +203,7 @@ func TestStageSignedUnityPackageRequiresExactlyOneTarball(t *testing.T) {
 		directory := t.TempDir()
 		writeSignedUnityPackageArchive(t, directory, "first.tgz", validSignedUnityPackageEntries())
 		writeSignedUnityPackageArchive(t, directory, "second.tar.gz", validSignedUnityPackageEntries())
-		code, _, stderr := runStageSignedUnityPackageForTest(directory, "3.14.0")
+		code, _, stderr := runStageSignedUnityPackageForTest(t, directory, "3.14.0")
 		if code == 0 || !strings.Contains(stderr, "found 2") {
 			t.Fatalf("exit code = %d, stderr = %q; want a failure reporting 2 tarballs", code, stderr)
 		}
@@ -180,7 +214,7 @@ func TestStageSignedUnityPackageRequiresExactlyOneTarball(t *testing.T) {
 // being attached to the release.
 func TestStageSignedUnityPackageRejectsUnreadablePackOutput(t *testing.T) {
 	t.Run("missing directory", func(t *testing.T) {
-		code, _, stderr := runStageSignedUnityPackageForTest(filepath.Join(t.TempDir(), "absent"), "3.14.0")
+		code, _, stderr := runStageSignedUnityPackageForTest(t, filepath.Join(t.TempDir(), "absent"), "3.14.0")
 		if code == 0 || !strings.Contains(stderr, "read pack output directory") {
 			t.Fatalf("exit code = %d, stderr = %q; want a failure reading the directory", code, stderr)
 		}
@@ -190,7 +224,7 @@ func TestStageSignedUnityPackageRejectsUnreadablePackOutput(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(directory, "upm-output.tgz"), []byte("not an archive"), 0o600); err != nil {
 			t.Fatalf("write archive: %v", err)
 		}
-		code, _, stderr := runStageSignedUnityPackageForTest(directory, "3.14.0")
+		code, _, stderr := runStageSignedUnityPackageForTest(t, directory, "3.14.0")
 		if code == 0 || !strings.Contains(stderr, "read signed tarball") {
 			t.Fatalf("exit code = %d, stderr = %q; want a failure reading the tarball", code, stderr)
 		}
@@ -208,19 +242,64 @@ func TestStageSignedUnityPackageRejectsUnreadablePackOutput(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(directory, "upm-output.tgz"), buffer.Bytes(), 0o600); err != nil {
 			t.Fatalf("write archive: %v", err)
 		}
-		code, _, stderr := runStageSignedUnityPackageForTest(directory, "3.14.0")
+		code, _, stderr := runStageSignedUnityPackageForTest(t, directory, "3.14.0")
 		if code == 0 || !strings.Contains(stderr, "read signed tarball") {
 			t.Fatalf("exit code = %d, stderr = %q; want a failure reading the tarball", code, stderr)
 		}
 	})
 }
 
+// Verifies that when packing drops a whole folder, the failure names the total count and lists
+// only the first missing files, which is the realistic way a tilde-suffixed folder goes missing.
+func TestStageSignedUnityPackageSummarizesManyMissingFiles(t *testing.T) {
+	directory := t.TempDir()
+	writeSignedUnityPackageArchive(t, directory, "upm-output.tgz", validSignedUnityPackageEntries())
+	sourceDirectory := writeSignedUnityPackageSource(t)
+	skillsDirectory := filepath.Join(sourceDirectory, "Editor", "CliOnlyTools~", "Many")
+	if err := os.MkdirAll(skillsDirectory, 0o755); err != nil {
+		t.Fatalf("create skills directory: %v", err)
+	}
+	for index := 0; index < 12; index++ {
+		if err := os.WriteFile(filepath.Join(skillsDirectory, fmt.Sprintf("skill-%02d.md", index)), []byte("# skill"), 0o600); err != nil {
+			t.Fatalf("write skill: %v", err)
+		}
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunStageSignedUnityPackage(&stdout, &stderr, []string{"--dir", directory, "--version", "3.14.0", "--source", sourceDirectory})
+	if code == 0 {
+		t.Fatalf("exit code = 0, stdout = %q; want a failure", stdout.String())
+	}
+	message := stderr.String()
+	if !strings.Contains(message, "12 package source files are missing") {
+		t.Fatalf("stderr = %q, want the total count of missing files", message)
+	}
+	if !strings.Contains(message, "skill-09.md") || strings.Contains(message, "skill-10.md") {
+		t.Fatalf("stderr = %q, want only the first 10 missing files listed", message)
+	}
+}
+
+// Verifies a package source directory that cannot be read fails the staging step, so a broken
+// checkout cannot pass the completeness check by having nothing to compare.
+func TestStageSignedUnityPackageRejectsUnreadableSource(t *testing.T) {
+	directory := t.TempDir()
+	writeSignedUnityPackageArchive(t, directory, "upm-output.tgz", validSignedUnityPackageEntries())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunStageSignedUnityPackage(&stdout, &stderr, []string{"--dir", directory, "--version", "3.14.0", "--source", filepath.Join(t.TempDir(), "absent")})
+	if code == 0 || !strings.Contains(stderr.String(), "read package source") {
+		t.Fatalf("exit code = %d, stderr = %q; want a failure reading the package source", code, stderr.String())
+	}
+}
+
 // Verifies missing or unknown arguments exit with the usage status.
 func TestRunStageSignedUnityPackageRejectsBadArguments(t *testing.T) {
 	for _, args := range [][]string{
-		{"--version", "3.14.0"},
-		{"--dir", "signed"},
-		{"--dir", "signed", "--version", "3.14.0", "--unknown"},
+		{"--version", "3.14.0", "--source", "source"},
+		{"--dir", "signed", "--source", "source"},
+		{"--dir", "signed", "--version", "3.14.0"},
+		{"--dir", "signed", "--version", "3.14.0", "--source", "source", "--unknown"},
 	} {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer

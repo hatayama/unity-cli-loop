@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,47 @@ func TestPlanUnityPackageSigningUsesExplicitTag(t *testing.T) {
 	}
 }
 
+// Verifies a dry run signs a published release even when it already carries the signed tarball,
+// so a manual run can validate a new UPM CLI pin after every release is signed, while a draft or
+// missing release is still skipped.
+func TestPlanUnityPackageSigningDryRunIgnoresExistingTarball(t *testing.T) {
+	tests := []struct {
+		name        string
+		releaseJSON string
+		failure     error
+		wantSign    bool
+	}{
+		{
+			name:        "signed published release",
+			releaseJSON: `{"isDraft": false, "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 2048}]}`,
+			wantSign:    true,
+		},
+		{name: "draft release", releaseJSON: `{"isDraft": true, "assets": []}`},
+		{name: "missing release", failure: errors.New("gh release view v3.14.0 failed: exit status 1\nrelease not found")},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repoRoot := writeUnityPackageSigningManifest(t, `{"Packages/src": "3.14.0"}`)
+			fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: test.releaseJSON, failure: test.failure}
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := runPlanUnityPackageSigningWithDeps(context.Background(), &stdout, &stderr, unityPackageSigningOptions{
+				Repository: unityPackageSigningTestRepository,
+				RepoRoot:   repoRoot,
+				DryRun:     true,
+			}, unityPackageSigningDeps{runOutput: fake.runOutput})
+			if code != 0 {
+				t.Fatalf("exit code = %d, stderr = %s", code, stderr.String())
+			}
+			wantLine := fmt.Sprintf("sign=%t\n", test.wantSign)
+			if !strings.HasPrefix(stdout.String(), wantLine) {
+				t.Fatalf("stdout = %q, want it to start with %q", stdout.String(), wantLine)
+			}
+		})
+	}
+}
+
 // Verifies tags of the other release components are rejected before any release is read, because
 // signing the package source at a CLI tag would publish a mislabeled package.
 func TestPlanUnityPackageSigningRejectsNonPackageTags(t *testing.T) {
@@ -216,12 +258,12 @@ func TestParseUnityPackageSigningOptions(t *testing.T) {
 		return "", false
 	}
 
-	options, err := parseUnityPackageSigningOptions(context.Background(), []string{"--tag", "v3.13.0"}, repositoryEnv)
+	options, err := parseUnityPackageSigningOptions(context.Background(), []string{"--tag", "v3.13.0", "--dry-run=true"}, repositoryEnv)
 	if err != nil {
 		t.Fatalf("parse with GITHUB_REPOSITORY: %v", err)
 	}
-	if options.Repository != unityPackageSigningTestRepository || options.Tag != "v3.13.0" {
-		t.Fatalf("options = %+v, want repository from GITHUB_REPOSITORY and tag v3.13.0", options)
+	if options.Repository != unityPackageSigningTestRepository || options.Tag != "v3.13.0" || !options.DryRun {
+		t.Fatalf("options = %+v, want repository from GITHUB_REPOSITORY, tag v3.13.0, and a dry run", options)
 	}
 	if _, err := os.Stat(filepath.Join(options.RepoRoot, ".release-please-manifest.json")); err != nil {
 		t.Fatalf("default repository root %q has no release-please manifest: %v", options.RepoRoot, err)

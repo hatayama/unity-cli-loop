@@ -8,8 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -17,7 +19,10 @@ const (
 	stageSignedUnityPackageCommandName = "stage-signed-unity-package"
 	signedUnityPackageManifestEntry    = "package/package.json"
 	signedUnityPackageSignatureEntry   = "package/.attestation.p7m"
-	signedUnityPackageCliSkillsPrefix  = "package/Editor/CliOnlyTools~/"
+	signedUnityPackageEntryPrefix      = "package/"
+	// signedUnityPackageMissingReportLimit keeps the failure message readable when packing drops a
+	// whole folder.
+	signedUnityPackageMissingReportLimit = 10
 	// signedUnityPackageManifestLimit bounds the package.json read so a corrupt entry header
 	// cannot make the check allocate an arbitrary amount of memory.
 	signedUnityPackageManifestLimit = 1 << 20
@@ -26,15 +31,15 @@ const (
 type signedUnityPackageStageOptions struct {
 	Directory string
 	Version   string
+	Source    string
 }
 
 // signedUnityPackageContents is what the staging check learns from one pass over the tarball.
 type signedUnityPackageContents struct {
-	manifest      []byte
-	hasManifest   bool
-	signatureSize int64
-	hasMetaFile   bool
-	hasCliSkills  bool
+	manifest       []byte
+	hasManifest    bool
+	signatureSize  int64
+	regularEntries map[string]bool
 }
 
 type signedUnityPackageManifest struct {
@@ -44,8 +49,8 @@ type signedUnityPackageManifest struct {
 
 // RunStageSignedUnityPackage checks the single tarball `upm pack` wrote into --dir and renames it
 // to the release asset name OpenUPM picks up, printing archive=<path> as a GITHUB_OUTPUT line.
-// The tarball is rejected unless it is signed, is this package at --version, and still carries the
-// Unity .meta files and the CLI-only skills, because OpenUPM republishes it without any rebuild.
+// The tarball is rejected unless it is signed, is this package at --version, and contains every
+// file of the package source in --source, because OpenUPM republishes it without any rebuild.
 func RunStageSignedUnityPackage(stdout io.Writer, stderr io.Writer, args []string) int {
 	options, err := parseSignedUnityPackageStageOptions(args)
 	if err != nil {
@@ -66,6 +71,7 @@ func parseSignedUnityPackageStageOptions(args []string) (signedUnityPackageStage
 	flags.SetOutput(io.Discard)
 	directory := flags.String("dir", "", "directory upm pack wrote the signed tarball into")
 	version := flags.String("version", "", "package version the release tag names")
+	source := flags.String("source", "", "package source directory the tarball was packed from")
 	if err := flags.Parse(args); err != nil {
 		return signedUnityPackageStageOptions{}, err
 	}
@@ -75,7 +81,10 @@ func parseSignedUnityPackageStageOptions(args []string) (signedUnityPackageStage
 	if *version == "" {
 		return signedUnityPackageStageOptions{}, errors.New("--version is required")
 	}
-	return signedUnityPackageStageOptions{Directory: *directory, Version: *version}, nil
+	if *source == "" {
+		return signedUnityPackageStageOptions{}, errors.New("--source is required")
+	}
+	return signedUnityPackageStageOptions{Directory: *directory, Version: *version, Source: *source}, nil
 }
 
 func stageSignedUnityPackage(options signedUnityPackageStageOptions) (string, error) {
@@ -88,6 +97,9 @@ func stageSignedUnityPackage(options signedUnityPackageStageOptions) (string, er
 		return "", err
 	}
 	if err := contents.validate(options.Version); err != nil {
+		return "", fmt.Errorf("%s: %w", filepath.Base(archivePath), err)
+	}
+	if err := contents.requireSourceFiles(options.Source); err != nil {
 		return "", fmt.Errorf("%s: %w", filepath.Base(archivePath), err)
 	}
 
@@ -129,7 +141,7 @@ func readSignedUnityPackageContents(archivePath string) (signedUnityPackageConte
 		return signedUnityPackageContents{}, fmt.Errorf("read signed tarball: %w", err)
 	}
 
-	contents := signedUnityPackageContents{}
+	contents := signedUnityPackageContents{regularEntries: map[string]bool{}}
 	tarReader := tar.NewReader(gzipReader)
 	for {
 		header, err := tarReader.Next()
@@ -147,11 +159,8 @@ func readSignedUnityPackageContents(archivePath string) (signedUnityPackageConte
 
 func (contents *signedUnityPackageContents) record(header *tar.Header, entryReader io.Reader) error {
 	name := header.Name
-	if strings.HasPrefix(name, signedUnityPackageCliSkillsPrefix) {
-		contents.hasCliSkills = true
-	}
-	if strings.HasSuffix(name, ".meta") {
-		contents.hasMetaFile = true
+	if header.Typeflag == tar.TypeReg {
+		contents.regularEntries[name] = true
 	}
 	switch name {
 	case signedUnityPackageSignatureEntry:
@@ -181,11 +190,42 @@ func (contents signedUnityPackageContents) validate(version string) error {
 	if manifest.Name != unityPackageName || manifest.Version != version {
 		return fmt.Errorf("%s names %s@%s, want %s@%s", signedUnityPackageManifestEntry, manifest.Name, manifest.Version, unityPackageName, version)
 	}
-	if !contents.hasMetaFile {
-		return errors.New("no .meta files were packed, so Unity would reimport the package with new GUIDs")
-	}
-	if !contents.hasCliSkills {
-		return fmt.Errorf("no entries under %s were packed, so the CLI-only skills would be missing", signedUnityPackageCliSkillsPrefix)
-	}
 	return nil
+}
+
+// requireSourceFiles fails when any regular file of the package source is not a regular file in
+// the tarball. A dropped asset .meta file makes Unity import the asset with a new GUID, and a
+// dropped tilde-suffixed folder loses the CLI-only skills, so no file may go missing.
+func (contents signedUnityPackageContents) requireSourceFiles(sourceDirectory string) error {
+	var missing []string
+	err := filepath.WalkDir(sourceDirectory, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		relativePath, err := filepath.Rel(sourceDirectory, path)
+		if err != nil {
+			return err
+		}
+		// Tar entry names always use "/", while a Windows walk yields backslash-separated paths.
+		packedName := signedUnityPackageEntryPrefix + filepath.ToSlash(relativePath)
+		if !contents.regularEntries[packedName] {
+			missing = append(missing, packedName)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("read package source: %w", err)
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	reported := missing
+	if len(reported) > signedUnityPackageMissingReportLimit {
+		reported = reported[:signedUnityPackageMissingReportLimit]
+	}
+	return fmt.Errorf("%d package source files are missing from the tarball: %s", len(missing), strings.Join(reported, ", "))
 }

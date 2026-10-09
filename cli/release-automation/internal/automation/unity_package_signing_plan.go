@@ -25,11 +25,14 @@ const (
 var unityPackageReleaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 
 // unityPackageSigningOptions selects the release whose signed tarball is planned. An empty Tag
-// means the Unity package version recorded in the release-please manifest under RepoRoot.
+// means the Unity package version recorded in the release-please manifest under RepoRoot. DryRun
+// signs a published release even when it already carries the tarball, because a dry run never
+// uploads and is how a new UPM CLI pin is validated once every release is signed.
 type unityPackageSigningOptions struct {
 	Repository string
 	RepoRoot   string
 	Tag        string
+	DryRun     bool
 }
 
 type unityPackageSigningDeps struct {
@@ -74,6 +77,7 @@ func parseUnityPackageSigningOptions(ctx context.Context, args []string, lookupE
 	repository := flags.String("repo", "", "owner/name of the repository; defaults to GITHUB_REPOSITORY")
 	repoRoot := flags.String("repo-root", "", "repository root holding the release-please manifest (default: the current git repository root)")
 	tag := flags.String("tag", "", "Unity package release tag to plan (default: the manifest version)")
+	dryRun := flags.Bool("dry-run", false, "sign a published release even when it already carries the signed tarball")
 	if err := flags.Parse(args); err != nil {
 		return unityPackageSigningOptions{}, err
 	}
@@ -91,7 +95,7 @@ func parseUnityPackageSigningOptions(ctx context.Context, args []string, lookupE
 		}
 		*repoRoot = resolvedRoot
 	}
-	return unityPackageSigningOptions{Repository: *repository, RepoRoot: *repoRoot, Tag: *tag}, nil
+	return unityPackageSigningOptions{Repository: *repository, RepoRoot: *repoRoot, Tag: *tag, DryRun: *dryRun}, nil
 }
 
 func runPlanUnityPackageSigningWithDeps(ctx context.Context, stdout io.Writer, stderr io.Writer, options unityPackageSigningOptions, deps unityPackageSigningDeps) int {
@@ -122,6 +126,9 @@ func planUnityPackageSigning(ctx context.Context, options unityPackageSigningOpt
 		plan.Reason = fmt.Sprintf("Release %s does not exist yet; the release sync creates it before it can be signed.", tag)
 	case release.IsDraft:
 		plan.Reason = fmt.Sprintf("Release %s is still a draft; it is signed once the release sync publishes it.", tag)
+	case options.DryRun:
+		plan.Sign = true
+		plan.Reason = fmt.Sprintf("Dry run: signing release %s without attaching the tarball.", tag)
 	case release.hasNonEmptyAsset(plan.AssetName):
 		plan.Reason = fmt.Sprintf("Release %s already carries %s.", tag, plan.AssetName)
 	default:
