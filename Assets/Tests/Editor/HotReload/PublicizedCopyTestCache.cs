@@ -1,7 +1,10 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -9,9 +12,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// Deletes cached rewritten copies of one assembly image, so the next request for a copy
     /// rewrites the image under the current rule. A copy is keyed by the image's name and Mvid only,
     /// so a copy written before a rule change would otherwise be returned without the rule running.
+    /// Also stops the installed warm-up from writing copies while a test deletes or writes them.
     /// </summary>
     internal static class PublicizedCopyTestCache
     {
+        /// <summary>
+        /// Stops the warm-up that started at the domain load. The warm-up writes the copy of the
+        /// assembly the previous run edited on a pool thread, so a test that deletes copies or has
+        /// one written waits for this to complete. It completes once the item's unit in flight ends.
+        /// </summary>
+        internal static Task StopInstalledWarmUpAsync()
+        {
+            return HotReloadCompositionRoot.Services.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope);
+        }
+
         /// <summary>
         /// Deletes the "&lt;assemblyName&gt;-&lt;Mvid&gt;.dll" copies under the project-relative
         /// <paramref name="relativeDirectory"/>. Copies of an assembly whose name only starts with
