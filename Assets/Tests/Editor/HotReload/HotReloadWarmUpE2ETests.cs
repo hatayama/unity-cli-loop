@@ -63,6 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new FixedContextSource(CreateTestAssemblyCapture(testDll)),
                 HotReloadWarmUpItems.CreateProduction());
             await BeginScope(warmUp);
+            // Why clear again once the installed warm-up stopped: its unit in flight can log a copy
+            // written and its completion after the clear in SetUp.
+            VibeLogger.ClearMemoryLogs();
             // Why delete: a copy left by an earlier test would make the run hit the cache even
             // when the warm-up wrote nothing.
             PublicizedCopyTestCache.DeleteCopiesOf(TestAssemblyName(), HotReloadConstants.PublicizedRefsRelativeDirectory);
