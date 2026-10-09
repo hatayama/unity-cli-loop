@@ -173,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 referencePaths = ReferencePaths,
                 targetTypesAssemblyPath = DllPath,
                 targetAssemblyName = AssemblyName,
-                targetAssemblyMvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(DllPath),
+                targetAssemblyMvid = HotReloadAssemblyMvid.Read(DllPath),
                 assemblySourcePaths = AssemblySourcePaths
             };
         }

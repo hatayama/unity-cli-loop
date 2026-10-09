@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             try
             {
-                return HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+                return HotReloadAssemblyMvid.Read(targetDllPath);
             }
             catch (IOException)
             {

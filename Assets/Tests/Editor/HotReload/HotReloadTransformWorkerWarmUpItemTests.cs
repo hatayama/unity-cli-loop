@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "reference paths");
             Assert.That(prepare.targetTypesAssemblyPath, Is.EqualTo(Path.GetFullPath(dllPath)), "dll path");
             Assert.That(prepare.targetAssemblyName, Is.EqualTo(TestAssemblyName), "assembly name");
-            Assert.That(prepare.targetAssemblyMvid, Is.EqualTo(HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath)), "MVID");
+            Assert.That(prepare.targetAssemblyMvid, Is.EqualTo(HotReloadAssemblyMvid.Read(dllPath)), "MVID");
             Assert.That(prepare.assemblySourcePaths, Is.EqualTo(sourcePaths), "assembly source paths");
 
             TransformWorkerInputDto transform = sender.Inputs[1];

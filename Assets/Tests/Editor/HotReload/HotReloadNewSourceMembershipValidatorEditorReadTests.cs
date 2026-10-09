@@ -329,7 +329,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 projectRelativePath,
                 assemblyName,
                 dllPath,
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(dllPath),
+                HotReloadAssemblyMvid.Read(dllPath),
                 null,
                 boundaries);
         }

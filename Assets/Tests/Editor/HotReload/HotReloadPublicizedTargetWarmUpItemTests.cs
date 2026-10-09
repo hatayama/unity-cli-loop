@@ -174,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Path.Combine(
                 ProjectRoot(),
                 HotReloadConstants.PublicizedRefsRelativeDirectory,
-                TestAssemblyName + "-" + HotReloadSourceSnapshotter.ReadAssemblyMvid(TestAssemblyDllPath())
+                TestAssemblyName + "-" + HotReloadAssemblyMvid.Read(TestAssemblyDllPath())
                     + HotReloadConstants.CompiledAssemblyExtension);
         }
 

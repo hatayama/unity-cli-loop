@@ -557,7 +557,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assembly testAssembly = typeof(HotReloadIntroducedTypeInternalAccessE2ETests).Assembly;
             HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
                 testAssembly.GetName().Name,
-                HotReloadSourceSnapshotter.ReadAssemblyMvid(testAssembly.Location),
+                HotReloadAssemblyMvid.Read(testAssembly.Location),
                 "Candidate",
                 UnexposableOwnerPath,
                 "unexposable-declaration",
