@@ -53,6 +53,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 $"RoslynWorker-{Process.GetCurrentProcess().Id}");
         }
 
+        // One per Editor process, outside the worker directory: a reload that drops a warm-up midway
+        // leaves only this, which the next warm-up overwrites, and the worker-directory cleanup must
+        // not delete a warm-up's files under it.
+        internal static string GetWarmUpDirectoryPath()
+        {
+            return Path.Combine(
+                Path.GetTempPath(),
+                "UnityCliLoopCompilation",
+                $"SharedWorkerWarmUp-{Process.GetCurrentProcess().Id}");
+        }
+
         internal static WorkerPaths CreateWorkerPaths(SharedRoslynCompilerWorkerSession session)
         {
             string workerDirectoryPath = GetWorkerDirectoryPath();
