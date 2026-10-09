@@ -31,6 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 #endif
         }
 
+        public static void PrepareBeforeServingCommands()
+        {
+        }
+
         public static void ResetServerScopedServices()
         {
             ExecuteDynamicCodeEditorStartup.ResetServerScopedServices();

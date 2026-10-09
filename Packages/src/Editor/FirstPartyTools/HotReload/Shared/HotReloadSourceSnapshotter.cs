@@ -29,10 +29,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// (edit between compile and this call) can only fail closed into "no baseline" —
         /// never into a silently wrong method diff.
         /// </summary>
-        internal static void CaptureAfterDomainReload()
+        internal static bool CaptureAfterDomainReload()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             CaptureAssemblies(projectRoot, HotReloadCompilationAssemblies.Current());
+            return true;
         }
 
         // Why separate from CaptureAfterDomainReload: the project root and the compilation assemblies come

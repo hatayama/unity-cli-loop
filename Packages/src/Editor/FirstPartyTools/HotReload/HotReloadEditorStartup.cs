@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             void CaptureOnFirstUpdateTick()
             {
                 EditorApplication.update -= CaptureOnFirstUpdateTick;
-                HotReloadCompositionRoot.Services.SourceSnapshotCapture.EnsureCaptured();
+                HotReloadCompositionRoot.Services.SourceSnapshotCapture.EnsureCaptured(HotReloadConstants.SourceSnapshotCaptureTriggerFirstUpdateTick);
             }
 
             // Why a callback of its own rather than a line in the capture above: an exception in
@@ -76,6 +76,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadUnityMessageForwardingEditorHooks.Initialize();
             HotReloadWiredValueEditorHooks.Initialize();
             TransformWorkerHostLifecycle.RegisterForEditorStartup();
+        }
+
+        internal static void CaptureSourceSnapshotBeforeServingCommands()
+        {
         }
     }
 }

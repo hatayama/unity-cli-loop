@@ -11,10 +11,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadSourceSnapshotCapture
     {
-        private readonly Action _capture;
+        private readonly Func<bool> _capture;
         private bool _captured;
 
-        internal HotReloadSourceSnapshotCapture(Action capture)
+        /// <param name="capture">
+        /// Captures the snapshot and returns whether Unity listed at least one compilation assembly.
+        /// </param>
+        internal HotReloadSourceSnapshotCapture(Func<bool> capture)
         {
             Debug.Assert(capture != null, "capture must not be null.");
             _capture = capture;
@@ -24,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Runs the capture unless it already ran to completion in this domain. Main thread
         /// only. A capture that throws is not marked done, so the next caller runs it again.
         /// </summary>
-        internal void EnsureCaptured()
+        internal void EnsureCaptured(string trigger)
         {
             if (_captured)
             {
