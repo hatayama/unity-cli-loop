@@ -28,14 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "UnityCLILoop.Tests.Editor.HotReload"
                 + HotReloadConstants.CompiledAssemblyExtension);
             string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
-            string snapshotFileName =
-                HotReloadSourceSnapshotLayout.SourceFileName(
-                    projectRelativePath.Replace('\\', '/'));
-            string snapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                "UnityCLILoop.Tests.Editor.HotReload-" + mvid,
-                snapshotFileName);
+            string snapshotPath = HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(projectRoot, "UnityCLILoop.Tests.Editor.HotReload", mvid),
+                projectRelativePath);
             Assert.That(
                 File.Exists(snapshotPath),
                 Is.True,

@@ -9228,10 +9228,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "UnityCLILoop.Tests.Editor.HotReload"
                 + HotReloadConstants.CompiledAssemblyExtension);
             string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
-            string snapshotDirectory = Path.Combine(
+            string snapshotDirectory = HotReloadSourceSnapshotLayout.AssemblyDirectory(
                 projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                "UnityCLILoop.Tests.Editor.HotReload-" + mvid);
+                "UnityCLILoop.Tests.Editor.HotReload",
+                mvid);
             Assert.That(
                 Directory.Exists(snapshotDirectory),
                 Is.True,

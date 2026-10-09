@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             _projectRoot = Path.Combine(Path.GetTempPath(), "uloop-test-" + Guid.NewGuid().ToString("N"));
-            _snapshotRoot = Path.Combine(_projectRoot, HotReloadConstants.SourceSnapshotRelativeDirectory);
+            _snapshotRoot = HotReloadSourceSnapshotLayout.Root(_projectRoot);
             Directory.CreateDirectory(Path.Combine(_projectRoot, "Assets"));
             Directory.CreateDirectory(Path.Combine(_projectRoot, HotReloadConstants.ScriptAssembliesRelativeDirectory));
             Directory.CreateDirectory(_snapshotRoot);
@@ -210,11 +210,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadCompileStart.Unknown,
                     CreateDocumentIndex());
 
-                string playerSnapshotSource = Path.Combine(
-                    playerRoot,
-                    HotReloadConstants.SourceSnapshotRelativeDirectory,
-                    "Fixture-" + mvid,
-                    HotReloadSourceSnapshotLayout.SourceFileName(SourceRelativePath));
+                string playerSnapshotSource = HotReloadSourceSnapshotLayout.SourcePath(
+                    HotReloadSourceSnapshotLayout.AssemblyDirectory(playerRoot, "Fixture", mvid),
+                    SourceRelativePath);
                 Assert.That(File.Exists(playerSnapshotSource), Is.True);
                 Assert.That(Directory.Exists(Path.Combine(mainRoot, "Library", "UloopHotReload")), Is.False);
             }
@@ -321,10 +319,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private string SnapshotSourcePath(string assemblyName, string mvid)
         {
-            return Path.Combine(
-                _snapshotRoot,
-                assemblyName + "-" + mvid,
-                HotReloadSourceSnapshotLayout.SourceFileName(SourceRelativePath));
+            return HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(_projectRoot, assemblyName, mvid),
+                SourceRelativePath);
         }
 
         private string StampPath(string assemblyName)

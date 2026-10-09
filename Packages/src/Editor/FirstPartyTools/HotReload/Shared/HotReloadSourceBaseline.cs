@@ -106,12 +106,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string mvid = HotReloadAssemblyMvid.Read(targetDllPath);
             string assemblyName = Path.GetFileNameWithoutExtension(targetDllPath);
             string slashNormalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
-            string snapshotFileName = HotReloadSourceSnapshotLayout.SourceFileName(slashNormalizedRelativePath);
-            string snapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                assemblyName + "-" + mvid,
-                snapshotFileName);
+            string snapshotPath = HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(projectRoot, assemblyName, mvid),
+                projectRelativeSourcePath);
             if (!File.Exists(snapshotPath))
             {
                 return HotReloadSnapshotMissReason.NoSnapshotFile;

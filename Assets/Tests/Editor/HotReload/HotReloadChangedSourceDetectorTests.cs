@@ -88,8 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 string sourcePath = "Assets/Source.cs";
                 string snapshotDirectory = Path.Combine(
-                    projectRoot,
-                    HotReloadConstants.SourceSnapshotRelativeDirectory,
+                    HotReloadSourceSnapshotLayout.Root(projectRoot),
                     "Assembly-mvid");
                 WriteProjectFile(projectRoot, sourcePath, "disk-changed");
                 Directory.CreateDirectory(snapshotDirectory);
@@ -282,13 +281,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string contents)
         {
             string snapshotDirectory = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                HotReloadSourceSnapshotLayout.Root(projectRoot),
                 assemblySnapshotDirectoryName);
             Directory.CreateDirectory(snapshotDirectory);
-            string snapshotPath = Path.Combine(
-                snapshotDirectory,
-                HotReloadSourceSnapshotLayout.SourceFileName(projectRelativePath.Replace('\\', '/')));
+            string snapshotPath = HotReloadSourceSnapshotLayout.SourcePath(snapshotDirectory, projectRelativePath);
             File.WriteAllBytes(
                 snapshotPath,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(contents));

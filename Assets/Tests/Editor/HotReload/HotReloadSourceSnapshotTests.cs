@@ -216,16 +216,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 // The player's snapshot is planted by hand: a root under Library is not a project the
                 // Editor resolves package asset paths for, so the capture would skip the source.
                 string mvid = HotReloadAssemblyMvid.Read(dllPath);
-                string snapshotDirectory = Path.Combine(
+                string snapshotDirectory = HotReloadSourceSnapshotLayout.AssemblyDirectory(
                     playerRoot,
-                    HotReloadConstants.SourceSnapshotRelativeDirectory,
-                    PausePointsRuntimeAssemblyName + "-" + mvid);
+                    PausePointsRuntimeAssemblyName,
+                    mvid);
                 Directory.CreateDirectory(snapshotDirectory);
                 File.Copy(
                     physicalSourcePath,
-                    Path.Combine(
-                        snapshotDirectory,
-                        HotReloadSourceSnapshotLayout.SourceFileName(PackageSourceAssetPath)));
+                    HotReloadSourceSnapshotLayout.SourcePath(snapshotDirectory, PackageSourceAssetPath));
                 HotReloadPdbDocumentIndex documentIndex = new HotReloadPdbDocumentIndex(
                     Path.Combine(playerRoot, HotReloadConstants.PdbDocumentsRelativeDirectory));
 
@@ -285,23 +283,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 mvid = assemblyDefinition.MainModule.Mvid.ToString("N");
             }
 
-            string slashNormalizedRelativePath = FixtureProjectRelativePath.Replace('\\', '/');
-            string snapshotFileName =
-                HotReloadSourceSnapshotLayout.SourceFileName(slashNormalizedRelativePath);
-            string realSnapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid,
-                snapshotFileName);
+            string realSnapshotPath = HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(projectRoot, TestAssemblyName, mvid),
+                FixtureProjectRelativePath);
             Assert.That(File.Exists(realSnapshotPath), Is.True);
 
             string fakeRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-tamper-" + Guid.NewGuid().ToString("N"));
-            string fakeSnapshotDir = Path.Combine(
-                fakeRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid);
+            string fakeSnapshotDir = HotReloadSourceSnapshotLayout.AssemblyDirectory(fakeRoot, TestAssemblyName, mvid);
             Directory.CreateDirectory(fakeSnapshotDir);
-            string fakeSnapshotPath = Path.Combine(fakeSnapshotDir, snapshotFileName);
+            string fakeSnapshotPath = HotReloadSourceSnapshotLayout.SourcePath(fakeSnapshotDir, FixtureProjectRelativePath);
             byte[] tampered = File.ReadAllBytes(realSnapshotPath);
             tampered[0] = (byte)(tampered[0] ^ 0xFF);
             File.WriteAllBytes(fakeSnapshotPath, tampered);
@@ -495,24 +485,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string WriteTamperedSnapshotTree(string projectRoot, string dllPath)
         {
             string mvid = HotReloadAssemblyMvid.Read(dllPath);
-            string snapshotFileName =
-                HotReloadSourceSnapshotLayout.SourceFileName(FixtureProjectRelativePath);
-            string realSnapshotPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid,
-                snapshotFileName);
+            string realSnapshotPath = HotReloadSourceSnapshotLayout.SourcePath(
+                HotReloadSourceSnapshotLayout.AssemblyDirectory(projectRoot, TestAssemblyName, mvid),
+                FixtureProjectRelativePath);
             Assert.That(File.Exists(realSnapshotPath), Is.True, "Precondition: the real snapshot must exist.");
 
             string fakeRoot = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-snapshot-miss-" + Guid.NewGuid().ToString("N"));
-            string fakeSnapshotDir = Path.Combine(
-                fakeRoot,
-                HotReloadConstants.SourceSnapshotRelativeDirectory,
-                TestAssemblyName + "-" + mvid);
+            string fakeSnapshotDir = HotReloadSourceSnapshotLayout.AssemblyDirectory(fakeRoot, TestAssemblyName, mvid);
             Directory.CreateDirectory(fakeSnapshotDir);
             byte[] tampered = File.ReadAllBytes(realSnapshotPath);
             tampered[0] = (byte)(tampered[0] ^ 0xFF);
-            File.WriteAllBytes(Path.Combine(fakeSnapshotDir, snapshotFileName), tampered);
+            File.WriteAllBytes(HotReloadSourceSnapshotLayout.SourcePath(fakeSnapshotDir, FixtureProjectRelativePath), tampered);
             return fakeRoot;
         }
 
