@@ -53,7 +53,8 @@ command ran against:
   `hot_reload_shim_references_timing` (one per shim compile) has the resolver directories, the
   target's publicized copy, the artifact copies and the reference copies with their counts.
   `hot_reload_publicized_copy_written` appears only when a rewritten copy was written, with
-  its rewrite and write time. `hot_reload_shim_compiler_timing` has the compile, the load and
+  its rewrite and write time. The warm-up's `publicized_targets` item writes it too, before any
+  run. `hot_reload_shim_compiler_timing` has the compile, the load and
   the backend kind. `dynamic_code_shared_worker_started` appears whenever no live shared Roslyn
   worker could serve the compile and one had to be started, with its source sync, worker
   assembly check and process spawn; `ready` is false when the start failed (no worker
@@ -68,6 +69,8 @@ command ran against:
   `hot_reload_warm_up_skipped` with its `reason` (`no_targets`, `compiling`, `updating`,
   `no_compiled_assembly`, `run_started_first`). `cancelled` covers both an item that never started
   (`ms` 0) and one stopped between its units (one dll each) with units left, with the time it ran.
+  The items run in the order `publicized_targets`, `call_sites`, `referenced_method_sets`,
+  `pdb_documents`.
   A run's `steps` have `warm_up_yield`, the time it waited for the unit in flight, and `warm_up_targets`, the time it took to record its
   assemblies for the next warm-up.
 - CLI side: only when the `ULOOP_DEBUG` environment variable is set to a value other than empty,
