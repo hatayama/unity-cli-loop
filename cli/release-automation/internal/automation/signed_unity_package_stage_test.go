@@ -293,6 +293,37 @@ func TestStageSignedUnityPackageRejectsUnreadableSource(t *testing.T) {
 	}
 }
 
+// Verifies the completeness check cannot pass vacuously: an empty --source is rejected, and a
+// symlinked --source is followed so its files are still compared against the tarball.
+func TestStageSignedUnityPackageRequiresPackageSourceRoot(t *testing.T) {
+	t.Run("empty directory", func(t *testing.T) {
+		directory := t.TempDir()
+		writeSignedUnityPackageArchive(t, directory, "upm-output.tgz", validSignedUnityPackageEntries())
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := RunStageSignedUnityPackage(&stdout, &stderr, []string{"--dir", directory, "--version", "3.14.0", "--source", t.TempDir()})
+		if code == 0 || !strings.Contains(stderr.String(), "package.json") {
+			t.Fatalf("exit code = %d, stderr = %q; want a failure naming the missing package.json", code, stderr.String())
+		}
+	})
+	t.Run("symlinked root", func(t *testing.T) {
+		directory := t.TempDir()
+		entries := validSignedUnityPackageEntries()
+		delete(entries, "package/Editor/Tool.cs.meta")
+		writeSignedUnityPackageArchive(t, directory, "upm-output.tgz", entries)
+		link := filepath.Join(t.TempDir(), "source-link")
+		if err := os.Symlink(writeSignedUnityPackageSource(t), link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := RunStageSignedUnityPackage(&stdout, &stderr, []string{"--dir", directory, "--version", "3.14.0", "--source", link})
+		if code == 0 || !strings.Contains(stderr.String(), "Editor/Tool.cs.meta") {
+			t.Fatalf("exit code = %d, stderr = %q; want the missing file found through the symlink", code, stderr.String())
+		}
+	})
+}
+
 // Verifies missing or unknown arguments exit with the usage status.
 func TestRunStageSignedUnityPackageRejectsBadArguments(t *testing.T) {
 	for _, args := range [][]string{

@@ -197,15 +197,19 @@ func (contents signedUnityPackageContents) validate(version string) error {
 // the tarball. A dropped asset .meta file makes Unity import the asset with a new GUID, and a
 // dropped tilde-suffixed folder loses the CLI-only skills, so no file may go missing.
 func (contents signedUnityPackageContents) requireSourceFiles(sourceDirectory string) error {
+	sourceRoot, err := resolvePackageSourceRoot(sourceDirectory)
+	if err != nil {
+		return err
+	}
 	var missing []string
-	err := filepath.WalkDir(sourceDirectory, func(path string, entry fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(sourceRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if !entry.Type().IsRegular() {
 			return nil
 		}
-		relativePath, err := filepath.Rel(sourceDirectory, path)
+		relativePath, err := filepath.Rel(sourceRoot, path)
 		if err != nil {
 			return err
 		}
@@ -228,4 +232,19 @@ func (contents signedUnityPackageContents) requireSourceFiles(sourceDirectory st
 		reported = reported[:signedUnityPackageMissingReportLimit]
 	}
 	return fmt.Errorf("%d package source files are missing from the tarball: %s", len(missing), strings.Join(reported, ", "))
+}
+
+// resolvePackageSourceRoot follows a symlinked root, which filepath.WalkDir would otherwise report
+// as a single non-regular entry, and requires the package manifest there, so an empty or wrong
+// directory cannot make the completeness check pass with nothing to compare.
+func resolvePackageSourceRoot(sourceDirectory string) (string, error) {
+	sourceRoot, err := filepath.EvalSymlinks(sourceDirectory)
+	if err != nil {
+		return "", fmt.Errorf("read package source: %w", err)
+	}
+	manifest, err := os.Stat(filepath.Join(sourceRoot, "package.json"))
+	if err != nil || !manifest.Mode().IsRegular() {
+		return "", fmt.Errorf("read package source: %s has no package.json, so it is not a package root", sourceDirectory)
+	}
+	return sourceRoot, nil
 }
