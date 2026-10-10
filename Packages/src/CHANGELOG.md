@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.15.0](https://github.com/hatayama/unity-cli-loop/compare/v3.14.0...v3.15.0) (2026-10-10)
+
+
+### Features
+
+* Hot reload keeps one run's assemblies cached between runs, uloop compile returns at once without raising the Editor, and pause point timeouts report their own timeout ([#3236](https://github.com/hatayama/unity-cli-loop/issues/3236)) ([68cdec1](https://github.com/hatayama/unity-cli-loop/commit/68cdec1bd3175f354f66c2928f27d68f38c8a3c1))
+
+
+### Performance Improvements
+
+* Hot reload reads the assemblies its caller-note budget refused in the background, so the next run finds them cached ([#3269](https://github.com/hatayama/unity-cli-loop/issues/3269)) ([7b8daca](https://github.com/hatayama/unity-cli-loop/commit/7b8dacafb4b7d13143f70c98471b0e6e78f018ad))
+* Hot reload's lifecycle note reads at most one assembly the call-site cache does not hold yet, so a cold run no longer walks the callers' callers ([#3268](https://github.com/hatayama/unity-cli-loop/issues/3268)) ([a6cb372](https://github.com/hatayama/unity-cli-loop/commit/a6cb372af219990777c02bd43faffded5a7e3d01))
+* The first hot reload after a domain reload finds the transform worker started and its Roslyn paths compiled, and the source snapshotter is split behind one capture facade ([#3266](https://github.com/hatayama/unity-cli-loop/issues/3266)) ([32297ac](https://github.com/hatayama/unity-cli-loop/commit/32297ac380457aa629700e97b0caeca3fc2cc8f7))
+
 ## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/v3.13.0...v3.14.0) (2026-10-07)
 
 
