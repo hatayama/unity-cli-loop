@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void IsOneShotLifecycleCaller_ParameterizedCallerWithMatchingName_ReturnsFalse()
         {
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(OverloadedLifecycleFixture), "Awake");
+            HotReloadCallSiteHit hit = CreateHit(typeof(OverloadedLifecycleFixture), "Awake");
             hit.CallerParameterTypeFullNames = new[] { "System.Int32" };
 
             bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(hit);
@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void IsOneShotLifecycleCaller_GenericCallerWithMatchingName_ReturnsFalse()
         {
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(OverloadedLifecycleFixture), "Awake");
+            HotReloadCallSiteHit hit = CreateHit(typeof(OverloadedLifecycleFixture), "Awake");
             hit.CallerGenericArity = 1;
 
             bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(hit);
@@ -167,8 +167,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate("Assembly.One", outcome)
                 };
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 outcomes,
                 candidates,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                    new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                    new List<HotReloadCallSiteHit>(),
                     new List<string> { assemblyName }));
 
             Assert.That(outcomes[0].LifecycleNote, Is.Empty);
@@ -193,12 +193,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate("Assembly.One", outcome)
                 };
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
+            HotReloadCallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
             hit.TargetMethodKey = HotReloadMethodKeys.BuildMethodKeyParts("Type", "SetUp", Array.Empty<string>(), 0);
 
             HotReloadOneShotCallerNoteEnricher.ApplyNotes(
@@ -206,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 outcomes,
                 candidates,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                    new List<HotReloadCallSiteScanner.CallSiteHit> { hit },
+                    new List<HotReloadCallSiteHit> { hit },
                     new List<string>(),
                     0,
                     null,
@@ -224,14 +224,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome first = HotReloadMethodOutcome.Patched("Type.First", "Assets/First.cs");
             HotReloadMethodOutcome second = HotReloadMethodOutcome.Patched("Type.Second", "Assets/Second.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { first, second };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate("Assembly.One", first),
                     CreateCandidate("Assembly.Two", second)
                 };
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity[]> calls =
-                new List<HotReloadCallSiteScanner.CompiledMethodIdentity[]>();
+            List<HotReloadCompiledMethodIdentity[]> calls =
+                new List<HotReloadCompiledMethodIdentity[]>();
 
             HotReloadOneShotCallerNoteEnricher.ApplyNotes(
                 "project",
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     calls.Add(identities);
                     return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                        new List<HotReloadCallSiteHit>(),
                         new List<string>());
                 });
 
@@ -263,8 +263,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assets/Test.cs",
                 workerNote);
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate("Assembly.One", outcome)
                 };
@@ -278,7 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     scanCount++;
                     return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                        new List<HotReloadCallSiteHit>(),
                         new List<string>());
                 });
 
@@ -294,12 +294,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, outcome)
                 };
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
+            HotReloadCallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
             hit.TargetMethodKey = "Type::SetUp()";
 
             HotReloadOneShotCallerNoteEnricher.ApplyNotes(
@@ -307,7 +307,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 outcomes,
                 candidates,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                    new List<HotReloadCallSiteScanner.CallSiteHit> { hit },
+                    new List<HotReloadCallSiteHit> { hit },
                     new List<string>()));
 
             Assert.That(
@@ -328,12 +328,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, outcome)
                 };
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
+            HotReloadCallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
             hit.TargetMethodKey = "Type::SetUp()";
             hit.IsFunctionPointerLoad = true;
 
@@ -342,7 +342,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 outcomes,
                 candidates,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                    new List<HotReloadCallSiteScanner.CallSiteHit> { hit },
+                    new List<HotReloadCallSiteHit> { hit },
                     new List<string>()));
 
             Assert.That(outcomes[0].LifecycleNote, Is.Empty);
@@ -356,8 +356,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("OneShotCallerScannerFixture.AwakeOnlyTarget()", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("AwakeOnlyTarget", outcome)
                 };
@@ -388,8 +388,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("OneShotCallerScannerFixture.MixedTarget()", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("MixedTarget", outcome)
                 };
@@ -414,8 +414,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerScannerFixture.ChainedAwakeOnlyTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("ChainedAwakeOnlyTarget", outcome)
                 };
@@ -448,8 +448,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerChainHelper.ConfigureTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerCandidateForType(typeof(OneShotCallerChainHelper), "ConfigureTarget", outcome)
                 };
@@ -482,8 +482,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerScannerFixture.MixedChainTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("MixedChainTarget", outcome)
                 };
@@ -508,8 +508,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerScannerFixture.DelegateChainTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("DelegateChainTarget", outcome)
                 };
@@ -534,8 +534,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerScannerFixture.DeadEndTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("DeadEndTarget", outcome)
                 };
@@ -560,8 +560,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerScannerFixture.DeepTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("DeepTarget", outcome)
                 };
@@ -585,8 +585,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
             string assemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name;
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate(assemblyName, outcome)
                 };
@@ -602,17 +602,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 intermediateName,
                 Array.Empty<string>(),
                 0);
-            HotReloadCallSiteScanner.CallSiteHit midToTarget = CreateKeyedHit(
+            HotReloadCallSiteHit midToTarget = CreateKeyedHit(
                 assemblyName,
                 intermediateType,
                 intermediateName,
                 targetKey);
-            HotReloadCallSiteScanner.CallSiteHit awakeToMid = CreateKeyedHit(
+            HotReloadCallSiteHit awakeToMid = CreateKeyedHit(
                 assemblyName,
                 typeof(ValidLifecycleFixture).FullName,
                 "Awake",
                 intermediateKey);
-            HotReloadCallSiteScanner.CallSiteHit targetToMid = CreateKeyedHit(
+            HotReloadCallSiteHit targetToMid = CreateKeyedHit(
                 assemblyName,
                 "Type",
                 "SetUp",
@@ -627,12 +627,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     if (identities.Length == 1 && identities[0].MethodName == intermediateName)
                     {
                         return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                            new List<HotReloadCallSiteScanner.CallSiteHit> { awakeToMid, targetToMid },
+                            new List<HotReloadCallSiteHit> { awakeToMid, targetToMid },
                             new List<string>());
                     }
 
                     return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteScanner.CallSiteHit> { midToTarget },
+                        new List<HotReloadCallSiteHit> { midToTarget },
                         new List<string>());
                 });
 
@@ -655,8 +655,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
             string assemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name;
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate(assemblyName, outcome)
                 };
@@ -667,7 +667,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "SetUp",
                 Array.Empty<string>(),
                 0);
-            HotReloadCallSiteScanner.CallSiteHit midToTarget = CreateKeyedHit(
+            HotReloadCallSiteHit midToTarget = CreateKeyedHit(
                 assemblyName,
                 intermediateType,
                 intermediateName,
@@ -682,12 +682,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     if (identities.Length == 1 && identities[0].MethodName == intermediateName)
                     {
                         return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                            new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                            new List<HotReloadCallSiteHit>(),
                             new List<string> { scannedAssembly });
                     }
 
                     return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteScanner.CallSiteHit> { midToTarget },
+                        new List<HotReloadCallSiteHit> { midToTarget },
                         new List<string>());
                 });
 
@@ -703,8 +703,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
             const string targetAssembly = "TargetAsm";
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateCandidate(targetAssembly, outcome)
                 };
@@ -722,18 +722,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "SetUp",
                 Array.Empty<string>(),
                 0);
-            HotReloadCallSiteScanner.CallSiteHit assemblyXHit = CreateKeyedHit(
+            HotReloadCallSiteHit assemblyXHit = CreateKeyedHit(
                 assemblyX,
                 helperType,
                 helperMethod,
                 targetKey);
-            HotReloadCallSiteScanner.CallSiteHit assemblyYHit = CreateKeyedHit(
+            HotReloadCallSiteHit assemblyYHit = CreateKeyedHit(
                 assemblyY,
                 helperType,
                 helperMethod,
                 targetKey);
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity[]> calls =
-                new List<HotReloadCallSiteScanner.CompiledMethodIdentity[]>();
+            List<HotReloadCompiledMethodIdentity[]> calls =
+                new List<HotReloadCompiledMethodIdentity[]>();
 
             HotReloadOneShotCallerNoteEnricher.ApplyNotes(
                 "project",
@@ -745,7 +745,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     if (scannedAssembly == assemblyX)
                     {
                         return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                            new List<HotReloadCallSiteScanner.CallSiteHit>
+                            new List<HotReloadCallSiteHit>
                             {
                                 CreateKeyedHit(
                                     typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name,
@@ -759,12 +759,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     if (scannedAssembly == assemblyY)
                     {
                         return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                            new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                            new List<HotReloadCallSiteHit>(),
                             new List<string>());
                     }
 
                     return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteScanner.CallSiteHit> { assemblyXHit, assemblyYHit },
+                        new List<HotReloadCallSiteHit> { assemblyXHit, assemblyYHit },
                         new List<string>());
                 });
 
@@ -789,8 +789,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "OneShotCallerScannerFixture.DelegateAssignedTarget()",
                 "Assets/Test.cs");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+            List<HotReloadOneShotCallerNoteCandidate> candidates =
+                new List<HotReloadOneShotCallerNoteCandidate>
                 {
                     CreateScannerFixtureCandidate("DelegateAssignedTarget", outcome)
                 };
@@ -947,14 +947,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(note, Is.Null);
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateHit(Type type, string methodName)
+        private static HotReloadCallSiteHit CreateHit(Type type, string methodName)
         {
             return CreateHit(type.FullName, methodName);
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateHit(string typeMetadataName, string methodName)
+        private static HotReloadCallSiteHit CreateHit(string typeMetadataName, string methodName)
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name,
                 CallerTypeMetadataName = new HotReloadMetadataTypeName(typeMetadataName),
@@ -964,28 +964,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadOneShotCallerNoteEnricher.Candidate CreateCandidate(
+        private static HotReloadOneShotCallerNoteCandidate CreateCandidate(
             string assemblyName,
             HotReloadMethodOutcome outcome)
         {
-            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity identity =
+                new HotReloadCompiledMethodIdentity(
                     assemblyName,
                     new HotReloadMetadataTypeName("Type"),
                     "SetUp",
                     Array.Empty<string>(),
                     0);
-            return new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome);
+            return new HotReloadOneShotCallerNoteCandidate(identity, outcome);
         }
 
-        private static HotReloadOneShotCallerNoteEnricher.Candidate CreateScannerFixtureCandidate(
+        private static HotReloadOneShotCallerNoteCandidate CreateScannerFixtureCandidate(
             string methodName,
             HotReloadMethodOutcome outcome)
         {
             return CreateScannerCandidateForType(typeof(OneShotCallerScannerFixture), methodName, outcome);
         }
 
-        private static HotReloadOneShotCallerNoteEnricher.Candidate CreateScannerCandidateForType(
+        private static HotReloadOneShotCallerNoteCandidate CreateScannerCandidateForType(
             Type type,
             string methodName,
             HotReloadMethodOutcome outcome)
@@ -993,23 +993,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
                 "Assets/Tests/Editor/HotReload/HotReloadCallSiteScannerFixture.cs");
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity identity =
+                new HotReloadCompiledMethodIdentity(
                     assemblyName,
                     new HotReloadMetadataTypeName(type.FullName),
                     methodName,
                     Array.Empty<string>(),
                     0);
-            return new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome);
+            return new HotReloadOneShotCallerNoteCandidate(identity, outcome);
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateKeyedHit(
+        private static HotReloadCallSiteHit CreateKeyedHit(
             string assemblyName,
             string typeMetadataName,
             string methodName,
             string targetMethodKey)
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = assemblyName,
                 CallerTypeMetadataName = new HotReloadMetadataTypeName(typeMetadataName),

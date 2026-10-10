@@ -6352,7 +6352,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
             TransformWorkerEntryDto caller = CreateOrdinaryEntry("Host", "Caller");
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = new List<HotReloadCallSiteScanner.CallSiteHit>
+            List<HotReloadCallSiteHit> hits = new List<HotReloadCallSiteHit>
             {
                 CreateCallSiteHit("Host::Caller(System.Int32)", "Host::Target(System.Int32)")
             };
@@ -6374,7 +6374,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindSignatureChangeCoverageLosses_CallerKeyDropped_ReturnsReplacementKey()
         {
             TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = new List<HotReloadCallSiteScanner.CallSiteHit>
+            List<HotReloadCallSiteHit> hits = new List<HotReloadCallSiteHit>
             {
                 CreateCallSiteHit("Host::Caller(System.Int32)", "Host::Target(System.Int32)")
             };
@@ -8421,11 +8421,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateCallSiteHit(
+        private static HotReloadCallSiteHit CreateCallSiteHit(
             string callerMethodKey,
             string targetMethodKey)
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = "TestAssembly",
                 CallerMethodKey = callerMethodKey,

@@ -13,20 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadOneShotCallerNoteEnricher
     {
-        internal sealed class Candidate
-        {
-            public HotReloadCallSiteScanner.CompiledMethodIdentity Identity;
-            public HotReloadMethodOutcome Outcome;
-
-            public Candidate(
-                HotReloadCallSiteScanner.CompiledMethodIdentity identity,
-                HotReloadMethodOutcome outcome)
-            {
-                Identity = identity;
-                Outcome = outcome;
-            }
-        }
-
         // Keep in sync with LifecycleNotes.OneShotLifecycleMethodNames in the transform worker.
         private static readonly string[] OneShotLifecycleMethodNames =
         {
@@ -40,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Determines whether a compiled caller can be proven to be a one-shot lifecycle message.
         /// </summary>
-        internal static bool IsOneShotLifecycleCaller(HotReloadCallSiteScanner.CallSiteHit hit)
+        internal static bool IsOneShotLifecycleCaller(HotReloadCallSiteHit hit)
         {
             if (hit == null || !IsOneShotLifecycleMethodName(hit.CallerMethodName))
             {
@@ -87,30 +73,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void ApplyNotes(
             string projectRoot,
             List<HotReloadMethodOutcome> outcomes,
-            IReadOnlyList<Candidate> candidates,
-            Func<string, HotReloadCallSiteScanner.CompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan)
+            IReadOnlyList<HotReloadOneShotCallerNoteCandidate> candidates,
+            Func<string, HotReloadCompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan)
         {
-            Dictionary<string, List<Candidate>> candidatesByAssembly =
-                new Dictionary<string, List<Candidate>>(StringComparer.Ordinal);
-            foreach (Candidate candidate in candidates)
+            Dictionary<string, List<HotReloadOneShotCallerNoteCandidate>> candidatesByAssembly =
+                new Dictionary<string, List<HotReloadOneShotCallerNoteCandidate>>(StringComparer.Ordinal);
+            foreach (HotReloadOneShotCallerNoteCandidate candidate in candidates)
             {
                 if (!string.IsNullOrEmpty(candidate.Outcome.LifecycleNote))
                 {
                     continue;
                 }
 
-                if (!candidatesByAssembly.TryGetValue(candidate.Identity.AssemblyName, out List<Candidate> group))
+                if (!candidatesByAssembly.TryGetValue(candidate.Identity.AssemblyName, out List<HotReloadOneShotCallerNoteCandidate> group))
                 {
-                    group = new List<Candidate>();
+                    group = new List<HotReloadOneShotCallerNoteCandidate>();
                     candidatesByAssembly.Add(candidate.Identity.AssemblyName, group);
                 }
 
                 group.Add(candidate);
             }
 
-            foreach (KeyValuePair<string, List<Candidate>> pair in candidatesByAssembly)
+            foreach (KeyValuePair<string, List<HotReloadOneShotCallerNoteCandidate>> pair in candidatesByAssembly)
             {
-                HotReloadCallSiteScanner.CompiledMethodIdentity[] identities = pair.Value.ConvertAll(
+                HotReloadCompiledMethodIdentity[] identities = pair.Value.ConvertAll(
                     candidate => candidate.Identity).ToArray();
                 HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = scan(pair.Key, identities);
                 if (result.IsIncomplete)
@@ -118,16 +104,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                foreach (Candidate candidate in pair.Value)
+                foreach (HotReloadOneShotCallerNoteCandidate candidate in pair.Value)
                 {
                     string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
                         candidate.Identity.TypeMetadataName.Value,
                         candidate.Identity.MethodName,
                         candidate.Identity.ParameterTypeFullNames,
                         candidate.Identity.GenericArity);
-                    List<HotReloadCallSiteScanner.CallSiteHit> targetHits =
-                        new List<HotReloadCallSiteScanner.CallSiteHit>();
-                    foreach (HotReloadCallSiteScanner.CallSiteHit hit in result.Hits)
+                    List<HotReloadCallSiteHit> targetHits =
+                        new List<HotReloadCallSiteHit>();
+                    foreach (HotReloadCallSiteHit hit in result.Hits)
                     {
                         if (hit.TargetMethodKey != targetKey)
                         {

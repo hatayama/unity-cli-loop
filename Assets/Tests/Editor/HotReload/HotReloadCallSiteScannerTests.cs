@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_OrdinaryCaller_ReportsCallerMethodKey()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod),
                 Array.Empty<string>(),
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_NeverCalled_ReturnsEmpty()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.NeverCalled),
                 Array.Empty<string>(),
@@ -91,8 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             const string missingAssemblyName = "MissingCompiledAssembly";
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadCallSiteScanner.CompiledMethodIdentity target =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity target =
+                new HotReloadCompiledMethodIdentity(
                     missingAssemblyName,
                     new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                     nameof(HotReloadCallSiteScannerFixture.NeverCalled),
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_DelegateAssignment_ReportsLdftnCaller()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
                 Array.Empty<string>(),
@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_AsyncCaller_ReportsLogicalOwnerMethodKey()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.CalledFromAsyncMethod),
                 Array.Empty<string>(),
@@ -152,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_GenericTypeInstantiation_ReportsCaller()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 GenericHostTypeMetadataName,
                 nameof(GenericHost<int>.Target),
                 Array.Empty<string>(),
@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_GenericMethodInstantiation_ReportsCallAndLdftn()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.GenericMethodTarget),
                 Array.Empty<string>(),
@@ -188,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_OrdinarySelfRecursion_ReturnsEmpty()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.SelfRecursive),
                 new[] { "System.Int32" },
@@ -210,17 +210,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string ordinaryTargetKey = FixtureTypeMetadataName + "::CalledFromOrdinaryMethod()";
             string delegateTargetKey = FixtureTypeMetadataName + "::CalledOnlyViaDelegate()";
 
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
+            List<HotReloadCallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
                 projectRoot,
                 new[]
                 {
-                    new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    new HotReloadCompiledMethodIdentity(
                         assemblyName,
                         new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                         nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod),
                         Array.Empty<string>(),
                         0),
-                    new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    new HotReloadCompiledMethodIdentity(
                         assemblyName,
                         new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                         nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
@@ -229,9 +229,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }).Hits;
 
             Assert.That(hits.Count, Is.EqualTo(2));
-            HotReloadCallSiteScanner.CallSiteHit ordinaryHit = null;
-            HotReloadCallSiteScanner.CallSiteHit delegateHit = null;
-            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            HotReloadCallSiteHit ordinaryHit = null;
+            HotReloadCallSiteHit delegateHit = null;
+            foreach (HotReloadCallSiteHit hit in hits)
             {
                 if (hit.TargetMethodKey == ordinaryTargetKey)
                 {
@@ -261,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_CrossAssemblyCaller_ReportsReferencedAssemblyHit()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 CrossAssemblyTargetTypeMetadataName,
                 nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
                 Array.Empty<string>(),
@@ -284,13 +284,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_SameKeyCallersAcrossAssemblies_ReportsBothCallerAssemblies()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 QualifiedCallerIdentityTargetTypeMetadataName,
                 nameof(HotReloadQualifiedCallerIdentityTarget.Called),
                 Array.Empty<string>(),
                 0);
             List<string> callerAssemblyNames = new List<string>();
-            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            foreach (HotReloadCallSiteHit hit in hits)
             {
                 callerAssemblyNames.Add(hit.CallerAssemblyName);
                 Assert.That(
@@ -315,7 +315,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_SameFullNameForeignAssemblyTarget_ExcludesForeignCallSite()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.CalledFromCrossAssembly),
                 Array.Empty<string>(),
@@ -331,7 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_GenericArityCaller_KeyDiffersFromNonGenericCaller()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.CalledFromGenericArityCaller),
                 Array.Empty<string>(),
@@ -352,7 +352,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_AsyncSelfRecursion_ReturnsEmpty()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.AsyncSelfRecursive),
                 new[] { "System.Int32" },
@@ -368,7 +368,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_NestedCaller_KeepsTheMetadataSeparator()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 FixtureTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.CalledFromNestedType),
                 Array.Empty<string>(),
@@ -390,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_NestedTarget_ReportsTheCaller()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 NestedCallerHostTypeMetadataName,
                 nameof(HotReloadCallSiteScannerFixture.NestedCallerHost.CalledFromOuterType),
                 Array.Empty<string>(),
@@ -445,25 +445,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
                 TestScriptProjectRelativePath);
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-            HotReloadCallSiteScanner.CompiledMethodIdentity typeParameterTarget =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity typeParameterTarget =
+                new HotReloadCompiledMethodIdentity(
                     assemblyName,
                     new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                     nameof(HotReloadCallSiteScannerFixture.GenericParameterTarget),
                     new[] { "T" },
                     1);
-            HotReloadCallSiteScanner.CompiledMethodIdentity int32Target =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity int32Target =
+                new HotReloadCompiledMethodIdentity(
                     assemblyName,
                     new HotReloadMetadataTypeName(FixtureTypeMetadataName),
                     nameof(HotReloadCallSiteScannerFixture.GenericParameterTarget),
                     new[] { "System.Int32" },
                     1);
 
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
+            List<HotReloadCallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
                 projectRoot,
                 new[] { typeParameterTarget, int32Target }).Hits;
-            List<HotReloadCallSiteScanner.CallSiteHit> reversedHits = HotReloadCallSiteScanner.FindCallSites(
+            List<HotReloadCallSiteHit> reversedHits = HotReloadCallSiteScanner.FindCallSites(
                 projectRoot,
                 new[] { int32Target, typeParameterTarget }).Hits;
 
@@ -487,7 +487,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_CrossAssemblyGenericTypeInstantiation_ReportsCaller()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 CrossAssemblyGenericHostTypeMetadataName,
                 nameof(HotReloadCrossAssemblyGenericHost<int>.Target),
                 Array.Empty<string>(),
@@ -507,15 +507,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_CrossAssemblyGenericMethodInstantiation_ReportsCallAndLdftn()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 CrossAssemblyTargetTypeMetadataName,
                 nameof(HotReloadCallSiteScannerCrossAssemblyTarget.GenericMethod),
                 Array.Empty<string>(),
                 1);
 
             Assert.That(hits.Count, Is.EqualTo(2));
-            HotReloadCallSiteScanner.CallSiteHit call = hits.Find(hit => !hit.IsFunctionPointerLoad);
-            HotReloadCallSiteScanner.CallSiteHit load = hits.Find(hit => hit.IsFunctionPointerLoad);
+            HotReloadCallSiteHit call = hits.Find(hit => !hit.IsFunctionPointerLoad);
+            HotReloadCallSiteHit load = hits.Find(hit => hit.IsFunctionPointerLoad);
             Assert.That(call.CallerAssemblyName, Is.EqualTo(CrossAssemblyCallerAssemblyName));
             Assert.That(load.CallerAssemblyName, Is.EqualTo(CrossAssemblyCallerAssemblyName));
             Assert.That(
@@ -533,7 +533,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindCallSites_CrossAssemblyNestedTarget_ReportsCaller()
         {
-            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+            List<HotReloadCallSiteHit> hits = FindHits(
                 CrossAssemblyNestedTargetTypeMetadataName,
                 nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Nested.CalledFromOtherAssembly),
                 Array.Empty<string>(),
@@ -748,16 +748,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 false);
             HotReloadMethodOutcome targetOutcome = HotReloadMethodOutcome.Patched("Type.Called", "Assets/Test.cs");
             HotReloadMethodOutcome callerOutcome = HotReloadMethodOutcome.Patched("Type.Call", "Assets/Test2.cs");
-            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteCandidate(
+                new HotReloadCompiledMethodIdentity(
                     GetTestAssemblyName(),
                     new HotReloadMetadataTypeName(CrossAssemblyTargetTypeMetadataName),
                     nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
                     Array.Empty<string>(),
                     0),
                 targetOutcome));
-            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteCandidate(
+                new HotReloadCompiledMethodIdentity(
                     CrossAssemblyCallerAssemblyName,
                     new HotReloadMetadataTypeName(CrossAssemblyCallerTypeMetadataName),
                     "Call",
@@ -798,7 +798,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 installed.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope));
         }
 
-        private static List<HotReloadCallSiteScanner.CallSiteHit> FindHits(
+        private static List<HotReloadCallSiteHit> FindHits(
             string typeMetadataName,
             string methodName,
             string[] parameterTypeFullNames,
@@ -813,8 +813,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] parameterTypeFullNames,
             int genericArity)
         {
-            HotReloadCallSiteScanner.CompiledMethodIdentity target =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity target =
+                new HotReloadCompiledMethodIdentity(
                     GetTestAssemblyName(),
                     new HotReloadMetadataTypeName(typeMetadataName),
                     methodName,
@@ -831,8 +831,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string methodName,
             HotReloadCallSiteLoadBudget loadBudget)
         {
-            HotReloadCallSiteScanner.CompiledMethodIdentity target =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity target =
+                new HotReloadCompiledMethodIdentity(
                     GetTestAssemblyName(),
                     new HotReloadMetadataTypeName(typeMetadataName),
                     methodName,

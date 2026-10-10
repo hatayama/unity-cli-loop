@@ -35,8 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // and two files declaring the same type is a mistake the run has to report against both.
         private readonly List<HotReloadIntroducedTypeOutcome> _introducedTypes =
             new List<HotReloadIntroducedTypeOutcome>();
-        private readonly List<HotReloadOneShotCallerNoteEnricher.Candidate> _oneShotCallerNoteCandidates =
-            new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
+        private readonly List<HotReloadOneShotCallerNoteCandidate> _oneShotCallerNoteCandidates =
+            new List<HotReloadOneShotCallerNoteCandidate>();
         // Why staged (not recorded per file): duplicate paths in one run must still apply
         // twice; recording mid-run would short-circuit the second copy.
         // Why the last occurrence wins: only what the last copy landed is what the next run has
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadSiblingBaselineNotices SiblingBaselineNotices => _siblingBaselineNotices;
 
         /// <summary>Candidate sink shared with the per-file stage for one-shot lifecycle notes.</summary>
-        public List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates =>
+        public List<HotReloadOneShotCallerNoteCandidate> OneShotCallerNoteCandidates =>
             _oneShotCallerNoteCandidates;
 
         /// <summary>Remembers why a sibling came back, for its report and its ledger updates.</summary>

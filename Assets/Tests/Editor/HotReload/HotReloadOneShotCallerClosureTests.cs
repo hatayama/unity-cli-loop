@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<OneShotCallerClassification> roots = HotReloadOneShotCallerClosure.Resolve(
                 new[] { CreateDirectHelperHit() },
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                    new List<HotReloadCallSiteScanner.CallSiteHit> { CreateAwakeCallerOfHelperHit() },
+                    new List<HotReloadCallSiteHit> { CreateAwakeCallerOfHelperHit() },
                     new List<string>()),
                 hit => hit.CallerMethodName == "Awake");
 
@@ -41,8 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void Resolve_LevelTwoScanIsIncompleteBecauseOfUnreadAssemblies_ReturnsNull()
         {
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity[]> scannedIdentities =
-                new List<HotReloadCallSiteScanner.CompiledMethodIdentity[]>();
+            List<HotReloadCompiledMethodIdentity[]> scannedIdentities =
+                new List<HotReloadCompiledMethodIdentity[]>();
 
             List<OneShotCallerClassification> roots = HotReloadOneShotCallerClosure.Resolve(
                 new[] { CreateDirectHelperHit() },
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     scannedIdentities.Add(identities);
                     return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteScanner.CallSiteHit> { CreateAwakeCallerOfHelperHit() },
+                        new List<HotReloadCallSiteHit> { CreateAwakeCallerOfHelperHit() },
                         new List<string>(),
                         0,
                         null,
@@ -65,9 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(scannedIdentities[0][0].MethodName, Is.EqualTo(HelperMethodName));
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateDirectHelperHit()
+        private static HotReloadCallSiteHit CreateDirectHelperHit()
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = "Assembly.Callers",
                 CallerTypeMetadataName = new HotReloadMetadataTypeName(HelperTypeMetadataName),
@@ -80,9 +80,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateAwakeCallerOfHelperHit()
+        private static HotReloadCallSiteHit CreateAwakeCallerOfHelperHit()
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = "Assembly.Callers",
                 CallerTypeMetadataName = new HotReloadMetadataTypeName("Callers.Mono"),

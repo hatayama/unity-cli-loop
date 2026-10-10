@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal sealed class HotReloadCallSiteScanResult
         {
-            public List<CallSiteHit> Hits;
+            public List<HotReloadCallSiteHit> Hits;
             public List<string> MissingScanAssemblyNames;
 
             /// <summary>
@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public bool IsIncomplete => MissingScanAssemblyNames.Count > 0 || UnreadScanAssemblyNames.Count > 0;
 
             public HotReloadCallSiteScanResult(
-                List<CallSiteHit> hits,
+                List<HotReloadCallSiteHit> hits,
                 List<string> missingScanAssemblyNames,
                 int examinedCallSiteCount = 0,
                 List<string> skippedScanAssemblyNames = null,
@@ -62,52 +62,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Identity of a compiled method to search for (assembly + type + name + arity + parameter types).
-        /// </summary>
-        public readonly struct CompiledMethodIdentity
-        {
-            public readonly string AssemblyName;
-            public readonly HotReloadMetadataTypeName TypeMetadataName;
-            public readonly string MethodName;
-            public readonly string[] ParameterTypeFullNames;
-            public readonly int GenericArity;
-
-            public CompiledMethodIdentity(
-                string assemblyName,
-                HotReloadMetadataTypeName typeMetadataName,
-                string methodName,
-                string[] parameterTypeFullNames,
-                int genericArity)
-            {
-                Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
-                Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
-                Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
-                Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
-
-                AssemblyName = assemblyName;
-                TypeMetadataName = typeMetadataName;
-                MethodName = methodName;
-                ParameterTypeFullNames = parameterTypeFullNames;
-                GenericArity = genericArity;
-            }
-        }
-
-        /// <summary>
-        /// One compiled instruction that references a target method, reported under its logical owner.
-        /// </summary>
-        public sealed class CallSiteHit
-        {
-            public string CallerAssemblyName;
-            public HotReloadMetadataTypeName CallerTypeMetadataName;
-            public string CallerMethodName;
-            public string[] CallerParameterTypeFullNames;
-            public int CallerGenericArity;
-            public string CallerMethodKey;
-            public string TargetMethodKey;
-            public bool IsFunctionPointerLoad;
-        }
-
-        /// <summary>
         /// Finds compiled call / ldftn sites that reference any of <paramref name="targets"/>.
         /// With a <paramref name="loadBudget"/>, assemblies that are not in the call-site cache are
         /// read only while the budget has a load left; the rest are listed as unread. Null reads
@@ -115,13 +69,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static HotReloadCallSiteScanResult FindCallSites(
             string projectRoot,
-            CompiledMethodIdentity[] targets,
+            HotReloadCompiledMethodIdentity[] targets,
             HotReloadCallSiteLoadBudget loadBudget = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(targets != null, "targets must not be null.");
 
-            List<CallSiteHit> hits = new List<CallSiteHit>();
+            List<HotReloadCallSiteHit> hits = new List<HotReloadCallSiteHit>();
             List<string> missingScanAssemblyNames = new List<string>();
             if (targets.Length == 0)
             {
@@ -180,10 +134,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unreadScanAssemblyNames);
         }
 
-        private static HashSet<string> CollectTargetAssemblyNames(CompiledMethodIdentity[] targets)
+        private static HashSet<string> CollectTargetAssemblyNames(HotReloadCompiledMethodIdentity[] targets)
         {
             HashSet<string> targetAssemblyNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (CompiledMethodIdentity target in targets)
+            foreach (HotReloadCompiledMethodIdentity target in targets)
             {
                 targetAssemblyNames.Add(target.AssemblyName);
             }
@@ -193,10 +147,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Keys the referenced-method index files a MemberRef row under. The type name is the
         // metadata name (nested types joined with '/'), the spelling Cecil's FullName uses.
-        private static HashSet<string> CollectTargetKeys(CompiledMethodIdentity[] targets)
+        private static HashSet<string> CollectTargetKeys(HotReloadCompiledMethodIdentity[] targets)
         {
             HashSet<string> targetKeys = new HashSet<string>(StringComparer.Ordinal);
-            foreach (CompiledMethodIdentity target in targets)
+            foreach (HotReloadCompiledMethodIdentity target in targets)
             {
                 targetKeys.Add(HotReloadReferencedMethodIndex.BuildKey(
                     target.AssemblyName,
@@ -208,11 +162,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static HashSet<string> CollectScanAssemblyNames(
-            CompiledMethodIdentity[] targets,
+            HotReloadCompiledMethodIdentity[] targets,
             HashSet<string> targetAssemblyNames)
         {
             HashSet<string> targetDllFileNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (CompiledMethodIdentity target in targets)
+            foreach (HotReloadCompiledMethodIdentity target in targets)
             {
                 targetDllFileNames.Add(target.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
             }
@@ -345,9 +299,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool TryCollectHitsFromAssembly(
             string assemblyName,
             string dllPath,
-            CompiledMethodIdentity[] targets,
+            HotReloadCompiledMethodIdentity[] targets,
             HotReloadCallSiteLoadBudget loadBudget,
-            List<CallSiteHit> hits,
+            List<HotReloadCallSiteHit> hits,
             out int examinedCallSiteCount)
         {
             // Why cache: the dll only changes on a compile, which also reloads the domain, so
@@ -381,13 +335,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // full identity match still decides each of them.
         private static List<int> CollectCandidatePositions(
             HotReloadCompiledCallSiteCache.Entry compiled,
-            CompiledMethodIdentity[] targets)
+            HotReloadCompiledMethodIdentity[] targets)
         {
             // Why skip a repeated key: targets that share a type and a name (overloads, arities)
             // share one bucket, and visiting it twice would report its call sites twice.
             HashSet<(string TypeName, string MethodName)> visitedKeys = new HashSet<(string TypeName, string MethodName)>();
             List<int> positions = new List<int>();
-            foreach (CompiledMethodIdentity target in targets)
+            foreach (HotReloadCompiledMethodIdentity target in targets)
             {
                 string typeName = target.TypeMetadataName.Value;
                 if (!visitedKeys.Add((typeName, target.MethodName)))
@@ -408,10 +362,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             HotReloadCompiledCallSiteCache.Entry compiled,
             HotReloadCompiledCallSiteCache.CompiledCallSite callSite,
-            CompiledMethodIdentity[] targets,
-            List<CallSiteHit> hits)
+            HotReloadCompiledMethodIdentity[] targets,
+            List<HotReloadCallSiteHit> hits)
         {
-            (bool matched, CompiledMethodIdentity target) = FindMatchingTarget(
+            (bool matched, HotReloadCompiledMethodIdentity target) = FindMatchingTarget(
                 callSite.Operand,
                 assemblyName,
                 compiled.Module,
@@ -439,13 +393,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     callSite.IsFunctionPointerLoad));
         }
 
-        private static (bool matched, CompiledMethodIdentity target) FindMatchingTarget(
+        private static (bool matched, HotReloadCompiledMethodIdentity target) FindMatchingTarget(
             MethodReference methodReference,
             string scannedAssemblyName,
             ModuleDefinition scannedModule,
-            CompiledMethodIdentity[] targets)
+            HotReloadCompiledMethodIdentity[] targets)
         {
-            foreach (CompiledMethodIdentity target in targets)
+            foreach (HotReloadCompiledMethodIdentity target in targets)
             {
                 if (MatchesIdentity(
                         methodReference,
@@ -464,7 +418,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string callerAssemblyName,
             ModuleDefinition callerModule,
             MethodDefinition caller,
-            CompiledMethodIdentity target)
+            HotReloadCompiledMethodIdentity target)
         {
             if (callerAssemblyName != target.AssemblyName)
             {
@@ -476,7 +430,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static bool MatchesIdentity(
             MethodReference methodReference,
-            CompiledMethodIdentity target,
+            HotReloadCompiledMethodIdentity target,
             string scannedAssemblyName,
             ModuleDefinition scannedModule)
         {
@@ -615,10 +569,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static CallSiteHit CreateHit(
+        private static HotReloadCallSiteHit CreateHit(
             string assemblyName,
             MethodDefinition caller,
-            CompiledMethodIdentity target,
+            HotReloadCompiledMethodIdentity target,
             bool isFunctionPointerLoad)
         {
             string[] parameterTypeFullNames = new string[caller.Parameters.Count];
@@ -629,7 +583,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadMetadataTypeName typeMetadataName = new HotReloadMetadataTypeName(caller.DeclaringType.FullName);
 
-            return new CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = assemblyName,
                 CallerTypeMetadataName = typeMetadataName,

@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             List<string> callerKeys = new List<string>();
             HashSet<string> seenCallerKeys = new HashSet<string>(StringComparer.Ordinal);
-            foreach (HotReloadCallSiteScanner.CallSiteHit caller in callSites.Callers)
+            foreach (HotReloadCallSiteHit caller in callSites.Callers)
             {
                 if (IsReplacedByActivePatch(caller, activeLabelsByAssembly))
                 {
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the label rather than the wire key: an active patch is described by the label of its
         // resolved method, which the hit's label spells the same way, nested types included.
         private static bool IsReplacedByActivePatch(
-            HotReloadCallSiteScanner.CallSiteHit caller,
+            HotReloadCallSiteHit caller,
             Dictionary<string, HashSet<string>> activeLabelsByAssembly)
         {
             return activeLabelsByAssembly.TryGetValue(caller.CallerAssemblyName, out HashSet<string> labels)

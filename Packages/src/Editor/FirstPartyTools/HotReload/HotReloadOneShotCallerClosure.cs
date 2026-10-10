@@ -17,17 +17,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Returns proven lifecycle roots, or null when any abort condition makes the note unsafe.
         /// </summary>
         internal static List<OneShotCallerClassification> Resolve(
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> directHits,
-            Func<string, HotReloadCallSiteScanner.CompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan,
-            Func<HotReloadCallSiteScanner.CallSiteHit, bool> isOneShotLifecycleCaller)
+            IReadOnlyList<HotReloadCallSiteHit> directHits,
+            Func<string, HotReloadCompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan,
+            Func<HotReloadCallSiteHit, bool> isOneShotLifecycleCaller)
         {
             Debug.Assert(directHits != null, "directHits must not be null.");
             Debug.Assert(scan != null, "scan must not be null.");
             Debug.Assert(isOneShotLifecycleCaller != null, "isOneShotLifecycleCaller must not be null.");
 
             List<OneShotCallerClassification> roots = new List<OneShotCallerClassification>();
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> frontier =
-                new List<HotReloadCallSiteScanner.CompiledMethodIdentity>();
+            List<HotReloadCompiledMethodIdentity> frontier =
+                new List<HotReloadCompiledMethodIdentity>();
             HashSet<string> visited = new HashSet<string>(StringComparer.Ordinal);
             if (!ClassifyHits(directHits, isOneShotLifecycleCaller, roots, frontier, visited))
             {
@@ -43,11 +43,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static List<OneShotCallerClassification> WalkFrontier(
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> frontier,
+            List<HotReloadCompiledMethodIdentity> frontier,
             List<OneShotCallerClassification> roots,
             HashSet<string> visited,
-            Func<string, HotReloadCallSiteScanner.CompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan,
-            Func<HotReloadCallSiteScanner.CallSiteHit, bool> isOneShotLifecycleCaller)
+            Func<string, HotReloadCompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan,
+            Func<HotReloadCallSiteHit, bool> isOneShotLifecycleCaller)
         {
             int depth = 1;
             while (frontier.Count > 0)
@@ -57,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return null;
                 }
 
-                List<HotReloadCallSiteScanner.CompiledMethodIdentity> nextFrontier =
-                    new List<HotReloadCallSiteScanner.CompiledMethodIdentity>();
+                List<HotReloadCompiledMethodIdentity> nextFrontier =
+                    new List<HotReloadCompiledMethodIdentity>();
                 if (!ScanFrontierLevel(frontier, nextFrontier, roots, visited, scan, isOneShotLifecycleCaller))
                 {
                     return null;
@@ -72,18 +72,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static bool ScanFrontierLevel(
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> frontier,
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> nextFrontier,
+            List<HotReloadCompiledMethodIdentity> frontier,
+            List<HotReloadCompiledMethodIdentity> nextFrontier,
             List<OneShotCallerClassification> roots,
             HashSet<string> visited,
-            Func<string, HotReloadCallSiteScanner.CompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan,
-            Func<HotReloadCallSiteScanner.CallSiteHit, bool> isOneShotLifecycleCaller)
+            Func<string, HotReloadCompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan,
+            Func<HotReloadCallSiteHit, bool> isOneShotLifecycleCaller)
         {
-            Dictionary<string, List<HotReloadCallSiteScanner.CompiledMethodIdentity>> groups =
+            Dictionary<string, List<HotReloadCompiledMethodIdentity>> groups =
                 GroupFrontierByAssembly(frontier);
-            foreach (KeyValuePair<string, List<HotReloadCallSiteScanner.CompiledMethodIdentity>> pair in groups)
+            foreach (KeyValuePair<string, List<HotReloadCompiledMethodIdentity>> pair in groups)
             {
-                HotReloadCallSiteScanner.CompiledMethodIdentity[] identities = pair.Value.ToArray();
+                HotReloadCompiledMethodIdentity[] identities = pair.Value.ToArray();
                 HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = scan(pair.Key, identities);
                 if (result.IsIncomplete)
                 {
@@ -100,23 +100,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static bool AssignHitsForGroup(
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> identities,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
-            Func<HotReloadCallSiteScanner.CallSiteHit, bool> isOneShotLifecycleCaller,
+            List<HotReloadCompiledMethodIdentity> identities,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
+            Func<HotReloadCallSiteHit, bool> isOneShotLifecycleCaller,
             List<OneShotCallerClassification> roots,
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> nextFrontier,
+            List<HotReloadCompiledMethodIdentity> nextFrontier,
             HashSet<string> visited)
         {
-            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity identity in identities)
+            foreach (HotReloadCompiledMethodIdentity identity in identities)
             {
                 string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     identity.TypeMetadataName.Value,
                     identity.MethodName,
                     identity.ParameterTypeFullNames,
                     identity.GenericArity);
-                List<HotReloadCallSiteScanner.CallSiteHit> hitsForIdentity =
-                    new List<HotReloadCallSiteScanner.CallSiteHit>();
-                foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+                List<HotReloadCallSiteHit> hitsForIdentity =
+                    new List<HotReloadCallSiteHit>();
+                foreach (HotReloadCallSiteHit hit in hits)
                 {
                     if (hit.TargetMethodKey == targetKey)
                     {
@@ -139,13 +139,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static bool ClassifyHits(
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
-            Func<HotReloadCallSiteScanner.CallSiteHit, bool> isOneShotLifecycleCaller,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
+            Func<HotReloadCallSiteHit, bool> isOneShotLifecycleCaller,
             List<OneShotCallerClassification> roots,
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> frontier,
+            List<HotReloadCompiledMethodIdentity> frontier,
             HashSet<string> visited)
         {
-            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            foreach (HotReloadCallSiteHit hit in hits)
             {
                 // A delegate target can run after its Awake registration, so a function-pointer
                 // load cannot prove the target is called only from one-shot lifecycle methods.
@@ -171,16 +171,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static Dictionary<string, List<HotReloadCallSiteScanner.CompiledMethodIdentity>> GroupFrontierByAssembly(
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> frontier)
+        private static Dictionary<string, List<HotReloadCompiledMethodIdentity>> GroupFrontierByAssembly(
+            List<HotReloadCompiledMethodIdentity> frontier)
         {
-            Dictionary<string, List<HotReloadCallSiteScanner.CompiledMethodIdentity>> groups =
-                new Dictionary<string, List<HotReloadCallSiteScanner.CompiledMethodIdentity>>(StringComparer.Ordinal);
-            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity identity in frontier)
+            Dictionary<string, List<HotReloadCompiledMethodIdentity>> groups =
+                new Dictionary<string, List<HotReloadCompiledMethodIdentity>>(StringComparer.Ordinal);
+            foreach (HotReloadCompiledMethodIdentity identity in frontier)
             {
-                if (!groups.TryGetValue(identity.AssemblyName, out List<HotReloadCallSiteScanner.CompiledMethodIdentity> group))
+                if (!groups.TryGetValue(identity.AssemblyName, out List<HotReloadCompiledMethodIdentity> group))
                 {
-                    group = new List<HotReloadCallSiteScanner.CompiledMethodIdentity>();
+                    group = new List<HotReloadCompiledMethodIdentity>();
                     groups.Add(identity.AssemblyName, group);
                 }
 
@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return groups;
         }
 
-        private static string BuildVisitKey(HotReloadCallSiteScanner.CallSiteHit hit)
+        private static string BuildVisitKey(HotReloadCallSiteHit hit)
         {
             string callerKey = hit.CallerMethodKey;
             if (string.IsNullOrEmpty(callerKey))
@@ -205,11 +205,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return hit.CallerAssemblyName + VisitKeySeparator + callerKey;
         }
 
-        private static HotReloadCallSiteScanner.CompiledMethodIdentity ToIdentity(
-            HotReloadCallSiteScanner.CallSiteHit hit)
+        private static HotReloadCompiledMethodIdentity ToIdentity(
+            HotReloadCallSiteHit hit)
         {
             string[] parameterTypeFullNames = hit.CallerParameterTypeFullNames ?? Array.Empty<string>();
-            return new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            return new HotReloadCompiledMethodIdentity(
                 hit.CallerAssemblyName,
                 hit.CallerTypeMetadataName,
                 hit.CallerMethodName,
