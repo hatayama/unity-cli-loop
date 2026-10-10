@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return SignatureChangeGateResult.NoWork();
             }
 
-            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets = CollectScanTargets(
+            HotReloadCompiledMethodIdentity[] targets = CollectScanTargets(
                 context.AssemblyName,
                 replacementEntries,
                 removedSignatures);
@@ -42,8 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>(),
                     context.WorkerOutput.skipped ?? Array.Empty<TransformWorkerSkippedDto>(),
                     removedSignatures);
-            List<HotReloadCallSiteScanner.CallSiteHit> hits =
-                HotReloadCallSiteScanner.FindCallSites(context.ProjectRoot, targets).Hits;
+            List<HotReloadCallSiteHit> hits = collaborators.CompiledCallers.FindCallSites(context.ProjectRoot, targets);
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget =
                 CollectInitialUncoveredCallers(context.AssemblyName, entries, hits, deletedCallerExemptions);
 
@@ -145,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static Dictionary<string, List<HotReloadQualifiedMethodIdentity>> CollectInitialUncoveredCallers(
             string assemblyName,
             TransformWorkerEntryDto[] entries,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
             IReadOnlyCollection<HotReloadQualifiedMethodIdentity> deletedCallerExemptions)
         {
             HashSet<HotReloadQualifiedMethodIdentity> coveredIdentities =
@@ -158,13 +157,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 coveredIdentities);
         }
 
-        private static HotReloadCallSiteScanner.CompiledMethodIdentity[] CollectScanTargets(
+        private static HotReloadCompiledMethodIdentity[] CollectScanTargets(
             string assemblyName,
             IReadOnlyList<TransformWorkerEntryDto> replacementEntries,
             TransformWorkerRemovedMethodSignatureDto[] removedSignatures)
         {
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> targets =
-                new List<HotReloadCallSiteScanner.CompiledMethodIdentity>();
+            List<HotReloadCompiledMethodIdentity> targets =
+                new List<HotReloadCompiledMethodIdentity>();
             HashSet<string> seenKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in replacementEntries)
             {
@@ -194,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void TryAddScanTarget(
-            List<HotReloadCallSiteScanner.CompiledMethodIdentity> targets,
+            List<HotReloadCompiledMethodIdentity> targets,
             HashSet<string> seenKeys,
             string assemblyName,
             string typeMetadataName,
@@ -213,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             targets.Add(
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                new HotReloadCompiledMethodIdentity(
                     assemblyName,
                     new HotReloadMetadataTypeName(typeMetadataName),
                     methodName,
@@ -354,7 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public HotReloadShimIsolation.HotReloadShimIsolationResult Isolation { get; }
             public List<HotReloadMethodOutcome> SkippedOutcomes { get; }
             public List<HotReloadStaleSignatureCallSites> StaleSignatureCallSites { get; }
-            public List<HotReloadCallSiteScanner.CallSiteHit> Hits { get; }
+            public List<HotReloadCallSiteHit> Hits { get; }
             public HashSet<HotReloadQualifiedMethodIdentity> DeletedCallerExemptions { get; }
             public List<string> GatedReplacementMethodKeys { get; }
 
@@ -368,7 +367,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadShimIsolation.HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
                 List<HotReloadStaleSignatureCallSites> staleSignatureCallSites,
-                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<HotReloadCallSiteHit> hits,
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions,
                 List<string> gatedReplacementMethodKeys)
             {
@@ -378,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Isolation = isolation;
                 SkippedOutcomes = skippedOutcomes ?? new List<HotReloadMethodOutcome>();
                 StaleSignatureCallSites = staleSignatureCallSites ?? new List<HotReloadStaleSignatureCallSites>();
-                Hits = hits ?? new List<HotReloadCallSiteScanner.CallSiteHit>();
+                Hits = hits ?? new List<HotReloadCallSiteHit>();
                 DeletedCallerExemptions = deletedCallerExemptions
                     ?? new HashSet<HotReloadQualifiedMethodIdentity>();
                 GatedReplacementMethodKeys = gatedReplacementMethodKeys ?? new List<string>();
@@ -393,7 +392,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             public static SignatureChangeGateResult WarningsOnly(
                 List<HotReloadStaleSignatureCallSites> staleSignatureCallSites,
-                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<HotReloadCallSiteHit> hits,
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions)
             {
                 return new SignatureChangeGateResult(
@@ -424,7 +423,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadShimIsolation.HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
                 List<HotReloadStaleSignatureCallSites> staleSignatureCallSites,
-                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<HotReloadCallSiteHit> hits,
                 HashSet<HotReloadQualifiedMethodIdentity> deletedCallerExemptions,
                 List<string> gatedReplacementMethodKeys)
             {

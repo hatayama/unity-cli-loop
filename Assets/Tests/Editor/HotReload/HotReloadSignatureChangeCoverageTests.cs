@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CollectUncoveredCallersByTarget_ExternalSameKeyCaller_StaysUncovered()
         {
             TransformWorkerEntryDto localCaller = CreateOrdinaryEntry();
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(ExternalAssemblyName);
+            HotReloadCallSiteHit hit = CreateHit(ExternalAssemblyName);
 
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncovered =
                 HotReloadSignatureChangeGate.CollectInitialUncoveredCallers(
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CollectInitialUncoveredCallers_SameAssemblySameKeyCaller_IsCovered()
         {
             TransformWorkerEntryDto localCaller = CreateOrdinaryEntry();
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(EditedAssemblyName);
+            HotReloadCallSiteHit hit = CreateHit(EditedAssemblyName);
 
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncovered =
                 HotReloadSignatureChangeGate.CollectInitialUncoveredCallers(
@@ -156,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerEntryDto replacement = CreateReplacementEntry();
             TransformWorkerEntryDto localCaller = CreateOrdinaryEntry();
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(ExternalAssemblyName);
+            HotReloadCallSiteHit hit = CreateHit(ExternalAssemblyName);
 
             List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
                 EditedAssemblyName,
@@ -343,7 +343,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerEntryDto replacement = CreateReplacementEntry();
             TransformWorkerEntryDto localCaller = CreateOrdinaryEntry();
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(ExternalAssemblyName);
+            HotReloadCallSiteHit hit = CreateHit(ExternalAssemblyName);
             List<string> warnings = new List<string>();
             HashSet<string> snapshotLabels = new HashSet<string>(StringComparer.Ordinal)
             {
@@ -372,11 +372,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void CollectStaleSignatureCallSites_CrossAssemblySameKey_KeepsFirstHitPerIdentity()
         {
-            HotReloadCallSiteScanner.CallSiteHit editedHit = CreateHit(EditedAssemblyName);
-            HotReloadCallSiteScanner.CallSiteHit repeatedEditedHit = CreateHit(EditedAssemblyName);
-            HotReloadCallSiteScanner.CallSiteHit externalHit = CreateHit(ExternalAssemblyName);
-            List<HotReloadCallSiteScanner.CallSiteHit> hits =
-                new List<HotReloadCallSiteScanner.CallSiteHit> { editedHit, repeatedEditedHit, externalHit };
+            HotReloadCallSiteHit editedHit = CreateHit(EditedAssemblyName);
+            HotReloadCallSiteHit repeatedEditedHit = CreateHit(EditedAssemblyName);
+            HotReloadCallSiteHit externalHit = CreateHit(ExternalAssemblyName);
+            List<HotReloadCallSiteHit> hits =
+                new List<HotReloadCallSiteHit> { editedHit, repeatedEditedHit, externalHit };
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> callersByTarget =
                 HotReloadSignatureChangeCoverage.CollectUncoveredCallersByTarget(
                     hits,
@@ -452,9 +452,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateHit(string callerAssemblyName)
+        private static HotReloadCallSiteHit CreateHit(string callerAssemblyName)
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = callerAssemblyName,
                 CallerTypeMetadataName = new HotReloadMetadataTypeName("Example.Caller"),

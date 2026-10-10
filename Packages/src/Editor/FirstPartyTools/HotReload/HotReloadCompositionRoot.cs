@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 
 using HarmonyLib;
 
@@ -50,17 +49,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static HotReloadServices CreateProductionServices()
         {
-            return CreateProductionServicesWith(CreateProductionWarmUp(), CreateProductionCallSiteBackfill());
+            HotReloadCompiledCallers compiledCallers = HotReloadCompiledCallers.CreateProduction();
+            return CreateProductionServicesWith(CreateProductionWarmUp(compiledCallers), compiledCallers);
         }
 
         /// <summary>
         /// Builds the production services around <paramref name="warmUp"/> and
-        /// <paramref name="callSiteBackfill"/>, without installing them. A test that drives the
-        /// warm-up or the backfill itself passes its own.
+        /// <paramref name="compiledCallers"/> (the compiled-caller analysis), without installing
+        /// them. A test that drives the warm-up or the background reads itself passes its own.
         /// </summary>
         internal static HotReloadServices CreateProductionServicesWith(
             HotReloadWarmUp warmUp,
-            HotReloadCallSiteBackfill callSiteBackfill)
+            HotReloadCompiledCallers compiledCallers)
         {
             HotReloadHarmonyGateway harmony =
                 new HotReloadHarmonyGateway(new Harmony(HotReloadConstants.HarmonyId));
@@ -74,33 +74,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadApplicationPlayModeQuery(),
                 new HotReloadSourceSnapshotCapture(HotReloadSourceSnapshotter.CaptureAfterDomainReload),
                 warmUp,
-                callSiteBackfill);
+                compiledCallers);
         }
 
-        /// <summary>
-        /// Builds the backfill production runs on: it reads a dll into the shared call-site cache.
-        /// </summary>
-        internal static HotReloadCallSiteBackfill CreateProductionCallSiteBackfill()
-        {
-            // Why the cache is taken before the pool thread starts: Start runs on the main thread at
-            // the end of a run, and the pool thread must not be the first to touch a Shared instance
-            // (the call-site warm-up item takes it the same way).
-            return new HotReloadCallSiteBackfill((dllPath, ct) =>
-            {
-                HotReloadCompiledCallSiteCache cache = HotReloadCompiledCallSiteCache.Shared;
-                return Task.Run(() => cache.GetOrLoad(dllPath), ct);
-            });
-        }
-
-        private static HotReloadWarmUp CreateProductionWarmUp()
+        private static HotReloadWarmUp CreateProductionWarmUp(HotReloadCompiledCallers compiledCallers)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             return new HotReloadWarmUp(
                 new HotReloadWarmUpContextSource(
                     projectRoot,
                     new HotReloadEditorStateSnapshotCapture(),
-                    assemblyName => HotReloadCallSiteScanner.CollectReferencingDllPaths(projectRoot, assemblyName)),
-                HotReloadWarmUpItems.CreateProduction());
+                    assemblyName => compiledCallers.CollectReferencingDllPaths(projectRoot, assemblyName)),
+                HotReloadWarmUpItems.CreateProduction(compiledCallers));
         }
 
         /// <summary>
@@ -133,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadPlayModeQuery playMode,
             HotReloadSourceSnapshotCapture sourceSnapshotCapture,
             HotReloadWarmUp warmUp,
-            HotReloadCallSiteBackfill callSiteBackfill)
+            HotReloadCompiledCallers compiledCallers)
         {
             // Built in dependency order, and every collaborator takes what it needs here: nothing
             // below may read the installed services, or a replacement scope would leave it bound
@@ -154,7 +139,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editorStateSnapshotCapture,
                 new HotReloadGroupCommitPolicy(domain, fileEntryApplier),
                 playMode,
-                HotReloadMonoInternalAccessGrant.ForThisProcess());
+                HotReloadMonoInternalAccessGrant.ForThisProcess(),
+                compiledCallers);
             // A factory, not a built value: the stages are bound to the collaborators built here,
             // and a caller that built them from the installed services would bind a replacement's
             // group run back to the domain that was installed when it called.
@@ -219,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     packageRootCapture,
                     unityMessageForwarding,
                     warmUp,
-                    callSiteBackfill),
+                    compiledCallers),
                 new HotReloadStatusExecutor(
                     domain,
                     patcher,
@@ -234,7 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 wiredValueRestoreRefresh,
                 sourceSnapshotCapture,
                 warmUp,
-                callSiteBackfill);
+                compiledCallers);
         }
 
         /// <summary>
@@ -325,11 +311,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void UninstallServices(HotReloadServices services)
         {
             ClearWiring();
-            // Why stop the warm-up and the backfill: services replaced within a domain would
-            // otherwise leave the previous warm-up or backfill reading the shared caches on a pool
-            // thread. Not awaited: the caller is synchronous, and the dll in flight ends on its own.
+            // Why stop the warm-up and the background reads: services replaced within a domain would
+            // otherwise leave the previous warm-up or background reads reading the shared caches on a
+            // pool thread. Not awaited: the caller is synchronous, and the dll in flight ends on its own.
             _ = services?.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerServicesReplaced);
-            _ = services?.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerServicesReplaced);
+            _ = services?.CompiledCallers.StopBackgroundReadsAsync(HotReloadConstants.WarmUpShutdownTriggerServicesReplaced);
             // Why the domain is disposed after the wiring is dropped: disposing unsubscribes its
             // resolver, and a bind arriving through a still-installed gateway would otherwise
             // reach a domain that can no longer answer.

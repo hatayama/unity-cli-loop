@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal HotReloadFileSinks(
             List<string> siblingDerivedWarnings,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates,
+            List<HotReloadOneShotCallerNoteCandidate> oneShotCallerNoteCandidates,
             HotReloadRunStaleSignatureWarnings staleSignatureWarnings,
             HotReloadRunDisplayedRemovedMembers displayedRemovedMembers = null)
         {
@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal List<string> SiblingDerivedWarnings { get; }
 
         // Shared across the whole run; null when the caller collects no one-shot caller notes.
-        internal List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates { get; }
+        internal List<HotReloadOneShotCallerNoteCandidate> OneShotCallerNoteCandidates { get; }
 
         // Shared across the whole run so the warning reflects the patches active when it ends.
         internal HotReloadRunStaleSignatureWarnings StaleSignatureWarnings { get; }

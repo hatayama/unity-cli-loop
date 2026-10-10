@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -10,31 +12,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class HotReloadReferencedMethodSetWarmUpItem : IHotReloadWarmUpItem
     {
+        private readonly HotReloadCompiledCallers _compiledCallers;
+
+        internal HotReloadReferencedMethodSetWarmUpItem(HotReloadCompiledCallers compiledCallers)
+        {
+            Debug.Assert(compiledCallers != null, "compiledCallers must not be null.");
+            _compiledCallers = compiledCallers;
+        }
+
         public string Name => "referenced_method_sets";
 
         public Task RunAsync(HotReloadWarmUpContext context, CancellationToken ct)
         {
-            // Why taken here: the Shared instance reads Application.dataPath when it is first
-            // touched, which only the main thread may do.
-            HotReloadReferencedMethodIndex index = HotReloadReferencedMethodIndex.Shared;
-            return Task.Run(() => PreloadSets(context.Targets, index, ct));
+            List<string> dllPaths = CollectDllPaths(context.Targets);
+            return _compiledCallers.WarmUpReferencedMethodSetsAsync(dllPaths, ct);
         }
 
-        /// <summary>Preloads each referencing dll's set; throws before the next dll once cancelled.</summary>
-        internal static void PreloadSets(
-            IReadOnlyList<HotReloadWarmUpTarget> targets,
-            HotReloadReferencedMethodIndex index,
-            CancellationToken ct)
+        /// <summary>The referencing dlls of every target, in target order; never a target's own dll.</summary>
+        internal static List<string> CollectDllPaths(IReadOnlyList<HotReloadWarmUpTarget> targets)
         {
+            List<string> dllPaths = new List<string>();
             foreach (HotReloadWarmUpTarget target in targets)
             {
-                foreach (string dllPath in target.ReferencingDllPaths)
-                {
-                    // Why throw rather than stop: an item that returns normally is reported done.
-                    ct.ThrowIfCancellationRequested();
-                    index.Preload(dllPath);
-                }
+                dllPaths.AddRange(target.ReferencingDllPaths);
             }
+
+            return dllPaths;
         }
     }
 }

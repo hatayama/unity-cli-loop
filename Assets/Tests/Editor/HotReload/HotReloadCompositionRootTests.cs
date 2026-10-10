@@ -184,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadApplicationPlayModeQuery(),
                 new HotReloadSourceSnapshotCapture(() => true),
                 installed.WarmUp,
-                installed.CallSiteBackfill);
+                installed.CompiledCallers);
         }
 
         private static HotReloadServices CreateServicesOwning(HotReloadDomain domain)
@@ -199,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadApplicationPlayModeQuery(),
                 new HotReloadSourceSnapshotCapture(() => true),
                 HotReloadWarmUpTestDoubles.CreateInert(),
-                HotReloadCompositionRoot.CreateProductionCallSiteBackfill());
+                HotReloadCompiledCallers.CreateProduction());
         }
 
         private static HotReloadIntroducedTypeArtifact CreateArtifact(string metadataName)

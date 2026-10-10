@@ -35,8 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // and two files declaring the same type is a mistake the run has to report against both.
         private readonly List<HotReloadIntroducedTypeOutcome> _introducedTypes =
             new List<HotReloadIntroducedTypeOutcome>();
-        private readonly List<HotReloadOneShotCallerNoteEnricher.Candidate> _oneShotCallerNoteCandidates =
-            new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
+        private readonly List<HotReloadOneShotCallerNoteCandidate> _oneShotCallerNoteCandidates =
+            new List<HotReloadOneShotCallerNoteCandidate>();
         // Why staged (not recorded per file): duplicate paths in one run must still apply
         // twice; recording mid-run would short-circuit the second copy.
         // Why the last occurrence wins: only what the last copy landed is what the next run has
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadSiblingBaselineNotices SiblingBaselineNotices => _siblingBaselineNotices;
 
         /// <summary>Candidate sink shared with the per-file stage for one-shot lifecycle notes.</summary>
-        public List<HotReloadOneShotCallerNoteEnricher.Candidate> OneShotCallerNoteCandidates =>
+        public List<HotReloadOneShotCallerNoteCandidate> OneShotCallerNoteCandidates =>
             _oneShotCallerNoteCandidates;
 
         /// <summary>Remembers why a sibling came back, for its report and its ledger updates.</summary>
@@ -216,35 +216,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Attaches one-shot lifecycle notes to the merged outcomes. Requires the Unity main thread
-        /// because the call-site scan reads compiled assemblies through Editor APIs.
-        /// Returns the compiled dlls the load budget refused, in scan order; empty when every scan
-        /// was complete.
+        /// Attaches one-shot lifecycle notes to the merged outcomes; <paramref name="buildNotes"/> gets
+        /// one request per candidate outcome that has no note yet and returns one note or null per request.
         /// </summary>
-        public IReadOnlyList<string> ApplyOneShotCallerNotes(string projectRoot, string correlationId)
+        public void ApplyOneShotCallerNotes(
+            Func<IReadOnlyList<HotReloadOneShotCallerNoteRequest>, IReadOnlyList<string>> buildNotes)
         {
-            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
-            Debug.Assert(!string.IsNullOrEmpty(correlationId), "correlationId must not be null or empty.");
-
-            // Why one budget per run rather than per scan: the direct scan and every level of the
-            // caller closure go through the same lambda, so one budget bounds the whole note step
-            // however many candidate assemblies and levels it visits.
-            HotReloadCallSiteLoadBudget budget =
-                new HotReloadCallSiteLoadBudget(HotReloadConstants.CallerNoteUncachedDllLoadBudget);
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                _outcomes,
-                _oneShotCallerNoteCandidates,
-                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities, budget));
-            if (budget.RefusedAssemblyNames.Count > 0)
-            {
-                HotReloadOrchestratorLog.LogHotReloadCallerNoteLoadBudgetExhausted(
-                    HotReloadConstants.CallerNoteUncachedDllLoadBudget,
-                    budget.RefusedAssemblyNames,
-                    correlationId);
-            }
-
-            return budget.RefusedDllPaths;
+            Debug.Assert(buildNotes != null, "buildNotes must not be null.");
+            HotReloadOneShotCallerNoteAttacher.Attach(_outcomes, _oneShotCallerNoteCandidates, buildNotes);
         }
 
         /// <summary>

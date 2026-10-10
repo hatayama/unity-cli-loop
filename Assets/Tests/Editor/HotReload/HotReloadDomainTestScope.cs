@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadServices installed = HotReloadCompositionRoot.Services;
             InstalledWarmUpStopped = Task.WhenAll(
                 installed.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope),
-                installed.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope));
+                installed.CompiledCallers.StopBackgroundReadsAsync(HotReloadConstants.WarmUpShutdownTriggerTestScope));
 
             // The capture is main-thread only, and a run inside the scope normalizes script paths
             // against these roots on the background threads it switches to.
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadDomainTestScope(
                 HotReloadCompositionRoot.CreateProductionServicesWith(
                     warmUp,
-                    HotReloadCompositionRoot.CreateProductionCallSiteBackfill()));
+                    HotReloadCompiledCallers.CreateProduction()));
         }
 
         /// <summary>
@@ -69,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadDomainTestScope(
                 HotReloadCompositionRoot.CreateProductionServicesWith(
                     HotReloadWarmUpTestDoubles.CreateInert(),
-                    callSiteBackfill));
+                    new HotReloadCompiledCallers(HotReloadCompiledCallSiteCache.Shared, callSiteBackfill)));
         }
 
         public void Dispose()

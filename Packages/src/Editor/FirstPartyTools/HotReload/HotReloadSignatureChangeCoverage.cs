@@ -26,12 +26,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static Dictionary<string, List<HotReloadQualifiedMethodIdentity>> CollectUncoveredCallersByTarget(
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
             HashSet<HotReloadQualifiedMethodIdentity> coveredIdentities)
         {
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget =
                 new Dictionary<string, List<HotReloadQualifiedMethodIdentity>>(StringComparer.Ordinal);
-            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            foreach (HotReloadCallSiteHit hit in hits)
             {
                 HotReloadQualifiedMethodIdentity callerIdentity = CreateCallerIdentity(hit);
                 if (coveredIdentities.Contains(callerIdentity))
@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal static List<HotReloadStaleSignatureCallSites> CollectStaleSignatureCallSites(
             TransformWorkerRemovedMethodSignatureDto[] removedSignatures,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget)
         {
             List<HotReloadStaleSignatureCallSites> staleCallSites = new List<HotReloadStaleSignatureCallSites>();
@@ -92,16 +92,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why one hit per caller: a caller that calls the removed method twice is still one caller
         // to name, and whether it still runs its compiled body is decided per caller.
-        private static List<HotReloadCallSiteScanner.CallSiteHit> CollectFirstHitPerCaller(
+        private static List<HotReloadCallSiteHit> CollectFirstHitPerCaller(
             string targetMethodKey,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
             List<HotReloadQualifiedMethodIdentity> uncoveredCallers)
         {
             HashSet<HotReloadQualifiedMethodIdentity> callersWithoutHit =
                 new HashSet<HotReloadQualifiedMethodIdentity>(uncoveredCallers);
-            List<HotReloadCallSiteScanner.CallSiteHit> callerHits =
-                new List<HotReloadCallSiteScanner.CallSiteHit>(uncoveredCallers.Count);
-            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            List<HotReloadCallSiteHit> callerHits =
+                new List<HotReloadCallSiteHit>(uncoveredCallers.Count);
+            foreach (HotReloadCallSiteHit hit in hits)
             {
                 if (string.Equals(hit.TargetMethodKey, targetMethodKey, StringComparison.Ordinal)
                     && callersWithoutHit.Remove(CreateCallerIdentity(hit)))
@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings,
             string assemblyName,
             TransformWorkerEntryDto[] entriesToPatch,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
             HashSet<string> snapshotLabels)
         {
             Debug.Assert(warnings != null, "warnings must not be null.");
@@ -151,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Dictionary<string, List<string>> callerLabelsByOldSignature =
                 new Dictionary<string, List<string>>(StringComparer.Ordinal);
-            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            foreach (HotReloadCallSiteHit hit in hits)
             {
                 if (hit == null
                     || !appliedReplacementKeys.Contains(hit.TargetMethodKey)
@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
+        internal static string FormatCallSiteCallerLabel(HotReloadCallSiteHit hit)
         {
             Debug.Assert(hit != null, "hit must not be null.");
             return HotReloadMethodKeys.FormatMethodLabelParts(
@@ -247,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static List<string> FindSignatureChangeCoverageLosses(
             string assemblyName,
             TransformWorkerEntryDto[] entriesToPatch,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<HotReloadCallSiteHit> hits,
             IReadOnlyCollection<HotReloadQualifiedMethodIdentity> deletedCallerExemptions)
         {
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
@@ -442,7 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static HotReloadQualifiedMethodIdentity CreateCallerIdentity(
-            HotReloadCallSiteScanner.CallSiteHit hit)
+            HotReloadCallSiteHit hit)
         {
             Debug.Assert(hit != null, "hit must not be null.");
             return new HotReloadQualifiedMethodIdentity(hit.CallerAssemblyName, hit.CallerMethodKey);

@@ -92,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new HotReloadApplicationPlayModeQuery(),
                     new HotReloadSourceSnapshotCapture(() => true),
                     HotReloadWarmUpTestDoubles.CreateInert(),
-                    HotReloadCompositionRoot.CreateProductionCallSiteBackfill()));
+                    HotReloadCompiledCallers.CreateProduction()));
         }
 
         /// <summary>

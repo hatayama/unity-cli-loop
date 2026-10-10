@@ -13,20 +13,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadOneShotCallerNoteEnricher
     {
-        internal sealed class Candidate
-        {
-            public HotReloadCallSiteScanner.CompiledMethodIdentity Identity;
-            public HotReloadMethodOutcome Outcome;
-
-            public Candidate(
-                HotReloadCallSiteScanner.CompiledMethodIdentity identity,
-                HotReloadMethodOutcome outcome)
-            {
-                Identity = identity;
-                Outcome = outcome;
-            }
-        }
-
         // Keep in sync with LifecycleNotes.OneShotLifecycleMethodNames in the transform worker.
         private static readonly string[] OneShotLifecycleMethodNames =
         {
@@ -40,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Determines whether a compiled caller can be proven to be a one-shot lifecycle message.
         /// </summary>
-        internal static bool IsOneShotLifecycleCaller(HotReloadCallSiteScanner.CallSiteHit hit)
+        internal static bool IsOneShotLifecycleCaller(HotReloadCallSiteHit hit)
         {
             if (hit == null || !IsOneShotLifecycleMethodName(hit.CallerMethodName))
             {
@@ -84,50 +70,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        internal static void ApplyNotes(
-            string projectRoot,
-            List<HotReloadMethodOutcome> outcomes,
-            IReadOnlyList<Candidate> candidates,
-            Func<string, HotReloadCallSiteScanner.CompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan)
+        /// <summary>
+        /// Builds the one-shot lifecycle note of each request; the result has one entry per request,
+        /// in the same order, null where no note can be proven.
+        /// </summary>
+        internal static string[] BuildNotes(
+            IReadOnlyList<HotReloadOneShotCallerNoteRequest> requests,
+            Func<string, HotReloadCompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan)
         {
-            Dictionary<string, List<Candidate>> candidatesByAssembly =
-                new Dictionary<string, List<Candidate>>(StringComparer.Ordinal);
-            foreach (Candidate candidate in candidates)
+            Debug.Assert(requests != null, "requests must not be null.");
+            Debug.Assert(scan != null, "scan must not be null.");
+
+            string[] notes = new string[requests.Count];
+            // Why grouped in request order: the scans run in this order, and the load budget is spent in it.
+            Dictionary<string, List<int>> indexesByAssembly =
+                new Dictionary<string, List<int>>(StringComparer.Ordinal);
+            for (int index = 0; index < requests.Count; index++)
             {
-                if (!string.IsNullOrEmpty(candidate.Outcome.LifecycleNote))
+                string assemblyName = requests[index].Identity.AssemblyName;
+                if (!indexesByAssembly.TryGetValue(assemblyName, out List<int> group))
                 {
-                    continue;
+                    group = new List<int>();
+                    indexesByAssembly.Add(assemblyName, group);
                 }
 
-                if (!candidatesByAssembly.TryGetValue(candidate.Identity.AssemblyName, out List<Candidate> group))
-                {
-                    group = new List<Candidate>();
-                    candidatesByAssembly.Add(candidate.Identity.AssemblyName, group);
-                }
-
-                group.Add(candidate);
+                group.Add(index);
             }
 
-            foreach (KeyValuePair<string, List<Candidate>> pair in candidatesByAssembly)
+            foreach (KeyValuePair<string, List<int>> pair in indexesByAssembly)
             {
-                HotReloadCallSiteScanner.CompiledMethodIdentity[] identities = pair.Value.ConvertAll(
-                    candidate => candidate.Identity).ToArray();
+                HotReloadCompiledMethodIdentity[] identities = pair.Value.ConvertAll(
+                    index => requests[index].Identity).ToArray();
                 HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = scan(pair.Key, identities);
                 if (result.IsIncomplete)
                 {
                     continue;
                 }
 
-                foreach (Candidate candidate in pair.Value)
+                foreach (int index in pair.Value)
                 {
+                    HotReloadOneShotCallerNoteRequest request = requests[index];
                     string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                        candidate.Identity.TypeMetadataName.Value,
-                        candidate.Identity.MethodName,
-                        candidate.Identity.ParameterTypeFullNames,
-                        candidate.Identity.GenericArity);
-                    List<HotReloadCallSiteScanner.CallSiteHit> targetHits =
-                        new List<HotReloadCallSiteScanner.CallSiteHit>();
-                    foreach (HotReloadCallSiteScanner.CallSiteHit hit in result.Hits)
+                        request.Identity.TypeMetadataName.Value,
+                        request.Identity.MethodName,
+                        request.Identity.ParameterTypeFullNames,
+                        request.Identity.GenericArity);
+                    List<HotReloadCallSiteHit> targetHits =
+                        new List<HotReloadCallSiteHit>();
+                    foreach (HotReloadCallSiteHit hit in result.Hits)
                     {
                         if (hit.TargetMethodKey != targetKey)
                         {
@@ -146,19 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    string note = HotReloadOneShotCallerNoteBuilder.Build(candidate.Outcome.Method, callers);
-                    if (note == null)
-                    {
-                        continue;
-                    }
-
-                    int index = outcomes.IndexOf(candidate.Outcome);
-                    if (index >= 0)
-                    {
-                        outcomes[index] = candidate.Outcome.WithLifecycleNote(note);
-                    }
+                    notes[index] = HotReloadOneShotCallerNoteBuilder.Build(request.Method, callers);
                 }
             }
+
+            return notes;
         }
 
         private static bool IsOneShotLifecycleMethodName(string methodName)

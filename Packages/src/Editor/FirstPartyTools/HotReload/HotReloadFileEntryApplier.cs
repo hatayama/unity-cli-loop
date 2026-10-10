@@ -385,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadEntryResolution.ResolvedEntry resolved,
             HotReloadMethodOutcome outcome,
             string assemblyName,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates)
+            List<HotReloadOneShotCallerNoteCandidate> candidates)
         {
             if (candidates == null)
             {
@@ -399,14 +399,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+            HotReloadCompiledMethodIdentity identity =
+                new HotReloadCompiledMethodIdentity(
                     assemblyName,
                     new HotReloadMetadataTypeName(resolved.Entry.typeMetadataName),
                     resolved.Entry.methodName,
                     resolved.Entry.parameterTypeFullNames ?? Array.Empty<string>(),
                     resolved.Entry.genericArity);
-            candidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome));
+            candidates.Add(new HotReloadOneShotCallerNoteCandidate(identity, outcome));
         }
 
         private HotReloadMethodOutcome ApplyResolvedEntry(
