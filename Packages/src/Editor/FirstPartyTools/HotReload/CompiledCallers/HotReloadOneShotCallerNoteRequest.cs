@@ -6,7 +6,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// One method a one-shot lifecycle note is asked for: the compiled identity its callers are
     /// searched by and the name the note shows.
     /// </summary>
-    internal sealed class HotReloadOneShotCallerNoteRequest
+    public sealed class HotReloadOneShotCallerNoteRequest
     {
         public HotReloadOneShotCallerNoteRequest(HotReloadCompiledMethodIdentity identity, string method)
         {

@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// assemblies it read cached between runs. What a run could not read is read in the background
     /// after it. Begin every run with <see cref="BeginRunAsync"/>.
     /// </summary>
-    internal sealed class HotReloadCompiledCallers
+    public sealed class HotReloadCompiledCallers
     {
         private readonly HotReloadCompiledCallSiteCache _cache;
         private readonly HotReloadCallSiteBackfill _backfill;

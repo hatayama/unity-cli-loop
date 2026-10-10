@@ -5,7 +5,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// Identity of a compiled method to search for (assembly + type + name + arity + parameter types).
     /// </summary>
-    internal readonly struct HotReloadCompiledMethodIdentity
+    public readonly struct HotReloadCompiledMethodIdentity
     {
         public readonly string AssemblyName;
         public readonly HotReloadMetadataTypeName TypeMetadataName;

@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// One run of the compiled-caller analysis: the cached compiled assemblies stay cached until it
     /// ends. End it with <see cref="End"/> once the run finished normally; dispose it on every exit.
     /// </summary>
-    internal sealed class HotReloadCompiledCallersRun : IDisposable
+    public sealed class HotReloadCompiledCallersRun : IDisposable
     {
         private readonly IDisposable _hold;
         private readonly HotReloadCallSiteBackfill _backfill;

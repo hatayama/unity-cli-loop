@@ -3,7 +3,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// One compiled instruction that references a target method, reported under its logical owner.
     /// </summary>
-    internal sealed class HotReloadCallSiteHit
+    public sealed class HotReloadCallSiteHit
     {
         public string CallerAssemblyName;
         public HotReloadMetadataTypeName CallerTypeMetadataName;
