@@ -58,9 +58,14 @@ type unityPackageSigningPlan struct {
 	Warning   bool
 }
 
+// unityPackageReleaseListingFilter trims each page of the release listing to the fields the plan
+// reads, so the release notes of every release in the repository are not carried along.
+const unityPackageReleaseListingFilter = `[.[] | {tag_name, draft, target_commitish, assets: [.assets[] | {name, size}]}]`
+
 type unityPackageRelease struct {
-	IsDraft         bool                       `json:"isDraft"`
-	TargetCommitish string                     `json:"targetCommitish"`
+	TagName         string                     `json:"tag_name"`
+	Draft           bool                       `json:"draft"`
+	TargetCommitish string                     `json:"target_commitish"`
 	Assets          []unityPackageReleaseAsset `json:"assets"`
 }
 
@@ -135,18 +140,33 @@ func planUnityPackageSigning(ctx context.Context, options unityPackageSigningOpt
 	version := strings.TrimPrefix(tag, "v")
 	plan := unityPackageSigningPlan{Tag: tag, Version: version, AssetName: signedUnityPackageAssetName(version)}
 
-	release, found, err := viewUnityPackageRelease(ctx, options.Repository, tag, deps)
+	releases, err := listUnityPackageReleases(ctx, options.Repository, tag, deps)
 	if err != nil {
 		return unityPackageSigningPlan{}, err
 	}
-	if !found {
+	if published, ok := findPublishedUnityPackageRelease(releases); ok {
+		return planPublishedUnityPackageSigning(plan, published, options.DryRun), nil
+	}
+	switch len(releases) {
+	case 0:
 		plan.Reason = fmt.Sprintf("Release %s does not exist yet; the release sync creates it as a draft.", tag)
 		return plan, nil
+	case 1:
+		return planDraftUnityPackageSigning(plan, releases[0], options.DryRun)
+	default:
+		return unityPackageSigningPlan{}, fmt.Errorf("%d draft releases carry tag %s; delete all but one, then run this workflow manually", len(releases), tag)
 	}
-	if release.IsDraft {
-		return planDraftUnityPackageSigning(plan, release, options.DryRun)
+}
+
+// findPublishedUnityPackageRelease returns the published release of the tag, which outranks any
+// draft of the same tag that a failed run left behind: only one release can own the tag.
+func findPublishedUnityPackageRelease(releases []unityPackageRelease) (unityPackageRelease, bool) {
+	for _, release := range releases {
+		if !release.Draft {
+			return release, true
+		}
 	}
-	return planPublishedUnityPackageSigning(plan, release, options.DryRun), nil
+	return unityPackageRelease{}, false
 }
 
 // planDraftUnityPackageSigning signs every draft and publishes it unless this is a dry run. A
@@ -216,26 +236,34 @@ func readUnityPackageManifestVersion(repoRoot string) (string, error) {
 	return version, nil
 }
 
-// viewUnityPackageRelease reports found=false only for a missing release. Any other gh failure is
-// returned, because treating an outage as "nothing to sign" would leave the release unsigned.
-func viewUnityPackageRelease(ctx context.Context, repository string, tag string, deps unityPackageSigningDeps) (unityPackageRelease, bool, error) {
-	output, err := deps.runOutput(ctx, "gh", "release", "view", tag, "--repo", repository, "--json", "isDraft,targetCommitish,assets")
+// listUnityPackageReleases returns every release, draft or published, that carries the tag. It
+// lists all releases instead of asking for the tag: the tag lookup returns only a published
+// release, and drafts of one tag can be duplicated because a draft does not own its tag. Drafts
+// are listed only to a token with push access. A failed listing is returned, because treating an
+// outage as "no release yet" would leave the release unsigned.
+func listUnityPackageReleases(ctx context.Context, repository string, tag string, deps unityPackageSigningDeps) ([]unityPackageRelease, error) {
+	output, err := deps.runOutput(ctx, "gh", "api", "--paginate", "repos/"+repository+"/releases?per_page=100", "--jq", unityPackageReleaseListingFilter)
 	if err != nil {
-		if isGhReleaseNotFound(err) {
-			return unityPackageRelease{}, false, nil
+		return nil, err
+	}
+	var matching []unityPackageRelease
+	// --paginate prints one JSON array per page back to back, so the output is a stream of arrays.
+	decoder := json.NewDecoder(strings.NewReader(output))
+	for {
+		var page []unityPackageRelease
+		err := decoder.Decode(&page)
+		if errors.Is(err, io.EOF) {
+			return matching, nil
 		}
-		return unityPackageRelease{}, false, err
+		if err != nil {
+			return nil, fmt.Errorf("parse release listing: %w", err)
+		}
+		for _, release := range page {
+			if release.TagName == tag {
+				matching = append(matching, release)
+			}
+		}
 	}
-	var release unityPackageRelease
-	if err := json.Unmarshal([]byte(output), &release); err != nil {
-		return unityPackageRelease{}, false, fmt.Errorf("parse release %s: %w", tag, err)
-	}
-	return release, true, nil
-}
-
-func isGhReleaseNotFound(err error) bool {
-	message := err.Error()
-	return strings.Contains(message, "release not found") || strings.Contains(message, "HTTP 404")
 }
 
 // hasNonEmptyAsset ignores a zero-byte asset, which an interrupted upload can leave behind and

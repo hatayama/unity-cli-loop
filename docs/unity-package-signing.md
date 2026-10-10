@@ -19,7 +19,10 @@ tarball is attached.
    `workflow_run` after every run of those three workflows on `main`.
 2. The `plan` job runs `cli/release-automation/cmd/plan-unity-package-signing` on the commit the
    triggering run processed, not the newest `main` commit, so a release commit that lands right
-   after another cannot hide the earlier draft. It signs and publishes every draft. It never
+   after another cannot hide the earlier draft. It lists every release instead of looking the tag
+   up, because the tag lookup returns only published releases, and its token has
+   `contents: write` because drafts are listed only to a token with push access. It signs and
+   publishes every draft. It never
    changes a published release: one that carries `io.github.hatayama.uloopmcp-<version>.tgz`
    needs nothing, and one without it gets a warning, because no run can attach the tarball any
    more. Most runs end here.
@@ -29,9 +32,9 @@ tarball is attached.
    file of the release commit's `Packages/src` tree (a dropped asset `.meta` file or
    `Editor/CliOnlyTools~/` skill), and renames it to the asset name.
 4. The `publish` job attaches the tarball to the draft and then publishes it, which creates the
-   tag at the draft's target commit. It is the only job with `contents: write`, and it never runs
-   the UPM CLI. The `sign` job, which holds the signing credentials, cannot write to the
-   repository.
+   tag at the draft's target commit. Neither this job nor `plan`, the other job with
+   `contents: write`, runs the UPM CLI. The `sign` job, which holds the signing credentials,
+   cannot write to the repository.
 
 ## Components
 
@@ -69,6 +72,10 @@ because both come from the same CDN and a replaced zip would come with a matchin
   release a draft: there is no tag, OpenUPM does not see the version, and the merged release pull
   request keeps `autorelease: pending`, which stops release-please from opening release pull
   requests. Fix the cause, then run the workflow manually with `dry-run` off.
+- **Two drafts of one tag.** A draft does not own its tag, so two syncs that create the release
+  at the same moment leave two drafts. The plan then fails rather than risk uploading to one
+  draft and publishing the other. Delete all but one of them on the Releases page, then run the
+  workflow manually with `dry-run` off.
 - **Never publish the package draft by hand.** Publishing it from the GitHub UI or with
   `gh release edit --draft=false` makes it immutable without the tarball, and that version can
   then never be signed. The plan reports such a release with a warning.

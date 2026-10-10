@@ -156,3 +156,13 @@ access control; the enforcement of correctness stays with
 `release-please.yml` therefore mints the same GitHub App token
 `post-publish` uses. A merge made with `GITHUB_TOKEN` starts no follow-up
 workflow run, so the package release would never be tagged.
+
+## Amendment (2026-10-10)
+
+`sync-release-please-package-releases.sh` no longer publishes the Unity package
+release: it creates it as a draft, and `unity-package-sign.yml` publishes it
+after attaching the signed tarball, because a published release is immutable
+(`docs/unity-package-signing.md`). Where this ADR says the pin check runs
+"before the package release is created or published", it now runs before the
+draft is created; publishing adds no check. The package tag is created when that
+workflow publishes the draft, at the release commit the sync set as its target.

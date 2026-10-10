@@ -39,8 +39,10 @@ jobs:
     # draft, so only a cancelled run is ignored.
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'cancelled')
     runs-on: ubuntu-latest
+    # GitHub lists draft releases only to a token with push access, and the
+    # draft is what this job looks for. The job runs no third-party code.
     permissions:
-      contents: read
+      contents: write
     outputs:
       sign: ${{ steps.plan.outputs.sign }}
       publish: ${{ steps.plan.outputs.publish }}
