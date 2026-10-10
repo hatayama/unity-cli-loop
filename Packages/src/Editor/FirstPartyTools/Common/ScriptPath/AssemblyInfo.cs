@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.HotReload.Shared.Editor")]
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.HotReload.CompiledCallers.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.HotReload.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.HotReload.Patching.Editor")]
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.PausePoint.Editor")]
