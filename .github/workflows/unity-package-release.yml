@@ -1,12 +1,13 @@
-name: unity-package-sign
+name: unity-package-release
 
-# Signs the Unity package with the Unity organization's service account,
-# attaches the tarball to the package's draft GitHub release, and publishes it;
-# OpenUPM republishes that tarball unchanged (docs/unity-package-signing.md).
-# Releases are immutable once published, so the release sync only creates the
-# draft and this workflow is the only one that publishes it. The sync runs with
-# GITHUB_TOKEN, which starts no release workflow, so this follows every run of
-# the three workflows that run the sync instead.
+# Creates the Unity package's GitHub release, and is the only workflow that
+# does. The package is signed with the Unity organization's service account
+# first, and the release is created and published with the signed tarball in
+# one step, because a published release is immutable; OpenUPM republishes that
+# tarball unchanged (docs/unity-package-release.md). A release can be created
+# once its release commit is on main and the runner and dispatcher releases it
+# depends on are published, so this follows every run of the three workflows
+# that make one of those happen.
 on:
   workflow_run:
     workflows:
@@ -17,32 +18,29 @@ on:
       - completed
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Unity package release tag to sign (default: the manifest version on the selected branch)"
-        type: string
-        required: false
       dry-run:
-        description: "Sign any existing release and keep the tarball as a workflow artifact, without attaching it or publishing the release"
+        description: "Sign without creating the release (a published release is signed from its tag), and keep the tarball as a workflow artifact"
         type: boolean
         default: true
 
 permissions:
   contents: read
 
+# Runs one at a time, so two runs can never create the same release. A waiting
+# run may be replaced by a newer one, which is harmless: every run decides from
+# the newest main commit.
 concurrency:
-  group: unity-package-sign
+  group: unity-package-release
   cancel-in-progress: false
 
 jobs:
   plan:
-    # A run that fails after its release sync step has still created the
-    # draft, so only a cancelled run is ignored.
+    # A run that fails partway may still have published what the package
+    # release waits for, so only a cancelled run is ignored.
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'cancelled')
     runs-on: ubuntu-latest
-    # GitHub lists draft releases only to a token with push access, and the
-    # draft is what this job looks for. The job runs no third-party code.
     permissions:
-      contents: write
+      contents: read
     outputs:
       sign: ${{ steps.plan.outputs.sign }}
       publish: ${{ steps.plan.outputs.publish }}
@@ -51,14 +49,14 @@ jobs:
       asset-name: ${{ steps.plan.outputs.asset-name }}
       source-ref: ${{ steps.plan.outputs.source-ref }}
     steps:
-      # A workflow_run job checks out the newest main commit by default. Reading
-      # the manifest there would let a later release commit hide the draft the
-      # triggering run's release sync just created, so the plan reads the commit
-      # that run processed.
+      # The newest main commit is the right one to read: while the package
+      # release pull request is still pending, release-please opens no next
+      # release pull request, so the manifest there still names the release that
+      # is not out yet. The full history is what the release commit is found in.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Go
@@ -67,14 +65,13 @@ jobs:
           go-version-file: cli/.go-version
           cache-dependency-path: '**/go.sum'
 
-      - name: Decide whether to sign and publish the package release
+      - name: Decide whether to sign and create the package release
         id: plan
         working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ github.token }}
-          INPUT_TAG: ${{ inputs.tag }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
-        run: go run ./cmd/plan-unity-package-signing --repo "$GITHUB_REPOSITORY" --tag "$INPUT_TAG" --dry-run="$DRY_RUN" >> "$GITHUB_OUTPUT"
+        run: go run ./cmd/plan-unity-package-release --repo "$GITHUB_REPOSITORY" --dry-run="$DRY_RUN" >> "$GITHUB_OUTPUT"
 
   # The UPM CLI is a third-party binary that sees the signing credentials, so it
   # runs in a job whose token cannot write to the repository. The credentials
@@ -101,8 +98,9 @@ jobs:
           persist-credentials: false
 
       # The signing tooling comes from the workflow ref above, but the package
-      # contents must be exactly the release's: a draft has no tag until it is
-      # published, so the plan names the commit the draft targets instead.
+      # contents must be exactly the release's: the plan names the release
+      # commit of a release that is not created yet, or the tag of a published
+      # one.
       - name: Checkout the package release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -154,6 +152,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Creates the tag at the release commit, then creates and publishes the
+  # release with the signed tarball in one step. The plan's readiness checks are
+  # not repeated: what they verified (the release commit's protocol and pin, the
+  # published runner and dispatcher releases) cannot change any more, and the
+  # tag and the release, which can, are checked again right before the writes.
   publish:
     needs: [plan, sign]
     if: needs.plan.outputs.publish == 'true'
@@ -161,30 +164,49 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The release notes are read from the changelog at the release commit.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
       - name: Download the signed tarball
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: signed-unity-package
           path: ${{ runner.temp }}/signed
 
-      # --clobber replaces a tarball left on the draft by a run whose publish
-      # step failed after the upload.
-      - name: Attach the signed tarball to the draft release
+      - name: Create the release with the signed tarball
+        working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          RELEASE_COMMIT: ${{ needs.plan.outputs.source-ref }}
           ASSET_NAME: ${{ needs.plan.outputs.asset-name }}
-        run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/signed/$ASSET_NAME" --repo "$GITHUB_REPOSITORY" --clobber
+        run: >-
+          go run ./cmd/create-unity-package-release
+          --repo "$GITHUB_REPOSITORY"
+          --tag "$RELEASE_TAG"
+          --commit "$RELEASE_COMMIT"
+          --asset "$RUNNER_TEMP/signed/$ASSET_NAME"
 
-      # Publishing creates the tag at the draft's target commit and freezes the
-      # assets. A pre-release version is published as a pre-release, as the
-      # release sync did when it still published the package release.
-      - name: Publish the release
+  # A release created with GITHUB_TOKEN starts no workflow, so release-please is
+  # started here: its label sync marks the package release pull request tagged,
+  # which is what lets release-please open the next release pull requests.
+  post-publish:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch release-please after the package release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
-        run: |
-          case "$RELEASE_TAG" in
-            *-*) gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease ;;
-            *) gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false ;;
-          esac
+        run: gh workflow run release-please.yml --repo "$GITHUB_REPOSITORY" --ref main -f branch=main

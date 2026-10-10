@@ -259,7 +259,6 @@ test_dispatcher_release_target_and_prerelease_state_remain_verified() {
   assert_contains 'gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '\''.sha'\'''
   assert_contains 'Release tag ${RELEASE_TAG} does not match approved build commit ${GITHUB_SHA}.'
   assert_contains 'gh release edit "${RELEASE_TAG}" --draft=false --prerelease'
-  assert_contains "      - name: Sync release-please package releases"
   assert_count 2 "      contents: write"
   if ! post_publish_section | grep -F "      - name: Setup Go" >/dev/null 2>&1; then
     echo "Post-publish job must set up the pinned Go toolchain." >&2
@@ -269,7 +268,7 @@ test_dispatcher_release_target_and_prerelease_state_remain_verified() {
     echo "Post-publish Go setup must use the repository pin and cache dependency path." >&2
     exit 1
   fi
-  assert_post_publish_before "      - name: Setup Go" "      - name: Sync release-please package releases"
+  assert_post_publish_before "      - name: Setup Go" "      - name: Push dispatcher pin stamp to main"
 }
 
 test_winget_pull_request_follows_homebrew_update_for_stable_releases() {

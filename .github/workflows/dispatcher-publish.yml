@@ -407,12 +407,6 @@ jobs:
           go-version-file: cli/.go-version
           cache-dependency-path: '**/go.sum'
 
-      - name: Sync release-please package releases
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: scripts/sync-release-please-package-releases.sh
-
       # Fresh installs follow the package pin, so a published stable dispatcher
       # only reaches new users once the pin records it. Pre-releases are never
       # stamped on main. The stamp is pushed to main directly: its content is

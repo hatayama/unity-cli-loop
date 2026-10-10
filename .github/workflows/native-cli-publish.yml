@@ -456,12 +456,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-        with:
-          go-version-file: cli/.go-version
-          cache-dependency-path: '**/go.sum'
-
       - name: Dispatch release-please after native CLI publish
         if: needs.build.outputs.should_publish == 'true' && github.event_name == 'push'
         env:
@@ -469,15 +463,8 @@ jobs:
           TARGET_BRANCH: ${{ github.ref_name }}
         run: gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"
 
-      - name: Sync release-please package releases
-        id: package_release_sync
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: scripts/sync-release-please-package-releases.sh
-
       - name: Mark release PR as tagged
-        if: github.event_name == 'push' && steps.package_release_sync.outputs.ready != 'false'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
