@@ -98,7 +98,10 @@ release_commit_sha_for_package() {
   # not enough: a commit that moves a package changelog re-adds every changelog
   # line in the pathspec-limited diff (the rename source is outside the
   # pathspec), so it would otherwise impersonate the release commit.
-  git log --format='%H%x09%s' HEAD |
+  # The history is read into a file first: piped into the loop, a failed read
+  # would only look like a history without the release commit.
+  commit_log_file="$TMP_DIR/release-commit-log.txt"
+  git log --format='%H%x09%s' HEAD > "$commit_log_file" || return 1
   while IFS='	' read -r commit_sha commit_subject; do
     if ! "$SCRIPT_DIR/is-release-please-release-commit.sh" "$commit_subject"; then
       continue
@@ -107,7 +110,7 @@ release_commit_sha_for_package() {
       printf '%s\n' "$commit_sha"
       break
     fi
-  done
+  done < "$commit_log_file"
 }
 
 release_commit_updates_package_version() {

@@ -622,6 +622,27 @@ test_missing_release_commit_fails() {
   assert_contains "$work_dir/stderr.txt" "No release-please commit for Packages/src version 3.0.0-beta.7 was found."
 }
 
+# Verifies a failed read of the commit history fails with git's own error instead of reading as a history without the release commit.
+test_unreadable_commit_history_fails() {
+  work_dir=$(create_release_repo unreadable-commit-history)
+  real_git=$(command -v git)
+  mkdir -p "$work_dir/bin"
+  cat > "$work_dir/bin/git" <<MOCK_GIT
+#!/bin/sh
+if [ "\$1" = "log" ]; then
+  echo "fatal: simulated commit history read failure" >&2
+  exit 128
+fi
+exec "$real_git" "\$@"
+MOCK_GIT
+  chmod +x "$work_dir/bin/git"
+
+  expect_check_failure "$work_dir" "commit history read failure"
+
+  assert_contains "$work_dir/stderr.txt" "fatal: simulated commit history read failure"
+  assert_not_contains "$work_dir/stderr.txt" "No release-please commit"
+}
+
 # Verifies a manifest key rename at an unchanged version is not mistaken for the release-please release commit.
 test_key_rename_commit_is_not_treated_as_release_commit() {
   work_dir=$(create_key_rename_repo key-rename-root)
@@ -697,6 +718,7 @@ test_runner_release_ready_uses_tag_generation_asset_list
 test_runner_attestation_digest_mismatch_fails
 test_release_commit_that_fails_its_checks_fails
 test_missing_release_commit_fails
+test_unreadable_commit_history_fails
 test_key_rename_commit_is_not_treated_as_release_commit
 test_changelog_move_commit_is_not_treated_as_release_commit
 test_unreadable_release_inputs_fail
