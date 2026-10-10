@@ -160,28 +160,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an incomplete scan does not add caller-aware notes to its candidates.
+        /// What: an incomplete scan returns no caller-aware note for its requests.
         /// </summary>
         [Test]
-        public void ApplyNotes_MissingScanAssembly_SuppressesNotes()
+        public void BuildNotes_MissingScanAssembly_SuppressesNotes()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate("Assembly.One", outcome)
+                    CreateRequest("Assembly.One", "Type.SetUp")
                 };
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
                     new List<HotReloadCallSiteHit>(),
                     new List<string> { assemblyName }));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
@@ -189,22 +185,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// did find would have proven an Awake-only caller.
         /// </summary>
         [Test]
-        public void ApplyNotes_UnreadScanAssembly_SuppressesNotes()
+        public void BuildNotes_UnreadScanAssembly_SuppressesNotes()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate("Assembly.One", outcome)
+                    CreateRequest("Assembly.One", "Type.SetUp")
                 };
             HotReloadCallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
             hit.TargetMethodKey = HotReloadMethodKeys.BuildMethodKeyParts("Type", "SetUp", Array.Empty<string>(), 0);
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
                     new List<HotReloadCallSiteHit> { hit },
                     new List<string>(),
@@ -212,31 +204,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     null,
                     new List<string> { assemblyName }));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
-        /// What: candidates with separate target assemblies are scanned in separate fake calls.
+        /// What: requests with separate target assemblies are scanned in separate fake calls.
         /// </summary>
         [Test]
-        public void ApplyNotes_DifferentTargetAssemblies_ScansEachAssemblySeparately()
+        public void BuildNotes_DifferentTargetAssemblies_ScansEachAssemblySeparately()
         {
-            HotReloadMethodOutcome first = HotReloadMethodOutcome.Patched("Type.First", "Assets/First.cs");
-            HotReloadMethodOutcome second = HotReloadMethodOutcome.Patched("Type.Second", "Assets/Second.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { first, second };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate("Assembly.One", first),
-                    CreateCandidate("Assembly.Two", second)
+                    CreateRequest("Assembly.One", "Type.First"),
+                    CreateRequest("Assembly.Two", "Type.Second")
                 };
             List<HotReloadCompiledMethodIdentity[]> calls =
                 new List<HotReloadCompiledMethodIdentity[]>();
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) =>
                 {
                     calls.Add(identities);
@@ -252,66 +239,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a worker lifecycle note remains authoritative and skips the caller scan.
+        /// What: a proven Awake-only caller returns the full indirect note for the request.
         /// </summary>
         [Test]
-        public void ApplyNotes_WorkerLifecycleNoteCandidate_SkipsScanAndKeepsNote()
+        public void BuildNotes_OnlyValidAwakeCaller_ReturnsIndirectLifecycleNote()
         {
-            const string workerNote = "Worker lifecycle note.";
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "Type.SetUp",
-                "Assets/Test.cs",
-                workerNote);
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate("Assembly.One", outcome)
-                };
-            int scanCount = 0;
-
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
-                (assemblyName, identities) =>
-                {
-                    scanCount++;
-                    return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
-                        new List<HotReloadCallSiteHit>(),
-                        new List<string>());
-                });
-
-            Assert.That(scanCount, Is.EqualTo(0));
-            Assert.That(outcomes[0].LifecycleNote, Is.EqualTo(workerNote));
-        }
-
-        /// <summary>
-        /// What: a proven Awake-only caller writes the full indirect note into the response outcome list.
-        /// </summary>
-        [Test]
-        public void ApplyNotes_OnlyValidAwakeCaller_ReplacesOutcomeWithIndirectLifecycleNote()
-        {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
-                {
-                    CreateCandidate(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, outcome)
+                    CreateRequest(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, "Type.SetUp")
                 };
             HotReloadCallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
             hit.TargetMethodKey = "Type::SetUp()";
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
                     new List<HotReloadCallSiteHit> { hit },
                     new List<string>()));
 
             Assert.That(
-                outcomes[0].LifecycleNote,
+                notes[0],
                 Is.EqualTo(
                     "Type.SetUp is called only from one-shot lifecycle method(s) (Awake) in the compiled "
                     + "assemblies; objects that already ran them will not run the patched body. It takes "
@@ -324,53 +272,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a function-pointer load suppresses the note before its Awake caller is classified.
         /// </summary>
         [Test]
-        public void ApplyNotes_FunctionPointerLoadHit_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_FunctionPointerLoadHit_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, outcome)
+                    CreateRequest(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, "Type.SetUp")
                 };
             HotReloadCallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
             hit.TargetMethodKey = "Type::SetUp()";
             hit.IsFunctionPointerLoad = true;
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
                     new List<HotReloadCallSiteHit> { hit },
                     new List<string>()));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
-        /// What: compiled Awake-only callers add an indirect lifecycle note to a patched outcome.
+        /// What: compiled Awake-only callers return an indirect lifecycle note for the patched method.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledAwakeOnlyCaller_AddsIndirectLifecycleNote()
+        public void BuildNotes_CompiledAwakeOnlyCaller_AddsIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("OneShotCallerScannerFixture.AwakeOnlyTarget()", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("AwakeOnlyTarget", outcome)
+                    CreateScannerFixtureRequest("AwakeOnlyTarget", "OneShotCallerScannerFixture.AwakeOnlyTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
             Assert.That(
-                outcomes[0].LifecycleNote,
+                notes[0],
                 Is.EqualTo(
                     "OneShotCallerScannerFixture.AwakeOnlyTarget() is called only from one-shot lifecycle "
                     + "method(s) (Awake) in the compiled assemblies; objects that already ran them will not run "
@@ -384,51 +324,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a compiled ordinary caller suppresses the indirect lifecycle note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledOrdinaryCaller_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_CompiledOrdinaryCaller_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("OneShotCallerScannerFixture.MixedTarget()", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("MixedTarget", outcome)
+                    CreateScannerFixtureRequest("MixedTarget", "OneShotCallerScannerFixture.MixedTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
         /// What: a compiled two-step Awake chain still produces the indirect lifecycle note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledChainedAwakeOnlyCaller_AddsIndirectLifecycleNote()
+        public void BuildNotes_CompiledChainedAwakeOnlyCaller_AddsIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerScannerFixture.ChainedAwakeOnlyTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("ChainedAwakeOnlyTarget", outcome)
+                    CreateScannerFixtureRequest("ChainedAwakeOnlyTarget", "OneShotCallerScannerFixture.ChainedAwakeOnlyTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
             Assert.That(
-                outcomes[0].LifecycleNote,
+                notes[0],
                 Is.EqualTo(
                     "OneShotCallerScannerFixture.ChainedAwakeOnlyTarget() is called only from one-shot "
                     + "lifecycle method(s) (Awake) in the compiled assemblies; objects that already ran them "
@@ -442,27 +372,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a compiled Awake chain through a non-MonoBehaviour instance still produces the note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledNonMonoBehaviourChain_AddsIndirectLifecycleNote()
+        public void BuildNotes_CompiledNonMonoBehaviourChain_AddsIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerChainHelper.ConfigureTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerCandidateForType(typeof(OneShotCallerChainHelper), "ConfigureTarget", outcome)
+                    CreateScannerRequestForType(typeof(OneShotCallerChainHelper), "ConfigureTarget", "OneShotCallerChainHelper.ConfigureTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
             Assert.That(
-                outcomes[0].LifecycleNote,
+                notes[0],
                 Is.EqualTo(
                     "OneShotCallerChainHelper.ConfigureTarget() is called only from one-shot lifecycle "
                     + "method(s) (Awake) in the compiled assemblies; objects that already ran them will not run "
@@ -476,119 +400,93 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a compiled chain that also has a non-lifecycle root suppresses the note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledMixedChain_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_CompiledMixedChain_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerScannerFixture.MixedChainTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("MixedChainTarget", outcome)
+                    CreateScannerFixtureRequest("MixedChainTarget", "OneShotCallerScannerFixture.MixedChainTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
         /// What: a compiled chain whose intermediate is loaded as a function pointer suppresses the note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledDelegateChain_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_CompiledDelegateChain_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerScannerFixture.DelegateChainTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("DelegateChainTarget", outcome)
+                    CreateScannerFixtureRequest("DelegateChainTarget", "OneShotCallerScannerFixture.DelegateChainTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
         /// What: a compiled chain that stops at an uncalled intermediate suppresses the note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledDeadEndChain_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_CompiledDeadEndChain_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerScannerFixture.DeadEndTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("DeadEndTarget", outcome)
+                    CreateScannerFixtureRequest("DeadEndTarget", "OneShotCallerScannerFixture.DeadEndTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
         /// What: a compiled chain deeper than MaxCallerDepth suppresses the note.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledDeepChain_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_CompiledDeepChain_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerScannerFixture.DeepTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("DeepTarget", outcome)
+                    CreateScannerFixtureRequest("DeepTarget", "OneShotCallerScannerFixture.DeepTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
         /// What: a cycle between the target and an intermediate still keeps a proven Awake root.
         /// </summary>
         [Test]
-        public void ApplyNotes_CycleThroughIntermediate_AddsIndirectLifecycleNote()
+        public void BuildNotes_CycleThroughIntermediate_AddsIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
             string assemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name;
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate(assemblyName, outcome)
+                    CreateRequest(assemblyName, "Type.SetUp")
                 };
             const string intermediateType = "Ns.Mid";
             const string intermediateName = "Run";
@@ -618,10 +516,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "SetUp",
                 intermediateKey);
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (scannedAssembly, identities) =>
                 {
                     if (identities.Length == 1 && identities[0].MethodName == intermediateName)
@@ -637,7 +533,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
 
             Assert.That(
-                outcomes[0].LifecycleNote,
+                notes[0],
                 Is.EqualTo(
                     "Type.SetUp is called only from one-shot lifecycle method(s) (Awake) in the compiled "
                     + "assemblies; objects that already ran them will not run the patched body. It takes "
@@ -650,15 +546,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a missing scan assembly at depth two suppresses the note.
         /// </summary>
         [Test]
-        public void ApplyNotes_MissingScanAssemblyAtDepthTwo_SuppressesNotes()
+        public void BuildNotes_MissingScanAssemblyAtDepthTwo_SuppressesNotes()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
             string assemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name;
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate(assemblyName, outcome)
+                    CreateRequest(assemblyName, "Type.SetUp")
                 };
             const string intermediateType = "Ns.Mid";
             const string intermediateName = "Run";
@@ -673,10 +567,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 intermediateName,
                 targetKey);
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (scannedAssembly, identities) =>
                 {
                     if (identities.Length == 1 && identities[0].MethodName == intermediateName)
@@ -691,22 +583,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         new List<string>());
                 });
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
         /// What: identical caller keys in different assemblies stay distinct so a dead end is not dropped.
         /// </summary>
         [Test]
-        public void ApplyNotes_SameCallerKeyDifferentAssemblies_SuppressesNoteAndScansEachAssembly()
+        public void BuildNotes_SameCallerKeyDifferentAssemblies_SuppressesNoteAndScansEachAssembly()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
             const string targetAssembly = "TargetAsm";
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateCandidate(targetAssembly, outcome)
+                    CreateRequest(targetAssembly, "Type.SetUp")
                 };
             const string helperType = "Ns.Helper";
             const string helperMethod = "Build";
@@ -735,10 +625,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadCompiledMethodIdentity[]> calls =
                 new List<HotReloadCompiledMethodIdentity[]>();
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                "project",
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (scannedAssembly, identities) =>
                 {
                     calls.Add(identities);
@@ -768,7 +656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         new List<string>());
                 });
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
             Assert.That(calls.Count, Is.EqualTo(3));
             Assert.That(calls[1].Length, Is.EqualTo(1));
             Assert.That(calls[2].Length, Is.EqualTo(1));
@@ -783,26 +671,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// event-driven calls are not proven to be one-shot.
         /// </summary>
         [Test]
-        public void ApplyNotes_CompiledDelegateAssignment_SuppressesIndirectLifecycleNote()
+        public void BuildNotes_CompiledDelegateAssignment_SuppressesIndirectLifecycleNote()
         {
-            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
-                "OneShotCallerScannerFixture.DelegateAssignedTarget()",
-                "Assets/Test.cs");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
-            List<HotReloadOneShotCallerNoteCandidate> candidates =
-                new List<HotReloadOneShotCallerNoteCandidate>
+            List<HotReloadOneShotCallerNoteRequest> requests =
+                new List<HotReloadOneShotCallerNoteRequest>
                 {
-                    CreateScannerFixtureCandidate("DelegateAssignedTarget", outcome)
+                    CreateScannerFixtureRequest("DelegateAssignedTarget", "OneShotCallerScannerFixture.DelegateAssignedTarget()")
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                candidates,
+            string[] notes = HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                requests,
                 (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
-            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(notes[0], Is.Null);
         }
 
         /// <summary>
@@ -964,9 +846,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadOneShotCallerNoteCandidate CreateCandidate(
+        private static HotReloadOneShotCallerNoteRequest CreateRequest(
             string assemblyName,
-            HotReloadMethodOutcome outcome)
+            string method)
         {
             HotReloadCompiledMethodIdentity identity =
                 new HotReloadCompiledMethodIdentity(
@@ -975,20 +857,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "SetUp",
                     Array.Empty<string>(),
                     0);
-            return new HotReloadOneShotCallerNoteCandidate(identity, outcome);
+            return new HotReloadOneShotCallerNoteRequest(identity, method);
         }
 
-        private static HotReloadOneShotCallerNoteCandidate CreateScannerFixtureCandidate(
+        private static HotReloadOneShotCallerNoteRequest CreateScannerFixtureRequest(
             string methodName,
-            HotReloadMethodOutcome outcome)
+            string method)
         {
-            return CreateScannerCandidateForType(typeof(OneShotCallerScannerFixture), methodName, outcome);
+            return CreateScannerRequestForType(typeof(OneShotCallerScannerFixture), methodName, method);
         }
 
-        private static HotReloadOneShotCallerNoteCandidate CreateScannerCandidateForType(
+        private static HotReloadOneShotCallerNoteRequest CreateScannerRequestForType(
             Type type,
             string methodName,
-            HotReloadMethodOutcome outcome)
+            string method)
         {
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
                 "Assets/Tests/Editor/HotReload/HotReloadCallSiteScannerFixture.cs");
@@ -1000,7 +882,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     methodName,
                     Array.Empty<string>(),
                     0);
-            return new HotReloadOneShotCallerNoteCandidate(identity, outcome);
+            return new HotReloadOneShotCallerNoteRequest(identity, method);
         }
 
         private static HotReloadCallSiteHit CreateKeyedHit(

@@ -70,47 +70,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        internal static void ApplyNotes(
-            string projectRoot,
-            List<HotReloadMethodOutcome> outcomes,
-            IReadOnlyList<HotReloadOneShotCallerNoteCandidate> candidates,
+        /// <summary>
+        /// Builds the one-shot lifecycle note of each request; the result has one entry per request,
+        /// in the same order, null where no note can be proven.
+        /// </summary>
+        internal static string[] BuildNotes(
+            IReadOnlyList<HotReloadOneShotCallerNoteRequest> requests,
             Func<string, HotReloadCompiledMethodIdentity[], HotReloadCallSiteScanner.HotReloadCallSiteScanResult> scan)
         {
-            Dictionary<string, List<HotReloadOneShotCallerNoteCandidate>> candidatesByAssembly =
-                new Dictionary<string, List<HotReloadOneShotCallerNoteCandidate>>(StringComparer.Ordinal);
-            foreach (HotReloadOneShotCallerNoteCandidate candidate in candidates)
+            Debug.Assert(requests != null, "requests must not be null.");
+            Debug.Assert(scan != null, "scan must not be null.");
+
+            string[] notes = new string[requests.Count];
+            // Why grouped in request order: the scans run in this order, and the load budget is spent in it.
+            Dictionary<string, List<int>> indexesByAssembly =
+                new Dictionary<string, List<int>>(StringComparer.Ordinal);
+            for (int index = 0; index < requests.Count; index++)
             {
-                if (!string.IsNullOrEmpty(candidate.Outcome.LifecycleNote))
+                string assemblyName = requests[index].Identity.AssemblyName;
+                if (!indexesByAssembly.TryGetValue(assemblyName, out List<int> group))
                 {
-                    continue;
+                    group = new List<int>();
+                    indexesByAssembly.Add(assemblyName, group);
                 }
 
-                if (!candidatesByAssembly.TryGetValue(candidate.Identity.AssemblyName, out List<HotReloadOneShotCallerNoteCandidate> group))
-                {
-                    group = new List<HotReloadOneShotCallerNoteCandidate>();
-                    candidatesByAssembly.Add(candidate.Identity.AssemblyName, group);
-                }
-
-                group.Add(candidate);
+                group.Add(index);
             }
 
-            foreach (KeyValuePair<string, List<HotReloadOneShotCallerNoteCandidate>> pair in candidatesByAssembly)
+            foreach (KeyValuePair<string, List<int>> pair in indexesByAssembly)
             {
                 HotReloadCompiledMethodIdentity[] identities = pair.Value.ConvertAll(
-                    candidate => candidate.Identity).ToArray();
+                    index => requests[index].Identity).ToArray();
                 HotReloadCallSiteScanner.HotReloadCallSiteScanResult result = scan(pair.Key, identities);
                 if (result.IsIncomplete)
                 {
                     continue;
                 }
 
-                foreach (HotReloadOneShotCallerNoteCandidate candidate in pair.Value)
+                foreach (int index in pair.Value)
                 {
+                    HotReloadOneShotCallerNoteRequest request = requests[index];
                     string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                        candidate.Identity.TypeMetadataName.Value,
-                        candidate.Identity.MethodName,
-                        candidate.Identity.ParameterTypeFullNames,
-                        candidate.Identity.GenericArity);
+                        request.Identity.TypeMetadataName.Value,
+                        request.Identity.MethodName,
+                        request.Identity.ParameterTypeFullNames,
+                        request.Identity.GenericArity);
                     List<HotReloadCallSiteHit> targetHits =
                         new List<HotReloadCallSiteHit>();
                     foreach (HotReloadCallSiteHit hit in result.Hits)
@@ -132,19 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    string note = HotReloadOneShotCallerNoteBuilder.Build(candidate.Outcome.Method, callers);
-                    if (note == null)
-                    {
-                        continue;
-                    }
-
-                    int index = outcomes.IndexOf(candidate.Outcome);
-                    if (index >= 0)
-                    {
-                        outcomes[index] = candidate.Outcome.WithLifecycleNote(note);
-                    }
+                    notes[index] = HotReloadOneShotCallerNoteBuilder.Build(request.Method, callers);
                 }
             }
+
+            return notes;
         }
 
         private static bool IsOneShotLifecycleMethodName(string methodName)

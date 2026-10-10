@@ -231,11 +231,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // however many candidate assemblies and levels it visits.
             HotReloadCallSiteLoadBudget budget =
                 new HotReloadCallSiteLoadBudget(HotReloadConstants.CallerNoteUncachedDllLoadBudget);
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
+            HotReloadOneShotCallerNoteAttacher.Attach(
                 _outcomes,
                 _oneShotCallerNoteCandidates,
-                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities, budget));
+                requests => HotReloadOneShotCallerNoteEnricher.BuildNotes(
+                    requests,
+                    (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities, budget)));
             if (budget.RefusedAssemblyNames.Count > 0)
             {
                 HotReloadOrchestratorLog.LogHotReloadCallerNoteLoadBudgetExhausted(
