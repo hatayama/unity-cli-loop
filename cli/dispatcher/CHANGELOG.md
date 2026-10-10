@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.8.1...dispatcher-v3.8.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* CLI binaries ship with the patched Go 1.26.9 runtime and golang.org/x/net 0.60.0 ([#3261](https://github.com/hatayama/unity-cli-loop/issues/3261)) ([c676543](https://github.com/hatayama/unity-cli-loop/commit/c676543c11fdb61f21bf1c0b2bfb6231473651b1))
+
 ## [3.8.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.8.0...dispatcher-v3.8.1) (2026-10-07)
 
 
