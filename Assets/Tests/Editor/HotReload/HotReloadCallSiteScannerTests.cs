@@ -736,36 +736,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// per scan call would read two.
         /// </summary>
         [Test]
-        public async Task ApplyOneShotCallerNotes_WithFreshCache_SharesOneLoadBudgetAcrossCandidateAssemblies()
+        public async Task BuildOneShotCallerNotes_WithFreshCache_SharesOneLoadBudgetAcrossCandidateAssemblies()
         {
             await StopInstalledWarmUpAsync();
             HotReloadCompiledCallSiteCache.Shared.Clear();
             int before = HotReloadCompiledCallSiteCache.Shared.LoadCount;
-            HotReloadRunAccumulator run = new HotReloadRunAccumulator(
-                HotReloadCompositionRoot.Services.Domain,
-                HotReloadCompositionRoot.Services.Patcher,
-                HotReloadCompositionRoot.Services.UnityMessageForwarding,
-                false);
-            HotReloadMethodOutcome targetOutcome = HotReloadMethodOutcome.Patched("Type.Called", "Assets/Test.cs");
-            HotReloadMethodOutcome callerOutcome = HotReloadMethodOutcome.Patched("Type.Call", "Assets/Test2.cs");
-            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteCandidate(
-                new HotReloadCompiledMethodIdentity(
-                    GetTestAssemblyName(),
-                    new HotReloadMetadataTypeName(CrossAssemblyTargetTypeMetadataName),
-                    nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
-                    Array.Empty<string>(),
-                    0),
-                targetOutcome));
-            run.OneShotCallerNoteCandidates.Add(new HotReloadOneShotCallerNoteCandidate(
-                new HotReloadCompiledMethodIdentity(
-                    CrossAssemblyCallerAssemblyName,
-                    new HotReloadMetadataTypeName(CrossAssemblyCallerTypeMetadataName),
-                    "Call",
-                    Array.Empty<string>(),
-                    0),
-                callerOutcome));
+            HotReloadCompiledCallers compiledCallers = new HotReloadCompiledCallers(
+                HotReloadCompiledCallSiteCache.Shared,
+                new HotReloadCallSiteBackfill((dllPath, ct) => Task.CompletedTask));
+            HotReloadOneShotCallerNoteRequest[] requests =
+            {
+                new HotReloadOneShotCallerNoteRequest(
+                    new HotReloadCompiledMethodIdentity(
+                        GetTestAssemblyName(),
+                        new HotReloadMetadataTypeName(CrossAssemblyTargetTypeMetadataName),
+                        nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
+                        Array.Empty<string>(),
+                        0),
+                    "Type.Called"),
+                new HotReloadOneShotCallerNoteRequest(
+                    new HotReloadCompiledMethodIdentity(
+                        CrossAssemblyCallerAssemblyName,
+                        new HotReloadMetadataTypeName(CrossAssemblyCallerTypeMetadataName),
+                        "Call",
+                        Array.Empty<string>(),
+                        0),
+                    "Type.Call")
+            };
 
-            run.ApplyOneShotCallerNotes(GetProjectRoot(), "test-correlation");
+            using (HotReloadCompiledCallersRun compiledCallersRun = await compiledCallers.BeginRunAsync())
+            {
+                compiledCallersRun.BuildOneShotCallerNotes(GetProjectRoot(), requests, "test-correlation");
+            }
 
             Assert.That(HotReloadCompiledCallSiteCache.Shared.LoadCount - before, Is.EqualTo(1));
         }
@@ -795,7 +797,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadServices installed = HotReloadCompositionRoot.Services;
             return Task.WhenAll(
                 installed.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope),
-                installed.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope));
+                installed.CompiledCallers.StopBackgroundReadsAsync(HotReloadConstants.WarmUpShutdownTriggerTestScope));
         }
 
         private static List<HotReloadCallSiteHit> FindHits(

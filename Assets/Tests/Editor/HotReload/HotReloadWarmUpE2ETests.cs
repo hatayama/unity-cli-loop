@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string testDll = TestAssemblyDllPath();
             HotReloadWarmUp warmUp = new HotReloadWarmUp(
                 new FixedContextSource(CreateTestAssemblyCapture(testDll)),
-                HotReloadWarmUpItems.CreateProduction());
+                HotReloadWarmUpItems.CreateProduction(HotReloadCompiledCallers.CreateProduction()));
             await BeginScope(warmUp);
             // Why clear again once the installed warm-up stopped: its unit in flight can log a copy
             // written and its completion after the clear in SetUp.

@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(new[] { CrossAssemblyName }),
                 "Precondition: the refused dll must be the cross-assembly caller.");
 
-            await HotReloadCompositionRoot.Services.CallSiteBackfill.Completion;
+            await HotReloadCompositionRoot.Services.CompiledCallers.Backfill.Completion;
             Assert.That(
                 HotReloadCompiledCallSiteCache.Shared.LoadCount - before,
                 Is.EqualTo(2),

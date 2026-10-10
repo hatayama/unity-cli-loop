@@ -102,7 +102,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 collaborators.EditorStateSnapshotCapture,
                 collaborators.CommitPolicy,
                 collaborators.PlayMode,
-                internalAccessGrant);
+                internalAccessGrant,
+                collaborators.CompiledCallers);
         }
 
         private protected static Task<HotReloadOrchestratorResult> RunReloadAsync(

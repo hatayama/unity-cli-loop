@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
         private readonly HotReloadWarmUp _warmUp;
-        private readonly HotReloadCallSiteBackfill _callSiteBackfill;
+        private readonly HotReloadCompiledCallers _compiledCallers;
 
         internal HotReloadOrchestrator(
             HotReloadDomain domain,
@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IHotReloadPackageRootCapture packageRootCapture,
             HotReloadUnityMessageForwarding unityMessageForwarding,
             HotReloadWarmUp warmUp,
-            HotReloadCallSiteBackfill callSiteBackfill)
+            HotReloadCompiledCallers compiledCallers)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             Debug.Assert(warmUp != null, "warmUp must not be null.");
-            Debug.Assert(callSiteBackfill != null, "callSiteBackfill must not be null.");
+            Debug.Assert(compiledCallers != null, "compiledCallers must not be null.");
             _domain = domain;
             _patcher = patcher;
             _groupProcessor = groupProcessor;
@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _packageRootCapture = packageRootCapture;
             _unityMessageForwarding = unityMessageForwarding;
             _warmUp = warmUp;
-            _callSiteBackfill = callSiteBackfill;
+            _compiledCallers = compiledCallers;
         }
 
         /// <summary>
@@ -85,22 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string correlationId = VibeLogger.GenerateCorrelationId();
             Stopwatch total = Stopwatch.StartNew();
-            // Why the whole run: the signature-change gate during analysis and the caller notes at
-            // the end both scan callers through the shared cache, once per method they check, so
-            // one hold keeps every dll they read until the run ends.
-            using IDisposable callSiteCacheHold = HotReloadCompiledCallSiteCache.Shared.HoldEntriesForRun();
             HotReloadRunTiming timing = new HotReloadRunTiming();
-
-            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWarmUpYield))
-            {
-                // Why first: the warm-up may be reading a dll this run is about to read; waiting for
-                // that one item here is cheaper than contending for the cache lock inside the run.
-                await _warmUp.YieldToRunAsync().ConfigureAwait(false);
-                // Why here too: the backfill of the previous run may still be reading a dll this run is
-                // about to read, and waiting for that one read here is cheaper than contending for the
-                // cache lock inside the run.
-                await _callSiteBackfill.YieldToRunAsync().ConfigureAwait(false);
-            }
+            using HotReloadCompiledCallersRun compiledCallersRun =
+                await BeginCompiledCallersRunAsync(timing).ConfigureAwait(false);
 
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
             {
@@ -261,11 +248,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
 
-            IReadOnlyList<string> refusedDllPaths;
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepCallerNotes))
             {
                 string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-                refusedDllPaths = run.ApplyOneShotCallerNotes(projectRoot, correlationId);
+                run.ApplyOneShotCallerNotes(
+                    requests => compiledCallersRun.BuildOneShotCallerNotes(projectRoot, requests, correlationId));
             }
 
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
@@ -278,12 +265,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadTimingDetailPayload.Build(breakdown, timing.Details, groupCount),
                 correlationId);
             HotReloadOrchestratorResult result = run.BuildResult(correlationId, breakdown);
-            // Why the hold ends here, before the backfill starts: its reads belong to no run, so they
-            // must evict as reads outside a run do rather than pile up under this run's hold. Disposing
-            // the hold again at the end of the method releases nothing.
-            callSiteCacheHold.Dispose();
-            _callSiteBackfill.Start(refusedDllPaths, correlationId);
+            compiledCallersRun.End(correlationId);
             return result;
+        }
+
+        // Yields to the background work that may be reading a dll this run is about to read, and
+        // begins the compiled-caller run once nothing reads any more.
+        private async Task<HotReloadCompiledCallersRun> BeginCompiledCallersRunAsync(HotReloadRunTiming timing)
+        {
+            using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepWarmUpYield))
+            {
+                // Why first: the warm-up may be reading a dll this run is about to read; waiting for
+                // that one item here is cheaper than contending for the cache lock inside the run.
+                await _warmUp.YieldToRunAsync().ConfigureAwait(false);
+                return await _compiledCallers.BeginRunAsync().ConfigureAwait(false);
+            }
         }
 
         // Why on the inputs only: a re-applied sibling joins a group later and was never selected,

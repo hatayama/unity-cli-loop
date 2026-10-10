@@ -44,18 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void PreloadSets_ReadsEachReferencingDllOnce_AndAgainReadsNothing()
         {
             HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex(_persistenceDirectory);
-            HotReloadWarmUpTarget[] targets =
-            {
-                new HotReloadWarmUpTarget(
-                    TestAssemblyName,
-                    DllPath(TestAssemblyName),
-                    Path.ChangeExtension(DllPath(TestAssemblyName), ".pdb"),
-                    new[] { DllPath(CrossAssemblyCallerAssemblyName), DllPath(TestAssemblyName) })
-            };
+            string[] dllPaths = { DllPath(CrossAssemblyCallerAssemblyName), DllPath(TestAssemblyName) };
 
-            HotReloadReferencedMethodSetWarmUpItem.PreloadSets(targets, index, CancellationToken.None);
+            HotReloadCompiledCallers.PreloadReferencedMethodSets(dllPaths, index, CancellationToken.None);
             int afterFirst = index.LoadCount;
-            HotReloadReferencedMethodSetWarmUpItem.PreloadSets(targets, index, CancellationToken.None);
+            HotReloadCompiledCallers.PreloadReferencedMethodSets(dllPaths, index, CancellationToken.None);
 
             Assert.That(afterFirst, Is.EqualTo(2), "reads after the first preload");
             Assert.That(index.LoadCount, Is.EqualTo(2), "reads after the second preload");
@@ -68,17 +61,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void PreloadSets_WhenCancelled_ThrowsAndReadsNothing()
         {
             HotReloadReferencedMethodIndex index = new HotReloadReferencedMethodIndex(_persistenceDirectory);
-            HotReloadWarmUpTarget[] targets =
-            {
-                new HotReloadWarmUpTarget(
-                    TestAssemblyName,
-                    DllPath(TestAssemblyName),
-                    Path.ChangeExtension(DllPath(TestAssemblyName), ".pdb"),
-                    new[] { DllPath(CrossAssemblyCallerAssemblyName) })
-            };
+            string[] dllPaths = { DllPath(CrossAssemblyCallerAssemblyName) };
 
             Assert.Throws<OperationCanceledException>(
-                () => HotReloadReferencedMethodSetWarmUpItem.PreloadSets(targets, index, new CancellationToken(true)));
+                () => HotReloadCompiledCallers.PreloadReferencedMethodSets(dllPaths, index, new CancellationToken(true)));
 
             Assert.That(index.LoadCount, Is.EqualTo(0), "reads");
         }

@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // Why stop the installed warm-up: the scope's run yields to that same warm-up, but a
             // test that counts cache reads must not race one already running on a pool thread.
             _ = installed.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope);
-            _ = installed.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope);
+            _ = installed.CompiledCallers.StopBackgroundReadsAsync(HotReloadConstants.WarmUpShutdownTriggerTestScope);
             return HotReloadCompositionRoot.BeginReplacement(
                 HotReloadCompositionRoot.CreateServices(
                     installed.Domain,
@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     playModeQuery,
                     installed.SourceSnapshotCapture,
                     installed.WarmUp,
-                    installed.CallSiteBackfill));
+                    installed.CompiledCallers));
         }
     }
 

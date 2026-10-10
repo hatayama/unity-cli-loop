@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void CreateProduction_ReturnsPublicizedTargetsThenCallSitesThenReferencedMethodSetsThenTransformWorkerThenPdbDocuments()
         {
             List<string> names = new List<string>();
-            foreach (IHotReloadWarmUpItem item in HotReloadWarmUpItems.CreateProduction())
+            foreach (IHotReloadWarmUpItem item in HotReloadWarmUpItems.CreateProduction(HotReloadCompiledCallers.CreateProduction()))
             {
                 names.Add(item.Name);
             }

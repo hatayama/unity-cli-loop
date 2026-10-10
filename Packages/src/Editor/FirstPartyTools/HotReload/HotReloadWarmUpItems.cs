@@ -20,13 +20,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// and do not stop the items after it; any other exception does, but a run with the same
         /// input makes the same call and fails the same way.
         /// </remarks>
-        internal static IReadOnlyList<IHotReloadWarmUpItem> CreateProduction()
+        internal static IReadOnlyList<IHotReloadWarmUpItem> CreateProduction(HotReloadCompiledCallers compiledCallers)
         {
             return new IHotReloadWarmUpItem[]
             {
                 new HotReloadPublicizedTargetWarmUpItem(),
-                new HotReloadCallSiteWarmUpItem(),
-                new HotReloadReferencedMethodSetWarmUpItem(),
+                new HotReloadCallSiteWarmUpItem(compiledCallers),
+                new HotReloadReferencedMethodSetWarmUpItem(compiledCallers),
                 new HotReloadTransformWorkerWarmUpItem(TransformWorkerHost.Shared.RunAsync),
                 new HotReloadPdbDocumentWarmUpItem()
             };
