@@ -6,7 +6,7 @@ on:
       - dispatcher-publish
       - native-cli-publish
       - release-please
-      - unity-package-sign
+      - unity-package-release
     types:
       - completed
 

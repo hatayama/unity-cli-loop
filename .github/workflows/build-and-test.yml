@@ -46,10 +46,11 @@ jobs:
           scripts/test-verify-dispatcher-release-assets.sh
           scripts/test-mark-release-pr-tagged.sh
           scripts/test-sync-published-release-pr-labels.sh
-          scripts/test-sync-release-please-package-releases.sh
+          scripts/test-check-unity-package-release.sh
           scripts/test-notify-release-workflow-failure.sh
           scripts/test-native-cli-publish-workflow.sh
           scripts/test-dispatcher-publish-workflow.sh
+          scripts/test-unity-package-release-workflow.sh
           scripts/test-distribute-attestation-bundles.sh
           scripts/test-install-release-filter.sh
           scripts/test-install-pin-manifest.sh

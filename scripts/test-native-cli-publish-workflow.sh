@@ -260,18 +260,9 @@ test_build_verifies_assets_before_writing_the_publish_input() {
 test_post_publish_automation_remains_outside_the_privileged_job() {
   assert_contains "  post-publish:"
   assert_contains "      - name: Dispatch release-please after native CLI publish"
-  assert_contains "      - name: Sync release-please package releases"
   assert_contains "      - name: Mark release PR as tagged"
   assert_count 2 "      contents: write"
-  if ! post_publish_section | grep -F "      - name: Setup Go" >/dev/null 2>&1; then
-    echo "Post-publish job must set up the pinned Go toolchain." >&2
-    exit 1
-  fi
-  if ! post_publish_section | grep -F "          go-version-file: cli/.go-version" >/dev/null 2>&1 || ! post_publish_section | grep -F "          cache-dependency-path: '**/go.sum'" >/dev/null 2>&1; then
-    echo "Post-publish Go setup must use the repository pin and cache dependency path." >&2
-    exit 1
-  fi
-  assert_post_publish_before "      - name: Setup Go" "      - name: Sync release-please package releases"
+  assert_post_publish_before "      - name: Dispatch release-please after native CLI publish" "      - name: Mark release PR as tagged"
 }
 
 test_build_and_publish_jobs_have_separate_trust_boundaries

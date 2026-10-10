@@ -1,0 +1,235 @@
+name: unity-package-release
+
+# Creates the Unity package's GitHub release, and is the only workflow that
+# does. The package is signed with the Unity organization's service account
+# first, and the release is created and published with the signed tarball in
+# one step, because a published release is immutable; OpenUPM republishes that
+# tarball unchanged (docs/unity-package-release.md). A release can be created
+# once its release commit is on main and the runner and dispatcher releases it
+# depends on are published, so this follows every run of the three workflows
+# that make one of those happen.
+on:
+  workflow_run:
+    workflows:
+      - release-please
+      - dispatcher-publish
+      - native-cli-publish
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Sign without creating the release (a published release is signed from its tag), and keep the tarball as a workflow artifact"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    # A run that fails partway may still have published what the package
+    # release waits for, so only a cancelled run is ignored.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sign: ${{ steps.plan.outputs.sign }}
+      publish: ${{ steps.plan.outputs.publish }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      asset-name: ${{ steps.plan.outputs.asset-name }}
+      source-ref: ${{ steps.plan.outputs.source-ref }}
+    steps:
+      # The newest main commit is the right one to read: while the package
+      # release pull request is still pending, release-please opens no next
+      # release pull request, so the manifest there still names the release that
+      # is not out yet. The full history is what the release commit is found in.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Decide whether to sign and create the package release
+        id: plan
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+        run: go run ./cmd/plan-unity-package-release --repo "$GITHUB_REPOSITORY" --dry-run="$DRY_RUN" >> "$GITHUB_OUTPUT"
+
+  # The UPM CLI is a third-party binary that sees the signing credentials, so it
+  # runs in a job whose token cannot write to the repository. The credentials
+  # live in the upm-signing environment, which only main may deploy to: a manual
+  # run on another branch would otherwise run that branch's edited steps with
+  # the secrets.
+  sign:
+    needs: plan
+    if: needs.plan.outputs.sign == 'true'
+    runs-on: ubuntu-latest
+    environment: upm-signing
+    permissions:
+      contents: read
+    env:
+      # Pinned to a release that had been public for weeks, and verified against
+      # a checksum recorded in this file rather than the one served beside the
+      # zip, so a later change on the CDN fails the run instead of running.
+      UPM_CLI_VERSION: v9.32.0
+      UPM_CLI_LINUX_X64_SHA256: 1de355a1bd5daf134a4dc7b6f97194e0db89cfedd0f98b5d8204603f7d009c21
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # The signing tooling comes from the workflow ref above, but the package
+      # contents must be exactly the release's: the plan names the release
+      # commit of a release that is not created yet, or the tag of a published
+      # one.
+      - name: Checkout the package release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.plan.outputs.source-ref }}
+          path: release-source
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Install the pinned UPM CLI
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/upm-cli.zip" "https://cdn.packages.unity.com/upm-cli/releases/${UPM_CLI_VERSION}/upm-linux-x64.zip"
+          echo "${UPM_CLI_LINUX_X64_SHA256}  ${RUNNER_TEMP}/upm-cli.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/upm-cli.zip" -d "$RUNNER_TEMP/upm-cli"
+          chmod +x "$RUNNER_TEMP/upm-cli/UnityPackageManager"
+          "$RUNNER_TEMP/upm-cli/UnityPackageManager" --version
+
+      - name: Sign the package
+        env:
+          UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
+          UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
+          UPM_ORG_ID: ${{ secrets.UPM_ORG_ID }}
+        run: |
+          "$RUNNER_TEMP/upm-cli/UnityPackageManager" pack release-source/Packages/src \
+            --organization-id "$UPM_ORG_ID" \
+            --destination "$RUNNER_TEMP/signed"
+
+      - name: Check and stage the signed tarball
+        id: stage
+        working-directory: cli/release-automation
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.version }}
+        run: go run ./cmd/stage-signed-unity-package --dir "$RUNNER_TEMP/signed" --version "$PACKAGE_VERSION" --source "$GITHUB_WORKSPACE/release-source/Packages/src" >> "$GITHUB_OUTPUT"
+
+      - name: List the signed tarball contents
+        env:
+          ARCHIVE: ${{ steps.stage.outputs.archive }}
+        run: tar -tzvf "$ARCHIVE"
+
+      - name: Upload the signed tarball as a workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: signed-unity-package
+          path: ${{ steps.stage.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # Creates the tag at the release commit, then creates and publishes the
+  # release with the signed tarball in one step. The plan's readiness checks are
+  # not repeated: what they verified (the release commit's protocol and pin, the
+  # published runner and dispatcher releases) cannot change any more, and the
+  # tag and the release, which can, are checked again right before the writes.
+  publish:
+    needs: [plan, sign]
+    if: needs.plan.outputs.publish == 'true'
+    # Creations run one at a time, so two runs never create the same release.
+    # Only this job is serialized: a run that skips, a dry run, or a run after a
+    # cancelled one never gets here, so it cannot take the place of a waiting
+    # creation. A waiting creation may be replaced by a newer one, which creates
+    # the same release, or finds it published and does nothing.
+    concurrency:
+      group: unity-package-release
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The release notes are read from the changelog at the release commit.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Download the signed tarball
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: signed-unity-package
+          path: ${{ runner.temp }}/signed
+
+      - name: Create the release with the signed tarball
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          RELEASE_COMMIT: ${{ needs.plan.outputs.source-ref }}
+          ASSET_NAME: ${{ needs.plan.outputs.asset-name }}
+        run: >-
+          go run ./cmd/create-unity-package-release
+          --repo "$GITHUB_REPOSITORY"
+          --tag "$RELEASE_TAG"
+          --commit "$RELEASE_COMMIT"
+          --asset "$RUNNER_TEMP/signed/$ASSET_NAME"
+
+  # Marks the package release pull request tagged, which is what lets
+  # release-please open the next release pull requests. It is marked here
+  # because release-please skips its own label sync while the release commit is
+  # still the newest main commit, which it is whenever the release was due as
+  # soon as the pull request was merged.
+  post-publish:
+    needs: [plan, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Mark the package release pull request as tagged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          TARGET_SHA: ${{ needs.plan.outputs.source-ref }}
+          TARGET_BRANCH: main
+        run: scripts/mark-release-pr-tagged.sh
+
+      # A release created with GITHUB_TOKEN starts no workflow, so release-please
+      # is started here to open the release pull requests of the commits merged
+      # while this release was pending.
+      - name: Dispatch release-please after the package release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release-please.yml --repo "$GITHUB_REPOSITORY" --ref main -f branch=main

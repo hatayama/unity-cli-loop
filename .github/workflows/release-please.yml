@@ -70,19 +70,6 @@ jobs:
         run: |
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
 
-      - name: Setup Go for package release sync
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-        with:
-          go-version-file: cli/.go-version
-          cache-dependency-path: '**/go.sum'
-
-      - name: 🏷️ Sync release-please package releases
-        id: package_release_sync
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: scripts/sync-release-please-package-releases.sh
-
       - name: 🏷️ Sync published release PR labels
         if: steps.release_commit.outputs.skip != 'true'
         env:
@@ -93,7 +80,7 @@ jobs:
 
       # ── Execute release-please ───────────────────────────
       - name: 🚀 Run release‑please
-        if: steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'
+        if: steps.release_commit.outputs.skip != 'true'
         id: release
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071
         with:
@@ -104,7 +91,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Go for release PR automation
-        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version-file: cli/.go-version
@@ -112,7 +99,7 @@ jobs:
 
       - name: Dispatch release PR checks
         id: release_pr_checks
-        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true'
         working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,7 +118,7 @@ jobs:
       # something unchecked.
       - name: Mint package release merge token
         id: package-merge-token
-        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true' && !cancelled() && (steps.release_pr_checks.outcome == 'success' || steps.release_pr_checks.outcome == 'failure')
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true' && !cancelled() && (steps.release_pr_checks.outcome == 'success' || steps.release_pr_checks.outcome == 'failure')
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}
@@ -147,7 +134,7 @@ jobs:
       # covers the run listing lagging the completion the previous step just
       # watched; without it a green head is left draft until the next push.
       - name: Merge the Unity package release pull request when no dispatcher release is pending
-        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true' && !cancelled() && (steps.release_pr_checks.outcome == 'success' || steps.release_pr_checks.outcome == 'failure')
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true' && !cancelled() && (steps.release_pr_checks.outcome == 'success' || steps.release_pr_checks.outcome == 'failure')
         working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ steps.package-merge-token.outputs.token }}
