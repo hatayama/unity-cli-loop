@@ -58,8 +58,12 @@ release waits for.
 - A run cut off between creating the tag and creating the release leaves only the tag, which
   the next run reuses; the OpenUPM hold applies only to this window. A draft left by a cut-off
   `gh release create` is deleted by the next run before it creates the release.
-- After it creates a release with `GITHUB_TOKEN`, which starts no workflow, the workflow starts
-  release-please so the pending pull request is marked tagged without waiting for the next push.
+- After it creates the release, the workflow marks the pending pull request tagged itself:
+  release-please skips its own label sync while the release commit is the newest `main` commit,
+  which it is whenever the release was due as soon as the pull request was merged. It then starts
+  release-please, because a release created with `GITHUB_TOKEN` starts no workflow, so commits
+  merged while the release was pending get their release pull requests without waiting for the
+  next push.
 
 ## Reversal Condition
 

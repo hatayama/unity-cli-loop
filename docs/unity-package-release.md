@@ -50,10 +50,12 @@ after the tarball is signed. The decision and the alternatives it replaced are r
    in one `gh release create` call, which uploads to a draft and publishes it only after the
    upload succeeded. It finally reads the release back until it shows as published with a
    non-empty tarball. A pre-release version is published as a pre-release.
-5. **`post-publish`** (`actions: write`) starts `release-please`. A release created with
-   `GITHUB_TOKEN` starts no workflow, and it is release-please's label sync that marks the
-   package release pull request `autorelease: tagged`, which lets release-please open the next
-   release pull requests.
+5. **`post-publish`** (`actions: write`, `pull-requests: write`) marks the package release pull
+   request `autorelease: tagged`, which lets release-please open the next release pull requests.
+   release-please's own label sync does not do it while the release commit is still the newest
+   `main` commit, because release-please skips release commits. It then starts `release-please`,
+   because a release created with `GITHUB_TOKEN` starts no workflow, so commits merged while the
+   release was pending get their release pull requests without waiting for the next push.
 
 Neither `plan` nor `publish` runs the UPM CLI, and `sign`, which holds the signing credentials,
 cannot write to the repository.

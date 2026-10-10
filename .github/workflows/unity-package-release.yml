@@ -200,15 +200,35 @@ jobs:
           --commit "$RELEASE_COMMIT"
           --asset "$RUNNER_TEMP/signed/$ASSET_NAME"
 
-  # A release created with GITHUB_TOKEN starts no workflow, so release-please is
-  # started here: its label sync marks the package release pull request tagged,
-  # which is what lets release-please open the next release pull requests.
+  # Marks the package release pull request tagged, which is what lets
+  # release-please open the next release pull requests. It is marked here
+  # because release-please skips its own label sync while the release commit is
+  # still the newest main commit, which it is whenever the release was due as
+  # soon as the pull request was merged.
   post-publish:
-    needs: publish
+    needs: [plan, publish]
     runs-on: ubuntu-latest
     permissions:
       actions: write
+      contents: read
+      pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Mark the package release pull request as tagged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          TARGET_SHA: ${{ needs.plan.outputs.source-ref }}
+          TARGET_BRANCH: main
+        run: scripts/mark-release-pr-tagged.sh
+
+      # A release created with GITHUB_TOKEN starts no workflow, so release-please
+      # is started here to open the release pull requests of the commits merged
+      # while this release was pending.
       - name: Dispatch release-please after the package release
         env:
           GH_TOKEN: ${{ github.token }}

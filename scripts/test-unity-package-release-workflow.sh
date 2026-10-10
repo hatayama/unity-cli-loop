@@ -62,7 +62,7 @@ test_only_release_creations_run_one_at_a_time() {
   assert_job_contains publish "      cancel-in-progress: false"
 }
 
-# Verifies each job holds only the permissions it needs: the plan and the signing job only read, only publish writes contents, and only post-publish starts workflows.
+# Verifies each job holds only the permissions it needs: the plan and the signing job only read, only publish writes contents, and only post-publish edits pull requests and starts workflows.
 test_jobs_use_least_privilege() {
   assert_job_contains plan "      contents: read"
   assert_job_not_contains plan ": write"
@@ -70,7 +70,9 @@ test_jobs_use_least_privilege() {
   assert_job_not_contains sign ": write"
   assert_job_contains publish "      contents: write"
   assert_job_not_contains publish "actions: write"
+  assert_job_not_contains publish "pull-requests: write"
   assert_job_contains post-publish "      actions: write"
+  assert_job_contains post-publish "      pull-requests: write"
   assert_job_not_contains post-publish "contents: write"
 }
 
@@ -90,8 +92,6 @@ test_release_is_created_only_after_signing() {
   assert_job_contains publish "go run ./cmd/create-unity-package-release"
   assert_job_contains publish '          RELEASE_COMMIT: ${{ needs.plan.outputs.source-ref }}'
   assert_job_contains sign "    if: needs.plan.outputs.sign == 'true'"
-  assert_job_contains post-publish "    needs: publish"
-  assert_job_contains post-publish 'gh workflow run release-please.yml --repo "$GITHUB_REPOSITORY" --ref main -f branch=main'
 }
 
 # Verifies the manual run's dry-run choice reaches the plan, which is the only thing that turns publish off for a dry run: without it the plan cannot tell a dry run from a run that creates the immutable release.
@@ -108,6 +108,19 @@ test_plan_decisions_reach_the_jobs() {
   assert_job_contains sign '          ref: ${{ needs.plan.outputs.source-ref }}'
   assert_job_contains sign "          name: signed-unity-package"
   assert_job_contains publish "          name: signed-unity-package"
+}
+
+# Verifies post-publish marks the release pull request tagged itself before it starts release-please: release-please skips its own label sync while the release commit is the newest main commit.
+test_post_publish_marks_the_release_pull_request_tagged() {
+  assert_job_contains post-publish "    needs: [plan, publish]"
+  assert_job_contains post-publish '          RELEASE_TAG: ${{ needs.plan.outputs.tag }}'
+  assert_job_contains post-publish '          TARGET_SHA: ${{ needs.plan.outputs.source-ref }}'
+  assert_job_contains post-publish "          TARGET_BRANCH: main"
+  mark_line=$(job_section post-publish | grep -n -F -- "run: scripts/mark-release-pr-tagged.sh" | cut -d: -f1)
+  dispatch_line=$(job_section post-publish | grep -n -F -- 'run: gh workflow run release-please.yml --repo "$GITHUB_REPOSITORY" --ref main -f branch=main' | cut -d: -f1)
+  [ -n "$mark_line" ] || fail "Expected post-publish to mark the release pull request tagged."
+  [ -n "$dispatch_line" ] || fail "Expected post-publish to start release-please."
+  [ "$mark_line" -lt "$dispatch_line" ] || fail "Expected the pull request to be marked tagged before release-please starts."
 }
 
 # Verifies no workflow still reads the readiness output or runs the release sync that this workflow replaced; an if: on a missing output reads as false and silently skips the step.
@@ -131,5 +144,6 @@ test_signing_credentials_stay_in_the_signing_job
 test_release_is_created_only_after_signing
 test_dry_run_reaches_the_plan
 test_plan_decisions_reach_the_jobs
+test_post_publish_marks_the_release_pull_request_tagged
 test_no_workflow_uses_the_removed_release_sync
 test_failures_are_reported
