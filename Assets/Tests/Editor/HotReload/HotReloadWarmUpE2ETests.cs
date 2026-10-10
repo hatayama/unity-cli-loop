@@ -153,6 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await BeginScope(warmUp);
             VibeLogger.ClearMemoryLogs();
             Task<HotReloadOrchestratorResult> run;
+            int fileStartsBeforeRelease;
             try
             {
                 warmUp.Start();
@@ -160,15 +161,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 // Why this shows the wait: without it the run passes its first main-thread switch
                 // synchronously here and writes its file start before the task comes back.
-                Assert.That(ReadEntries(HotReloadConstants.VibeLogFileStart), Is.Empty, "file start before the item finished");
+                fileStartsBeforeRelease = ReadEntries(HotReloadConstants.VibeLogFileStart).Count;
             }
             finally
             {
                 pending.Release.TrySetResult(true);
             }
 
+            // Assert only after the run finishes: an assertion that throws first leaves the run
+            // going into the next test, which then counts that run's log entries.
             await run;
 
+            Assert.That(fileStartsBeforeRelease, Is.EqualTo(0), "file start before the item finished");
             Assert.That(ReadEntries(HotReloadConstants.VibeLogFileStart), Is.Not.Empty, "file start after the item finished");
             JArray timingDetails = ReadEntries(HotReloadConstants.VibeLogTimingDetail);
             Assert.That(timingDetails.Count, Is.EqualTo(1), "timing details");
@@ -193,23 +197,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await BeginScope(warmUp);
             int holdDepthBefore = HotReloadCompiledCallSiteCache.Shared.HoldDepth;
             Task<HotReloadOrchestratorResult> run;
+            bool waitingForItem;
+            int holdDepthWhileItemRuns;
             try
             {
                 warmUp.Start();
                 run = RunWithReadReturningAsync(6);
 
-                Assert.That(run.IsCompleted, Is.False, "Precondition: the run must be waiting for the item.");
-                Assert.That(
-                    HotReloadCompiledCallSiteCache.Shared.HoldDepth,
-                    Is.EqualTo(holdDepthBefore),
-                    "cache hold taken while the item is in flight");
+                waitingForItem = !run.IsCompleted;
+                holdDepthWhileItemRuns = HotReloadCompiledCallSiteCache.Shared.HoldDepth;
             }
             finally
             {
                 pending.Release.TrySetResult(true);
             }
 
+            // Assert only after the run finishes: an assertion that throws first leaves the run
+            // going into the next test, which then counts that run's log entries.
             await run;
+
+            Assert.That(waitingForItem, Is.True, "Precondition: the run must be waiting for the item.");
+            Assert.That(holdDepthWhileItemRuns, Is.EqualTo(holdDepthBefore), "cache hold taken while the item is in flight");
         }
 
         /// <summary>
