@@ -16,8 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Method = method;
         }
 
-        public HotReloadCompiledMethodIdentity Identity { get; }
+        // Only the analysis behind the entry point reads these; hot-reload code outside it only
+        // builds this value and passes it in.
+        internal HotReloadCompiledMethodIdentity Identity { get; }
 
-        public string Method { get; }
+        internal string Method { get; }
     }
 }

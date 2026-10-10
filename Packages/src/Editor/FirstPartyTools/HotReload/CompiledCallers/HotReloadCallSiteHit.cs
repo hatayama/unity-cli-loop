@@ -9,9 +9,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public HotReloadMetadataTypeName CallerTypeMetadataName;
         public string CallerMethodName;
         public string[] CallerParameterTypeFullNames;
-        public int CallerGenericArity;
+        // Hot-reload code outside the analysis does not read these two.
+        internal int CallerGenericArity;
         public string CallerMethodKey;
         public string TargetMethodKey;
-        public bool IsFunctionPointerLoad;
+        internal bool IsFunctionPointerLoad;
     }
 }
