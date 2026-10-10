@@ -1,11 +1,12 @@
 name: unity-package-sign
 
-# Signs the Unity package with the Unity organization's service account and
-# attaches the tarball to the package's GitHub release, which OpenUPM republishes
-# unchanged (docs/unity-package-signing.md). release-please.yml creates that
-# release with GITHUB_TOKEN, which starts no release or tag-push workflow, so
-# this follows every release-please run instead and signs only a published
-# release that still lacks the tarball.
+# Signs the Unity package with the Unity organization's service account,
+# attaches the tarball to the package's draft GitHub release, and publishes it;
+# OpenUPM republishes that tarball unchanged (docs/unity-package-signing.md).
+# Releases are immutable once published, so the release sync only creates the
+# draft and this workflow is the only one that publishes it. The sync runs in
+# release-please.yml with GITHUB_TOKEN, which starts no release workflow, so
+# this follows every release-please run instead.
 on:
   workflow_run:
     workflows:
@@ -19,7 +20,7 @@ on:
         type: string
         required: false
       dry-run:
-        description: "Keep the signed tarball as a workflow artifact instead of attaching it to the release"
+        description: "Sign any existing release and keep the tarball as a workflow artifact, without attaching it or publishing the release"
         type: boolean
         default: true
 
@@ -33,16 +34,18 @@ concurrency:
 jobs:
   plan:
     # A release-please run that fails after its release sync step has still
-    # published the release, so only a cancelled run is ignored.
+    # created the draft, so only a cancelled run is ignored.
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'cancelled')
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       sign: ${{ steps.plan.outputs.sign }}
+      publish: ${{ steps.plan.outputs.publish }}
       tag: ${{ steps.plan.outputs.tag }}
       version: ${{ steps.plan.outputs.version }}
       asset-name: ${{ steps.plan.outputs.asset-name }}
+      source-ref: ${{ steps.plan.outputs.source-ref }}
     steps:
       # A workflow_run job checks out the newest main commit by default. Reading
       # the manifest there would let a later release commit hide the release the
@@ -60,7 +63,7 @@ jobs:
           go-version-file: cli/.go-version
           cache-dependency-path: '**/go.sum'
 
-      - name: Decide whether the package release needs its signed tarball
+      - name: Decide whether to sign and publish the package release
         id: plan
         working-directory: cli/release-automation
         env:
@@ -94,11 +97,12 @@ jobs:
           persist-credentials: false
 
       # The signing tooling comes from the workflow ref above, but the package
-      # contents must be exactly what the release tag points at.
-      - name: Checkout the package release tag
+      # contents must be exactly the release's: a draft has no tag until it is
+      # published, so the plan names the commit the draft targets instead.
+      - name: Checkout the package release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: refs/tags/${{ needs.plan.outputs.tag }}
+          ref: ${{ needs.plan.outputs.source-ref }}
           path: release-source
           persist-credentials: false
 
@@ -148,7 +152,7 @@ jobs:
 
   publish:
     needs: [plan, sign]
-    if: needs.plan.outputs.sign == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry-run)
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -159,11 +163,24 @@ jobs:
           name: signed-unity-package
           path: ${{ runner.temp }}/signed
 
-      # --clobber replaces an empty asset left by an interrupted upload; the plan
-      # job only asks for a signature when no non-empty tarball is attached.
-      - name: Attach the signed tarball to the release
+      # --clobber replaces a tarball left on the draft by a run whose publish
+      # step failed after the upload.
+      - name: Attach the signed tarball to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.plan.outputs.tag }}
           ASSET_NAME: ${{ needs.plan.outputs.asset-name }}
         run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/signed/$ASSET_NAME" --repo "$GITHUB_REPOSITORY" --clobber
+
+      # Publishing creates the tag at the draft's target commit and freezes the
+      # assets. A pre-release version is published as a pre-release, as the
+      # release sync did when it still published the package release.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          case "$RELEASE_TAG" in
+            *-*) gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease ;;
+            *) gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false ;;
+          esac

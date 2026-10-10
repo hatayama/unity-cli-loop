@@ -43,80 +43,137 @@ func writeUnityPackageSigningManifest(t *testing.T, content string) string {
 	return repoRoot
 }
 
-func runPlanUnityPackageSigningForTest(t *testing.T, fake *fakeUnityPackageSigningGh, tag string) (int, string, string) {
+func runPlanUnityPackageSigningForTest(t *testing.T, fake *fakeUnityPackageSigningGh, tag string, dryRun bool) (int, string, string) {
 	t.Helper()
 	repoRoot := writeUnityPackageSigningManifest(t, `{"Packages/src": "3.14.0", "cli/dispatcher": "3.8.1"}`)
-	return runPlanUnityPackageSigningInRootForTest(fake, repoRoot, tag)
+	return runPlanUnityPackageSigningInRootForTest(fake, repoRoot, tag, dryRun)
 }
 
-func runPlanUnityPackageSigningInRootForTest(fake *fakeUnityPackageSigningGh, repoRoot string, tag string) (int, string, string) {
+func runPlanUnityPackageSigningInRootForTest(fake *fakeUnityPackageSigningGh, repoRoot string, tag string, dryRun bool) (int, string, string) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := runPlanUnityPackageSigningWithDeps(context.Background(), &stdout, &stderr, unityPackageSigningOptions{
 		Repository: unityPackageSigningTestRepository,
 		RepoRoot:   repoRoot,
 		Tag:        tag,
+		DryRun:     dryRun,
 	}, unityPackageSigningDeps{runOutput: fake.runOutput})
 	return code, stdout.String(), stderr.String()
 }
 
-// Verifies the plan decides from the release state of the package tag, signing only a published
-// release that has no non-empty signed tarball yet, and names the asset the publish job uploads.
+const (
+	unityPackageSigningTestReleaseCommit = "0123456789abcdef0123456789abcdef01234567"
+	unityPackageSigningTestTagRef        = "refs/tags/v3.14.0"
+)
+
+// Verifies the plan signs and publishes only a draft release, because an immutable published
+// release can no longer take the tarball, and that a dry run signs any existing release without
+// publishing it. A draft has no tag yet, so its source is the commit the release targets.
 func TestPlanUnityPackageSigningDecidesFromReleaseState(t *testing.T) {
+	const draftWithoutTarball = `{"isDraft": true, "targetCommitish": "` + unityPackageSigningTestReleaseCommit + `", "assets": []}`
+	const publishedWithTarball = `{"isDraft": false, "targetCommitish": "main", "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 2048}]}`
+	const publishedWithoutTarball = `{"isDraft": false, "targetCommitish": "main", "assets": [{"name": "uloop-dispatcher-linux-amd64.tar.gz", "size": 10}]}`
 	tests := []struct {
-		name        string
-		releaseJSON string
-		failure     error
-		wantSign    string
+		name          string
+		releaseJSON   string
+		failure       error
+		dryRun        bool
+		wantSign      bool
+		wantPublish   bool
+		wantSourceRef string
+		wantWarning   bool
 	}{
 		{
-			name:        "published release without assets is signed",
-			releaseJSON: `{"isDraft": false, "assets": []}`,
-			wantSign:    "true",
+			name:          "draft release without the tarball is signed and published",
+			releaseJSON:   draftWithoutTarball,
+			wantSign:      true,
+			wantPublish:   true,
+			wantSourceRef: unityPackageSigningTestReleaseCommit,
 		},
 		{
-			name:        "published release with only unrelated assets is signed",
-			releaseJSON: `{"isDraft": false, "assets": [{"name": "uloop-dispatcher-linux-amd64.tar.gz", "size": 10}]}`,
-			wantSign:    "true",
+			name:          "draft carrying a tarball from an interrupted publish is signed and published again",
+			releaseJSON:   `{"isDraft": true, "targetCommitish": "` + unityPackageSigningTestReleaseCommit + `", "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 2048}]}`,
+			wantSign:      true,
+			wantPublish:   true,
+			wantSourceRef: unityPackageSigningTestReleaseCommit,
 		},
 		{
-			name:        "empty signed tarball left by a failed upload is signed again",
-			releaseJSON: `{"isDraft": false, "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 0}]}`,
-			wantSign:    "true",
+			name:          "dry run signs a draft without publishing it",
+			releaseJSON:   draftWithoutTarball,
+			dryRun:        true,
+			wantSign:      true,
+			wantSourceRef: unityPackageSigningTestReleaseCommit,
 		},
 		{
-			name:        "release that already carries the signed tarball is skipped",
-			releaseJSON: `{"isDraft": false, "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 2048}]}`,
-			wantSign:    "false",
+			name:          "published release that carries the tarball is skipped",
+			releaseJSON:   publishedWithTarball,
+			wantSourceRef: unityPackageSigningTestTagRef,
 		},
 		{
-			name:        "draft release is skipped until the release sync publishes it",
-			releaseJSON: `{"isDraft": true, "assets": []}`,
-			wantSign:    "false",
+			name:          "published release without the tarball is skipped with a warning",
+			releaseJSON:   publishedWithoutTarball,
+			wantSourceRef: unityPackageSigningTestTagRef,
+			wantWarning:   true,
 		},
 		{
-			name:     "missing release is skipped until the release sync creates it",
-			failure:  errors.New("gh release view v3.14.0 failed: exit status 1\nrelease not found"),
-			wantSign: "false",
+			name:          "published release with an empty tarball is skipped with a warning",
+			releaseJSON:   `{"isDraft": false, "targetCommitish": "main", "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 0}]}`,
+			wantSourceRef: unityPackageSigningTestTagRef,
+			wantWarning:   true,
+		},
+		{
+			name:          "dry run signs a published release from its tag",
+			releaseJSON:   publishedWithTarball,
+			dryRun:        true,
+			wantSign:      true,
+			wantSourceRef: unityPackageSigningTestTagRef,
+		},
+		{
+			name:    "missing release is skipped until the release sync creates it",
+			failure: errors.New("gh release view v3.14.0 failed: exit status 1\nrelease not found"),
+		},
+		{
+			name:    "dry run skips a missing release",
+			failure: errors.New("gh release view v3.14.0 failed: exit status 1\nrelease not found"),
+			dryRun:  true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: test.releaseJSON, failure: test.failure}
-			code, stdout, stderr := runPlanUnityPackageSigningForTest(t, fake, "")
+			code, stdout, stderr := runPlanUnityPackageSigningForTest(t, fake, "", test.dryRun)
 			if code != 0 {
 				t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 			}
-			want := "sign=" + test.wantSign + "\n" +
+			want := fmt.Sprintf("sign=%t\npublish=%t\n", test.wantSign, test.wantPublish) +
 				"tag=v3.14.0\n" +
 				"version=3.14.0\n" +
-				"asset-name=io.github.hatayama.uloopmcp-3.14.0.tgz\n"
+				"asset-name=io.github.hatayama.uloopmcp-3.14.0.tgz\n" +
+				"source-ref=" + test.wantSourceRef + "\n"
 			if stdout != want {
 				t.Fatalf("stdout = %q, want %q", stdout, want)
 			}
 			if strings.TrimSpace(stderr) == "" {
 				t.Fatal("stderr has no reason for the decision")
+			}
+			if hasWarning := strings.HasPrefix(stderr, "::warning::"); hasWarning != test.wantWarning {
+				t.Fatalf("stderr = %q, want warning annotation = %t", stderr, test.wantWarning)
+			}
+		})
+	}
+}
+
+// Verifies a draft whose target is not a full commit SHA fails without GITHUB_OUTPUT lines. A
+// draft has no tag yet, so a branch target would sign whatever that branch holds at signing time
+// instead of the release commit.
+func TestPlanUnityPackageSigningRejectsDraftWithoutCommitTarget(t *testing.T) {
+	for _, target := range []string{"main", "", "0123456"} {
+		t.Run(target, func(t *testing.T) {
+			fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: `{"isDraft": true, "targetCommitish": "` + target + `", "assets": []}`}
+			code, stdout, _ := runPlanUnityPackageSigningForTest(t, fake, "", false)
+			if code == 0 || stdout != "" {
+				t.Fatalf("exit code = %d, stdout = %q; want a failure without GITHUB_OUTPUT lines", code, stdout)
 			}
 		})
 	}
@@ -125,7 +182,7 @@ func TestPlanUnityPackageSigningDecidesFromReleaseState(t *testing.T) {
 // Verifies an explicit tag replaces the manifest version, so a manual run can sign an older release.
 func TestPlanUnityPackageSigningUsesExplicitTag(t *testing.T) {
 	fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: `{"isDraft": false, "assets": []}`}
-	code, stdout, stderr := runPlanUnityPackageSigningForTest(t, fake, "v3.13.0")
+	code, stdout, stderr := runPlanUnityPackageSigningForTest(t, fake, "v3.13.0", false)
 	if code != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 	}
@@ -137,54 +194,13 @@ func TestPlanUnityPackageSigningUsesExplicitTag(t *testing.T) {
 	}
 }
 
-// Verifies a dry run signs a published release even when it already carries the signed tarball,
-// so a manual run can validate a new UPM CLI pin after every release is signed, while a draft or
-// missing release is still skipped.
-func TestPlanUnityPackageSigningDryRunIgnoresExistingTarball(t *testing.T) {
-	tests := []struct {
-		name        string
-		releaseJSON string
-		failure     error
-		wantSign    bool
-	}{
-		{
-			name:        "signed published release",
-			releaseJSON: `{"isDraft": false, "assets": [{"name": "io.github.hatayama.uloopmcp-3.14.0.tgz", "size": 2048}]}`,
-			wantSign:    true,
-		},
-		{name: "draft release", releaseJSON: `{"isDraft": true, "assets": []}`},
-		{name: "missing release", failure: errors.New("gh release view v3.14.0 failed: exit status 1\nrelease not found")},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			repoRoot := writeUnityPackageSigningManifest(t, `{"Packages/src": "3.14.0"}`)
-			fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: test.releaseJSON, failure: test.failure}
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
-			code := runPlanUnityPackageSigningWithDeps(context.Background(), &stdout, &stderr, unityPackageSigningOptions{
-				Repository: unityPackageSigningTestRepository,
-				RepoRoot:   repoRoot,
-				DryRun:     true,
-			}, unityPackageSigningDeps{runOutput: fake.runOutput})
-			if code != 0 {
-				t.Fatalf("exit code = %d, stderr = %s", code, stderr.String())
-			}
-			wantLine := fmt.Sprintf("sign=%t\n", test.wantSign)
-			if !strings.HasPrefix(stdout.String(), wantLine) {
-				t.Fatalf("stdout = %q, want it to start with %q", stdout.String(), wantLine)
-			}
-		})
-	}
-}
-
 // Verifies tags of the other release components are rejected before any release is read, because
 // signing the package source at a CLI tag would publish a mislabeled package.
 func TestPlanUnityPackageSigningRejectsNonPackageTags(t *testing.T) {
 	for _, tag := range []string{"dispatcher-v3.8.1", "uloop-project-runner-v3.8.0", "3.14.0", "v3.14"} {
 		t.Run(tag, func(t *testing.T) {
 			fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: `{"isDraft": false, "assets": []}`}
-			code, stdout, _ := runPlanUnityPackageSigningForTest(t, fake, tag)
+			code, stdout, _ := runPlanUnityPackageSigningForTest(t, fake, tag, false)
 			if code == 0 {
 				t.Fatalf("exit code = 0, stdout = %q; want a failure", stdout)
 			}
@@ -199,7 +215,7 @@ func TestPlanUnityPackageSigningRejectsNonPackageTags(t *testing.T) {
 // authentication or API outage cannot silently leave a release unsigned.
 func TestPlanUnityPackageSigningFailsOnUnexpectedGhError(t *testing.T) {
 	fake := &fakeUnityPackageSigningGh{t: t, failure: errors.New("gh release view v3.14.0 failed: exit status 1\nHTTP 401: Bad credentials")}
-	code, stdout, _ := runPlanUnityPackageSigningForTest(t, fake, "")
+	code, stdout, _ := runPlanUnityPackageSigningForTest(t, fake, "", false)
 	if code == 0 {
 		t.Fatalf("exit code = 0, stdout = %q; want a failure", stdout)
 	}
@@ -235,7 +251,7 @@ func TestPlanUnityPackageSigningFailsOnUnusableInputs(t *testing.T) {
 				repoRoot = writeUnityPackageSigningManifest(t, test.manifest)
 			}
 			fake := &fakeUnityPackageSigningGh{t: t, releaseJSON: test.releaseJSON}
-			code, stdout, _ := runPlanUnityPackageSigningInRootForTest(fake, repoRoot, "")
+			code, stdout, _ := runPlanUnityPackageSigningInRootForTest(fake, repoRoot, "", false)
 			if code == 0 || stdout != "" {
 				t.Fatalf("exit code = %d, stdout = %q; want a failure without GITHUB_OUTPUT lines", code, stdout)
 			}
