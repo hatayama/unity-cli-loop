@@ -296,7 +296,8 @@ lifecycle messages and methods whose every compiled caller is a one-shot lifecyc
 `MonoBehaviour`. The caller check is conservative: when the scan cannot prove exclusivity (a
 missing assembly, reflection, or event-driven calls), or when proving it would read more than
 one compiled assembly the call-site cache does not hold yet (as on the first run after a domain
-reload), the note is omitted. Only compiled callers
+reload), the note is omitted; the run then reads those assemblies in the background, so the
+next run can prove it. Only compiled callers
 are counted: a method hot reload added or patched that calls the method already runs the patched
 body, which the note does not see. To see an
 initialization change take effect, run `uloop compile` and restart
