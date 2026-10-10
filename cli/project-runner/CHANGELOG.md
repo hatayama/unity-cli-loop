@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.9.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.8.0...uloop-project-runner-v3.9.0) (2026-10-10)
+
+
+### Features
+
+* Hot reload keeps one run's assemblies cached between runs, uloop compile returns at once without raising the Editor, and pause point timeouts report their own timeout ([#3236](https://github.com/hatayama/unity-cli-loop/issues/3236)) ([68cdec1](https://github.com/hatayama/unity-cli-loop/commit/68cdec1bd3175f354f66c2928f27d68f38c8a3c1))
+* Hot reload waits for a busy Editor instead of compiling, stays fast as live patches grow, and pause points work in package scripts ([#3224](https://github.com/hatayama/unity-cli-loop/issues/3224)) ([35084a8](https://github.com/hatayama/unity-cli-loop/commit/35084a8d244c357fe85fc95d3bef739e7302109f))
+
 ## [3.8.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.7.0...uloop-project-runner-v3.8.0) (2026-10-07)
 
 
