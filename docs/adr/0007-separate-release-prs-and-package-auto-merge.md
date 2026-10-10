@@ -159,10 +159,13 @@ workflow run, so the package release would never be tagged.
 
 ## Amendment (2026-10-10)
 
-`sync-release-please-package-releases.sh` no longer publishes the Unity package
-release: it creates it as a draft, and `unity-package-sign.yml` publishes it
-after attaching the signed tarball, because a published release is immutable
-(`docs/unity-package-signing.md`). Where this ADR says the pin check runs
-"before the package release is created or published", it now runs before the
-draft is created; publishing adds no check. The package tag is created when that
-workflow publishes the draft, at the release commit the sync set as its target.
+`sync-release-please-package-releases.sh` no longer exists. The Unity package
+release is created only by `unity-package-release.yml`, after its tarball is
+signed, because a published release is immutable
+(`docs/adr/0013-create-the-unity-package-release-after-signing.md`,
+`docs/unity-package-release.md`). Where this ADR says the pin check runs inside
+the sync "before the package release is created or published", it now runs in
+that workflow's readiness check, `scripts/check-unity-package-release.sh`,
+before the package is signed. The tag and the release are created at the
+release commit that check names, so the pin the release ships is still the one
+that commit records.

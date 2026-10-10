@@ -143,9 +143,10 @@ The Homebrew tap (`hatayama/homebrew-tap`) is updated by release automation —
 never edit the tap formula by hand. Channel policy, secrets, and the planned
 winget rollout live in `docs/package-manager-distribution.md`.
 
-OpenUPM republishes the signed tarball that `unity-package-sign.yml` attaches to each
-Unity package release. Signing credentials, the pinned UPM CLI checksum, and recovery
-steps live in `docs/unity-package-signing.md`.
+OpenUPM republishes the signed tarball each Unity package release carries. Only
+`unity-package-release.yml` creates that release, and only after signing, because a
+published release is immutable — never create or publish it by hand. Signing credentials,
+the pinned UPM CLI checksum, and recovery steps live in `docs/unity-package-release.md`.
 
 ## Dead Code Scanner
 
