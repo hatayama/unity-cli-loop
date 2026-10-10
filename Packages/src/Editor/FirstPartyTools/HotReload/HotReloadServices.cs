@@ -27,7 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadWiredValuePersistence wiredValuePersistence,
             HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh,
             HotReloadSourceSnapshotCapture sourceSnapshotCapture,
-            HotReloadWarmUp warmUp)
+            HotReloadWarmUp warmUp,
+            HotReloadCallSiteBackfill callSiteBackfill)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
@@ -52,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 wiredValueRestoreRefresh != null, "wiredValueRestoreRefresh must not be null.");
             Debug.Assert(sourceSnapshotCapture != null, "sourceSnapshotCapture must not be null.");
             Debug.Assert(warmUp != null, "warmUp must not be null.");
+            Debug.Assert(callSiteBackfill != null, "callSiteBackfill must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
@@ -71,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WiredValueRestoreRefresh = wiredValueRestoreRefresh;
             SourceSnapshotCapture = sourceSnapshotCapture;
             WarmUp = warmUp;
+            CallSiteBackfill = callSiteBackfill;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -133,6 +136,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadWarmUp WarmUp { get; }
 
         /// <summary>
+        /// Reads, after a run, the assemblies the run's caller-note budget refused. Shared by every
+        /// copy below, so the run that yields to it and the Editor hooks that stop it see one backfill.
+        /// </summary>
+        internal HotReloadCallSiteBackfill CallSiteBackfill { get; }
+
+        /// <summary>
         /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
         /// other collaborator — including the domain, so installing the copy neither takes the
         /// resolver over nor disposes anything when it is put back.
@@ -158,7 +167,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WiredValuePersistence,
                 WiredValueRestoreRefresh,
                 SourceSnapshotCapture,
-                WarmUp);
+                WarmUp,
+                CallSiteBackfill);
         }
 
         /// <summary>
@@ -186,7 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WiredValuePersistence,
                 WiredValueRestoreRefresh,
                 SourceSnapshotCapture,
-                WarmUp);
+                WarmUp,
+                CallSiteBackfill);
         }
 
         /// <summary>
@@ -215,7 +226,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WiredValuePersistence,
                 WiredValueRestoreRefresh,
                 sourceSnapshotCapture,
-                WarmUp);
+                WarmUp,
+                CallSiteBackfill);
         }
     }
 }

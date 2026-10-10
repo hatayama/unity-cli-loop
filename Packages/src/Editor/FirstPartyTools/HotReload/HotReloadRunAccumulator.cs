@@ -218,8 +218,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Attaches one-shot lifecycle notes to the merged outcomes. Requires the Unity main thread
         /// because the call-site scan reads compiled assemblies through Editor APIs.
+        /// Returns the compiled dlls the load budget refused, in scan order; empty when every scan
+        /// was complete.
         /// </summary>
-        public void ApplyOneShotCallerNotes(string projectRoot, string correlationId)
+        public IReadOnlyList<string> ApplyOneShotCallerNotes(string projectRoot, string correlationId)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(correlationId), "correlationId must not be null or empty.");
@@ -241,6 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     budget.RefusedAssemblyNames,
                     correlationId);
             }
+
+            return budget.RefusedDllPaths;
         }
 
         /// <summary>

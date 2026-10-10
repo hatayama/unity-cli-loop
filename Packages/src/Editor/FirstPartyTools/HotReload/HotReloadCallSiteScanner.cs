@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Debug.Assert(loadBudget != null, "a load is refused only when a budget is in place.");
                     unreadScanAssemblyNames.Add(assemblyName);
-                    loadBudget.Refuse(assemblyName);
+                    loadBudget.Refuse(assemblyName, dllPath);
                     continue;
                 }
 

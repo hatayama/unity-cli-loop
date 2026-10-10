@@ -29,11 +29,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private HotReloadDomainTestScope(HotReloadServices services)
         {
-            // Why stop the installed warm-up first: it reads the shared caches on a pool thread,
-            // and a test that counts their reads must not race it. The scope's own run yields to
-            // the scope's warm-up, never to the installed one.
-            InstalledWarmUpStopped = HotReloadCompositionRoot.Services.WarmUp.Shutdown(
-                HotReloadConstants.WarmUpShutdownTriggerTestScope);
+            // Why stop the installed warm-up and backfill first: they read the shared caches on a
+            // pool thread, and a test that counts their reads must not race them. The scope's own
+            // run yields to the scope's warm-up and backfill, never to the installed ones.
+            HotReloadServices installed = HotReloadCompositionRoot.Services;
+            InstalledWarmUpStopped = Task.WhenAll(
+                installed.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope),
+                installed.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestScope));
 
             // The capture is main-thread only, and a run inside the scope normalizes script paths
             // against these roots on the background threads it switches to.
@@ -43,15 +45,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Completes once the warm-up that was installed before this scope has stopped. A test that
-        /// counts reads of a shared cache awaits it before it clears the cache.
+        /// Completes once the warm-up and the caller-note backfill that were installed before this
+        /// scope have stopped. A test that counts reads of a shared cache awaits it before it
+        /// clears the cache.
         /// </summary>
         internal Task InstalledWarmUpStopped { get; }
 
         /// <summary>A scope whose services run <paramref name="warmUp"/> instead of a production one.</summary>
         internal static HotReloadDomainTestScope WithWarmUp(HotReloadWarmUp warmUp)
         {
-            return new HotReloadDomainTestScope(HotReloadCompositionRoot.CreateProductionServicesWithWarmUp(warmUp));
+            return new HotReloadDomainTestScope(
+                HotReloadCompositionRoot.CreateProductionServicesWith(
+                    warmUp,
+                    HotReloadCompositionRoot.CreateProductionCallSiteBackfill()));
+        }
+
+        /// <summary>
+        /// A scope whose services run <paramref name="callSiteBackfill"/> instead of a production
+        /// one, with an inert warm-up.
+        /// </summary>
+        internal static HotReloadDomainTestScope WithCallSiteBackfill(HotReloadCallSiteBackfill callSiteBackfill)
+        {
+            return new HotReloadDomainTestScope(
+                HotReloadCompositionRoot.CreateProductionServicesWith(
+                    HotReloadWarmUpTestDoubles.CreateInert(),
+                    callSiteBackfill));
         }
 
         public void Dispose()

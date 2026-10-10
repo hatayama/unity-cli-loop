@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HotReloadPatcher _patcher;
         private readonly HotReloadUnityMessageForwarding _unityMessageForwarding;
         private readonly HotReloadWarmUp _warmUp;
+        private readonly HotReloadCallSiteBackfill _callSiteBackfill;
 
         internal HotReloadOrchestrator(
             HotReloadDomain domain,
@@ -36,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadSiblingRebindReporter siblingRebindReporter,
             IHotReloadPackageRootCapture packageRootCapture,
             HotReloadUnityMessageForwarding unityMessageForwarding,
-            HotReloadWarmUp warmUp)
+            HotReloadWarmUp warmUp,
+            HotReloadCallSiteBackfill callSiteBackfill)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(patcher != null, "patcher must not be null.");
@@ -48,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 unityMessageForwarding != null, "unityMessageForwarding must not be null.");
             Debug.Assert(warmUp != null, "warmUp must not be null.");
+            Debug.Assert(callSiteBackfill != null, "callSiteBackfill must not be null.");
             _domain = domain;
             _patcher = patcher;
             _groupProcessor = groupProcessor;
@@ -57,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _packageRootCapture = packageRootCapture;
             _unityMessageForwarding = unityMessageForwarding;
             _warmUp = warmUp;
+            _callSiteBackfill = callSiteBackfill;
         }
 
         /// <summary>
@@ -92,6 +96,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why first: the warm-up may be reading a dll this run is about to read; waiting for
                 // that one item here is cheaper than contending for the cache lock inside the run.
                 await _warmUp.YieldToRunAsync().ConfigureAwait(false);
+                // Why here too: the backfill of the previous run may still be reading a dll this run is
+                // about to read, and waiting for that one read here is cheaper than contending for the
+                // cache lock inside the run.
+                await _callSiteBackfill.YieldToRunAsync().ConfigureAwait(false);
             }
 
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
@@ -253,10 +261,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await MainThreadSwitcher.SwitchToMainThread(ct);
             }
 
+            IReadOnlyList<string> refusedDllPaths;
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepCallerNotes))
             {
                 string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-                run.ApplyOneShotCallerNotes(projectRoot, correlationId);
+                refusedDllPaths = run.ApplyOneShotCallerNotes(projectRoot, correlationId);
             }
 
             using (timing.MeasureDetail(HotReloadConstants.TimingDetailStepMainThreadSwitch))
@@ -268,7 +277,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorLog.LogHotReloadTimingDetail(
                 HotReloadTimingDetailPayload.Build(breakdown, timing.Details, groupCount),
                 correlationId);
-            return run.BuildResult(correlationId, breakdown);
+            HotReloadOrchestratorResult result = run.BuildResult(correlationId, breakdown);
+            // Why the hold ends here, before the backfill starts: its reads belong to no run, so they
+            // must evict as reads outside a run do rather than pile up under this run's hold. Disposing
+            // the hold again at the end of the method releases nothing.
+            callSiteCacheHold.Dispose();
+            _callSiteBackfill.Start(refusedDllPaths, correlationId);
+            return result;
         }
 
         // Why on the inputs only: a re-applied sibling joins a group later and was never selected,

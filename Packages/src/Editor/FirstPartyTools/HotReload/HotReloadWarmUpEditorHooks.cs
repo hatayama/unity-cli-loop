@@ -6,9 +6,9 @@ using UnityEditor.Compilation;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Stops the installed warm-up when the Editor is about to reload the domain or starts a
-    /// compile: the warm-up would read dlls that are being rewritten, or work for a domain that
-    /// is going away.
+    /// Stops the installed warm-up and caller-note backfill when the Editor is about to reload the
+    /// domain or starts a compile: they would read dlls that are being rewritten, or work for a
+    /// domain that is going away.
     /// </summary>
     internal static class HotReloadWarmUpEditorHooks
     {
@@ -34,11 +34,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void ShutdownForReload()
         {
             _ = GetServices().WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerBeforeAssemblyReload);
+            _ = GetServices().CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerBeforeAssemblyReload);
         }
 
         internal static void ShutdownForCompile(object context)
         {
             _ = GetServices().WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerCompilationStarted);
+            _ = GetServices().CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerCompilationStarted);
         }
     }
 }
