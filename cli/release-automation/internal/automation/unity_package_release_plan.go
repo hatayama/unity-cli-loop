@@ -77,6 +77,11 @@ func parseUnityPackageReleasePlanOptions(ctx context.Context, args []string, loo
 	if err := flags.Parse(args); err != nil {
 		return unityPackageReleasePlanOptions{}, err
 	}
+	// Omitting the flag would mean "not a dry run", which creates an immutable release, so the
+	// caller has to say which it wants rather than inherit that from a default.
+	if !unityPackageReleasePlanFlagSet(flags, "dry-run") {
+		return unityPackageReleasePlanOptions{}, errors.New("--dry-run=true or --dry-run=false is required")
+	}
 
 	if *repository == "" {
 		*repository, _ = lookupEnv("GITHUB_REPOSITORY")
@@ -92,6 +97,16 @@ func parseUnityPackageReleasePlanOptions(ctx context.Context, args []string, loo
 		*repoRoot = resolvedRoot
 	}
 	return unityPackageReleasePlanOptions{Repository: *repository, RepoRoot: *repoRoot, DryRun: *dryRun}, nil
+}
+
+func unityPackageReleasePlanFlagSet(flags *flag.FlagSet, name string) bool {
+	set := false
+	flags.Visit(func(visited *flag.Flag) {
+		if visited.Name == name {
+			set = true
+		}
+	})
+	return set
 }
 
 func runPlanUnityPackageReleaseWithDeps(ctx context.Context, stdout io.Writer, stderr io.Writer, options unityPackageReleasePlanOptions, deps unityPackageReleasePlanDeps) int {

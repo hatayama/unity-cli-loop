@@ -299,11 +299,26 @@ func TestParseUnityPackageReleasePlanOptions(t *testing.T) {
 		t.Fatalf("default repository root %q has no release-please manifest: %v", options.RepoRoot, err)
 	}
 
-	if _, err := parseUnityPackageReleasePlanOptions(context.Background(), []string{"--repo-root", t.TempDir()}, noEnv); err == nil {
+	options, err = parseUnityPackageReleasePlanOptions(context.Background(), []string{"--dry-run=false"}, repositoryEnv)
+	if err != nil || options.DryRun {
+		t.Fatalf("parse with --dry-run=false: options = %+v, err = %v; want a run that creates the release", options, err)
+	}
+
+	if _, err := parseUnityPackageReleasePlanOptions(context.Background(), []string{"--dry-run=false", "--repo-root", t.TempDir()}, noEnv); err == nil {
 		t.Fatal("parse without --repo or GITHUB_REPOSITORY succeeded, want an error")
 	}
-	if _, err := parseUnityPackageReleasePlanOptions(context.Background(), []string{"--tag", "v3.13.0"}, repositoryEnv); err == nil {
+	if _, err := parseUnityPackageReleasePlanOptions(context.Background(), []string{"--dry-run=false", "--tag", "v3.13.0"}, repositoryEnv); err == nil {
 		t.Fatal("parse with --tag succeeded, want an error")
+	}
+}
+
+// Verifies a plan without --dry-run is rejected rather than read as "not a dry run": a workflow
+// that stopped passing the flag would otherwise create an immutable release from a manual dry run.
+func TestParseUnityPackageReleasePlanOptionsRequiresDryRun(t *testing.T) {
+	repositoryEnv := func(string) (string, bool) { return unityPackageReleaseTestRepository, true }
+	_, err := parseUnityPackageReleasePlanOptions(context.Background(), []string{"--repo-root", t.TempDir()}, repositoryEnv)
+	if err == nil || !strings.Contains(err.Error(), "--dry-run") {
+		t.Fatalf("parse without --dry-run: err = %v, want an error naming --dry-run", err)
 	}
 }
 
@@ -312,7 +327,7 @@ func TestParseUnityPackageReleasePlanOptions(t *testing.T) {
 func TestRunPlanUnityPackageReleaseFailsWithoutManifest(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := RunPlanUnityPackageRelease(context.Background(), &stdout, &stderr, []string{"--repo", unityPackageReleaseTestRepository, "--repo-root", t.TempDir()})
+	code := RunPlanUnityPackageRelease(context.Background(), &stdout, &stderr, []string{"--repo", unityPackageReleaseTestRepository, "--repo-root", t.TempDir(), "--dry-run=false"})
 	if code != 1 || stdout.Len() != 0 {
 		t.Fatalf("exit code = %d, stdout = %q; want 1 without output", code, stdout.String())
 	}
