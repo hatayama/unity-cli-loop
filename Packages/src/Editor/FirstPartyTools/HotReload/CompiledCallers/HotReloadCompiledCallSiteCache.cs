@@ -255,6 +255,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Number of holds now open; how a test sees whether a run holds the entries.
+        /// </summary>
+        public int HoldDepth
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _holdDepth;
+                }
+            }
+        }
+
+        /// <summary>
         /// Returns the cached view of <paramref name="dllPath"/> while the file's length, last
         /// write time, and module version id (MVID) all match the cached entry; otherwise reads the
         /// file and replaces the stale entry. This is a heuristic identity, not a content hash: it

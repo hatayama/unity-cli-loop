@@ -158,8 +158,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase(false)]
         public void AppendTo_SameWireKeyInTwoAssemblies_OneActive_ListsItOnce(bool activeCallerRecordedFirst)
         {
-            HotReloadCallSiteScanner.CallSiteHit activeCaller = CreateHit(ExternalAssemblyName, CallerType, "Call");
-            HotReloadCallSiteScanner.CallSiteHit compiledCaller = CreateHit(EditedAssemblyName, CallerType, "Call");
+            HotReloadCallSiteHit activeCaller = CreateHit(ExternalAssemblyName, CallerType, "Call");
+            HotReloadCallSiteHit compiledCaller = CreateHit(EditedAssemblyName, CallerType, "Call");
             HotReloadRunStaleSignatureWarnings staleWarnings = activeCallerRecordedFirst
                 ? Record(RemovedKey, activeCaller, compiledCaller)
                 : Record(RemovedKey, compiledCaller, activeCaller);
@@ -245,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void AppendTo_FunctionPointerLoadOfActiveCaller_IsOmitted()
         {
-            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(ExternalAssemblyName, CallerType, "Call");
+            HotReloadCallSiteHit hit = CreateHit(ExternalAssemblyName, CallerType, "Call");
             hit.IsFunctionPointerLoad = true;
             HotReloadRunStaleSignatureWarnings staleWarnings = Record(RemovedKey, hit);
             List<string> warnings = new List<string>();
@@ -300,7 +300,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     new HotReloadStaleSignatureCallSites(
                         OtherRemovedKey,
-                        new List<HotReloadCallSiteScanner.CallSiteHit>
+                        new List<HotReloadCallSiteHit>
                         {
                             CreateHit(ExternalAssemblyName, OtherCallerType, "Call")
                         })
@@ -319,7 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static HotReloadRunStaleSignatureWarnings Record(
             string removedKey,
-            params HotReloadCallSiteScanner.CallSiteHit[] callers)
+            params HotReloadCallSiteHit[] callers)
         {
             HotReloadRunStaleSignatureWarnings staleWarnings = new HotReloadRunStaleSignatureWarnings();
             staleWarnings.AddRange(
@@ -327,17 +327,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     new HotReloadStaleSignatureCallSites(
                         removedKey,
-                        new List<HotReloadCallSiteScanner.CallSiteHit>(callers))
+                        new List<HotReloadCallSiteHit>(callers))
                 });
             return staleWarnings;
         }
 
-        private static HotReloadCallSiteScanner.CallSiteHit CreateHit(
+        private static HotReloadCallSiteHit CreateHit(
             string assemblyName,
             string typeMetadataName,
             string methodName)
         {
-            return new HotReloadCallSiteScanner.CallSiteHit
+            return new HotReloadCallSiteHit
             {
                 CallerAssemblyName = assemblyName,
                 CallerTypeMetadataName = new HotReloadMetadataTypeName(typeMetadataName),

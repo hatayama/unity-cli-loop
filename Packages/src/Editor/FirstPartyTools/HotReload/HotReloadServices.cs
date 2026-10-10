@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadWiredValueRestoreRefresh wiredValueRestoreRefresh,
             HotReloadSourceSnapshotCapture sourceSnapshotCapture,
             HotReloadWarmUp warmUp,
-            HotReloadCallSiteBackfill callSiteBackfill)
+            HotReloadCompiledCallers compiledCallers)
         {
             Debug.Assert(domain != null, "domain must not be null.");
             Debug.Assert(harmony != null, "harmony must not be null.");
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 wiredValueRestoreRefresh != null, "wiredValueRestoreRefresh must not be null.");
             Debug.Assert(sourceSnapshotCapture != null, "sourceSnapshotCapture must not be null.");
             Debug.Assert(warmUp != null, "warmUp must not be null.");
-            Debug.Assert(callSiteBackfill != null, "callSiteBackfill must not be null.");
+            Debug.Assert(compiledCallers != null, "compiledCallers must not be null.");
             Domain = domain;
             Harmony = harmony;
             Patcher = patcher;
@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WiredValueRestoreRefresh = wiredValueRestoreRefresh;
             SourceSnapshotCapture = sourceSnapshotCapture;
             WarmUp = warmUp;
-            CallSiteBackfill = callSiteBackfill;
+            CompiledCallers = compiledCallers;
         }
 
         internal HotReloadDomain Domain { get; }
@@ -136,10 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HotReloadWarmUp WarmUp { get; }
 
         /// <summary>
-        /// Reads, after a run, the assemblies the run's caller-note budget refused. Shared by every
-        /// copy below, so the run that yields to it and the Editor hooks that stop it see one backfill.
+        /// The compiled-caller analysis, which also reads after a run the assemblies the run's
+        /// caller-note budget refused. Shared by every copy below, so the run that yields to those
+        /// background reads and the Editor hooks that stop them see one instance.
         /// </summary>
-        internal HotReloadCallSiteBackfill CallSiteBackfill { get; }
+        internal HotReloadCompiledCallers CompiledCallers { get; }
 
         /// <summary>
         /// A copy that runs <paramref name="orchestrator"/> instead of this one, sharing every
@@ -168,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WiredValueRestoreRefresh,
                 SourceSnapshotCapture,
                 WarmUp,
-                CallSiteBackfill);
+                CompiledCallers);
         }
 
         /// <summary>
@@ -197,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WiredValueRestoreRefresh,
                 SourceSnapshotCapture,
                 WarmUp,
-                CallSiteBackfill);
+                CompiledCallers);
         }
 
         /// <summary>
@@ -227,7 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 WiredValueRestoreRefresh,
                 sourceSnapshotCapture,
                 WarmUp,
-                CallSiteBackfill);
+                CompiledCallers);
         }
     }
 }

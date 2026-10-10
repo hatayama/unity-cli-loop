@@ -12,8 +12,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Why a type and not a string: metadata, reflection and display names differ only in the
     /// separator of a nested type, so a value that crosses from one world to the other silently
     /// stops matching. Holding the world in the type makes the crossing a call, not a habit.
+    /// Public because the compiled-caller analysis exposes it in the types of its entry point.
     /// </remarks>
-    internal readonly struct HotReloadMetadataTypeName : IEquatable<HotReloadMetadataTypeName>
+    public readonly struct HotReloadMetadataTypeName : IEquatable<HotReloadMetadataTypeName>
     {
         public string Value { get; }
 
@@ -87,8 +88,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// A type name in reflection form, the spelling Type.FullName produces, where a nested type
     /// reads Outer+Inner.
+    /// Public because HotReloadMetadataTypeName, which the compiled-caller analysis exposes,
+    /// returns it from ToReflectionName.
     /// </summary>
-    internal readonly struct HotReloadReflectionTypeName : IEquatable<HotReloadReflectionTypeName>
+    public readonly struct HotReloadReflectionTypeName : IEquatable<HotReloadReflectionTypeName>
     {
         public string Value { get; }
 

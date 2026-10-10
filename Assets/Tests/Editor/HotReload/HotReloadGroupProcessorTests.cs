@@ -1321,9 +1321,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
                 new List<HotReloadStaleSignatureCallSites>(),
-                new List<HotReloadCallSiteScanner.CallSiteHit>
+                new List<HotReloadCallSiteHit>
                 {
-                    new HotReloadCallSiteScanner.CallSiteHit
+                    new HotReloadCallSiteHit
                     {
                         CallerAssemblyName = AssemblyName,
                         CallerMethodKey = CallerKey,
@@ -1340,7 +1340,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
                 new List<HotReloadStaleSignatureCallSites>(),
-                new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                new List<HotReloadCallSiteHit>(),
                 new HashSet<HotReloadQualifiedMethodIdentity>());
         }
 
@@ -1353,9 +1353,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 };
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
                 new List<HotReloadStaleSignatureCallSites>(),
-                new List<HotReloadCallSiteScanner.CallSiteHit>
+                new List<HotReloadCallSiteHit>
                 {
-                    new HotReloadCallSiteScanner.CallSiteHit
+                    new HotReloadCallSiteHit
                     {
                         CallerAssemblyName = AssemblyName,
                         CallerMethodKey = CallerKey,
@@ -2037,7 +2037,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     null,
                     new List<HotReloadMethodOutcome>(),
                     new List<HotReloadStaleSignatureCallSites>(),
-                    new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                    new List<HotReloadCallSiteHit>(),
                     new HashSet<HotReloadQualifiedMethodIdentity>(),
                     new List<string>());
 

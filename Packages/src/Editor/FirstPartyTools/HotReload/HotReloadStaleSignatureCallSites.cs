@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal HotReloadStaleSignatureCallSites(
             string removedMethodKey,
-            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> callers)
+            IReadOnlyList<HotReloadCallSiteHit> callers)
         {
             Debug.Assert(!string.IsNullOrEmpty(removedMethodKey), "removedMethodKey must not be null or empty.");
             Debug.Assert(callers != null && callers.Count > 0, "callers must hold at least one hit.");
@@ -28,6 +28,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The wire key of the removed signature (Type::Method(params)), as the warning names it.
         internal string RemovedMethodKey { get; }
 
-        internal IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> Callers { get; }
+        internal IReadOnlyList<HotReloadCallSiteHit> Callers { get; }
     }
 }

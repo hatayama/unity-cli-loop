@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // they read the shared caches on a pool thread (after a reload, or after a hot reload
             // run made just before the tests), and the tests that count those reads must not race them.
             _ = HotReloadCompositionRoot.Services.WarmUp.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestRun);
-            _ = HotReloadCompositionRoot.Services.CallSiteBackfill.Shutdown(HotReloadConstants.WarmUpShutdownTriggerTestRun);
+            _ = HotReloadCompositionRoot.Services.CompiledCallers.StopBackgroundReadsAsync(HotReloadConstants.WarmUpShutdownTriggerTestRun);
             StopPump();
             // EditorApplication.SignalTick is [ThreadSafe] in the Editor bindings, which is what
             // allows the timer thread to call it.

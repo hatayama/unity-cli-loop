@@ -46,11 +46,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void LoadCallSites_LoadsTheDllOnce_AndAgainReadsNothing()
         {
-            HotReloadWarmUpTarget[] targets = { CopyTarget() };
+            string[] dllPaths = { CopyDll() };
 
-            int first = HotReloadCallSiteWarmUpItem.LoadCallSites(targets, _cache, CancellationToken.None);
+            int first = HotReloadCompiledCallers.LoadCallSites(dllPaths, _cache, CancellationToken.None);
             int afterFirst = _cache.LoadCount;
-            HotReloadCallSiteWarmUpItem.LoadCallSites(targets, _cache, CancellationToken.None);
+            HotReloadCompiledCallers.LoadCallSites(dllPaths, _cache, CancellationToken.None);
 
             Assert.That(first, Is.EqualTo(1), "loaded targets");
             Assert.That(afterFirst, Is.EqualTo(1), "reads after the first load");
@@ -63,15 +63,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void LoadCallSites_WhenCancelled_ThrowsAndLoadsNothing()
         {
-            HotReloadWarmUpTarget[] targets = { CopyTarget() };
+            string[] dllPaths = { CopyDll() };
 
             Assert.Throws<OperationCanceledException>(
-                () => HotReloadCallSiteWarmUpItem.LoadCallSites(targets, _cache, new CancellationToken(true)));
+                () => HotReloadCompiledCallers.LoadCallSites(dllPaths, _cache, new CancellationToken(true)));
 
             Assert.That(_cache.LoadCount, Is.EqualTo(0), "reads");
         }
 
-        private HotReloadWarmUpTarget CopyTarget()
+        private string CopyDll()
         {
             string source = Path.Combine(
                 Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
@@ -79,11 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
             string dllPath = Path.Combine(_tempDirectory, Path.GetFileName(source));
             File.Copy(source, dllPath);
-            return new HotReloadWarmUpTarget(
-                TestAssemblyName,
-                dllPath,
-                Path.ChangeExtension(dllPath, ".pdb"),
-                Array.Empty<string>());
+            return dllPath;
         }
     }
 }
