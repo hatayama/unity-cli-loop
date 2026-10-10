@@ -102,6 +102,11 @@ because both come from the same CDN and a replaced zip would come with a matchin
     create the release within that time. The next run reuses the tag.
   - A draft of the tag left by a `gh release create` that was cut off is deleted by the next
     run; do not publish it.
+  - A failure in `post-publish`, or a `post-publish` that finds no pending pull request merged
+    as the release commit, leaves the release created and the pull request
+    `autorelease: pending`. The label sync of the next release-please run on a commit that is
+    not a release commit marks it tagged; rerunning this workflow does not, because its plan
+    then finds the release published.
 - **Never create or publish the package release by hand.** A release published without the
   tarball is immutable without it, and that version can then never be signed. The plan reports
   such a release with a warning on every run until the next version is released.
