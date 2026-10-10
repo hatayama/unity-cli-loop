@@ -88,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// A type name in reflection form, the spelling Type.FullName produces, where a nested type
     /// reads Outer+Inner.
-    /// Public because the compiled-caller analysis exposes it in the types of its entry point.
+    /// Public because HotReloadMetadataTypeName, which the compiled-caller analysis exposes,
+    /// returns it from ToReflectionName.
     /// </summary>
     public readonly struct HotReloadReflectionTypeName : IEquatable<HotReloadReflectionTypeName>
     {
