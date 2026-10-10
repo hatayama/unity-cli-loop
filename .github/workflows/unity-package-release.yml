@@ -16,6 +16,8 @@ on:
       - native-cli-publish
     types:
       - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       dry-run:
@@ -25,13 +27,6 @@ on:
 
 permissions:
   contents: read
-
-# Runs one at a time, so two runs can never create the same release. A waiting
-# run may be replaced by a newer one, which is harmless: every run decides from
-# the newest main commit.
-concurrency:
-  group: unity-package-release
-  cancel-in-progress: false
 
 jobs:
   plan:
@@ -160,6 +155,14 @@ jobs:
   publish:
     needs: [plan, sign]
     if: needs.plan.outputs.publish == 'true'
+    # Creations run one at a time, so two runs never create the same release.
+    # Only this job is serialized: a run that skips, a dry run, or a run after a
+    # cancelled one never gets here, so it cannot take the place of a waiting
+    # creation. A waiting creation may be replaced by a newer one, which creates
+    # the same release, or finds it published and does nothing.
+    concurrency:
+      group: unity-package-release
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write

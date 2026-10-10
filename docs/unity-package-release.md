@@ -17,8 +17,9 @@ after the tarball is signed. The decision and the alternatives it replaced are r
 1. **Trigger.** The workflow runs on `workflow_run` after every run of `release-please`,
    `dispatcher-publish`, and `native-cli-publish` on `main` that was not cancelled: merging the
    package release pull request, publishing the project runner, and publishing the dispatcher
-   are the three things a package release waits for. Runs are serialized; a waiting run may be
-   replaced by a newer one, which decides from the same or a newer `main` commit.
+   are the three things a package release waits for. Only `publish` is serialized across runs,
+   so a run that skips or only signs never takes the place of a waiting creation; a waiting
+   creation may be replaced by a newer one, which creates the same release or finds it published.
 2. **`plan`** (`contents: read`) runs `cli/release-automation/cmd/plan-unity-package-release`
    on the newest `main` commit. While the package release pull request is still
    `autorelease: pending`, release-please opens no next release pull request, so the manifest

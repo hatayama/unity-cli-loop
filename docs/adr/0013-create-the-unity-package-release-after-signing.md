@@ -8,8 +8,9 @@ The Unity package release (`v<version>`) is created by one workflow, `unity-pack
 and by nothing else. A run reads the newest `main` commit. When no release of the manifest
 version is published and the readiness check names its release commit, the run signs the
 package at that commit, creates the tag there, and creates and publishes the release with the
-signed tarball in one `gh release create` call. Runs are serialized. A run that cannot sign
-creates nothing: no tag, no draft, no release.
+signed tarball in one `gh release create` call. Creating the release is serialized across runs;
+a run that is not going to create one never waits for, or takes the place of, one that is. A
+run that cannot sign creates nothing: no tag, no draft, no release.
 
 release-please, dispatcher-publish, and native-cli-publish do not create the package release.
 Their completion only starts the workflow, because each of them can be the last thing the

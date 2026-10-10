@@ -37,15 +37,29 @@ assert_job_not_contains() {
   fi
 }
 
-# Verifies the workflow follows every workflow whose completion can make the package release due, and runs one at a time so two runs never create the same release.
-test_runs_after_each_dependency_one_at_a_time() {
+workflow_run_trigger() {
+  awk '/^  workflow_run:$/ { inside = 1; next } /^  [a-z_]+:$/ { inside = 0 } inside' "$WORKFLOW"
+}
+
+# Verifies the workflow follows, on main only, every workflow whose completion can make the package release due.
+test_runs_after_each_dependency_on_main() {
   for workflow_name in release-please dispatcher-publish native-cli-publish; do
-    if ! awk '/^  workflow_run:$/ { inside = 1; next } /^  [a-z_]+:$/ { inside = 0 } inside' "$WORKFLOW" | grep -Fx -- "      - $workflow_name" >/dev/null; then
+    if ! workflow_run_trigger | grep -Fx -- "      - $workflow_name" >/dev/null; then
       fail "Expected the workflow_run trigger to list $workflow_name."
     fi
   done
-  grep -Fx -- "  group: unity-package-release" "$WORKFLOW" >/dev/null || fail "Expected the unity-package-release concurrency group."
-  grep -Fx -- "  cancel-in-progress: false" "$WORKFLOW" >/dev/null || fail "A running release must never be cancelled."
+  if ! workflow_run_trigger | awk '/^    branches:$/ { inside = 1; next } /^    [a-z_-]+:$/ { inside = 0 } inside' | grep -Fx -- "      - main" >/dev/null; then
+    fail "Expected the workflow_run trigger to follow main only."
+  fi
+}
+
+# Verifies only the job that creates the release is serialized, so a run that skips or only signs never takes the place of a waiting creation, and a running creation is never cancelled.
+test_only_release_creations_run_one_at_a_time() {
+  if grep -n '^concurrency:' "$WORKFLOW"; then
+    fail "Expected no workflow-level concurrency group: every run would then queue in it, including runs that never create a release."
+  fi
+  assert_job_contains publish "      group: unity-package-release"
+  assert_job_contains publish "      cancel-in-progress: false"
 }
 
 # Verifies each job holds only the permissions it needs: the plan and the signing job only read, only publish writes contents, and only post-publish starts workflows.
@@ -110,7 +124,8 @@ test_failures_are_reported() {
   fi
 }
 
-test_runs_after_each_dependency_one_at_a_time
+test_runs_after_each_dependency_on_main
+test_only_release_creations_run_one_at_a_time
 test_jobs_use_least_privilege
 test_signing_credentials_stay_in_the_signing_job
 test_release_is_created_only_after_signing
