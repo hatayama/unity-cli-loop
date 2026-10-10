@@ -43,7 +43,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Finds the compiled call and ldftn sites that reference any of <paramref name="targets"/>,
-        /// reading every compiled assembly it needs.
+        /// reading every compiled assembly it needs. Call it only while a run begun with
+        /// <see cref="BeginRunAsync"/> is open: outside one, a read on another thread may evict and
+        /// dispose a cached assembly this is still reading.
         /// </summary>
         public List<HotReloadCallSiteHit> FindCallSites(string projectRoot, HotReloadCompiledMethodIdentity[] targets)
         {
