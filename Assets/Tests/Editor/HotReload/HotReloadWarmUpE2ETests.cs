@@ -182,6 +182,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a run that comes while a warm-up item is in flight takes the call-site cache hold
+        /// only after it yielded to the warm-up, so the hold is not open while the item runs.
+        /// </summary>
+        [Test]
+        public async Task Run_WhileAnItemIsInFlight_TakesTheCallSiteCacheHoldOnlyAfterTheItemFinishes()
+        {
+            PendingWarmUpItem pending = new PendingWarmUpItem("a", _ran);
+            HotReloadWarmUp warmUp = CreateWarmUp(pending);
+            await BeginScope(warmUp);
+            int holdDepthBefore = HotReloadCompiledCallSiteCache.Shared.HoldDepth;
+            Task<HotReloadOrchestratorResult> run;
+            try
+            {
+                warmUp.Start();
+                run = RunWithReadReturningAsync(6);
+
+                Assert.That(run.IsCompleted, Is.False, "Precondition: the run must be waiting for the item.");
+                Assert.That(
+                    HotReloadCompiledCallSiteCache.Shared.HoldDepth,
+                    Is.EqualTo(holdDepthBefore),
+                    "cache hold taken while the item is in flight");
+            }
+            finally
+            {
+                pending.Release.TrySetResult(true);
+            }
+
+            await run;
+        }
+
+        /// <summary>
         /// What: a run puts the edited assembly first in the project's ledger and keeps the names
         /// recorded before it.
         /// </summary>

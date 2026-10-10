@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -26,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CacheFixtureFileName = "HotReloadCallSiteCacheE2EFixture.cs";
         private const string CrossAssemblyName = "UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly";
         private const string ReadBody = "return 1;";
+        private const int HeldReadMilliseconds = 100;
 
         private HotReloadDomainTestScope _scope;
 
@@ -142,6 +144,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             JObject context = HotReloadWarmUpTestDoubles.ReadSingleVibeContext(HotReloadConstants.VibeLogCallerNoteBackfillComplete);
             Assert.That((int)context["loaded"], Is.EqualTo(1), "loaded");
             Assert.That((string)context["cancelledBy"], Is.EqualTo(HotReloadConstants.WarmUpCancelledByRun), "cancelledBy");
+        }
+
+        /// <summary>
+        /// What: a run that comes while a backfill read is in flight counts the wait for that read
+        /// in its warm_up_yield step, so a slow start shows where its time went.
+        /// </summary>
+        [Test]
+        public async Task Run_WhileABackfillReadIsInFlight_CountsTheWaitInWarmUpYield()
+        {
+            string fixturePath = FixturePath(CacheFixtureFileName);
+            string source = File.ReadAllText(fixturePath);
+            Assert.That(source, Does.Contain(ReadBody), "Precondition: the Read body anchor must exist.");
+            PendingDllLoader loader = new PendingDllLoader();
+            loader.PendingFor.Add("a.dll");
+            HotReloadCallSiteBackfill backfill = new HotReloadCallSiteBackfill(loader.Load);
+            _scope = HotReloadDomainTestScope.WithCallSiteBackfill(backfill);
+            await _scope.InstalledWarmUpStopped;
+            VibeLogger.ClearMemoryLogs();
+            backfill.Start(new[] { "a.dll" }, "corr");
+
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "CallerNoteBackfillE2E.cs",
+                source.Replace(ReadBody, "return 4;"));
+            Task<HotReloadOrchestratorResult> run = HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            Assert.That(run.IsCompleted, Is.False, "Precondition: the run must be waiting for the read.");
+            // Why measure here: the run's warm_up_yield step started before RunAsync returned and
+            // ends only after the release below, so it covers at least this span.
+            Stopwatch held = Stopwatch.StartNew();
+            await Task.Delay(HeldReadMilliseconds);
+            long heldMs = held.ElapsedMilliseconds;
+            loader.Release("a.dll");
+            HotReloadOrchestratorResult result = await AwaitRunAsync(run);
+
+            JArray details = JArray.Parse(VibeLogger.GetLogsForAi(HotReloadConstants.VibeLogTimingDetail));
+            Assert.That(details.Count, Is.EqualTo(1), "timing details\n" + FormatOutcomes(result));
+            long warmUpYieldMs = -1;
+            foreach (JToken step in (JArray)details[0]["context"]["steps"])
+            {
+                if ((string)step["step"] == HotReloadConstants.TimingDetailStepWarmUpYield)
+                {
+                    warmUpYieldMs = (long)step["ms"];
+                }
+            }
+
+            Assert.That(warmUpYieldMs, Is.GreaterThanOrEqualTo(heldMs), "the wait for the read counts in warm_up_yield");
         }
 
         private static async Task<HotReloadOrchestratorResult> RunWithReadReturningAsync(
