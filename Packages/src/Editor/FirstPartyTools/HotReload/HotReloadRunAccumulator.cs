@@ -219,14 +219,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Attaches one-shot lifecycle notes to the merged outcomes. Requires the Unity main thread
         /// because the call-site scan reads compiled assemblies through Editor APIs.
         /// </summary>
-        public void ApplyOneShotCallerNotes(string projectRoot)
+        public void ApplyOneShotCallerNotes(string projectRoot, string correlationId)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(correlationId), "correlationId must not be null or empty.");
+
+            // Why one budget per run rather than per scan: the direct scan and every level of the
+            // caller closure go through the same lambda, so one budget bounds the whole note step
+            // however many candidate assemblies and levels it visits.
+            HotReloadCallSiteLoadBudget budget =
+                new HotReloadCallSiteLoadBudget(HotReloadConstants.CallerNoteUncachedDllLoadBudget);
             HotReloadOneShotCallerNoteEnricher.ApplyNotes(
                 projectRoot,
                 _outcomes,
                 _oneShotCallerNoteCandidates,
-                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities, budget));
+            if (budget.RefusedAssemblyNames.Count > 0)
+            {
+                HotReloadOrchestratorLog.LogHotReloadCallerNoteLoadBudgetExhausted(
+                    HotReloadConstants.CallerNoteUncachedDllLoadBudget,
+                    budget.RefusedAssemblyNames,
+                    correlationId);
+            }
         }
 
         /// <summary>

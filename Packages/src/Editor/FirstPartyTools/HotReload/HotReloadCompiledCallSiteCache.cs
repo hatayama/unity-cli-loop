@@ -265,6 +265,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <exception cref="IOException">The file kept changing while it was being read.</exception>
         public Entry GetOrLoad(string dllPath)
         {
+            TryGetOrLoad(dllPath, true, out Entry entry, out _);
+            return entry;
+        }
+
+        /// <summary>
+        /// Like <see cref="GetOrLoad"/>, but reads the file only when <paramref name="allowLoad"/>
+        /// is true: with it false, a dll that is not cached, or whose cached entry is stale, is
+        /// reported as not available (false) and the stale entry is kept for the next allowed read.
+        /// <paramref name="loaded"/> is true only when this call read the file.
+        /// </summary>
+        /// <remarks>
+        /// Why one method rather than a peek plus <see cref="GetOrLoad"/>: a stale entry must count
+        /// as a read for whoever pays for reads, and the fingerprint must be checked once.
+        /// </remarks>
+        /// <exception cref="IOException">The file kept changing while it was being read.</exception>
+        public bool TryGetOrLoad(string dllPath, bool allowLoad, out Entry entry, out bool loaded)
+        {
             Debug.Assert(!string.IsNullOrEmpty(dllPath), "dllPath must not be null or empty.");
 
             string fullPath = Path.GetFullPath(dllPath);
@@ -278,26 +295,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     if (existing.Fingerprint.Equals(fingerprint))
                     {
                         existing.LastAccess = _accessSequence;
-                        return existing;
+                        entry = existing;
+                        loaded = false;
+                        return true;
+                    }
+
+                    if (!allowLoad)
+                    {
+                        entry = null;
+                        loaded = false;
+                        return false;
                     }
 
                     _entries.Remove(fullPath);
                     _cachedBytes -= existing.Fingerprint.Length;
                     existing.Dispose();
                 }
+                else if (!allowLoad)
+                {
+                    entry = null;
+                    loaded = false;
+                    return false;
+                }
 
-                Entry loaded = LoadConsistent(fullPath, fingerprint);
-                loaded.LastAccess = _accessSequence;
+                Entry loadedEntry = LoadConsistent(fullPath, fingerprint);
+                loadedEntry.LastAccess = _accessSequence;
                 // Why not while held: a run scans the same dlls once per caller it looks up, so an
                 // eviction inside the run turns one read per dll into one read per scan.
                 if (_holdDepth == 0)
                 {
-                    EvictLeastRecentlyUsedUntilFits(loaded.Fingerprint.Length);
+                    EvictLeastRecentlyUsedUntilFits(loadedEntry.Fingerprint.Length);
                 }
 
-                _entries[fullPath] = loaded;
-                _cachedBytes += loaded.Fingerprint.Length;
-                return loaded;
+                _entries[fullPath] = loadedEntry;
+                _cachedBytes += loadedEntry.Fingerprint.Length;
+                entry = loadedEntry;
+                loaded = true;
+                return true;
             }
         }
 

@@ -39,6 +39,12 @@ command ran against:
   `hot_reload_call_site_cache_evicted` with the evicted count and bytes, the bytes still cached,
   and the budget — a sign that the assemblies one run scans do not fit the cache and are read
   again on the next run.
+  The caller-note resolution of a run (the `LifecycleNote` that says a patched method is called
+  only from one-shot lifecycle messages) reads at most one compiled assembly that is not in the
+  call-site cache yet; when it would need more, the note is omitted and the run writes one
+  `hot_reload_caller_note_load_budget_exhausted` with `budgetLoads` and the `refusedAssemblies`
+  it did not read. The next runs find the first assembly cached, so a note that needs one more
+  assembly appears from the second run on.
   The time inside the analysis and shim-compile phases is split by separate entries, never by
   `steps`, so `unaccountedMs` keeps its meaning. `hot_reload_worker_request_timing` (one per
   request to the transform worker, prepare and transform) has the gate wait, launch target

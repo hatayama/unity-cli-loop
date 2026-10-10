@@ -37,16 +37,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             /// </summary>
             public List<string> SkippedScanAssemblyNames;
 
+            /// <summary>
+            /// Assemblies of the scan set that were not in the call-site cache and that the load
+            /// budget did not let this scan read; a result listing any is incomplete, like one with
+            /// a missing assembly.
+            /// </summary>
+            public List<string> UnreadScanAssemblyNames;
+
+            public bool IsIncomplete => MissingScanAssemblyNames.Count > 0 || UnreadScanAssemblyNames.Count > 0;
+
             public HotReloadCallSiteScanResult(
                 List<CallSiteHit> hits,
                 List<string> missingScanAssemblyNames,
                 int examinedCallSiteCount = 0,
-                List<string> skippedScanAssemblyNames = null)
+                List<string> skippedScanAssemblyNames = null,
+                List<string> unreadScanAssemblyNames = null)
             {
                 Hits = hits;
                 MissingScanAssemblyNames = missingScanAssemblyNames;
                 ExaminedCallSiteCount = examinedCallSiteCount;
                 SkippedScanAssemblyNames = skippedScanAssemblyNames ?? new List<string>();
+                UnreadScanAssemblyNames = unreadScanAssemblyNames ?? new List<string>();
             }
         }
 
@@ -98,10 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Finds compiled call / ldftn sites that reference any of <paramref name="targets"/>.
+        /// With a <paramref name="loadBudget"/>, assemblies that are not in the call-site cache are
+        /// read only while the budget has a load left; the rest are listed as unread. Null reads
+        /// without limit.
         /// </summary>
         public static HotReloadCallSiteScanResult FindCallSites(
             string projectRoot,
-            CompiledMethodIdentity[] targets)
+            CompiledMethodIdentity[] targets,
+            HotReloadCallSiteLoadBudget loadBudget = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(targets != null, "targets must not be null.");
@@ -117,6 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets, targetAssemblyNames);
             HashSet<string> targetKeys = CollectTargetKeys(targets);
             List<string> skippedScanAssemblyNames = new List<string>();
+            List<string> unreadScanAssemblyNames = new List<string>();
             int examinedCallSiteCount = 0;
             CompiledAssemblyLayout layout = CompiledAssemblyLayout.Resolve(projectRoot);
             foreach (string assemblyName in scanAssemblyNames)
@@ -141,14 +157,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                examinedCallSiteCount += CollectHitsFromAssembly(assemblyName, dllPath, targets, hits);
+                // Why the budget comes after the MemberRef skip: an assembly that names no target
+                // is not read either way, so it must not cost a load or appear as unread. Why the
+                // loop goes on after a refusal: the remaining assemblies still sort into skipped
+                // and unread, so the unread list names only the dlls the scan could not read.
+                if (!TryCollectHitsFromAssembly(assemblyName, dllPath, targets, loadBudget, hits, out int examined))
+                {
+                    Debug.Assert(loadBudget != null, "a load is refused only when a budget is in place.");
+                    unreadScanAssemblyNames.Add(assemblyName);
+                    loadBudget.Refuse(assemblyName);
+                    continue;
+                }
+
+                examinedCallSiteCount += examined;
             }
 
             return new HotReloadCallSiteScanResult(
                 hits,
                 missingScanAssemblyNames,
                 examinedCallSiteCount,
-                skippedScanAssemblyNames);
+                skippedScanAssemblyNames,
+                unreadScanAssemblyNames);
         }
 
         private static HashSet<string> CollectTargetAssemblyNames(CompiledMethodIdentity[] targets)
@@ -310,23 +339,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        // Returns how many call sites of the assembly it compared against the targets.
-        private static int CollectHitsFromAssembly(
+        // Outputs how many call sites of the assembly it compared against the targets in
+        // examinedCallSiteCount; returns false when the dll is not cached and the budget has no
+        // load left, in which case nothing was read and no hit was added.
+        private static bool TryCollectHitsFromAssembly(
             string assemblyName,
             string dllPath,
             CompiledMethodIdentity[] targets,
-            List<CallSiteHit> hits)
+            HotReloadCallSiteLoadBudget loadBudget,
+            List<CallSiteHit> hits,
+            out int examinedCallSiteCount)
         {
             // Why cache: the dll only changes on a compile, which also reloads the domain, so
             // across the runs in between the Cecil read and the instruction walk are pure repeat work.
-            HotReloadCompiledCallSiteCache.Entry compiled = HotReloadCompiledCallSiteCache.Shared.GetOrLoad(dllPath);
+            bool allowLoad = loadBudget == null || loadBudget.RemainingLoads > 0;
+            if (!HotReloadCompiledCallSiteCache.Shared.TryGetOrLoad(dllPath, allowLoad, out HotReloadCompiledCallSiteCache.Entry compiled, out bool loaded))
+            {
+                examinedCallSiteCount = 0;
+                return false;
+            }
+
+            // Why consume on loaded rather than on allowLoad: a cached dll costs nothing, so only a
+            // read takes a load from the budget.
+            if (loaded && loadBudget != null)
+            {
+                bool consumed = loadBudget.TryConsume();
+                Debug.Assert(consumed, "a load was allowed only while the budget had a load left.");
+            }
+
             List<int> positions = CollectCandidatePositions(compiled, targets);
             foreach (int position in positions)
             {
                 CollectHitFromCallSite(assemblyName, compiled, compiled.CallSites[position], targets, hits);
             }
 
-            return positions.Count;
+            examinedCallSiteCount = positions.Count;
+            return true;
         }
 
         // Narrows the walk to the call sites filed under a target's type and method name; the

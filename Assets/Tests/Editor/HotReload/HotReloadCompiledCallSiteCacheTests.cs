@@ -92,6 +92,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: with loads allowed, a stale entry is replaced and the lookup reports that it read
+        /// the file.
+        /// </summary>
+        [Test]
+        public void TryGetOrLoad_StaleEntryWithLoadAllowed_ReplacesItAndReportsLoaded()
+        {
+            string dllPath = CopyTestAssembly("a.dll");
+            HotReloadCompiledCallSiteCache.Entry first = _cache.GetOrLoad(dllPath);
+            File.SetLastWriteTimeUtc(dllPath, File.GetLastWriteTimeUtc(dllPath).AddSeconds(5));
+
+            bool available = _cache.TryGetOrLoad(dllPath, true, out HotReloadCompiledCallSiteCache.Entry second, out bool loaded);
+
+            Assert.That(available, Is.True);
+            Assert.That(loaded, Is.True);
+            Assert.That(second, Is.Not.SameAs(first));
+            Assert.That(_cache.LoadCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: with loads refused, a stale entry is reported as not available and kept, so the
+        /// next allowed lookup still sees it as stale and reads the file.
+        /// </summary>
+        [Test]
+        public void TryGetOrLoad_StaleEntryWithoutLoadAllowed_ReturnsFalseAndKeepsTheOldEntry()
+        {
+            string dllPath = CopyTestAssembly("a.dll");
+            HotReloadCompiledCallSiteCache.Entry first = _cache.GetOrLoad(dllPath);
+            File.SetLastWriteTimeUtc(dllPath, File.GetLastWriteTimeUtc(dllPath).AddSeconds(5));
+
+            bool available = _cache.TryGetOrLoad(dllPath, false, out HotReloadCompiledCallSiteCache.Entry refused, out bool loaded);
+
+            Assert.That(available, Is.False);
+            Assert.That(loaded, Is.False);
+            Assert.That(refused, Is.Null);
+            Assert.That(_cache.LoadCount, Is.EqualTo(1));
+            Assert.That(_cache.Count, Is.EqualTo(1));
+
+            HotReloadCompiledCallSiteCache.Entry second = _cache.GetOrLoad(dllPath);
+            Assert.That(second, Is.Not.SameAs(first));
+            Assert.That(_cache.LoadCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
         /// What: a size change invalidates the entry even when the write time is restored.
         /// </summary>
         [Test]

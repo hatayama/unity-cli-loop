@@ -185,6 +185,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a scan the load budget left incomplete suppresses the note even when the hits it
+        /// did find would have proven an Awake-only caller.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_UnreadScanAssembly_SuppressesNotes()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate("Assembly.One", outcome)
+                };
+            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
+            hit.TargetMethodKey = HotReloadMethodKeys.BuildMethodKeyParts("Type", "SetUp", Array.Empty<string>(), 0);
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                    new List<HotReloadCallSiteScanner.CallSiteHit> { hit },
+                    new List<string>(),
+                    0,
+                    null,
+                    new List<string> { assemblyName }));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
         /// What: candidates with separate target assemblies are scanned in separate fake calls.
         /// </summary>
         [Test]
