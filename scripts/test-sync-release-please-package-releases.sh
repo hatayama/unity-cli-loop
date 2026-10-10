@@ -116,7 +116,7 @@ if [ "$1" = "release" ] && [ "$2" = "view" ]; then
   if [ -n "${CREATE_RELEASE_RACE_TAG:-}" ] && [ "$tag" = "$CREATE_RELEASE_RACE_TAG" ]; then
     race_file="$GH_LOG.release-created-by-other-workflow"
     if [ -f "$race_file" ]; then
-      printf '{"isDraft":false,"targetCommitish":"%s","assets":[]}\n' "$CREATE_RELEASE_RACE_TARGET"
+      printf '{"isDraft":%s,"targetCommitish":"%s","assets":[]}\n' "${CREATE_RELEASE_RACE_DRAFT:-false}" "$CREATE_RELEASE_RACE_TARGET"
       exit 0
     fi
   fi
@@ -503,7 +503,8 @@ run_sync() {
     "$SCRIPT" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
 }
 
-# Verifies a missing root package release is created from the release-please commit, not from the latest follow-up commit.
+# Verifies a missing root package release is created as a draft from the release-please commit, not from the latest
+# follow-up commit, and left unpublished so the signed tarball can still be attached.
 test_creates_missing_root_release_from_release_commit() {
   work_dir=$(create_release_repo creates-missing-root)
   release_sha=$(cat "$work_dir/release-sha.txt")
@@ -512,7 +513,8 @@ test_creates_missing_root_release_from_release_commit() {
 
   assert_contains "$work_dir/gh.log" "release view v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
-  assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
+  assert_contains "$work_dir/gh.log" "--target $release_sha --draft --prerelease"
+  assert_not_contains "$work_dir/gh.log" "release edit"
   assert_contains "$work_dir/gh.log" "release view uloop-project-runner-v3.0.0-beta.6 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish,assets"
   assert_contains "$work_dir/go.log" "run ./cmd/check-protocol-minimum-version --verify-release --ref $release_sha"
   assert_contains "$work_dir/github-output.txt" "ready=true"
@@ -541,14 +543,17 @@ test_existing_root_release_target_branch_resolves_via_origin() {
   assert_not_contains "$work_dir/stderr.txt" "points at"
 }
 
-# Verifies a draft root package release is published once it points at the expected release commit.
-test_existing_draft_root_release_is_published() {
+# Verifies a draft root package release that points at the release commit is still verified but left unpublished,
+# because the signing workflow must attach the tarball before the release becomes immutable.
+test_existing_draft_root_release_is_left_for_signing() {
   work_dir=$(create_release_repo draft-root)
   release_sha=$(cat "$work_dir/release-sha.txt")
 
   run_sync "$work_dir" v3.0.0-beta.6 true "$release_sha"
 
-  assert_contains "$work_dir/gh.log" "release edit v3.0.0-beta.6 --repo hatayama/unity-cli-loop --draft=false --prerelease"
+  assert_contains "$work_dir/go.log" "run ./cmd/check-protocol-minimum-version --verify-release --ref $release_sha"
+  assert_contains "$work_dir/output.txt" "Draft release v3.0.0-beta.6 awaits its signed tarball"
+  assert_not_contains "$work_dir/gh.log" "release edit"
 }
 
 # Verifies draft package releases are not published when their release commit cannot be checked.
@@ -718,7 +723,7 @@ test_retries_until_cli_assets_are_ready() {
   assert_contains "$work_dir/sleep.log" "1"
   assert_contains "$work_dir/output.txt" "Project runner release uloop-project-runner-v3.0.0-beta.6 is now published with complete assets."
   assert_contains "$work_dir/gh.log" "release create v3.0.0-beta.6 --repo hatayama/unity-cli-loop --title v3.0.0-beta.6 --notes-file"
-  assert_contains "$work_dir/gh.log" "--target $release_sha --prerelease"
+  assert_contains "$work_dir/gh.log" "--target $release_sha --draft --prerelease"
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
@@ -800,11 +805,23 @@ test_concurrent_root_release_creation_is_reused() {
   assert_contains "$work_dir/github-output.txt" "ready=true"
 }
 
+# Verifies a root package draft created by another workflow during creation is left unpublished for the signing workflow.
+test_concurrent_root_draft_creation_is_left_for_signing() {
+  work_dir=$(create_release_repo concurrent-root-draft-create)
+  release_sha=$(cat "$work_dir/release-sha.txt")
+
+  CREATE_RELEASE_RACE_TAG=v3.0.0-beta.6 CREATE_RELEASE_RACE_TARGET="$release_sha" CREATE_RELEASE_RACE_DRAFT=true run_sync "$work_dir" "" false ""
+
+  assert_contains "$work_dir/output.txt" "Draft release v3.0.0-beta.6 was created by another workflow"
+  assert_not_contains "$work_dir/gh.log" "release edit"
+  assert_contains "$work_dir/github-output.txt" "ready=true"
+}
+
 assert_contains "$SCRIPT" 'fetch_cli_release_tag "$cli_release_tag"'
 test_creates_missing_root_release_from_release_commit
 test_existing_root_release_is_reused
 test_existing_root_release_target_branch_resolves_via_origin
-test_existing_draft_root_release_is_published
+test_existing_draft_root_release_is_left_for_signing
 test_existing_draft_root_release_without_release_commit_fails
 test_waits_for_cli_release_before_creating_root_release
 test_waits_for_cli_assets_before_creating_root_release
@@ -818,5 +835,6 @@ test_key_rename_commit_is_not_treated_as_release_commit
 test_changelog_move_commit_is_not_treated_as_release_commit
 test_dispatcher_package_release_is_left_to_dispatcher_publish
 test_concurrent_root_release_creation_is_reused
+test_concurrent_root_draft_creation_is_left_for_signing
 test_fails_when_package_pin_records_a_different_dispatcher
 test_package_pin_gate_does_not_apply_to_project_runner_release

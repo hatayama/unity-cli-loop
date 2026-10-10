@@ -4,13 +4,15 @@ name: unity-package-sign
 # attaches the tarball to the package's draft GitHub release, and publishes it;
 # OpenUPM republishes that tarball unchanged (docs/unity-package-signing.md).
 # Releases are immutable once published, so the release sync only creates the
-# draft and this workflow is the only one that publishes it. The sync runs in
-# release-please.yml with GITHUB_TOKEN, which starts no release workflow, so
-# this follows every release-please run instead.
+# draft and this workflow is the only one that publishes it. The sync runs with
+# GITHUB_TOKEN, which starts no release workflow, so this follows every run of
+# the three workflows that run the sync instead.
 on:
   workflow_run:
     workflows:
       - release-please
+      - dispatcher-publish
+      - native-cli-publish
     types:
       - completed
   workflow_dispatch:
@@ -33,8 +35,8 @@ concurrency:
 
 jobs:
   plan:
-    # A release-please run that fails after its release sync step has still
-    # created the draft, so only a cancelled run is ignored.
+    # A run that fails after its release sync step has still created the
+    # draft, so only a cancelled run is ignored.
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'cancelled')
     runs-on: ubuntu-latest
     permissions:
@@ -48,8 +50,8 @@ jobs:
       source-ref: ${{ steps.plan.outputs.source-ref }}
     steps:
       # A workflow_run job checks out the newest main commit by default. Reading
-      # the manifest there would let a later release commit hide the release the
-      # triggering release-please run just created, so the plan reads the commit
+      # the manifest there would let a later release commit hide the draft the
+      # triggering run's release sync just created, so the plan reads the commit
       # that run processed.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

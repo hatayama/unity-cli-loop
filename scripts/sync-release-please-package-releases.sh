@@ -12,6 +12,9 @@ CLI_PACKAGE_PATH="cli/project-runner"
 # the release here would publish it before its assets are uploaded, so the sync
 # must skip the dispatcher package entirely.
 DISPATCHER_PACKAGE_PATH="cli/dispatcher"
+# unity-package-sign.yml owns publishing the Unity package release. A release is
+# immutable once published, so the sync only creates the draft that workflow
+# attaches the signed tarball to and then publishes, and never publishes it here.
 UNITY_PACKAGE_PATH="Packages/src"
 UNITY_PACKAGE_CLI_PIN_FILE="Packages/src/project-runner-pin.json"
 REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
@@ -221,21 +224,6 @@ ensure_release_points_to_commit() {
   fi
 }
 
-publish_existing_draft_release() {
-  release_tag=$1
-  version=$2
-  prerelease_flag=""
-
-  case "$version" in
-    *-*)
-      prerelease_flag="--prerelease"
-      ;;
-  esac
-
-  gh release edit "$release_tag" --repo "$REPO_FULL_NAME" --draft=false $prerelease_flag
-  echo "Published existing draft release $release_tag."
-}
-
 create_package_release() {
   release_tag=$1
   version=$2
@@ -262,13 +250,14 @@ create_package_release() {
     --title "$release_tag" \
     --notes-file "$notes_file" \
     --target "$target_sha" \
+    --draft \
     $prerelease_flag 2>"$create_error_file"
 
   release_created=$?
   set -e
   if [ "$release_created" -eq 0 ]; then
     rm -f "$create_error_file"
-    echo "Created release-please package release $release_tag at $target_sha."
+    echo "Created draft release-please package release $release_tag at $target_sha; unity-package-sign.yml publishes it."
     return
   fi
 
@@ -285,7 +274,7 @@ create_package_release() {
       ensure_release_points_to_commit "$release_tag" "$target_sha" "$release_data"
       is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft' | strip_carriage_returns)
       if [ "$is_draft" != "false" ]; then
-        publish_existing_draft_release "$release_tag" "$version"
+        echo "Draft release $release_tag was created by another workflow; unity-package-sign.yml publishes it."
       else
         echo "Release $release_tag was created by another workflow."
       fi
@@ -655,13 +644,17 @@ while IFS='	' read -r package_path changelog_config_path component include_compo
       fi
 
       is_draft=$(printf '%s\n' "$release_data" | jq -r '.isDraft' | strip_carriage_returns)
+      # A draft this script did not create was never verified, so it is
+      # verified here even though the sync no longer publishes it: a draft that
+      # fails is reported by this run, while unity-package-sign.yml does not
+      # wait for the verdict.
       if [ "$is_draft" != "false" ]; then
         if [ -z "$release_commit_sha" ]; then
           echo "Draft release $release_tag cannot be protocol-verified because no release-please commit for $package_path version $version was found." >&2
           exit 1
         fi
         verify_release_commit_for_package "$package_path" "$release_commit_sha"
-        publish_existing_draft_release "$release_tag" "$version"
+        echo "Draft release $release_tag awaits its signed tarball; unity-package-sign.yml publishes it."
       else
         echo "Release $release_tag already exists."
       fi
