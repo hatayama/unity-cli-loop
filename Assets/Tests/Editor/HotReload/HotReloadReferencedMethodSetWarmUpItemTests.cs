@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
@@ -67,6 +68,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 () => HotReloadCompiledCallers.PreloadReferencedMethodSets(dllPaths, index, new CancellationToken(true)));
 
             Assert.That(index.LoadCount, Is.EqualTo(0), "reads");
+        }
+
+        /// <summary>
+        /// What: the item reads the referencing dlls of every target in target order and never a
+        /// target's own dll.
+        /// </summary>
+        [Test]
+        public void CollectDllPaths_ReturnsEachTargetsReferencingDllsInOrder_AndNotItsOwnDll()
+        {
+            HotReloadWarmUpTarget[] targets =
+            {
+                new HotReloadWarmUpTarget(
+                    "A",
+                    DllPath("A"),
+                    Path.ChangeExtension(DllPath("A"), ".pdb"),
+                    new[] { DllPath("B"), DllPath("C") }),
+                new HotReloadWarmUpTarget(
+                    "D",
+                    DllPath("D"),
+                    Path.ChangeExtension(DllPath("D"), ".pdb"),
+                    new[] { DllPath("E") })
+            };
+
+            List<string> dllPaths = HotReloadReferencedMethodSetWarmUpItem.CollectDllPaths(targets);
+
+            Assert.That(dllPaths, Is.EqualTo(new[] { DllPath("B"), DllPath("C"), DllPath("E") }));
         }
 
         private static string DllPath(string assemblyName)
