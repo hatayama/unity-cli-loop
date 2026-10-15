@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/hatayama/unity-cli-loop/common v0.0.0-00010101000000-000000000000
 	github.com/sigstore/sigstore-go v1.3.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 )
 
