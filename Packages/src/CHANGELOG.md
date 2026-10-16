@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.18.0](https://github.com/hatayama/unity-cli-loop/compare/v3.17.0...v3.18.0) (2026-10-16)
+
+
+### Features
+
+* compile-check answers a method-body edit in a large assembly in seconds instead of a full recompile ([#3318](https://github.com/hatayama/unity-cli-loop/issues/3318)) ([e917059](https://github.com/hatayama/unity-cli-loop/commit/e917059fde46431a24a9f4c7d84ca3e686160307))
+
 ## [3.17.0](https://github.com/hatayama/unity-cli-loop/compare/v3.16.0...v3.17.0) (2026-10-14)
 
 
