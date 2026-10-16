@@ -165,6 +165,36 @@ func TestCompileUnitsKeepsAnEarlyCompileWhenTheAssumedReferenceChangedNoNameItWr
 	}
 }
 
+// Verifies a unit with analyzers and no saved generator output that started ahead of a reference
+// compiles again when the reference changed only names it never writes, whether it was picked up as
+// a dependent or started on its own sources: without that output, names cannot say it is untouched.
+func TestCompileUnitsCompilesAgainAnEarlyUnitWithoutSavedGeneratorOutput(t *testing.T) {
+	for label, dependents := range map[string][]string{"dependent": {"D1", "D2"}, "own sources": {"D1"}} {
+		t.Run(label, func(t *testing.T) {
+			project, recorder := newOptimisticCachedProject(t, chainReferences, dependents, "X", "K", "D1", "D2")
+			recorder.holdUntilBegun(t, "K", "D2")
+			recorder.surfaces["K"] = keptSurfaceOf("K")
+			project.editSource(t, "D2", "class D2 { int Bar; }")
+			withAnalyzer(t, project, "D2")
+
+			outcome := project.compileWithVerdicts(t, recorder, namedVerdicts{"D1": namedChangeOf("D1", "Foo")})
+
+			if recorder.runs["D2"] != 2 {
+				t.Fatalf("D2 compiled %d times, want 2", recorder.runs["D2"])
+			}
+			d2 := resultOf(t, outcome.Units, "D2")
+			if d2.CompiledAgainAfter != "D1" {
+				t.Errorf("D2 compiled again after %q, want D1", d2.CompiledAgainAfter)
+			}
+			assertChangedReferences(t, d2,
+				[]ChangedReference{{Assembly: "X"}, {Assembly: "D1", Reason: noSavedGeneratorOutputReason}})
+			if outcome.NameIndex.WithoutGenerated != 1 {
+				t.Errorf("name index = %+v, want D2 counted once", outcome.NameIndex)
+			}
+		})
+	}
+}
+
 // Verifies a dependent that started on the assumption that a reference keeps its surface compiles
 // again when the reference changed a name it writes.
 func TestCompileUnitsCompilesAgainWhenTheAssumedReferenceChangedANameItWrites(t *testing.T) {
@@ -340,4 +370,14 @@ func TestCompileUnitsReadsTheSourcesOnceAUnitCompilesInFull(t *testing.T) {
 	if !outcome.NameIndex.SourcesRead {
 		t.Errorf("name index = %+v, want the sources read", outcome.NameIndex)
 	}
+}
+
+// Verifies a dependent that writes a changed name only with a \u escape compiles for that name.
+func TestCompileUnitsCompilesADependentThatWritesTheChangedNameWithAnEscape(t *testing.T) {
+	project, recorder := newNamesProject(t, "class B { int x = "+escapeOf("u0046")+"oo(); }")
+
+	outcome := project.compileWithVerdicts(t, recorder, namedVerdicts{"A": namedChangeOf("Foo")})
+
+	assertStrings(t, "results", compiledNames(outcome.Units), []string{"A", "B"})
+	assertChangedReferences(t, resultOf(t, outcome.Units, "B"), []ChangedReference{{Assembly: "A", Name: "Foo"}})
 }

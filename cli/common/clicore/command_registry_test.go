@@ -113,22 +113,29 @@ func TestPausePointStatusNativeCommandDescription(t *testing.T) {
 	}
 }
 
-// Verifies a hidden native command stays routable but is left out of every user-facing command list.
-func TestHiddenNativeCommandIsRoutableButNotListed(t *testing.T) {
-	if !IsDispatcherOwnedCommandName(CompileCheckCommandName) {
-		t.Fatalf("%s must stay registered as a dispatcher-owned command", CompileCheckCommandName)
+// Verifies an entry marked hidden is still found by name but left out of the listed commands and
+// of completion.
+func TestVisibleNativeCommandsLeaveOutAHiddenEntry(t *testing.T) {
+	original := NativeCommands
+	t.Cleanup(func() { NativeCommands = original })
+	const probe = "hidden-probe"
+	NativeCommands = append(append([]NativeCommandEntry{}, original...),
+		NativeCommandEntry{Name: probe, Owner: DispatcherOwned, Hidden: true})
+
+	if _, found := NativeCommand(probe); !found {
+		t.Fatalf("%s must stay routable", probe)
 	}
 	for _, entry := range VisibleNativeCommands() {
-		if entry.Name == CompileCheckCommandName {
-			t.Fatalf("%s must not be listed: %#v", CompileCheckCommandName, VisibleNativeCommands())
+		if entry.Name == probe {
+			t.Fatalf("%s must not be listed: %#v", probe, VisibleNativeCommands())
 		}
 	}
 	for _, name := range NativeCommandNamesForCompletion() {
-		if name == CompileCheckCommandName {
-			t.Fatalf("%s must not be offered as a completion: %#v", CompileCheckCommandName, NativeCommandNamesForCompletion())
+		if name == probe {
+			t.Fatalf("%s must not be offered as a completion: %#v", probe, NativeCommandNamesForCompletion())
 		}
 	}
-	if len(VisibleNativeCommands()) != len(NativeCommands)-1 {
-		t.Fatalf("only %s should be hidden: %#v", CompileCheckCommandName, VisibleNativeCommands())
+	if len(VisibleNativeCommands()) != len(original) {
+		t.Fatalf("only %s should be hidden: %#v", probe, VisibleNativeCommands())
 	}
 }

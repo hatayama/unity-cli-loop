@@ -38,8 +38,9 @@ func newAssemblyReferenceProject(t *testing.T) (string, assemblyGraph, AssemblyC
 		},
 	}
 	context := AssemblyContext{
-		BuiltAssemblies: map[string]bool{"P": true, "Q": true},
-		AssemblyByGUID:  map[string]string{"qqqq": "Q"},
+		BuiltAssemblies:   map[string]bool{"P": true, "Q": true},
+		DefinedAssemblies: map[string]bool{"P": true, "Q": true},
+		AssemblyByGUID:    map[string]string{"qqqq": "Q"},
 	}
 
 	return projectRoot, graph, context, buildTime

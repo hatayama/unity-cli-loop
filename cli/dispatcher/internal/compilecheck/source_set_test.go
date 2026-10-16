@@ -23,7 +23,7 @@ func newAssemblyProject(t *testing.T) string {
 
 // newOwnerIndexForProject indexes the .asmdef and .asmref files of a project the way one run does,
 // treating every assembly the project declares as one the last build produced - an .asmref naming
-// an assembly that was never built owns nothing, which the unbuilt-target test covers on its own.
+// an assembly that was not built is covered by the predefined-source tests on their own.
 func newOwnerIndexForProject(t *testing.T, projectRoot string) assemblyOwnerIndex {
 	t.Helper()
 	tree := walkProjectTree(projectRoot)

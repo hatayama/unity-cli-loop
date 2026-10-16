@@ -24,9 +24,10 @@ var commandSkillNames = map[string]string{
 	"simulate-mouse-ui":    "uloop-simulate-mouse-ui",
 	"hot-reload":           "uloop-hot-reload",
 
-	"launch": "uloop-launch",
-	"status": "uloop-status",
-	"cancel": "uloop-cancel",
+	"launch":        "uloop-launch",
+	"status":        "uloop-status",
+	"cancel":        "uloop-cancel",
+	"compile-check": "uloop-compile-check",
 
 	// One skill covers the four pause-point commands and the three watch commands: watch
 	// expressions are documented by the pause-point skill's references/watch-expressions.md.

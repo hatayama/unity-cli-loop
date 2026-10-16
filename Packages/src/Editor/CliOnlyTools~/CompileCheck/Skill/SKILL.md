@@ -1,7 +1,6 @@
 ---
 name: uloop-compile-check
 description: "Compile C# with the Unity-bundled Roslyn compiler without launching or contacting the Unity Editor; reports errors and warnings only."
-internal: true
 ---
 
 # uloop compile-check
@@ -19,6 +18,10 @@ in `Library/uloop/compile-check/` and are never handed to the Editor.
 - You want compiler errors quickly, without waiting for an import and a domain reload.
 - You are iterating on code whose result does not need to be live in the Editor yet.
 
+Unseen edits (see Limitations): a generator reading a referenced assembly, a new script in a package
+folder without an `.asmdef`, build-profile defines, a setting changed before the first run after a
+build. Run `uloop compile` after one.
+
 ## When not to use
 
 - You want the change reflected in the Editor (play mode, tests, a tool call): run `uloop compile`.
@@ -35,8 +38,8 @@ in `Library/uloop/compile-check/` and are never handed to the Editor.
   ```
 
   `uloop launch` does the same with the Editor window open. After that one build, compile-check works
-  without the Editor; it asks for another build when it detects an `.asmdef` change. A scripting define
-  change it cannot detect, so run `uloop compile` yourself after one.
+  without the Editor; it asks for another build when it detects an `.asmdef` change or a build setting
+  that moved; see the limitations for what stays unseen.
 
 ## Usage
 
@@ -59,10 +62,10 @@ directive counts as a declaration change. Such a check skips a few assembly-wide
 with `--full` before finishing. When the project treats warnings as errors, a rule listed in
 `UncheckedCodes`, such as CS0414, can fail that `--full` run only. The first body edit after a Unity
 build, after a full compile that had errors (a `--full` run or a run that fell back to one), after
-a run that picked it up only because an assembly it references changed, whether it compiled or
-skipped the assembly, or after `--all` in an assembly that references one whose rebuilt API
-differed from the last Unity build and that the next run no longer rebuilds is compiled in full and
-records what the next check compares against; `FastPathFallbacks` says why.
+a run that compiled the assembly only because an assembly it references changed, or after `--all`
+in an assembly that references one whose rebuilt API differed from the last Unity build and that
+the next run no longer rebuilds is compiled in full and records what the next check compares
+against; `FastPathFallbacks` says why.
 
 ## Parameters
 
@@ -107,13 +110,17 @@ compile-check once more rather than retrying in a loop.
 - It replays the last Unity build's response files. A new or deleted `.asmdef`, a changed `.asmdef`
   reference, an `.asmdef` that stopped building for the Editor, or a newly required precompiled
   reference stops the run and asks for `uloop compile`.
-- Changes to `defineConstraints` and `versionDefines` are **not** detected, because they depend on
-  scripting defines and package versions that cannot be evaluated outside the Editor. Run
-  `uloop compile` after editing them.
-- A reference **removed** from an `.asmdef` is not detected either: Unity injects references of its
-  own that no `.asmdef` declares, so only added references can be told apart from those. Diagnostics
-  may therefore miss an error that the removal would cause. Run `uloop compile` after removing one.
-- Changed scripting defines are not detected; the defines from the last build are reused.
-- The predefined assemblies (`Assembly-CSharp` and friends) keep the source list of the last build,
-  so a brand-new `.cs` file outside an `.asmdef` is not compiled until Unity imports it.
+- Build settings are compared against a record the first run after a Unity build writes: a
+  removed scripting define, a changed `csc.rsp`, `defineConstraints`, `versionDefines`,
+  `packages-lock.json` or `manifest.json` stops the run, and a scripting define the last build lacks
+  stops it when `ProjectSettings.asset` was saved after that build. A change made before that first
+  run (other than an added define) is not seen, so run `uloop compile` after one. Under a Unity 6
+  build profile that overrides Player Settings or carries its own defines, only the global
+  ProjectSettings defines are compared.
+- A reference removed from an `.asmdef` stops the run with `COMPILE_CHECK_UNITY_BUILD_REQUIRED`; the
+  four references Unity adds on its own are allowed, and an `.asmdef` with a reference that matches
+  no `.asmdef` in the project is not judged.
+- A new `.cs` file outside every `.asmdef` goes to `Assembly-CSharp` or a sibling by Unity's path
+  rules (`Editor` folders, `Assets/Plugins`); if the last build did not produce that assembly, the run
+  stops and asks for `uloop compile`. A new script in a package folder without an `.asmdef` is not seen.
 - The produced DLLs are never loaded by Unity, and the command never contacts a running Editor.

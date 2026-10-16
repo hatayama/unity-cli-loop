@@ -19,6 +19,15 @@ func TestSkillGuidanceLineNamesTheMatchingSkill(t *testing.T) {
 	}
 }
 
+// Verifies the CLI-only compile-check command points at its own skill, which it did not while the
+// command was hidden.
+func TestSkillGuidanceLineNamesTheCompileCheckSkill(t *testing.T) {
+	line, ok := SkillGuidanceLine("compile-check")
+	if !ok || !strings.Contains(line, "uloop-compile-check") {
+		t.Errorf("guidance line = %q (ok %v), want it to name uloop-compile-check", line, ok)
+	}
+}
+
 // Verifies all four pause-point commands point at the single uloop-pause-point skill rather than a
 // per-command skill name derived from the command, which would not exist.
 func TestSkillGuidanceLineMapsEveryPausePointCommandToOneSkill(t *testing.T) {

@@ -43,6 +43,8 @@ type BuildPlan struct {
 	// All says the caller asked for every assembly to be compiled. Such a run reuses nothing, which
 	// is what makes --all the way out of a reuse that got something wrong.
 	All bool
+	// BuildSettings says what comparing the build settings with the last Unity build found.
+	BuildSettings BuildSettingsReport
 }
 
 // assemblyGraph holds every response file in the dag together with the edges between them.
@@ -62,7 +64,7 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 	}
 	graph := inputs.graph
 
-	reasons, err := selectChangedAssemblies(projectRoot, dagDir, inputs, all)
+	reasons, buildSettings, err := selectChangedAssemblies(projectRoot, dagDir, inputs, all)
 	if err != nil {
 		return BuildPlan{}, err
 	}
@@ -70,7 +72,7 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 
 	order, err := topologicalOrder(graph, reasons)
 	if err != nil {
-		return BuildPlan{}, err
+		return BuildPlan{}, withBuildSettingsReport(buildSettings, err)
 	}
 
 	units := make([]CompileUnit, 0, len(order))
@@ -85,11 +87,12 @@ func BuildCompilePlan(projectRoot string, dagDir string, all bool) (BuildPlan, e
 	}
 
 	return BuildPlan{
-		DagDir:    dagDir,
-		OutputDir: filepath.Join(filepath.FromSlash(compileCheckOutputRoot), filepath.Base(dagDir)),
-		Units:     units,
-		Skipped:   len(graph.names) - len(units),
-		All:       all,
+		DagDir:        dagDir,
+		OutputDir:     filepath.Join(filepath.FromSlash(compileCheckOutputRoot), filepath.Base(dagDir)),
+		Units:         units,
+		Skipped:       len(graph.names) - len(units),
+		All:           all,
+		BuildSettings: buildSettings,
 	}, nil
 }
 
@@ -172,17 +175,35 @@ func listResponseFiles(dagDirectoryPath string) ([]string, error) {
 // below read the same walk.
 func selectChangedAssemblies(
 	projectRoot string, dagDir string, inputs planInputs, all bool,
-) (map[string]string, error) {
+) (map[string]string, BuildSettingsReport, error) {
 	graph := inputs.graph
-	tree := inputs.tree
-	assemblyDefinitions, err := IndexAssemblyDefinitions(tree)
+	assemblyDefinitions, err := IndexAssemblyDefinitions(inputs.tree)
 	if err != nil {
-		return nil, err
+		return nil, BuildSettingsReport{}, err
 	}
 
 	if setErr := DetectAssemblySetChange(projectRoot, dagDir, graph, assemblyDefinitions); setErr != nil {
-		return nil, setErr
+		return nil, BuildSettingsReport{}, setErr
 	}
+
+	buildSettings, settingsErr := DetectBuildSettingsChange(projectRoot, dagDir, graph, assemblyDefinitions)
+	if settingsErr != nil {
+		return nil, buildSettings, withBuildSettingsReport(buildSettings, settingsErr)
+	}
+
+	reasons, err := selectAssembliesByOwnership(projectRoot, dagDir, inputs, assemblyDefinitions, all)
+
+	return reasons, buildSettings, withBuildSettingsReport(buildSettings, err)
+}
+
+// selectAssembliesByOwnership checks which assemblies own which sources now, refuses a run whose
+// ownership moved, and returns why each changed assembly needs compiling.
+func selectAssembliesByOwnership(
+	projectRoot string, dagDir string, inputs planInputs,
+	assemblyDefinitions map[string]AssemblyDefinition, all bool,
+) (map[string]string, error) {
+	graph := inputs.graph
+	tree := inputs.tree
 
 	// Why the .asmref files are indexed here: both the reference check and every source rebuild need
 	// them.
@@ -193,6 +214,16 @@ func selectChangedAssemblies(
 
 	context := NewAssemblyContext(graph, assemblyDefinitions)
 	owners := newAssemblyOwnerIndex(assemblyDefinitions, references, context, tree)
+	// Why Assets is walked once here rather than per assembly: one walk decides the assembly of every
+	// script outside the assembly definitions, and each predefined assembly takes its share of it.
+	predefined, predefinedErr := globPredefinedSources(projectRoot, owners)
+	if predefinedErr != nil {
+		return nil, predefinedErr
+	}
+	if lackErr := detectPredefinedAssemblyTheBuildLacks(predefined, graph); lackErr != nil {
+		return nil, lackErr
+	}
+	owners.predefinedSources = predefined
 	if referenceErr := DetectAssemblyReferenceChange(
 		projectRoot, graph, context, references, owners); referenceErr != nil {
 		return nil, referenceErr

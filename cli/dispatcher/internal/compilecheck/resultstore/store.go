@@ -90,8 +90,8 @@ func (s Store[D]) Forget(assembly string) error {
 	return nil
 }
 
-// writeFileAtomically writes content to path through a temporary file in directoryPath.
-func writeFileAtomically(directoryPath string, path string, content []byte) error {
+// WriteFileAtomically writes content to path through a temporary file in directoryPath.
+func WriteFileAtomically(directoryPath string, path string, content []byte) error {
 	// Why the temporary name is unique per writer: two runs of the same project writing the same
 	// file at once must not rename each other's half-written file into place.
 	temporary, err := os.CreateTemp(directoryPath, filepath.Base(path)+".*"+resultManifestTempSuffix)

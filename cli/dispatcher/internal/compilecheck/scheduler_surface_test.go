@@ -304,3 +304,55 @@ func TestCompileUnitsDoesNotCompareASurfaceNobodyInThePlanReads(t *testing.T) {
 		}
 	}
 }
+
+// Verifies a dependent left out because its reference kept the surface keeps the baseline of its own
+// earlier full compile, so its next edit is checked on the changed files instead of compiled in full.
+func TestCompileUnitsKeepsTheBaselineOfASkippedDependent(t *testing.T) {
+	project, worker := newLargeDependentProject(t)
+	compileWithFastPath(t, project, worker, newCachedSchedulerRecorder("Beta"), "Beta")
+	if !project.hasBaselineOf("Beta") {
+		t.Fatal("expected the first full compile of Beta to record a baseline")
+	}
+
+	project.editSource(t, "Alpha", "class Alpha { void Body() { } }")
+	markSelectedAsDependent(t, project.plan, "Beta")
+	skipping := newCachedSchedulerRecorder("Alpha", "Beta")
+	skipping.surfaces["Alpha"] = keptSurfaceOf("Alpha")
+	skipped := compileWithFastPath(t, project, worker, skipping, "Alpha", "Beta")
+	if skipping.runs["Beta"] != 0 || skipped.Skipped != 1 {
+		t.Fatalf("expected Beta to be left out, got %d compiles and %d skips", skipping.runs["Beta"], skipped.Skipped)
+	}
+
+	project.plan.Units[indexOfUnit(t, project.plan, "Beta")].SelectedAsDependent = false
+	project.writeFile(t, "Assets/Beta/File007.cs", bodyContent(7, "edited body"))
+	recorder := newCachedSchedulerRecorder("Beta")
+	outcome := compileWithFastPath(t, project, worker, recorder, "Beta")
+
+	beta := resultOf(t, outcome.Units, "Beta")
+	if !beta.FastChecked || strings.Contains(beta.FastPathFallbackReason, "no baseline") {
+		t.Fatalf("expected Beta's edit to be checked against the kept baseline, got %+v", beta)
+	}
+}
+
+// Verifies a dependent compiled in the same run reads Unity's reference assembly for a skipped
+// dependent it references, not the output an earlier run left for it, while it reads this run's
+// output for a reference whose surface changed.
+func TestCompileUnitsReadsUnitysReferenceForASkippedDependent(t *testing.T) {
+	project := newCachedSchedulerProject(t,
+		map[string][]string{"Beta": {"Alpha"}, "Delta": {"Beta", "Gamma"}}, "Alpha", "Gamma", "Beta", "Delta")
+	markSelectedAsDependent(t, project.plan, "Beta", "Delta")
+	writeStaleUnitOutput(t, project.root, project.plan, "Beta")
+	recorder := newCachedSchedulerRecorder("Alpha", "Gamma", "Beta", "Delta")
+	recorder.surfaces["Alpha"] = keptSurfaceOf("Alpha")
+	recorder.surfaces["Gamma"] = "changed Gamma"
+
+	project.compileOrFail(t, recorder)
+
+	if recorder.runs["Beta"] != 0 || recorder.runs["Delta"] != 1 {
+		t.Fatalf("expected Beta left out and Delta compiled once, got %d and %d",
+			recorder.runs["Beta"], recorder.runs["Delta"])
+	}
+	assertReferenceFlags(t, project.writtenResponseFile(t, "Delta"+responseFileExtension),
+		[]string{unityReferenceFlag("Beta"), producedReferenceFlag(project.plan, "Gamma")},
+		[]string{producedReferenceFlag(project.plan, "Beta")})
+}

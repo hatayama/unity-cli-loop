@@ -35,7 +35,7 @@ func TestNameIndexReadsGeneratedCodeBeforeStartReturns(t *testing.T) {
 	index.readSources()
 	releaseFIFO(t, source, "class First { }")
 
-	set, err := index.lookup(0)
+	set, _, err := index.lookup(0)
 	if err != nil {
 		t.Fatalf("expected the identifiers of the unit, got %v", err)
 	}

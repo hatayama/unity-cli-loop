@@ -62,6 +62,9 @@ func (logRun compileCheckVibeLog) failed(err error) {
 	context["error_code"] = clierrors.ClassifyError(err, clierrors.ErrorContext{
 		Command: clicore.CompileCheckCommandName, ProjectRoot: logRun.projectRoot,
 	}).ErrorCode
+	if report, found := compilecheck.BuildSettingsReportOf(err); found {
+		context["build_settings"] = compileCheckVibeBuildSettings(report)
+	}
 	logRun.write("ERROR", compileCheckVibeCompleteOperation, "compile-check failed.", context)
 }
 
@@ -90,6 +93,7 @@ func (logRun compileCheckVibeLog) completed(response compileCheckResponse, resul
 	context["units"] = compileCheckVibeUnits(result.Units)
 	context["surface_checks"] = compileCheckVibeSurfaceChecks(result.Units)
 	addCompileCheckVibeNameNarrowing(context, result)
+	context["build_settings"] = compileCheckVibeBuildSettings(result.BuildSettings)
 	logRun.write(level, compileCheckVibeCompleteOperation, "compile-check finished.", context)
 }
 
@@ -112,6 +116,17 @@ func (logRun compileCheckVibeLog) write(level string, operation string, message 
 		Context:       context,
 		CorrelationID: logRun.correlationID,
 	})
+}
+
+// compileCheckVibeBuildSettings says whether the last Unity build left a build-trace file, what
+// happened to the build-settings record, and which setting a refusal was for.
+func compileCheckVibeBuildSettings(report compilecheck.BuildSettingsReport) map[string]any {
+	return map[string]any{
+		"stamp_found":     report.StampFound,
+		"record":          report.Record,
+		"refused_part":    report.RefusedPart,
+		"defines_checked": report.DefinesChecked,
+	}
 }
 
 // compileCheckVibeFastChecks lists each fast check by assembly, whether it was replayed, and how
@@ -182,7 +197,11 @@ func addCompileCheckVibeScheduling(entry map[string]any, unit compilecheck.UnitR
 	if len(unit.ChangedReferences) > 0 {
 		changedBy := make([]map[string]any, 0, len(unit.ChangedReferences))
 		for _, reference := range unit.ChangedReferences {
-			changedBy = append(changedBy, map[string]any{"reference": reference.Assembly, "name": reference.Name})
+			entry := map[string]any{"reference": reference.Assembly, "name": reference.Name}
+			if reference.Reason != "" {
+				entry["reason"] = reference.Reason
+			}
+			changedBy = append(changedBy, entry)
 		}
 		entry["changed_by"] = changedBy
 	}
@@ -200,11 +219,12 @@ func addCompileCheckVibeNameNarrowing(context map[string]any, result compilechec
 	}
 	if result.NameIndex.Units > 0 {
 		context["name_index"] = map[string]any{
-			"duration_ms":    result.NameIndex.Duration.Milliseconds(),
-			"units":          result.NameIndex.Units,
-			"with_generated": result.NameIndex.WithGenerated,
-			"unreadable":     result.NameIndex.Unreadable,
-			"sources_read":   result.NameIndex.SourcesRead,
+			"duration_ms":       result.NameIndex.Duration.Milliseconds(),
+			"units":             result.NameIndex.Units,
+			"with_generated":    result.NameIndex.WithGenerated,
+			"without_generated": result.NameIndex.WithoutGenerated,
+			"unreadable":        result.NameIndex.Unreadable,
+			"sources_read":      result.NameIndex.SourcesRead,
 		}
 	}
 }

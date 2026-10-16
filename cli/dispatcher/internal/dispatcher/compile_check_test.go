@@ -108,7 +108,8 @@ func TestTryHandleCompileCheckRequestIgnoresAnotherCommand(t *testing.T) {
 	}
 }
 
-// Verifies that --help documents the command without compiling anything.
+// Verifies that --help documents the command without compiling anything and closes with the line
+// that sends agents to its skill.
 func TestTryHandleCompileCheckRequestPrintsHelp(t *testing.T) {
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
@@ -117,7 +118,9 @@ func TestTryHandleCompileCheckRequestPrintsHelp(t *testing.T) {
 	if !handled || exitCode != 0 {
 		t.Fatalf("expected help to be handled, got handled=%v exitCode=%d", handled, exitCode)
 	}
-	for _, expected := range []string{"uloop compile-check", "--all", "without contacting the Unity Editor"} {
+	for _, expected := range []string{
+		"uloop compile-check", "--all", "without contacting the Unity Editor", "Load the uloop-compile-check skill",
+	} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Fatalf("expected the help to mention %q, got %q", expected, stdout.String())
 		}

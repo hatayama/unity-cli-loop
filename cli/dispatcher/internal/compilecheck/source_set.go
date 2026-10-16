@@ -185,9 +185,24 @@ func RebuildSources(
 		existing = append(existing, source)
 	}
 
+	// Why only the predefined assemblies gain sources without an .asmdef: an assembly with no .asmdef
+	// that is not one of them is an .asmdef the index does not hold, so nothing says which folder it
+	// owns.
+	if asmdef == nil {
+		if predefinedAssemblyNames[rsp.AssemblyName] {
+			if owners.predefinedSources == nil {
+				return nil, fmt.Errorf(
+					"the scripts outside every assembly definition were never listed for %s", rsp.AssemblyName)
+			}
+
+			return appendPredefinedSources(existing, owners.predefinedSources[rsp.AssemblyName]), nil
+		}
+
+		return existing, nil
+	}
 	// Why package-cache assemblies are not re-globbed: their contents are restored from the package
 	// manager and never edited in place, so the walk would only cost time.
-	if asmdef == nil || isUnderPackageCache(projectRoot, asmdef.Directory) {
+	if isUnderPackageCache(projectRoot, asmdef.Directory) {
 		return existing, nil
 	}
 

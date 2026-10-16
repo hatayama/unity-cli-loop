@@ -128,8 +128,9 @@ func (s Store[D]) LoadBaseline(assembly string) (Baseline[D], string) {
 // compile.
 // Why the reasons are told apart: a full compile with errors drops the baseline an earlier compile
 // left, and a reason that read as "never compiled" sent users looking for a compile that had run.
-// Why a missing manifest says nothing about what happened: a run that skips the unit
-// removes the manifest and the baseline alike, so nothing on disk tells that apart from no compile.
+// Why a missing manifest says nothing about what happened: the records of a unit are removed only
+// when its next compile starts, so a compile that never finished leaves nothing on disk, and
+// nothing tells that apart from no compile at all.
 func (s Store[D]) missingBaselineReason(assembly string) string {
 	const notOnRecord = "no baseline: no full compile of this assembly is on record"
 	content, err := os.ReadFile(manifestPath(s.directoryPath(), assembly))
@@ -233,7 +234,7 @@ func writeBaselineRecord(directoryPath string, assembly string, record baselineR
 		return fmt.Errorf("failed to record the baseline of %s: %w", assembly, err)
 	}
 
-	return writeFileAtomically(directoryPath, baselineRecordPath(directoryPath, assembly), content)
+	return WriteFileAtomically(directoryPath, baselineRecordPath(directoryPath, assembly), content)
 }
 
 // baselineRecordPath names where one assembly's baseline lives.

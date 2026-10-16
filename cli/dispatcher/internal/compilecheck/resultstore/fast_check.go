@@ -102,7 +102,7 @@ func (s Store[D]) RecordFastCheck(
 		return fmt.Errorf("failed to record the changed-files check of %s: %w", assembly, err)
 	}
 
-	return writeFileAtomically(s.directoryPath(), fastResultPath(s.directoryPath(), assembly), content)
+	return WriteFileAtomically(s.directoryPath(), fastResultPath(s.directoryPath(), assembly), content)
 }
 
 // missingFastCheckKey names the first of the keys a check is looked up by that is empty, or returns

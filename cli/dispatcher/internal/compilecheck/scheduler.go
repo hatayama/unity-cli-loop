@@ -169,7 +169,7 @@ func compileUnits(
 		Skipped:   run.referenceSkips,
 		Blocked:   run.blockedNames(),
 		NameSkips: run.nameSkips,
-		NameIndex: run.names.report(),
+		NameIndex: run.nameIndexReport(),
 	}, nil
 }
 
@@ -244,16 +244,15 @@ func (run *schedulerRun) skipBlockedUnit(index int) (bool, error) {
 // was last compiled against, as far as anything it writes can tell. It counts as
 // having kept Unity's surface, so the units that started before it finished read Unity's reference
 // assembly for it, as they assumed.
-// Why its earlier outputs are removed rather than left alone: a reference assembly an earlier run
-// wrote would otherwise be picked up as this run's own output, and the units below it would be
-// compiled against a result this run never produced.
+// Why its earlier outputs and records are left alone: the units of this run read Unity's reference
+// assembly for it because it counts as having kept the surface, a later run trusts them only through
+// the input key and the output hashes its record holds, and its baseline and saved generator output are what later
+// changed-files checks and name narrowing read. Removing them made the next edit of the unit compile
+// it in full, and left the names of its generated code unread.
 func (run *schedulerRun) skipUnchangedDependent(index int) (bool, error) {
 	unit := run.plan.Units[index]
 	if !unit.SelectedAsDependent || run.state.changedInputs[index] != 0 {
 		return false, nil
-	}
-	if err := run.compiler.removeUnitOutputs(run.plan, unit); err != nil {
-		return false, err
 	}
 	if err := run.markFinal(index); err != nil {
 		return false, err
@@ -436,7 +435,8 @@ func (state *schedule) release(index int, effects []referenceEffect) []int {
 			continue
 		}
 		state.changedInputs[dependent]++
-		state.changedBy[dependent] = append(state.changedBy[dependent], changedReference{reference: index, name: effect.name})
+		state.changedBy[dependent] = append(state.changedBy[dependent],
+			changedReference{reference: index, name: effect.name, reason: effect.reason})
 		if !state.stale[dependent] && containsIndex(state.assumed[dependent], index) {
 			state.stale[dependent] = true
 			state.staleCause[dependent] = index

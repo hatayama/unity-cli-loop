@@ -20,14 +20,22 @@ type assemblyOwnerIndex struct {
 	definitionDirectories map[string]bool
 	referencesByDirectory map[string]string
 	tree                  projectTree // the listing the run took, which the source globs read
+	// predefinedSources are the scripts under Assets no assembly definition owns, by the predefined
+	// assembly each belongs to; set once the index is built, because the walk needs the index. Nil
+	// means Assets was never walked, which RebuildSources refuses for a predefined assembly as a
+	// broken contract; an empty map means the walk found none.
+	predefinedSources map[string][]string
 }
 
 // newAssemblyOwnerIndex maps every directory that starts an assembly to what it starts.
-// Why an .asmref naming an assembly this build never produced is left out: Unity has nothing to
-// attach the folder to, so it compiles the folder's sources into the enclosing assembly instead.
-// A package shipping a sample .asmref for an optional render pipeline is the ordinary case - the
-// pipeline is not installed, the GUID resolves to nothing, and the sample compiles into the package's
-// own editor assembly.
+// Why an .asmref whose GUID resolves to nothing, or whose name matches no .asmdef, is left out: Unity
+// has nothing to attach the folder to, so it compiles the folder's sources into the enclosing
+// assembly instead. A package shipping a sample .asmref for an optional render pipeline is the
+// ordinary case - the pipeline is not installed, the GUID resolves to nothing, and the sample
+// compiles into the package's own editor assembly.
+// Why an .asmref naming an .asmdef this build did not produce still owns its folder: Unity attaches
+// the folder to that .asmdef first and only then drops the scripts of an assembly it does not build,
+// so the folder's scripts belong to no assembly at all rather than to the one around it.
 func newAssemblyOwnerIndex(
 	assemblyDefinitions map[string]AssemblyDefinition, references []AssemblyReference,
 	context AssemblyContext, tree projectTree,
@@ -40,7 +48,7 @@ func newAssemblyOwnerIndex(
 	referencesByDirectory := make(map[string]string, len(references))
 	for _, reference := range references {
 		name, resolved := resolveReferenceName(reference.Reference, context)
-		if !resolved || !context.BuiltAssemblies[name] {
+		if !resolved {
 			continue
 		}
 		referencesByDirectory[filepath.Clean(reference.Directory)] = name

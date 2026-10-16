@@ -93,5 +93,5 @@ func (s Store[D]) RecordSurfaceVerdict(assembly string, inputs SurfaceInputs, ve
 		return fmt.Errorf("failed to encode the surface verdict of %s: %w", assembly, err)
 	}
 
-	return writeFileAtomically(s.directoryPath(), surfaceRecordPath(s.directoryPath(), assembly), content)
+	return WriteFileAtomically(s.directoryPath(), surfaceRecordPath(s.directoryPath(), assembly), content)
 }

@@ -434,8 +434,8 @@ func compiledNames(results []UnitResult) []string {
 }
 
 // Verifies a dependent is left out when the assembly it waited for came out byte-identical to the
-// one the last Unity build produced, and that the stale output of an earlier run is removed with it.
-func TestCompileUnitsSkipsADependentWhoseReferenceKeptItsSurface(t *testing.T) {
+// one the last Unity build produced, and that the output an earlier run left for it is kept.
+func TestCompileUnitsKeepsTheOutputOfASkippedDependent(t *testing.T) {
 	plan := newSchedulerPlan(map[string][]string{"B": {"A"}}, "A", "B")
 	markSelectedAsDependent(t, plan, "B")
 	recorder := newSchedulerRecorder(0)
@@ -457,8 +457,8 @@ func TestCompileUnitsSkipsADependentWhoseReferenceKeptItsSurface(t *testing.T) {
 	if recorder.started["B"] {
 		t.Error("a dependent whose reference kept its surface should not have been compiled")
 	}
-	if _, statErr := os.Stat(staleOutput); !os.IsNotExist(statErr) {
-		t.Error("the skipped unit's earlier output should have been removed")
+	if _, statErr := os.Stat(staleOutput); statErr != nil {
+		t.Errorf("the skipped unit's earlier output should have been kept, got: %v", statErr)
 	}
 }
 

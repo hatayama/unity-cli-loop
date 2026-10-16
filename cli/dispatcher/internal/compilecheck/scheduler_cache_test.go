@@ -462,9 +462,9 @@ func TestCompileUnitsCompilesAgainWhenAnOutputWasChanged(t *testing.T) {
 	}
 }
 
-// Verifies the skip of a dependent still wins over the reuse and takes the recorded result with it:
-// the outputs it describes are removed, so nothing may replay diagnostics for them.
-func TestCompileUnitsLeavesNoManifestForASkippedDependent(t *testing.T) {
+// Verifies the skip of a dependent still wins over the reuse and keeps the recorded result of its
+// earlier compile, so a later run can still reuse or check against it.
+func TestCompileUnitsKeepsTheRecordOfASkippedDependent(t *testing.T) {
 	project := newCachedSchedulerProject(t, map[string][]string{"Beta": {"Alpha"}}, "Alpha", "Beta")
 	project.compileOrFail(t, newCachedSchedulerRecorder("Alpha", "Beta"))
 	if !project.hasRecordedCompile("Beta") {
@@ -488,8 +488,8 @@ func TestCompileUnitsLeavesNoManifestForASkippedDependent(t *testing.T) {
 	if recorder.runs["Beta"] != 0 {
 		t.Errorf("the skipped dependent should not have compiled, got %d runs", recorder.runs["Beta"])
 	}
-	if project.hasRecordedCompile("Beta") {
-		t.Error("the skipped dependent's recorded result should have been removed with its outputs")
+	if !project.hasRecordedCompile("Beta") {
+		t.Error("the skipped dependent's recorded result should have been kept")
 	}
 }
 

@@ -161,6 +161,25 @@ func (c Compiler) CompileUnit(
 		return UnitResult{}, fmt.Errorf("failed to create %s: %w", generatedPath, err)
 	}
 
+	result, err := c.invokeCompiler(ctx, plan, unit)
+	// Why the generator output goes when csc did not finish: name narrowing takes the directory as
+	// the output of a finished compile, even an empty one, so a directory left by a compile that
+	// never ran would let a later run narrow the unit by its hand-written sources alone. A dispatcher
+	// killed mid-compile still leaves one, until the unit compiles again and Forget removes it.
+	if err != nil || result.RawOutput != "" {
+		if removeErr := os.RemoveAll(generatedPath); removeErr != nil {
+			return result, errors.Join(err, fmt.Errorf("failed to remove %s: %w", generatedPath, removeErr))
+		}
+	}
+
+	return result, err
+}
+
+// invokeCompiler writes the unit's response file and runs csc on it, once its outputs are cleared
+// and its generator output directory exists.
+func (c Compiler) invokeCompiler(
+	ctx context.Context, plan BuildPlan, unit CompileUnit,
+) (UnitResult, error) {
 	// Why the generator output is saved: a later fast check reads it instead of running the generators.
 	responseFilePath, err := writeRewrittenResponseFile(c.ProjectRoot, plan, unit,
 		unit.Assembly.AssemblyName+responseFileExtension,

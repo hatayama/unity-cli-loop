@@ -203,7 +203,7 @@ func (s Store[D]) RecordCompile(
 		return fmt.Errorf("failed to record the result of %s: %w", assembly, err)
 	}
 
-	return writeFileAtomically(s.directoryPath(), manifestPath(s.directoryPath(), assembly), content)
+	return WriteFileAtomically(s.directoryPath(), manifestPath(s.directoryPath(), assembly), content)
 }
 
 // hashOutputs hashes the named files a compile wrote in directoryPath.

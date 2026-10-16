@@ -50,6 +50,8 @@ type Result struct {
 	NameSkips []NameSkip
 	// NameIndex says what reading the names of the assemblies with references in the plan took.
 	NameIndex NameIndexReport
+	// BuildSettings says what comparing the build settings with the last Unity build found.
+	BuildSettings BuildSettingsReport
 }
 
 // Run compiles the assemblies that need checking and collects their diagnostics.
@@ -106,10 +108,11 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		// Why the two counts are added: both name an assembly the run did not compile - one because
 		// nothing it compiles from changed, the other because everything it references kept the
 		// public surface the last Unity build recorded.
-		Skipped:   plan.Skipped + outcome.Skipped,
-		Blocked:   outcome.Blocked,
-		NameSkips: outcome.NameSkips,
-		NameIndex: outcome.NameIndex,
+		Skipped:       plan.Skipped + outcome.Skipped,
+		Blocked:       outcome.Blocked,
+		NameSkips:     outcome.NameSkips,
+		NameIndex:     outcome.NameIndex,
+		BuildSettings: plan.BuildSettings,
 	}, nil
 }
 

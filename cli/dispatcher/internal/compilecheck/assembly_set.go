@@ -15,10 +15,10 @@ const (
 
 // predefinedAssemblyNames are the assemblies Unity builds without an .asmdef of their own.
 var predefinedAssemblyNames = map[string]bool{
-	"Assembly-CSharp":                  true,
-	"Assembly-CSharp-firstpass":        true,
-	"Assembly-CSharp-Editor":           true,
-	"Assembly-CSharp-Editor-firstpass": true,
+	assemblyCSharp:                true,
+	assemblyCSharpFirstpass:       true,
+	assemblyCSharpEditor:          true,
+	assemblyCSharpEditorFirstpass: true,
 }
 
 // DetectAssemblySetChange refuses a run whose set of assemblies no longer matches the last build.
