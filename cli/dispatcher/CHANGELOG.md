@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.9.0...dispatcher-v3.10.0) (2026-10-16)
+
+
+### Features
+
+* compile-check answers a method-body edit in a large assembly in seconds instead of a full recompile ([#3318](https://github.com/hatayama/unity-cli-loop/issues/3318)) ([e917059](https://github.com/hatayama/unity-cli-loop/commit/e917059fde46431a24a9f4c7d84ca3e686160307))
+
 ## [3.9.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.8.2...dispatcher-v3.9.0) (2026-10-13)
 
 
