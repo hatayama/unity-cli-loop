@@ -39,6 +39,64 @@ Unity Loop Harness is built around four core ideas:
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
+# Demos
+
+Each clip is a real Claude Code session driving a small voxel game through `uloop`. Stretches where only the terminal changes are sped up; the game plays at real speed.
+
+## Launch Unity: `launch`
+
+`uloop launch` opens the project in the Unity version it specifies and returns once the Editor can take commands.
+
+<!-- demo video: launch -->
+
+## Add a feature and test it: `compile`, `run-tests`
+
+Claude adds a glowing torch block, builds the project with `compile`, and runs the EditMode tests with `run-tests`. It fixes the test that fails, then checks the torch at night in Play Mode.
+
+<!-- demo video: compile -->
+
+## Change code during Play Mode: `hot-reload`
+
+Claude adds a double jump and applies it with `hot-reload` without leaving Play Mode, then presses Space with `simulate-keyboard` to measure the jump heights.
+
+<!-- demo video: hot-reload -->
+
+## Stop on a line and read that frame: `pause-point`
+
+The first time water flows into a gap, `pause-point` stops the game on the line that writes water into a cell. Claude reads the new cell's water level in that exact frame.
+
+<!-- demo video: pause-point -->
+
+## Run C# inside the game: `execute-dynamic-code`
+
+`execute-dynamic-code` runs C# in the running game. Claude stacks ten glass blocks in front of the player, then renders a wide shot of the tower from a temporary camera.
+
+<!-- demo video: execute-dynamic-code -->
+
+## Capture what the game shows: `screenshot`
+
+Claude finds the lake with `execute-dynamic-code`, moves the camera high above it, and captures the view with `screenshot`, then hides the HUD and takes the shot again.
+
+<!-- demo video: screenshot -->
+
+## Read the scene: `get-hierarchy`, `find-game-objects`
+
+`get-hierarchy` saves the running scene's tree to a file, and `find-game-objects` reads the Player's components.
+
+<!-- demo video: get-hierarchy -->
+
+## Press keys: `simulate-keyboard`
+
+`simulate-keyboard` holds W through the Input System. The player walks off the bank into the lake, and a screenshot confirms the underwater view.
+
+<!-- demo video: simulate-keyboard -->
+
+## Move and click the mouse: `simulate-mouse-input`
+
+`simulate-mouse-input` moves the mouse gradually, the way a hand would, to break three blocks and fill the hole with water.
+
+<!-- demo video: simulate-mouse-input -->
+
 # Quickstart
 
 This guide installs three things — the CLI, the Unity package, and the skills — so that your LLM tool can drive Unity. You can install everything from the terminal or from the Unity UI; either path is complete on its own.

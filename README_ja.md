@@ -39,6 +39,64 @@ Unity Loop Harnessのコアとなるコンセプトは次の4つです。
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
+# デモ
+
+どの動画も、Claude Code が `uloop` で小さなボクセルゲームを操作した実際のセッションです。ターミナルだけが動く区間は早送りし、ゲーム画面は実時間で再生しています。
+
+## Unity を起動する：`launch`
+
+`uloop launch` は、プロジェクトが指定するバージョンの Unity でプロジェクトを開き、Editor がコマンドを受け付けられるようになるまで待ちます。
+
+<!-- demo video: launch -->
+
+## 機能を足してテストする：`compile`、`run-tests`
+
+Claude が光る松明ブロックを追加し、`compile` でビルドして、`run-tests` で EditMode テストを実行します。失敗したテストを直し、Play Mode で夜にして松明を確かめます。
+
+<!-- demo video: compile -->
+
+## Play Mode のままコードを変える：`hot-reload`
+
+Claude が二段ジャンプを追加し、Play Mode を止めずに `hot-reload` で反映します。続けて `simulate-keyboard` で Space を押し、ジャンプの高さを測ります。
+
+<!-- demo video: hot-reload -->
+
+## 指定した行で止めて、そのフレームを読む：`pause-point`
+
+水が隙間へ初めて流れ込むとき、セルに水を書き込む行で `pause-point` がゲームを止めます。Claude はそのフレームのまま、新しいセルの水位を読みます。
+
+<!-- demo video: pause-point -->
+
+## ゲームの中で C# を実行する：`execute-dynamic-code`
+
+`execute-dynamic-code` は実行中のゲームの中で C# を動かします。Claude がプレイヤーの前にガラスブロックを 10 個積み、一時的なカメラから塔全体を撮ります。
+
+<!-- demo video: execute-dynamic-code -->
+
+## ゲーム画面を撮る：`screenshot`
+
+Claude が `execute-dynamic-code` で湖を探してカメラを真上に移し、`screenshot` で撮ります。そのあと HUD を隠して撮り直します。
+
+<!-- demo video: screenshot -->
+
+## シーンの構造を読む：`get-hierarchy`、`find-game-objects`
+
+`get-hierarchy` が実行中のシーンのツリーをファイルに保存し、`find-game-objects` がプレイヤーのコンポーネントを読みます。
+
+<!-- demo video: get-hierarchy -->
+
+## キーを押す：`simulate-keyboard`
+
+`simulate-keyboard` が Input System 経由で W キーを押し続けます。プレイヤーは岸から湖に入り、スクリーンショットで水中の視界を確かめます。
+
+<!-- demo video: simulate-keyboard -->
+
+## マウスを動かしてクリックする：`simulate-mouse-input`
+
+`simulate-mouse-input` が人の手のようにマウスを少しずつ動かし、ブロックを 3 つ壊して、できた穴を水で満たします。
+
+<!-- demo video: simulate-mouse-input -->
+
 # クイックスタート
 
 このガイドでは、CLI、Unity パッケージ、スキルの 3 つをインストールし、LLM ツールから Unity を操作できる状態にします。ターミナルから入れる方法と Unity の UI から入れる方法があり、どちらか一方で完了します。
