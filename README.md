@@ -47,55 +47,55 @@ Each clip is a real Claude Code session driving a small voxel game through `uloo
 
 `uloop launch` opens the project in the Unity version it specifies and returns once the Editor can take commands.
 
-<!-- demo video: launch -->
+https://github.com/user-attachments/assets/4e83a196-66a4-4f39-80fb-f33b7a038066
 
 ## Add a feature and test it: `compile`, `run-tests`
 
 Claude adds a glowing torch block, builds the project with `compile`, and runs the EditMode tests with `run-tests`. It fixes the test that fails, then checks the torch at night in Play Mode.
 
-<!-- demo video: compile -->
+https://github.com/user-attachments/assets/98bba49f-1846-4b8e-9702-733207e8318f
 
 ## Change code during Play Mode: `hot-reload`
 
 Claude adds a double jump and applies it with `hot-reload` without leaving Play Mode, then presses Space with `simulate-keyboard` to measure the jump heights.
 
-<!-- demo video: hot-reload -->
+https://github.com/user-attachments/assets/fdba761a-b65a-4297-92f1-5cb274f4c4cf
 
 ## Stop on a line and read that frame: `pause-point`
 
 The first time water flows into a gap, `pause-point` stops the game on the line that writes water into a cell. Claude reads the new cell's water level in that exact frame.
 
-<!-- demo video: pause-point -->
+https://github.com/user-attachments/assets/2ea60f1a-ac62-4671-ada6-edb33c0e9f11
 
 ## Run C# inside the game: `execute-dynamic-code`
 
 `execute-dynamic-code` runs C# in the running game. Claude stacks ten glass blocks in front of the player, then renders a wide shot of the tower from a temporary camera.
 
-<!-- demo video: execute-dynamic-code -->
+https://github.com/user-attachments/assets/804d81bc-e019-4423-bfcd-089cd0e207c2
 
 ## Capture what the game shows: `screenshot`
 
 Claude finds the lake with `execute-dynamic-code`, moves the camera high above it, and captures the view with `screenshot`, then hides the HUD and takes the shot again.
 
-<!-- demo video: screenshot -->
+https://github.com/user-attachments/assets/da9302a6-7785-4b21-affa-e6f814094c48
 
 ## Read the scene: `get-hierarchy`, `find-game-objects`
 
 `get-hierarchy` saves the running scene's tree to a file, and `find-game-objects` reads the Player's components.
 
-<!-- demo video: get-hierarchy -->
+https://github.com/user-attachments/assets/ccb960a9-fa8a-40d8-b72c-7e24e11d32c8
 
 ## Press keys: `simulate-keyboard`
 
 `simulate-keyboard` holds W through the Input System. The player walks off the bank into the lake, and a screenshot confirms the underwater view.
 
-<!-- demo video: simulate-keyboard -->
+https://github.com/user-attachments/assets/7b7abb7c-6d87-464e-b7d7-223109c27d30
 
 ## Move and click the mouse: `simulate-mouse-input`
 
 `simulate-mouse-input` moves the mouse gradually, the way a hand would, to break three blocks and fill the hole with water.
 
-<!-- demo video: simulate-mouse-input -->
+https://github.com/user-attachments/assets/0ecf0876-8230-4b4d-b51a-fe72cf9ca4c7
 
 # Quickstart
 
