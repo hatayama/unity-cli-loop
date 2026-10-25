@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     // Ensure session reflects stopped state on failure
                     _sessionFlagsRepository.ClearServerSession();
                     _sessionFlagsRepository.ClearReconnectingFlags();
-                    string message = "Unity CLI Loop server recovery failed because the project IPC endpoint could not be bound within 5000ms.";
+                    string message = "Unity Loop Harness server recovery failed because the project IPC endpoint could not be bound within 5000ms.";
                     UnityEngine.Debug.LogError($"[{UnityCliLoopConstants.PROJECT_NAME}] {message}");
                     throw new InvalidOperationException(message);
                 }
@@ -174,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _setBridgeServer(server);
                     VibeLogger.LogInfo(
                         "binding_success",
-                        "Unity CLI Loop server bound the project IPC endpoint.",
+                        "Unity Loop Harness server bound the project IPC endpoint.",
                         new { endpoint = server.Endpoint });
                     return true;
                 }

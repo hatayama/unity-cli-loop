@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
-    /// Defines the coordination boundary for Unity CLI Loop Server Recovery behavior.
+    /// Defines the coordination boundary for Unity Loop Harness Server Recovery behavior.
     /// </summary>
     public interface IUnityCliLoopServerRecoveryCoordinator
     {
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             if (recoveredServer?.IsRunning != true)
             {
                 return ValidationResult.Failure(
-                    "Unity CLI Loop server recovery finished, but no running server instance is available.");
+                    "Unity Loop Harness server recovery finished, but no running server instance is available.");
             }
 
             return ValidationResult.Success();

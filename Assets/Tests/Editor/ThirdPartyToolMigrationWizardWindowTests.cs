@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
                     window,
-                    "Unity CLI Loop Migration",
+                    "Unity Loop Harness Migration",
                     new Rect(12f, 34f, 360f, 220f),
                     shouldRefreshAfterCreateGui: true);
 
@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
                     window,
-                    "Unity CLI Loop Migration",
+                    "Unity Loop Harness Migration",
                     new Rect(12f, 34f, 360f, 220f),
                     shouldRefreshAfterCreateGui: true);
 
@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
                     window,
-                    "Unity CLI Loop Migration",
+                    "Unity Loop Harness Migration",
                     new Rect(12f, 34f, 360f, 220f),
                     shouldRefreshAfterCreateGui: false);
 
@@ -537,7 +537,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
                     window,
-                    "Unity CLI Loop Migration",
+                    "Unity Loop Harness Migration",
                     position,
                     true);
 
@@ -545,7 +545,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SerializedProperty refreshProperty =
                     serializedWindow.FindProperty("_shouldRefreshAfterCreateGui");
 
-                Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Migration"));
+                Assert.That(window.titleContent.text, Is.EqualTo("Unity Loop Harness Migration"));
                 Assert.That(window.position, Is.EqualTo(position));
                 Assert.That(window.minSize, Is.EqualTo(new Vector2(360f, 120f)));
                 Assert.That(refreshProperty, Is.Not.Null);
@@ -569,7 +569,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 ThirdPartyToolMigrationWizardWindow.PrepareForOpen(
                     window,
-                    "Unity CLI Loop Migration",
+                    "Unity Loop Harness Migration",
                     position,
                     false);
 
@@ -577,7 +577,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SerializedProperty refreshProperty =
                     serializedWindow.FindProperty("_shouldRefreshAfterCreateGui");
 
-                Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Migration"));
+                Assert.That(window.titleContent.text, Is.EqualTo("Unity Loop Harness Migration"));
                 Assert.That(window.position, Is.EqualTo(position));
                 Assert.That(window.minSize, Is.EqualTo(new Vector2(360f, 120f)));
                 Assert.That(refreshProperty, Is.Not.Null);

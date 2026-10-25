@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 if (ServiceValue == null)
                 {
                     throw new InvalidOperationException(
-                        "Unity CLI Loop compile session lifecycle service is not registered.");
+                        "Unity Loop Harness compile session lifecycle service is not registered.");
                 }
 
                 return ServiceValue;

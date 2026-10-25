@@ -2,7 +2,7 @@
 namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
-    /// Provides Unity CLI Loop Editor Domain Reload State dependencies to callers without exposing construction details.
+    /// Provides Unity Loop Harness Editor Domain Reload State dependencies to callers without exposing construction details.
     /// </summary>
     public sealed class UnityCliLoopEditorDomainReloadStateProvider : IDomainReloadStateProvider
     {
@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Provides Unity CLI Loop Editor Domain Reload State Registration behavior for Unity CLI Loop.
+    /// Provides Unity Loop Harness Editor Domain Reload State Registration behavior for Unity Loop Harness.
     /// </summary>
     public static class UnityCliLoopEditorDomainReloadStateRegistration
     {

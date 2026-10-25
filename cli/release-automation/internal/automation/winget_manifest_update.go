@@ -60,7 +60,7 @@ PackageLocale: en-US
 Publisher: hatayama
 PublisherUrl: https://github.com/hatayama
 PublisherSupportUrl: https://github.com/hatayama/unity-cli-loop/issues
-PackageName: Unity CLI Loop
+PackageName: Unity Loop Harness
 PackageUrl: https://github.com/hatayama/unity-cli-loop
 License: MIT
 LicenseUrl: https://github.com/hatayama/unity-cli-loop/blob/main/LICENSE.md

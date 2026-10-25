@@ -31,4 +31,4 @@ Returns JSON with:
 - `ProductName`: Application product name
 - `CompanyName`: Company name
 - `Version`: Application version
-- `Ver`: Unity CLI Loop package version
+- `Ver`: Unity Loop Harness package version

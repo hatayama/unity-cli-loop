@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Settings Window Refresh Policy behavior.
+    /// Test fixture that verifies Unity Loop Harness Settings Window Refresh Policy behavior.
     /// </summary>
     public class UnityCliLoopSettingsWindowRefreshPolicyTests
     {

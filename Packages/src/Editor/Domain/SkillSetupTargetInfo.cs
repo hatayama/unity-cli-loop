@@ -1,7 +1,7 @@
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Describes one agent tool target that can receive Unity CLI Loop skill files.
+    /// Describes one agent tool target that can receive Unity Loop Harness skill files.
     /// </summary>
     public readonly struct SkillSetupTargetInfo
     {

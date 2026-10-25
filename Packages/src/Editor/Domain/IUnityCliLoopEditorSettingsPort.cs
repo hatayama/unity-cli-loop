@@ -3,7 +3,7 @@ using System;
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Defines the persistence boundary for Unity CLI Loop editor settings, owned by Infrastructure.
+    /// Defines the persistence boundary for Unity Loop Harness editor settings, owned by Infrastructure.
     /// </summary>
     public interface IUnityCliLoopEditorSettingsPort
     {

@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Defines the Compiled Assembly contract used by Unity CLI Loop.
+    /// Defines the Compiled Assembly contract used by Unity Loop Harness.
     /// </summary>
     public interface ICompiledAssemblyBuilder
     {

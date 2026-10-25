@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	launchReadinessMessage           = "Waiting for Unity CLI Loop server readiness..."
-	launchReadyMessage               = "Unity CLI Loop is ready."
+	launchReadinessMessage           = "Waiting for Unity Loop Harness server readiness..."
+	launchReadyMessage               = "Unity Loop Harness is ready."
 	launchAlreadyRunningReadyMessage = "Unity is already running and ready."
 	launchStoppedMessage             = "Unity process stopped."
 	launchNoProcessMessage           = "No matching Unity process was found; it may have already exited."

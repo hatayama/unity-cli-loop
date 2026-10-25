@@ -9,7 +9,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Provides Bridge Client Connection behavior for Unity CLI Loop.
+    /// Provides Bridge Client Connection behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class BridgeClientConnection : IDisposable
     {
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Provides Unix Domain Socket Bridge Transport Listener behavior for Unity CLI Loop.
+    /// Provides Unix Domain Socket Bridge Transport Listener behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class UnixDomainSocketBridgeTransportListener : IBridgeTransportListener
     {
@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     }
 
     /// <summary>
-    /// Provides Windows Named Pipe Bridge Transport Listener behavior for Unity CLI Loop.
+    /// Provides Windows Named Pipe Bridge Transport Listener behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class WindowsNamedPipeBridgeTransportListener : IBridgeTransportListener
     {

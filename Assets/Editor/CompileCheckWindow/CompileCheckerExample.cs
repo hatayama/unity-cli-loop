@@ -10,7 +10,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Dev
 {
     /// <summary>
-    /// Provides Compile Checker Example behavior for Unity CLI Loop.
+    /// Provides Compile Checker Example behavior for Unity Loop Harness.
     /// </summary>
     public class CompileCheckerExample
     {

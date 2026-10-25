@@ -6,11 +6,11 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Shows Unity CLI Loop project-scoped (git-shared) settings under Edit > Project Settings.
+    /// Shows Unity Loop Harness project-scoped (git-shared) settings under Edit > Project Settings.
     /// </summary>
     internal static class UnityCliLoopProjectSettingsProvider
     {
-        private const string SETTINGS_MENU_PATH = "Project/Unity CLI Loop";
+        private const string SETTINGS_MENU_PATH = "Project/Unity Loop Harness";
         private const string SUPPRESS_TOGGLE_LABEL = "Suppress Setup Wizard popup";
         private const float TOGGLE_WIDTH = 16f;
         private const float TOGGLE_LABEL_GAP = 4f;
@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             // are still initializing), so a missing port is reported instead of asserted.
             if (RegisteredProjectSettingsPort == null)
             {
-                EditorGUILayout.HelpBox("Unity CLI Loop is still initializing.", MessageType.Info);
+                EditorGUILayout.HelpBox("Unity Loop Harness is still initializing.", MessageType.Info);
                 return;
             }
 

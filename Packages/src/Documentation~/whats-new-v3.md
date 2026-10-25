@@ -12,7 +12,7 @@ MCP support has been removed; the CLI plus Skills is now the only integration pa
 
 ## Upgrading
 
-For most users the upgrade is three steps. Raise the Unity package version, open `Window > Unity CLI Loop > Settings` and press **Install CLI** (or **Update CLI**) to replace the old npm CLI with the native `uloop` command, and finally press **Install Skills** (or **Update Skills**) in the same window to refresh your installed Skills to the V3 content. The installer attempts to remove the obsolete npm package with `npm uninstall -g uloop-cli` and prints the command to run manually when it cannot.
+For most users the upgrade is three steps. Raise the Unity package version, open `Window > Unity Loop Harness > Settings` and press **Install CLI** (or **Update CLI**) to replace the old npm CLI with the native `uloop` command, and finally press **Install Skills** (or **Update Skills**) in the same window to refresh your installed Skills to the V3 content. The installer attempts to remove the obsolete npm package with `npm uninstall -g uloop-cli` and prints the command to run manually when it cannot.
 
 The new `uloop` command is also compatible with V2 projects. When a project still resolves to the V2 package, it fetches the matching V2 CLI automatically and delegates the command to it — so replacing the CLI first does not break the V2 projects you still have around.
 
@@ -73,7 +73,7 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 
 - **MCP connection** — removed. Use the CLI together with the bundled Skills; every capability that was exposed over MCP is reachable through `uloop` commands.
 - **`get-version`, `get-project-info`** — removed as user commands. They were internal diagnostics and were never installed as agent skills, but V2 scripts could still invoke them. Use `uloop --version` for the CLI version, or `execute-dynamic-code` for Unity and project metadata.
-- **`record-input`** — removed. Record input in the Unity Editor from **Window > Unity CLI Loop > Recordings**, then play the resulting JSON back with `replay-input`.
+- **`record-input`** — removed. Record input in the Unity Editor from **Window > Unity Loop Harness > Recordings**, then play the resulting JSON back with `replay-input`.
 
 ## Breaking Changes
 

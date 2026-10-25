@@ -1,7 +1,7 @@
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
     /// <summary>
-    /// Defines the CLI and skill layout contract used by Unity CLI Loop.
+    /// Defines the CLI and skill layout contract used by Unity Loop Harness.
     /// </summary>
     public static class CliConstants
     {

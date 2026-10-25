@@ -6,7 +6,7 @@
         "info": {
           "0409": {
             "CompanyName": "unity-cli-loop",
-            "FileDescription": "uloop project runner for Unity CLI Loop",
+            "FileDescription": "uloop project runner for Unity Loop Harness",
             "FileVersion": "0.0.0.0",
             "InternalName": "uloop-project-runner",
             "LegalCopyright": "Copyright (c) 2025 Masamichi Hatayama",

@@ -6,7 +6,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Provides Key Symbol Map behavior for Unity CLI Loop.
+    /// Provides Key Symbol Map behavior for Unity Loop Harness.
     /// </summary>
     public static class KeySymbolMap
     {

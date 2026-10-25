@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     // Infrastructure dispatcher backed by Unity Editor's update loop.
     /// <summary>
-    /// Provides Editor Main Thread Dispatcher behavior for Unity CLI Loop.
+    /// Provides Editor Main Thread Dispatcher behavior for Unity Loop Harness.
     /// </summary>
     public sealed class EditorMainThreadDispatcher : IMainThreadDispatcher
     {

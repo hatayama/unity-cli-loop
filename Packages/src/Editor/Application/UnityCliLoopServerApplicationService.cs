@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Defines how Unity CLI Loop server instances are created without exposing concrete construction.
+    /// Defines how Unity Loop Harness server instances are created without exposing concrete construction.
     /// </summary>
     public interface IUnityCliLoopServerInstanceFactory
     {
@@ -27,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Defines the event source used to observe Unity CLI Loop server lifecycle behavior.
+    /// Defines the event source used to observe Unity Loop Harness server lifecycle behavior.
     /// Why only ServerLoopExited: it is the one lifecycle signal raised by the server itself
     /// (from the thread pool when the accept loop dies). ServerStarted/ServerStopping describe
     /// controller-level readiness and are published manually via the lifecycle registry.
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Defines the control operations needed for Unity CLI Loop Server behavior.
+    /// Defines the control operations needed for Unity Loop Harness Server behavior.
     /// </summary>
     public interface IUnityCliLoopServerController
     {
@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Provides Unity CLI Loop Server Lifecycle Registry operations for its owning module.
+    /// Provides Unity Loop Harness Server Lifecycle Registry operations for its owning module.
     /// ServerStarted/ServerStopping are delivered only through the Publish* methods;
     /// ServerLoopExited is delivered only by the registered lifecycle source.
     /// </summary>
@@ -195,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Provides Unity CLI Loop Server Application operations for its owning module.
+    /// Provides Unity Loop Harness Server Application operations for its owning module.
     /// </summary>
     public sealed class UnityCliLoopServerApplicationService
     {

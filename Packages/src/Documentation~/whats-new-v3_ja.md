@@ -12,7 +12,7 @@ MCP対応は削除され、CLIとSkillsが唯一の連携方法になりまし�
 
 ## アップグレード方法
 
-ほとんどのユーザーにとって、アップグレードは3ステップで完了します。Unityパッケージのバージョンを上げ、`Window > Unity CLI Loop > Settings` を開いて **Install CLI**（または **Update CLI**）を押し、古いnpm版CLIをネイティブ版の `uloop` コマンドに置き換えます。最後に同じウィンドウで **Install Skills**（または **Update Skills**）を押し、インストール済みのSkillsをV3の内容に更新してください。インストーラは古いnpmパッケージを `npm uninstall -g uloop-cli` で自動削除しようとし、削除できなかった場合は手動で実行するコマンドを表示します。
+ほとんどのユーザーにとって、アップグレードは3ステップで完了します。Unityパッケージのバージョンを上げ、`Window > Unity Loop Harness > Settings` を開いて **Install CLI**（または **Update CLI**）を押し、古いnpm版CLIをネイティブ版の `uloop` コマンドに置き換えます。最後に同じウィンドウで **Install Skills**（または **Update Skills**）を押し、インストール済みのSkillsをV3の内容に更新してください。インストーラは古いnpmパッケージを `npm uninstall -g uloop-cli` で自動削除しようとし、削除できなかった場合は手動で実行するコマンドを表示します。
 
 新しい `uloop` コマンドはV2プロジェクトとも互換性があります。まだV2パッケージのままのプロジェクトに対しては、対応するV2 CLIを自動で取得してコマンドを委譲します。そのため、CLIを先に入れ替えても、手元に残っているV2プロジェクトはそのまま動き続けます。
 
@@ -73,7 +73,7 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 
 - **MCP接続** — 削除されました。CLIとバンドルSkillsを組み合わせて使ってください。MCPで公開していた機能はすべて `uloop` コマンドから利用できます。
 - **`get-version`, `get-project-info`** — ユーザー向けコマンドとしては削除されました。どちらも内部診断用でエージェント向けSkillとしては配布されていませんでしたが、V2ではスクリプトから呼び出せていました。CLIのバージョンは `uloop --version`、Unityやプロジェクトの情報は `execute-dynamic-code` で取得してください。
-- **`record-input`** — 削除されました。入力記録は Unity Editor の **Window > Unity CLI Loop > Recordings** で行い、作成したJSONを `replay-input` で再生してください。
+- **`record-input`** — 削除されました。入力記録は Unity Editor の **Window > Unity Loop Harness > Recordings** で行い、作成したJSONを `replay-input` で再生してください。
 
 ## 破壊的変更
 

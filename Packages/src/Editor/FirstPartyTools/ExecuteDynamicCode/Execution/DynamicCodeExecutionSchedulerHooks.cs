@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Dynamic Code Execution Scheduler Hooks behavior for Unity CLI Loop.
+    /// Provides Dynamic Code Execution Scheduler Hooks behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class DynamicCodeExecutionSchedulerHooks
     {

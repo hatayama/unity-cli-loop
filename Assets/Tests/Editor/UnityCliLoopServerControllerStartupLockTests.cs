@@ -10,7 +10,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Server Controller recovery behavior.
+    /// Test fixture that verifies Unity Loop Harness Server Controller recovery behavior.
     /// </summary>
     public class UnityCliLoopServerControllerRecoveryTests
     {
@@ -259,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that public recovery tracking completes after give-up and does not block later recovery.
             UnityEngine.TestTools.LogAssert.Expect(
                 UnityEngine.LogType.Error,
-                "[UnityCliLoop] Unity CLI Loop server recovery failed before the bridge became ready. first failure");
+                "[UnityCliLoop] Unity Loop Harness server recovery failed before the bridge became ready. first failure");
             _sessionFlagsRepository.MarkServerStarted();
             int firstRecoveryAttempts = 0;
             bool secondRecoveryStarted = false;
@@ -478,7 +478,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 });
             UnityEngine.TestTools.LogAssert.Expect(
                 UnityEngine.LogType.Error,
-                "[UnityCliLoop] Unity CLI Loop server recovery failed before the bridge became ready. readiness probe timed out");
+                "[UnityCliLoop] Unity Loop Harness server recovery failed before the bridge became ready. readiness probe timed out");
 
             System.InvalidOperationException exception =
                 Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
@@ -551,7 +551,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 exception.Message,
-                Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
+                Is.EqualTo("Unity Loop Harness server recovery finished, but no running server instance is available."));
             Assert.That(serverInstanceFactory.LastCreated, Is.Null);
         }
 

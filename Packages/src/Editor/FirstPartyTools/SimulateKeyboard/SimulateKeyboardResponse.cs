@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // tell whether the uloop-side tracker and the Input System device agree.
 
         /// <summary>
-        /// Whether Unity CLI Loop's own key-hold tracker (not the Input System device) considered
+        /// Whether Unity Loop Harness's own key-hold tracker (not the Input System device) considered
         /// the key held at the moment of the diagnostic read.
         /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

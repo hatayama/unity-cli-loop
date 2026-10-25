@@ -8,7 +8,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
-    // Infrastructure adapter for project skill files managed by Unity CLI Loop.
+    // Infrastructure adapter for project skill files managed by Unity Loop Harness.
     /// <summary>
     /// Provides Tool Skill Setup operations for its owning module.
     /// </summary>

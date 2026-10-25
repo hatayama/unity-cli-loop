@@ -34,8 +34,8 @@ May print status/progress lines before the final JSON payload, such as project p
 The final JSON payload includes:
 
 - `Success`: whether the command completed
-- `Ready`: whether Unity CLI Loop is ready for commands
-- `ServerReady`: whether the Unity CLI Loop server accepted requests
+- `Ready`: whether Unity Loop Harness is ready for commands
+- `ServerReady`: whether the Unity Loop Harness server accepted requests
 - `ProjectIpcReady`: whether the project IPC path accepted tool requests
 - `AlreadyRunning`: whether an existing Unity process was reused
 - `Launched`: whether this command launched a Unity process

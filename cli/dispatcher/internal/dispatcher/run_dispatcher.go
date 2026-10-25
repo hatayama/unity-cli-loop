@@ -299,8 +299,8 @@ func dispatcherPinResolutionError(projectRoot string, cause error) clierrors.CLI
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
 		NextActions: []string{
-			"Open the Unity project once so Unity CLI Loop can write `.uloop/project-runner-pin.json`.",
-			"Run the CLI setup from Unity CLI Loop Settings if the pin file is still missing.",
+			"Open the Unity project once so Unity Loop Harness can write `.uloop/project-runner-pin.json`.",
+			"Run the CLI setup from Unity Loop Harness Settings if the pin file is still missing.",
 		},
 		Details: map[string]any{
 			"Cause": cause.Error(),

@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Provides External Compiler Paths behavior for Unity CLI Loop.
+    /// Provides External Compiler Paths behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class ExternalCompilerPaths
     {

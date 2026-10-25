@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             {
                 if (RepositoryValue == null)
                 {
-                    throw new InvalidOperationException("Unity CLI Loop session flags repository is not registered.");
+                    throw new InvalidOperationException("Unity Loop Harness session flags repository is not registered.");
                 }
 
                 return RepositoryValue;

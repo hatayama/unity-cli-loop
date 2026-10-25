@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private int _prevSecs = -1;
         private int _prevReplayFrame = -1;
 
-        [MenuItem("Window/Unity CLI Loop/Recordings", priority = 1)]
+        [MenuItem("Window/Unity Loop Harness/Recordings", priority = 1)]
         public static void ShowWindow()
         {
             RecordingsEditorWindow window = GetWindow<RecordingsEditorWindow>("Recordings");

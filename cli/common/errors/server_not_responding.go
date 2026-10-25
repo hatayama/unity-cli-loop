@@ -5,7 +5,7 @@ import (
 )
 
 // UnityServerNotRespondingError reports that a running Unity Editor accepted a
-// connection but its Unity CLI Loop server did not respond in time. Both the
+// connection but its Unity Loop Harness server did not respond in time. Both the
 // dispatcher's launch-readiness wait and the runner's connection retry loop
 // construct this error, and the shared CORE classifiers turn it into a CLIError.
 type UnityServerNotRespondingError struct {
@@ -16,9 +16,9 @@ type UnityServerNotRespondingError struct {
 
 func (err UnityServerNotRespondingError) Error() string {
 	if err.Cause != nil {
-		return fmt.Sprintf("Unity is running but the Unity CLI Loop server is not responding: %s", err.Cause)
+		return fmt.Sprintf("Unity is running but the Unity Loop Harness server is not responding: %s", err.Cause)
 	}
-	return "Unity is running but the Unity CLI Loop server is not responding"
+	return "Unity is running but the Unity Loop Harness server is not responding"
 }
 
 func (err UnityServerNotRespondingError) Unwrap() error {

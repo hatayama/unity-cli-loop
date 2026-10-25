@@ -21,13 +21,13 @@ func nativeToolDisabledError(projectRoot string, command string) clierrors.CLIEr
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeToolDisabled,
 		Phase:       clierrors.ErrorPhaseDispatch,
-		Message:     "Tool is disabled in Unity CLI Loop settings: " + command,
+		Message:     "Tool is disabled in Unity Loop Harness settings: " + command,
 		Retryable:   false,
 		SafeToRetry: false,
 		ProjectRoot: projectRoot,
 		Command:     command,
 		NextActions: []string{
-			"Enable the tool in Unity CLI Loop settings before running this command.",
+			"Enable the tool in Unity Loop Harness settings before running this command.",
 		},
 	}
 }

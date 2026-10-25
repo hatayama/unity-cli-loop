@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal sealed class EditorExecutionActivity
     {
-        private const string ActivityReason = "Unity CLI Loop is executing a command";
+        private const string ActivityReason = "Unity Loop Harness is executing a command";
 
         private readonly IProcessActivityApi _api;
         private readonly object _gate = new object();

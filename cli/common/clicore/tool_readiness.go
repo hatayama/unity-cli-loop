@@ -23,7 +23,7 @@ const (
 	DomainReloadWaitParam = "WaitForDomainReload"
 )
 
-const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
+const executeDynamicCodeReadinessProbe = `return "Unity Loop Harness dynamic code prewarm";`
 
 type toolReadinessDeps struct {
 	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)

@@ -11,7 +11,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Provides Skill Install Layout behavior for Unity CLI Loop.
+    /// Provides Skill Install Layout behavior for Unity Loop Harness.
     /// </summary>
     internal static class SkillInstallLayout
     {

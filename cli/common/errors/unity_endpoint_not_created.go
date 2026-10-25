@@ -8,7 +8,7 @@ func unityEndpointNotCreatedCLIError(err UnityEndpointNotCreatedError, context E
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseConnection,
-		Message:     "The Unity CLI Loop server is not reachable for this project.",
+		Message:     "The Unity Loop Harness server is not reachable for this project.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: context.ProjectRoot,

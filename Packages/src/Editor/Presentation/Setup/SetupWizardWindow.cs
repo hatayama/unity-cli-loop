@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     public class SetupWizardWindow : EditorWindow
     {
-        private const string WindowTitle = "Unity CLI Loop Setup";
+        private const string WindowTitle = "Unity Loop Harness Setup";
         private const string UXML_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uxml";
         private const string USS_RELATIVE_PATH = "Editor/Presentation/Setup/SetupWizardWindow.uss";
         private const string SKILLS_PANEL_UXML_RELATIVE_PATH = "Editor/Presentation/Shared/SkillsSetupPanel.uxml";
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(skillSetupUseCase));
         }
 
-        [MenuItem("Window/Unity CLI Loop/Setup Wizard", priority = 3)]
+        [MenuItem("Window/Unity Loop Harness/Setup Wizard", priority = 3)]
         public static void ShowWindow()
         {
             ShowWindowInternal(false);
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (RegisteredEditorSettingsPort == null)
             {
-                throw new System.InvalidOperationException("Unity CLI Loop editor settings port is not registered.");
+                throw new System.InvalidOperationException("Unity Loop Harness editor settings port is not registered.");
             }
 
             return RegisteredEditorSettingsPort;

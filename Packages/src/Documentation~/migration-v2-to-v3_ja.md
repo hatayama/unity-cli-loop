@@ -3,7 +3,7 @@
 [English](migration-v2-to-v3.md) | 日本語
 
 > [!NOTE]
-> **ほとんどのユーザーには、このガイドは不要です。** C#カスタムツールも、`uloop` を呼び出す自作のスキル／スクリプトも持っていないなら、アップグレードは3ステップで終わります。Unityパッケージのバージョンを上げ、`Window > Unity CLI Loop > Settings` で **Install CLI**（または **Update CLI**）を押し、同じウィンドウで **Install Skills**（または **Update Skills**）を押すだけです。これで移行は完了なので、ここで読み終えて構いません。V3で何が変わったかは [V3の新機能](whats-new-v3_ja.md) を参照してください。
+> **ほとんどのユーザーには、このガイドは不要です。** C#カスタムツールも、`uloop` を呼び出す自作のスキル／スクリプトも持っていないなら、アップグレードは3ステップで終わります。Unityパッケージのバージョンを上げ、`Window > Unity Loop Harness > Settings` で **Install CLI**（または **Update CLI**）を押し、同じウィンドウで **Install Skills**（または **Update Skills**）を押すだけです。これで移行は完了なので、ここで読み終えて構いません。V3で何が変わったかは [V3の新機能](whats-new-v3_ja.md) を参照してください。
 
 ## このガイドが必要な人
 
@@ -42,9 +42,9 @@ CLIから起動してもこのダイアログは回避できません。`uloop l
 
 ## Step 2: Migrateを押す
 
-Editorが起動すると、`Unity CLI Loop Migration` ウィンドウが**自動的に開きます**。この自動オープンは、パッケージのメジャーバージョンがV2からV3になった最初の起動時に発火します。つまり一度きりのイベントで、再起動すればまた出せるというものではありません。**自動で開かなかった場合**は、`Window > Unity CLI Loop > Custom Tool Migration` から手動で開いてください。
+Editorが起動すると、`Unity Loop Harness Migration` ウィンドウが**自動的に開きます**。この自動オープンは、パッケージのメジャーバージョンがV2からV3になった最初の起動時に発火します。つまり一度きりのイベントで、再起動すればまた出せるというものではありません。**自動で開かなかった場合**は、`Window > Unity Loop Harness > Custom Tool Migration` から手動で開いてください。
 
-![Unity CLI Loop Migrationウィンドウ。C# Source Structure MigrationとAI Skill and Script Migrationの2セクションが表示され、検出結果とMigrateボタンが見える](images/migration-wizard-detected.png)
+![Unity Loop Harness Migrationウィンドウ。C# Source Structure MigrationとAI Skill and Script Migrationの2セクションが表示され、検出結果とMigrateボタンが見える](images/migration-wizard-detected.png)
 
 `C# Source Structure Migration` セクションには、コンパイルエラー起点の検出結果が次のように表示されます（`{N}` は対象ファイル数。特定できなかった場合は件数なしの文言になります）。
 
@@ -152,7 +152,7 @@ V3のbooleanオプションは値を取りません。V2の呼び出しをどう
 | `uloop get-menu-items` | 削除。`uloop execute-dynamic-code` を使う。 |
 | `uloop get-version` | ユーザー向けコマンドとしては削除。CLIのバージョンは `uloop --version`、Unity Editorのバージョンは `uloop execute-dynamic-code` で取得する。 |
 | `uloop get-project-info` | 削除。必要なプロジェクト情報は `uloop execute-dynamic-code` で取得する。 |
-| `uloop record-input` | V3で削除。入力記録は Unity Editor の **Window > Unity CLI Loop > Recordings** で行う。 |
+| `uloop record-input` | V3で削除。入力記録は Unity Editor の **Window > Unity Loop Harness > Recordings** で行う。 |
 
 移行スキルはこれらを自動で書き換えず、移行候補として報告するだけです。スクリプトが何をしていたかによって適切な代替手段が変わるためです。
 
@@ -211,7 +211,7 @@ uloop list
 
 **Safe Modeに入ってしまった。** Safe Modeではパッケージのコードが動かないため、何も記録されておらず、失われたものもありません。Editorを再起動し、ダイアログで `Ignore` を押してください。そもそもダイアログが出なかった場合は、`Preferences > Asset Pipeline > Show Enter Safe Mode Dialog` をONに戻してから再起動してください。
 
-**ウィザードが自動で開かない。** まず、EditorがV3のパッケージで起動し直されたかを確認してください。自動オープンは起動時、しかもメジャーバージョンがV2からV3になった最初の起動時に発火します。Unityを起動したままPackage Managerで更新したセッションは対象外なので、Editorを再起動してください。開かない場合は `Window > Unity CLI Loop > Custom Tool Migration` から手動で開いてください。手動で開いても、Step 2以降の手順はまったく同じです。
+**ウィザードが自動で開かない。** まず、EditorがV3のパッケージで起動し直されたかを確認してください。自動オープンは起動時、しかもメジャーバージョンがV2からV3になった最初の起動時に発火します。Unityを起動したままPackage Managerで更新したセッションは対象外なので、Editorを再起動してください。開かない場合は `Window > Unity Loop Harness > Custom Tool Migration` から手動で開いてください。手動で開いても、Step 2以降の手順はまったく同じです。
 
 **`Migrate` 実行後もコンパイルエラーが残る。** まず残っているエラーの内容を読んでください。カスタムロジックとV2 API呼び出しが混在しているソースは、置換ルールでカバーできず手直しが必要な場合があります。VCSのdiffでウィザードが何を変更したかを確認し、やり直したい場合はcommitやバックアップから戻したうえで、上記の「手動移行のリファレンス」を使って残りを対処してください。
 

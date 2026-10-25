@@ -44,7 +44,7 @@ Prefer `rg` for searches when available. If `rg` is unavailable, use the best av
 - For first-party tools, use the reference table. `compile`, `run-tests`,
   `get-hierarchy`, and `replay-input` have special renamed
   negative flags.
-- `record-input` is removed. Direct users to create recordings in **Window > Unity CLI Loop > Recordings** instead of translating its options.
+- `record-input` is removed. Direct users to create recordings in **Window > Unity Loop Harness > Recordings** instead of translating its options.
 - For first-party boolean options that are not in the reference tables, run
   `uloop <command> --help` and apply the boolean rules to the printed
   default: `default: enabled` means the V3 default is true, and

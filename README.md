@@ -105,7 +105,7 @@ Make sure you have:
 - An LLM tool that can load skills, such as Claude Code or Codex
 
 > [!NOTE]
-> **Upgrading from V2**: if the project has custom tools written against the V2 API, compile errors appear right after the V3 package is installed. This is expected. Do not fix them by hand: choose `Ignore` in Unity's Safe Mode prompt on startup, then press **Migrate** in the migration window that opens automatically (`Window > Unity CLI Loop > Custom Tool Migration`). See [Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md) for the full procedure.
+> **Upgrading from V2**: if the project has custom tools written against the V2 API, compile errors appear right after the V3 package is installed. This is expected. Do not fix them by hand: choose `Ignore` in Unity's Safe Mode prompt on startup, then press **Migrate** in the migration window that opens automatically (`Window > Unity Loop Harness > Custom Tool Migration`). See [Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md) for the full procedure.
 
 ## Install from the terminal
 
@@ -200,7 +200,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 ### Step 2: Install the CLI
 
-Open `Window > Unity CLI Loop > Settings` and press **Install CLI**:
+Open `Window > Unity Loop Harness > Settings` and press **Install CLI**:
 
 <img width="350" alt="Settings window before the CLI is installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 

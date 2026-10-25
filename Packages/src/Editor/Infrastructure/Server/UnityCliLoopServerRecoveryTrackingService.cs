@@ -210,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 {
                     if (failedAttemptCount >= UnityCliLoopServerConfig.RECOVERY_RETRY_DELAYS_MS.Length)
                     {
-                        string message = $"Unity CLI Loop server recovery failed before the bridge became ready. {ex.GetBaseException().Message}";
+                        string message = $"Unity Loop Harness server recovery failed before the bridge became ready. {ex.GetBaseException().Message}";
                         // Why: the thrown exception ends in an unobserved task and VibeLogger is
                         // compiled out without ULOOP_DEBUG, so without this console entry an
                         // unrecoverable server (uloop unreachable) would be completely silent.

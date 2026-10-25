@@ -8,7 +8,7 @@ using ToolContractsRegistrar = io.github.hatayama.UnityCliLoop.ToolContracts.Uni
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
     /// <summary>
-    /// Provides Unity CLI Loop Application Registration behavior for Unity CLI Loop.
+    /// Provides Unity Loop Harness Application Registration behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class UnityCliLoopApplicationRegistration
     {

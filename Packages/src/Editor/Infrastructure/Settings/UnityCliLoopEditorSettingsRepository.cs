@@ -12,7 +12,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Management class for Unity CLI Loop Editor settings.
+    /// Management class for Unity Loop Harness Editor settings.
     /// Saves as a JSON file in the UserSettings folder.
     /// </summary>
     public sealed class UnityCliLoopEditorSettingsRepository : IUnityCliLoopEditorSettingsPort
@@ -198,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 // Don't suppress this exception - corrupted settings should be reported
                 throw new InvalidOperationException(
-                    $"Failed to load Unity CLI Loop Editor settings from: {SettingsFilePath}. Settings file may be corrupted.", ex);
+                    $"Failed to load Unity Loop Harness Editor settings from: {SettingsFilePath}. Settings file may be corrupted.", ex);
             }
         }
 

@@ -7,7 +7,7 @@ using UnityEditor;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     /// <summary>
-    /// Verifies that bundled Roslyn support plugins stay private to Unity CLI Loop.
+    /// Verifies that bundled Roslyn support plugins stay private to Unity Loop Harness.
     /// </summary>
     public sealed class CodeAnalysisPluginImporterTests
     {

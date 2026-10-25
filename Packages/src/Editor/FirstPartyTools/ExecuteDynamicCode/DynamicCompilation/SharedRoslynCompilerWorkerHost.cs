@@ -12,7 +12,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Shared Roslyn Compiler Worker Host behavior for Unity CLI Loop.
+    /// Provides Shared Roslyn Compiler Worker Host behavior for Unity Loop Harness.
     /// </summary>
     internal static class SharedRoslynCompilerWorkerHost
     {

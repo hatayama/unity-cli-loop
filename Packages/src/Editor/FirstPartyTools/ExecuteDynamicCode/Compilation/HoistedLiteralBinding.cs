@@ -2,7 +2,7 @@
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Hoisted Literal Binding behavior for Unity CLI Loop.
+    /// Provides Hoisted Literal Binding behavior for Unity Loop Harness.
     /// </summary>
     public sealed class HoistedLiteralBinding
     {

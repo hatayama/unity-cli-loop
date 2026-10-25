@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (action == UnityCliLoopKeyboardAction.KeyUp)
             {
                 return
-                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' release was interrupted by the pause; the key is no longer held by Unity CLI Loop.";
+                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' release was interrupted by the pause; the key is no longer held by Unity Loop Harness.";
             }
 
             if (pressWasApplied)
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return
-                $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume.";
+                $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity Loop Harness bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume.";
         }
 
         internal static SimulateKeyboardResponse AlreadyHeldRejection(string keyName, bool deviceIsPressed)

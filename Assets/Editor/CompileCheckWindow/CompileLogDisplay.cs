@@ -6,7 +6,7 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Dev
 {
     /// <summary>
-    /// Provides Compile Log Display behavior for Unity CLI Loop.
+    /// Provides Compile Log Display behavior for Unity Loop Harness.
     /// </summary>
     public class CompileLogDisplay : System.IDisposable
     {

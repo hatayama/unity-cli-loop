@@ -101,7 +101,7 @@ type ConnectionAttemptError struct {
 }
 
 func (err *ConnectionAttemptError) Error() string {
-	return fmt.Sprintf("the Unity CLI Loop server is not reachable for this project: %s", err.Cause)
+	return fmt.Sprintf("the Unity Loop Harness server is not reachable for this project: %s", err.Cause)
 }
 
 func (err *ConnectionAttemptError) Unwrap() error {

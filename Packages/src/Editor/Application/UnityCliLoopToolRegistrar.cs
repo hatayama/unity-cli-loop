@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             {
                 if (ServiceValue == null)
                 {
-                    throw new InvalidOperationException("Unity CLI Loop tool registrar service is not registered.");
+                    throw new InvalidOperationException("Unity Loop Harness tool registrar service is not registered.");
                 }
 
                 return ServiceValue;

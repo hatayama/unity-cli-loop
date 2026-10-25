@@ -2,7 +2,7 @@
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Dynamic Compilation Plan behavior for Unity CLI Loop.
+    /// Provides Dynamic Compilation Plan behavior for Unity Loop Harness.
     /// </summary>
     public sealed class DynamicCompilationPlan
     {

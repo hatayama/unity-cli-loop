@@ -5,7 +5,7 @@ using UnityEditor.Compilation;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Compiler Diagnostics behavior for Unity CLI Loop.
+    /// Provides Compiler Diagnostics behavior for Unity Loop Harness.
     /// </summary>
     public sealed class CompilerDiagnostics
     {

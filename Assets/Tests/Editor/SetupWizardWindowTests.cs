@@ -445,7 +445,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 SetupWizardWindow.PrepareForOpen(
                     window,
-                    "Unity CLI Loop Setup",
+                    "Unity Loop Harness Setup",
                     position,
                     true);
 
@@ -453,7 +453,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SerializedProperty recordVersionProperty =
                     serializedWindow.FindProperty("_shouldRecordLastSeenVersionAfterCreateGui");
 
-                Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
+                Assert.That(window.titleContent.text, Is.EqualTo("Unity Loop Harness Setup"));
                 Assert.That(window.position, Is.EqualTo(position));
                 Assert.That(recordVersionProperty, Is.Not.Null);
                 Assert.That(recordVersionProperty.boolValue, Is.True);

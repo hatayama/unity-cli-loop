@@ -258,7 +258,7 @@ func unityServerNotRespondingAfterDispatchError(err UnityServerNotRespondingErro
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseResponseWaiting,
-		Message:     "Unity is running for this project, but the Unity CLI Loop server did not acknowledge the dispatched request.",
+		Message:     "Unity is running for this project, but the Unity Loop Harness server did not acknowledge the dispatched request.",
 		Retryable:   true,
 		SafeToRetry: false,
 		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
