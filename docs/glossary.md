@@ -1,6 +1,6 @@
 # Glossary
 
-Ubiquitous language for Unity Loop Harness. Code identifiers, docs, commit messages, and reviews
+Ubiquitous language for Unity CLI Loop. Code identifiers, docs, commit messages, and reviews
 should use these terms with the meanings defined here.
 
 ## Naming policy

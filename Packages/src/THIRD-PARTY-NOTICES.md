@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Unity Loop Harness includes the following Microsoft .NET assemblies for the
+Unity CLI Loop includes the following Microsoft .NET assemblies for the
 Editor-only dynamic code metadata validation pipeline:
 
 | Component | NuGet package | Package version | Assembly version | Package asset |
@@ -53,7 +53,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Unity Loop Harness also includes the following renamed copy of a third-party
+Unity CLI Loop also includes the following renamed copy of a third-party
 assembly for the Editor-only source pause point feature:
 
 | Component | NuGet package | Package version | Assembly version | Package asset |

@@ -29,7 +29,7 @@ As a precondition, the steps below start from **the Unity Editor starting up wit
 
 On startup, Unity finds the compile errors from the V2 sources and asks whether to enter Safe Mode. **Press `Ignore` so that Unity starts up without entering Safe Mode.**
 
-**Why this matters:** Safe Mode loads only a whitelisted set of assemblies. The Unity Loop Harness editor extension is not on that whitelist, so in Safe Mode the package code never runs and **the migration window cannot open**. Declining Safe Mode is what makes the rest of this guide possible.
+**Why this matters:** Safe Mode loads only a whitelisted set of assemblies. The Unity CLI Loop editor extension is not on that whitelist, so in Safe Mode the package code never runs and **the migration window cannot open**. Declining Safe Mode is what makes the rest of this guide possible.
 
 ![The Safe Mode confirmation dialog shown on startup. Press Ignore](images/migration-safe-mode-dialog.png)
 
