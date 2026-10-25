@@ -55,7 +55,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     SkillsTarget.Claude,
                     isInstallingSkills: false,
                     new List<SkillSetupTargetInfo>(),
-                    _includeSkillScanResult),
+                    _includeSkillScanResult,
+                    default),
                 () => _skillsRefreshCount++,
                 refreshSkills => _refreshAllSectionsCalls.Add(refreshSkills));
         }

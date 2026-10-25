@@ -174,6 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _view.OnRefreshSkillsState += _skillsPresenter.HandleRefreshSkillsState;
             _view.OnSkillsTargetChanged += _skillsPresenter.HandleSkillsTargetChanged;
             _view.OnGroupSkillsChanged += _skillsPresenter.HandleGroupSkillsChanged;
+            _view.OnSkillsInstallRootChanged += _skillsPresenter.HandleSkillsInstallRootChanged;
             _view.OnConfigurationFoldoutChanged += UpdateShowConfiguration;
             _view.OnToolSettingsFoldoutChanged += UpdateShowToolSettings;
             _view.OnToolToggled += HandleToolToggled;

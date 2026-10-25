@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:VisualElement name="skills-setup-panel" class="skills-setup-panel">
+        <ui:VisualElement name="skills-install-root-row" class="skills-setup-panel__target-row">
+            <ui:Label text="Location:" class="skills-setup-panel__install-root-label" />
+            <uie:EnumField name="skills-install-root-field" class="skills-setup-panel__target-field" />
+        </ui:VisualElement>
+        <ui:Label name="skills-install-root-location" text="" class="skills-install-root-location" />
         <ui:VisualElement name="skill-target-status-list" class="skill-target-status-list" />
         <ui:VisualElement name="skill-target-status-divider" class="skill-target-status-divider" />
         <ui:Label name="skill-target-status-summary" text="" class="skill-target-status-summary" />

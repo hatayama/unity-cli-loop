@@ -74,7 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 selectedTarget: target,
                 groupSkillsUnderUnityCliLoop: true,
                 isInstallingSkills: false,
-                installableSkillTargets: System.Array.Empty<SkillSetupTargetInfo>());
+                installableSkillTargets: System.Array.Empty<SkillSetupTargetInfo>(),
+                skillInstallRootSelection: default);
 
             bool isInstalled = SkillsTargetSelectionResolver.IsInstalled(data, target);
 

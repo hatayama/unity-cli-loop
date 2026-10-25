@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private CancellationTokenSource _skillInstallStateRefreshCts;
         private SkillsTarget _skillsTarget = SkillsTarget.Claude;
         private List<SkillSetupTargetInfo> _latestTargets = new();
+        private SkillInstallRootSelection _installRootSelection;
 
         internal SetupWizardSkillsWorkflowController(
             SkillsSetupPanelView skillsSetupPanelView,
@@ -64,6 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillsSetupPanelView.OnRefreshClicked += RefreshSkillsSection;
             _skillsSetupPanelView.OnTargetChanged += HandleTargetChanged;
             _skillsSetupPanelView.OnGroupSkillsChanged += HandleGroupSkillsChanged;
+            _skillsSetupPanelView.OnInstallRootChanged += HandleInstallRootChanged;
         }
 
         internal void InitializeGroupSkillsToggle()
@@ -87,6 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cachedCliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             bool cliInstalled = IsCliInstalled(cachedCliVersion);
+            _installRootSelection = _skillSetupUseCase.GetSkillInstallRootSelection(projectRoot);
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
             bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
@@ -97,6 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void ApplyFastSkillsState(bool cliInstalled)
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            _installRootSelection = _skillSetupUseCase.GetSkillInstallRootSelection(projectRoot);
             List<SkillSetupTargetInfo> targets = DetectDisplayedSkillTargetsFast(projectRoot);
             bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled);
             UpdateSkillsStep(canManageSkills, targets);
@@ -160,6 +164,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             List<SkillSetupTargetInfo> installableTargets =
                 SkillsSetupPanelView.FilterInstallableSkillTargets(targets);
             bool groupSkillsUnderUnityCliLoop = !_installSkillsFlat;
+            _skillsSetupPanelView.UpdateInstallRoot(
+                _installRootSelection,
+                canManageSkills && !_isInstallingSkills);
             _skillsSetupPanelView.UpdateGroupSkillsToggle(
                 groupSkillsUnderUnityCliLoop,
                 canManageSkills && !_isInstallingSkills);
@@ -194,6 +201,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (_isInstallingSkills)
             {
+                return;
+            }
+
+            // Checked before installing because the install would otherwise throw from the skill setup port.
+            _installRootSelection = _skillSetupUseCase.GetSkillInstallRootSelection(
+                UnityCliLoopPathResolver.GetProjectRoot());
+            if (!_installRootSelection.IsSelectedRootAvailable)
+            {
+                _dialogs.ShowMessage(
+                    SkillsInstallRootText.UnavailableDialogTitle,
+                    SkillsInstallRootText.UnavailableDialogMessage);
+                RefreshSkillsSection();
                 return;
             }
 
@@ -251,6 +270,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canManageSkills = SetupWizardWindow.CanManageSkills(IsCliInstalled(cachedCliVersion));
             UpdateSkillsStep(canManageSkills, _latestTargets);
             _scheduleResizeToContent();
+        }
+
+        internal void HandleInstallRootChanged(SkillInstallRoot root)
+        {
+            _skillSetupUseCase.SaveSkillInstallRoot(UnityCliLoopPathResolver.GetProjectRoot(), root);
+            RefreshSkillsSection();
         }
 
         internal void HandleGroupSkillsChanged(bool _)

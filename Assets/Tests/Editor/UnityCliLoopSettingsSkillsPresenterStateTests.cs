@@ -165,12 +165,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies an unchanged missing state does not refresh the section again.
+        /// Verifies an unchanged missing state and install root do not refresh the section again.
         /// </summary>
         [Test]
         public void RefreshSelectedTargetInstallStateInBackground_WithoutACli_WhenAlreadyMissing_SkipsTheRefresh()
         {
             _cliDetector.IsCliInstalledValue = false;
+            // The first refresh loads the saved install root, which the section must show once.
+            _presenter.RefreshSelectedTargetInstallStateInBackground();
+            _sectionRefreshCalls.Clear();
 
             _presenter.RefreshSelectedTargetInstallStateInBackground();
 
@@ -364,6 +367,106 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
             Assert.That(_skillPort.FullScanCount, Is.EqualTo(2));
             Assert.That(_presenter.GetSnapshot().HasSkillTargetScanResult, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies the fast refresh publishes the saved skill install root in the snapshot.
+        /// </summary>
+        [Test]
+        public void RefreshSelectedTargetInstallStateFast_PublishesTheSavedInstallRoot()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                "<PROJECT_ROOT>/unity",
+                "<PROJECT_ROOT>");
+
+            _presenter.RefreshSelectedTargetInstallStateFast();
+
+            SkillInstallRootSelection selection = _presenter.GetSnapshot().SkillInstallRootSelection;
+            Assert.That(selection.SelectedRoot, Is.EqualTo(SkillInstallRoot.GitRepositoryRoot));
+            Assert.That(selection.SelectedRootPath, Is.EqualTo("<PROJECT_ROOT>"));
+        }
+
+        /// <summary>
+        /// Verifies the background refresh the window starts on open also publishes the saved install root,
+        /// even when the scan itself cannot start.
+        /// </summary>
+        [Test]
+        public void RefreshSelectedTargetInstallStateInBackground_PublishesTheSavedInstallRoot()
+        {
+            _cliDetector.IsCliInstalledValue = false;
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                "<PROJECT_ROOT>/unity",
+                "<PROJECT_ROOT>");
+
+            _presenter.RefreshSelectedTargetInstallStateInBackground();
+
+            Assert.That(
+                _presenter.GetSnapshot().SkillInstallRootSelection.SelectedRoot,
+                Is.EqualTo(SkillInstallRoot.GitRepositoryRoot));
+        }
+
+        /// <summary>
+        /// Verifies choosing an install root saves it and rescans the install state at the new root.
+        /// </summary>
+        [Test]
+        public void HandleSkillsInstallRootChanged_SavesTheRootAndRescans()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.UnityProjectRoot,
+                "<PROJECT_ROOT>/unity",
+                "<PROJECT_ROOT>");
+
+            _presenter.HandleSkillsInstallRootChanged(SkillInstallRoot.GitRepositoryRoot);
+
+            Assert.That(
+                _skillPort.SavedInstallRoots,
+                Is.EqualTo(new List<SkillInstallRoot> { SkillInstallRoot.GitRepositoryRoot }));
+            Assert.That(
+                _presenter.GetSnapshot().SkillInstallRootSelection.SelectedRoot,
+                Is.EqualTo(SkillInstallRoot.GitRepositoryRoot));
+            Assert.That(_skillPort.FastScanGroupFlags.Count, Is.EqualTo(1));
+            Assert.That(_skillPort.FullScanCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies installing the selected target into an unavailable Git repository root explains why and installs nothing.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallSkills_WhenTheGitRootIsUnavailable_ExplainsAndInstallsNothing()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                "<PROJECT_ROOT>/unity",
+                null);
+
+            await _presenter.HandleInstallSkills();
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "No Git Repository" }));
+        }
+
+        /// <summary>
+        /// Verifies installing all targets into an unavailable Git repository root explains why and installs nothing.
+        /// </summary>
+        [Test]
+        public async Task HandleInstallAllSkills_WhenTheGitRootIsUnavailable_ExplainsAndInstallsNothing()
+        {
+            _cliDetector.IsCliInstalledValue = true;
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                "<PROJECT_ROOT>/unity",
+                null);
+
+            await _presenter.HandleInstallAllSkills(CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "No Git Repository" }));
+            Assert.That(_presenter.GetSnapshot().IsInstallingSkills, Is.False);
         }
 
         /// <summary>
@@ -626,9 +729,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return FullTargets;
             }
 
-            public SkillInstallRootSelection InstallRootSelection { get; set; }
-
-            public List<SkillInstallRoot> SavedInstallRoots { get; } = new();
+            // The default (unset) selection means the Unity project root of the queried project.
+            internal SkillInstallRootSelection InstallRootSelection { get; set; }
+            internal List<SkillInstallRoot> SavedInstallRoots { get; } = new List<SkillInstallRoot>();
 
             public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
                 string.IsNullOrEmpty(InstallRootSelection.UnityProjectRootPath)
@@ -638,10 +741,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root)
             {
                 SavedInstallRoots.Add(root);
+                SkillInstallRootSelection current = GetSkillInstallRootSelection(projectRoot);
                 InstallRootSelection = new SkillInstallRootSelection(
                     root,
-                    GetSkillInstallRootSelection(projectRoot).UnityProjectRootPath,
-                    GetSkillInstallRootSelection(projectRoot).GitRepositoryRootPath);
+                    current.UnityProjectRootPath,
+                    current.GitRepositoryRootPath);
             }
 
             public void RemoveSkillFiles(string toolName)

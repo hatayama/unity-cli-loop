@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public event Action OnRefreshSkillsState;
         public event Action<SkillsTarget> OnSkillsTargetChanged;
         public event Action<bool> OnGroupSkillsChanged;
+        public event Action<SkillInstallRoot> OnSkillsInstallRootChanged;
         public event Action<bool> OnConfigurationFoldoutChanged;
         public event Action<bool> OnToolSettingsFoldoutChanged;
         public event Action<string, bool> OnToolToggled;
@@ -126,6 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliSetupSection.OnRefreshSkillsState += () => OnRefreshSkillsState?.Invoke();
             _cliSetupSection.OnSkillsTargetChanged += value => OnSkillsTargetChanged?.Invoke(value);
             _cliSetupSection.OnGroupSkillsChanged += value => OnGroupSkillsChanged?.Invoke(value);
+            _cliSetupSection.OnSkillsInstallRootChanged += value => OnSkillsInstallRootChanged?.Invoke(value);
 
             _mainScrollView = _root.Q<ScrollView>("main-scroll-view");
             ConfigureScrollView();
