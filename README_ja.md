@@ -35,7 +35,63 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、記録済み入力の再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
 
-https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
+# デモ
+
+どの動画も、Claude Code が `uloop` で小さなボクセルゲームを操作した実際のセッションです。ターミナルだけが動く区間は早送りし、ゲーム画面は実時間で再生しています。
+
+## Unity を起動する：`launch`
+
+`uloop launch` は、プロジェクトが指定するバージョンの Unity でプロジェクトを開き、Editor がコマンドを受け付けられるようになるまで待ちます。
+
+https://github.com/user-attachments/assets/4e83a196-66a4-4f39-80fb-f33b7a038066
+
+## 機能を足してテストする：`compile`、`run-tests`
+
+Claude が光る松明ブロックを追加し、`compile` でビルドして、`run-tests` で EditMode テストを実行します。失敗したテストを直し、Play Mode で夜にして松明を確かめます。
+
+https://github.com/user-attachments/assets/98bba49f-1846-4b8e-9702-733207e8318f
+
+## Play Mode のままコードを変える：`hot-reload`
+
+Claude が二段ジャンプを追加し、Play Mode を止めずに `hot-reload` で反映します。続けて `simulate-keyboard` で Space を押し、ジャンプの高さを測ります。
+
+https://github.com/user-attachments/assets/fdba761a-b65a-4297-92f1-5cb274f4c4cf
+
+## 指定した行で止めて、そのフレームを読む：`pause-point`
+
+水が隙間へ初めて流れ込むとき、セルの新しい水位を決める行で `pause-point` がゲームを止め、そのフレームのローカル変数・フィールド・呼び出し経路を返します。続いてウォッチ式で水路の水位を追いながら、水を 1 tick ずつ進めます。
+
+https://github.com/user-attachments/assets/99ef7b4a-b32f-4e75-9aa8-9e976f7b0078
+
+## ゲームの中で C# を実行する：`execute-dynamic-code`
+
+`execute-dynamic-code` は実行中のゲームの中で C# を動かします。Claude がプレイヤーの前にガラスブロックを 10 個積み、一時的なカメラから塔全体を撮ります。
+
+https://github.com/user-attachments/assets/804d81bc-e019-4423-bfcd-089cd0e207c2
+
+## ゲーム画面を撮る：`screenshot`
+
+Claude が `execute-dynamic-code` で湖を探してカメラを真上に移し、`screenshot` で撮ります。そのあと HUD を隠して撮り直します。
+
+https://github.com/user-attachments/assets/da9302a6-7785-4b21-affa-e6f814094c48
+
+## シーンの構造を読む：`get-hierarchy`、`find-game-objects`
+
+`get-hierarchy` が実行中のシーンのツリーをファイルに保存し、`find-game-objects` がプレイヤーのコンポーネントを読みます。
+
+https://github.com/user-attachments/assets/ccb960a9-fa8a-40d8-b72c-7e24e11d32c8
+
+## キーを押す：`simulate-keyboard`
+
+`simulate-keyboard` が Input System 経由で W キーを押し続けます。プレイヤーは岸から湖に入り、スクリーンショットで水中の視界を確かめます。
+
+https://github.com/user-attachments/assets/7b7abb7c-6d87-464e-b7d7-223109c27d30
+
+## マウスを動かしてクリックする：`simulate-mouse-input`
+
+`simulate-mouse-input` が人の手のようにマウスを少しずつ動かし、ブロックを 3 つ壊して、できた穴を水で満たします。
+
+https://github.com/user-attachments/assets/0ecf0876-8230-4b4d-b51a-fe72cf9ca4c7
 
 # クイックスタート
 
