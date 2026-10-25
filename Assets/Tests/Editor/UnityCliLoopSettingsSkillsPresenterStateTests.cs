@@ -626,6 +626,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return FullTargets;
             }
 
+            public SkillInstallRootSelection InstallRootSelection { get; set; }
+
+            public List<SkillInstallRoot> SavedInstallRoots { get; } = new();
+
+            public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
+                string.IsNullOrEmpty(InstallRootSelection.UnityProjectRootPath)
+                    ? new SkillInstallRootSelection(SkillInstallRoot.UnityProjectRoot, projectRoot, null)
+                    : InstallRootSelection;
+
+            public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root)
+            {
+                SavedInstallRoots.Add(root);
+                InstallRootSelection = new SkillInstallRootSelection(
+                    root,
+                    GetSkillInstallRootSelection(projectRoot).UnityProjectRootPath,
+                    GetSkillInstallRootSelection(projectRoot).GitRepositoryRootPath);
+            }
+
             public void RemoveSkillFiles(string toolName)
             {
                 RemovedTools.Add(toolName);

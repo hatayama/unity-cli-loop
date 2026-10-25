@@ -993,6 +993,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return FullTargets;
             }
 
+            public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
+                new(SkillInstallRoot.UnityProjectRoot, projectRoot, null);
+
+            public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root) =>
+                throw new NotSupportedException();
+
             public void RemoveSkillFiles(string toolName) => throw new NotSupportedException();
             public bool IsSkillInstalled(string toolName) => throw new NotSupportedException();
 

@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ["SKILL.md"] = new byte[] { 0x41 }
                 });
 
-            SkillInstallState state = V3MigrationSkillInstaller.GetSkillInstallStateAtProjectRoot(
+            SkillInstallState state = V3MigrationSkillInstaller.GetSkillInstallStateAtInstallRoot(
                 _temporaryProjectRoot,
                 target,
                 skill,
