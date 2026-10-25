@@ -114,6 +114,9 @@ uloop skills install --claude
 # Codex など .agents/skills を読むツール
 uloop skills install --agents
 
+# Unity プロジェクトを含む Git リポジトリのルートにインストール
+uloop skills install --claude --root git
+
 # プロジェクトではなくグローバルにインストール
 uloop skills install --claude --global
 

@@ -27,42 +27,6 @@ const (
 	lineFeedCodeUnit               = 0x000a
 )
 
-var targetConfigs = map[string]skillTarget{
-	"claude":      {id: "claude", displayName: "Claude Code", projectDir: ".claude"},
-	"codex":       {id: "codex", displayName: "Codex CLI", projectDir: ".codex"},
-	"agents":      {id: "agents", displayName: "Common", projectDir: ".agents"},
-	"windsurf":    {id: "windsurf", displayName: "Windsurf", projectDir: ".agents"},
-	"antigravity": {id: "antigravity", displayName: "Antigravity", projectDir: ".agent"},
-}
-
-// allSkillTargetIDs enumerates every target id in the display order used by
-// help output and flag parsing. targetConfigs is an unordered map, so this
-// slice is the single source of truth for iteration order and for the set of
-// accepted --<id> flags; help lines and parseSkillsOptions must both derive
-// from it to avoid drift.
-var allSkillTargetIDs = []string{"claude", "codex", "agents", "windsurf", "antigravity"}
-
-// nonDefaultSkillTargetIDs lists targets that are excluded from the default
-// target set and are only installed when explicitly requested via their
-// --<id> flag.
-var nonDefaultSkillTargetIDs = map[string]bool{"windsurf": true}
-
-// defaultSkillTargetIDs is derived from allSkillTargetIDs so its order matches
-// help output and so any new target added to allSkillTargetIDs is included by
-// default unless it is explicitly listed in nonDefaultSkillTargetIDs.
-var defaultSkillTargetIDs = buildDefaultSkillTargetIDs()
-
-func buildDefaultSkillTargetIDs() []string {
-	ids := make([]string, 0, len(allSkillTargetIDs))
-	for _, id := range allSkillTargetIDs {
-		if nonDefaultSkillTargetIDs[id] {
-			continue
-		}
-		ids = append(ids, id)
-	}
-	return ids
-}
-
 // deprecatedSkillNames lists previously installed skill directory names that
 // skills install/uninstall runs clean up. Keep cleanup names here and in the
 // Unity-side SkillTargetInstaller; agent-facing V2-to-V3 CLI migration
@@ -89,7 +53,11 @@ type skillCommandOptions struct {
 	global    bool
 	flat      bool
 	outputDir string
-	targets   []skillTarget
+	// root is the install root requested with --root; empty until resolved
+	// against the saved setting. installRoot is its resolved directory.
+	root        skillsInstallRoot
+	installRoot string
+	targets     []skillTarget
 }
 
 type skillDefinition struct {
@@ -135,6 +103,12 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 	projectRoot, err := resolveSkillsProjectRoot(startPath, globalProjectPath, options.global)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
+		return true, 1
+	}
+
+	options, err = resolveSkillsInstallLocation(projectRoot, options)
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 		return true, 1
 	}
 
@@ -219,10 +193,7 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 		targets = defaultSkillTargets()
 	}
 
-	location := "Project"
-	if options.global {
-		location = "Global"
-	}
+	location := skillLocationLabel(options)
 
 	disabledTools := loadDisabledToolsForSkills(projectRoot, options.global)
 
@@ -230,7 +201,7 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 	clicore.WriteLine(stdout, "uloop Skills Status:")
 	clicore.WriteLine(stdout, "")
 	for _, target := range targets {
-		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		baseDir, err := getSkillsBaseDir(skillsInstallRootFor(projectRoot, options), target, options.global)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -258,7 +229,7 @@ func runSkillsList(projectRoot string, skills []skillDefinition, options skillCo
 
 func runSkillsInstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
-	clicore.WriteFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options.global))
+	clicore.WriteFormat(stdout, "Installing uloop skills (%s)...\n", skillLocationName(options))
 	clicore.WriteLine(stdout, "")
 	// Targets installed earlier but omitted from this invocation would keep stale
 	// skill copies that contradict the CLI, so refresh every detected install.
@@ -271,7 +242,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 		clicore.WriteFormat(stdout, "Auto-refreshing %s: an existing uloop skill install was detected there.\n\n", autoTarget.displayName)
 	}
 	for _, target := range append(append([]skillTarget{}, options.targets...), autoRefreshTargets...) {
-		result, err := installSkillsForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
+		result, err := installSkillsForTarget(projectRoot, skillsInstallRootFor(projectRoot, options), target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -283,7 +254,7 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 		if result.deprecatedRemoved > 0 {
 			clicore.WriteFormat(stdout, "  Deprecated removed: %d\n", result.deprecatedRemoved)
 		}
-		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		baseDir, err := getSkillsBaseDir(skillsInstallRootFor(projectRoot, options), target, options.global)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -295,11 +266,11 @@ func runSkillsInstall(projectRoot string, skills []skillDefinition, options skil
 
 func runSkillsUninstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
-	clicore.WriteFormat(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options.global))
+	clicore.WriteFormat(stdout, "Uninstalling uloop skills (%s)...\n", skillLocationName(options))
 	clicore.WriteLine(stdout, "")
 	for _, target := range options.targets {
 		grouped := groupManagedSkillsForOptions(options)
-		removed, notFound, err := uninstallSkillsForTarget(projectRoot, target, skills, options.global, grouped)
+		removed, notFound, err := uninstallSkillsForTarget(skillsInstallRootFor(projectRoot, options), target, skills, options.global, grouped)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -307,7 +278,7 @@ func runSkillsUninstall(projectRoot string, skills []skillDefinition, options sk
 		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
 		clicore.WriteFormat(stdout, "  Removed: %d\n", removed)
 		clicore.WriteFormat(stdout, "  Not found: %d\n", notFound)
-		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		baseDir, err := getSkillsBaseDir(skillsInstallRootFor(projectRoot, options), target, options.global)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -331,7 +302,7 @@ func detectInstalledSkillTargets(projectRoot string, skills []skillDefinition, o
 		if requestedDirs[target.projectDir] {
 			continue
 		}
-		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		baseDir, err := getSkillsBaseDir(skillsInstallRootFor(projectRoot, options), target, options.global)
 		if err != nil {
 			return nil, err
 		}
@@ -368,9 +339,16 @@ type skillInstallResult struct {
 	deprecatedRemoved int
 }
 
-func installSkillsForTarget(projectRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (skillInstallResult, error) {
+func installSkillsForTarget(
+	projectRoot string,
+	installRoot string,
+	target skillTarget,
+	skills []skillDefinition,
+	global bool,
+	grouped bool,
+) (skillInstallResult, error) {
 	result := skillInstallResult{}
-	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
+	baseDir, err := getSkillsBaseDir(installRoot, target, global)
 	if err != nil {
 		return skillInstallResult{}, err
 	}
@@ -457,10 +435,10 @@ func installSkillForTarget(
 	return nil
 }
 
-func uninstallSkillsForTarget(projectRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (int, int, error) {
+func uninstallSkillsForTarget(installRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (int, int, error) {
 	removed := 0
 	notFound := 0
-	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
+	baseDir, err := getSkillsBaseDir(installRoot, target, global)
 	if err != nil {
 		return removed, notFound, err
 	}
