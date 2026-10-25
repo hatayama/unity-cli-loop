@@ -37,8 +37,6 @@ Unity Loop Harnessのコアとなるコンセプトは次の4つです。
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、記録済み入力の再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
 
-https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
-
 # デモ
 
 どの動画も、Claude Code が `uloop` で小さなボクセルゲームを操作した実際のセッションです。ターミナルだけが動く区間は早送りし、ゲーム画面は実時間で再生しています。

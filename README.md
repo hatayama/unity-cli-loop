@@ -37,8 +37,6 @@ Unity Loop Harness is built around four core ideas:
 3. **PlayMode automated testing — AI clicks buttons, drags elements, presses keys, replays recorded input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`.
 4. **Achieving the above with a minimal set of tools.** See [Design Philosophy](#design-philosophy).
 
-https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
-
 # Demos
 
 Each clip is a real Claude Code session driving a small voxel game through `uloop`. Stretches where only the terminal changes are sped up; the game plays at real speed.
