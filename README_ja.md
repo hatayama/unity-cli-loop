@@ -61,9 +61,9 @@ https://github.com/user-attachments/assets/fdba761a-b65a-4297-92f1-5cb274f4c4cf
 
 ## 指定した行で止めて、そのフレームを読む：`pause-point`
 
-水が隙間へ初めて流れ込むとき、セルに水を書き込む行で `pause-point` がゲームを止めます。Claude はそのフレームのまま、新しいセルの水位を読みます。
+水が隙間へ初めて流れ込むとき、セルの新しい水位を決める行で `pause-point` がゲームを止め、そのフレームのローカル変数・フィールド・呼び出し経路を返します。続いてウォッチ式で水路の水位を追いながら、水を 1 tick ずつ進めます。
 
-https://github.com/user-attachments/assets/2ea60f1a-ac62-4671-ada6-edb33c0e9f11
+https://github.com/user-attachments/assets/99ef7b4a-b32f-4e75-9aa8-9e976f7b0078
 
 ## ゲームの中で C# を実行する：`execute-dynamic-code`
 

@@ -61,9 +61,9 @@ https://github.com/user-attachments/assets/fdba761a-b65a-4297-92f1-5cb274f4c4cf
 
 ## Stop on a line and read that frame: `pause-point`
 
-The first time water flows into a gap, `pause-point` stops the game on the line that writes water into a cell. Claude reads the new cell's water level in that exact frame.
+The first time water flows into a gap, `pause-point` stops the game on the line that decides a cell's new water level and returns that frame's local variables, fields, and call path. A watch expression then tracks the water level along the channel while the water advances one tick at a time.
 
-https://github.com/user-attachments/assets/2ea60f1a-ac62-4671-ada6-edb33c0e9f11
+https://github.com/user-attachments/assets/99ef7b4a-b32f-4e75-9aa8-9e976f7b0078
 
 ## Run C# inside the game: `execute-dynamic-code`
 
