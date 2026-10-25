@@ -2,7 +2,7 @@
 
 English | [日本語](tools_ja.md)
 
-Detailed descriptions of the tools built into Unity Loop Harness. For the big picture and the design philosophy, see the [README](../../../README.md).
+Detailed descriptions of the tools built into Unity CLI Loop. For the big picture and the design philosophy, see the [README](../../../README.md).
 
 ## Development Loop Tools
 

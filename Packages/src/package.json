@@ -1,8 +1,8 @@
 {
   "name": "io.github.hatayama.uloopmcp",
   "version": "3.19.0",
-  "displayName": "Unity Loop Harness",
-  "description": "Agent harness for Unity: lets AI agents compile, test, and operate your Unity project through the uloop CLI.",
+  "displayName": "Unity CLI Loop",
+  "description": "AI-driven development loop for Unity via CLI.",
   "unity": "2022.3",
   "documentationUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/README.md",
   "licensesUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/LICENSE.md",
@@ -17,7 +17,6 @@
     "com.unity.nuget.mono-cecil": "1.11.6"
   },
   "keywords": [
-    "Unity Loop Harness",
     "Unity CLI Loop",
     "uloop",
     "Cursor",
