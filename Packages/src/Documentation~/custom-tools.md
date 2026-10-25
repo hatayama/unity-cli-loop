@@ -2,7 +2,7 @@
 
 English | [日本語](custom-tools_ja.md)
 
-Unity Loop Harness enables efficient development of project-specific tools without requiring changes to the core package.
+Unity CLI Loop enables efficient development of project-specific tools without requiring changes to the core package.
 The type-safe design allows for reliable custom tool implementation in minimal time.
 (If you ask AI, they should be able to make it for you soon ✨)
 

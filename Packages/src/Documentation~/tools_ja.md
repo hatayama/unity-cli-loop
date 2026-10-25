@@ -2,7 +2,7 @@
 
 [English](tools.md) | 日本語
 
-Unity Loop Harness に内蔵されている各ツールの詳細な説明です。全体像や設計思想は [README](../../../README_ja.md) を参照してください。
+Unity CLI Loop に内蔵されている各ツールの詳細な説明です。全体像や設計思想は [README](../../../README_ja.md) を参照してください。
 
 ## 自律開発ループ系ツール
 
