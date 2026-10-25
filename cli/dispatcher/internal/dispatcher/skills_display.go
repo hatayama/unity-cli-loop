@@ -93,8 +93,9 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	printSkillTargetFlagLines(stdout, "      ")
 	clicore.WriteLine(stdout, "")
 	if command == "install" {
-		clicore.WriteLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
-		clicore.WriteLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		clicore.WriteLine(stdout, "Targets under the install root that already contain uloop skills are refreshed")
+		clicore.WriteLine(stdout, "automatically, even when their flag is omitted, so previously installed copies")
+		clicore.WriteLine(stdout, "never go stale. Copies under the other root are left untouched when the root changes.")
 		clicore.WriteLine(stdout, "")
 	}
 	clicore.WriteLine(stdout, "Project-local skills go under the Unity project root by default. --root git")
