@@ -98,10 +98,17 @@
     margin-right: 6px;
 }
 
+.skills-setup-panel__install-root-divider {
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
 .skills-install-root-location {
     white-space: normal;
     color: #999999;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .skills-install-root-location--unavailable {
