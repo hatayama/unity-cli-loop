@@ -43,7 +43,7 @@ Each clip is a real Claude Code session driving a small voxel game through `uloo
 
 `uloop launch` opens the project in the Unity version it specifies and returns once the Editor can take commands.
 
-https://github.com/user-attachments/assets/4e83a196-66a4-4f39-80fb-f33b7a038066
+https://github.com/user-attachments/assets/9e1edafe-07e6-4439-862f-4bbe6ff86f0f
 
 ## Add a feature and test it: `compile`, `run-tests`
 
