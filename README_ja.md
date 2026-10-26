@@ -43,7 +43,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
 `uloop launch` は、プロジェクトが指定するバージョンの Unity でプロジェクトを開き、Editor がコマンドを受け付けられるようになるまで待ちます。
 
-https://github.com/user-attachments/assets/d5adebae-e973-467d-927a-89b8cd13118b
+https://github.com/user-attachments/assets/06cb2abf-7d05-49f3-8b0d-afb90417f7f8
 
 ## 機能を足してテストする：`compile`、`run-tests`
 
