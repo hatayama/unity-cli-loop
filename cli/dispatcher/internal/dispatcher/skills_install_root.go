@@ -1,12 +1,12 @@
 package dispatcher
 
 // The install root is the directory whose agent directories (.claude/skills,
-// .agents/skills, ...) receive project-local skills. Teams split on where
+// .agents/skills, ...) receive project-local skills. People differ in where
 // their agents start: some open the Unity project itself, others open the
 // Git repository that contains it, so both are supported. The choice made in
-// the Editor is saved in the project's .uloop/settings.skills.json, and a
-// flagless `uloop skills` command follows it so the CLI and the Editor never
-// install into different places; --root overrides it for one invocation.
+// the Editor is saved per checkout in the project's .uloop/settings.skills.json,
+// and a flagless `uloop skills` command follows it so the CLI and the Editor
+// never install into different places; --root overrides it for one invocation.
 // Only the destination moves: skill sources and tool settings still come from
 // the Unity project root.
 
