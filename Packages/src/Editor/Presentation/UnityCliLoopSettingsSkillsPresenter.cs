@@ -348,7 +348,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     !_installSkillsFlat,
                     CancellationToken.None);
 
-                if (!_skillSetupUseCase.IsSkillInstalled(toolName))
+                // The skill setup port already explained a sync skipped for an unavailable install root;
+                // blaming the skill source here would point the user at the wrong cause.
+                SkillInstallRootSelection installRootSelection =
+                    _skillSetupUseCase.GetSkillInstallRootSelection(UnityCliLoopPathResolver.GetProjectRoot());
+                if (installRootSelection.IsSelectedRootAvailable && !_skillSetupUseCase.IsSkillInstalled(toolName))
                 {
                     Debug.LogWarning(
                         $"[UnityCliLoop] Skill for '{toolName}' was not installed after enabling. " +

@@ -278,6 +278,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies an enabled tool skips the skill-source warning when the chosen install root is unavailable,
+        /// because the skill was never meant to be written and the sync already reported why.
+        /// </summary>
+        [Test]
+        public async Task ApplyToolToggleSideEffects_WhenInstallRootIsUnavailable_DoesNotWarnAboutTheSkillSource()
+        {
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                null);
+
+            await _presenter.ApplyToolToggleSideEffects("sample-tool", true);
+
+            Assert.That(_skillPort.InstalledToolSkills.Count, Is.EqualTo(1));
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        /// <summary>
         /// Verifies a background refresh with a CLI applies the full scan run through the background runner.
         /// </summary>
         [Test]

@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private VisualElement _root;
         private RecordingMigrationSkillPort _skillPort;
+        private RecordingPresentationDialogs _dialogs;
         private int _resizeCount;
         private ThirdPartyToolMigrationWizardWorkflowController _controller;
 
@@ -32,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             _root = new VisualElement();
             _skillPort = new RecordingMigrationSkillPort();
+            _dialogs = new RecordingPresentationDialogs();
             _resizeCount = 0;
             ThirdPartyToolMigrationWizardView view = ThirdPartyToolMigrationWizardView.Create(
                 _root,
@@ -45,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new SkillSetupUseCase(_skillPort),
                 new ThirdPartyToolMigrationUseCase(new UnusedMigrationPort()),
                 new List<string> { "Assets/Seed.cs" },
-                () => _resizeCount++);
+                () => _resizeCount++,
+                _dialogs);
         }
 
         [TearDown]
@@ -198,6 +201,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_skillPort.InstallCalls[0].Targets[0].DirName, Is.EqualTo(".claude"));
             Assert.That(_skillPort.InstallCalls[0].GroupSkillsUnderUnityCliLoop, Is.False);
             Assert.That(_skillPort.StateQueries.Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Verifies the toggle explains an unavailable Git repository install root in a dialog instead of
+        /// attempting the install.
+        /// </summary>
+        [Test]
+        public async Task HandleToggleMigrationSkill_WhenInstallRootIsUnavailable_ShowsDialogWithoutInstalling()
+        {
+            _skillPort.InstallState = SkillInstallState.Missing;
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                null);
+
+            await _controller.HandleToggleMigrationSkill();
+
+            Assert.That(_skillPort.InstallCalls, Is.Empty);
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new[] { SkillsInstallRootText.UnavailableDialogTitle }));
+            Assert.That(
+                GetMigrationSkillButtonText(),
+                Is.EqualTo(ThirdPartyToolMigrationWizardText.GetMigrationSkillButtonText(false, SkillInstallState.Missing)));
         }
 
         /// <summary>
@@ -436,8 +461,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return Task.CompletedTask;
             }
 
+            internal SkillInstallRootSelection? InstallRootSelection { get; set; }
+
             public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
-                new(SkillInstallRoot.UnityProjectRoot, projectRoot, null);
+                InstallRootSelection ?? new(SkillInstallRoot.UnityProjectRoot, projectRoot, null);
 
             public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root) =>
                 throw new NotSupportedException();
