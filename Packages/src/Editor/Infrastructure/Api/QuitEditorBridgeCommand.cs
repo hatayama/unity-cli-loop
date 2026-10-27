@@ -17,13 +17,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// </summary>
     internal static class QuitEditorBridgeCommand
     {
+        // Long enough for this answer to be written before the process ends.
+        private const double ExitDelaySeconds = 0.5;
+
         public static QuitEditorResponse Execute()
         {
-            // Why Exit rather than the quit the Editor menu runs: that quit asks whether to save modified
-            // scenes and waits for an answer nobody gives, while Exit discards them without asking and
-            // still saves the window layout.
-            // Why on the next update: exiting now would end the process before this answer is written.
-            EditorApplication.delayCall += () => EditorApplication.Exit(0);
+            double exitAt = EditorApplication.timeSinceStartup + ExitDelaySeconds;
+            EditorApplication.CallbackFunction exitWhenDue = null;
+            exitWhenDue = () =>
+            {
+                if (EditorApplication.timeSinceStartup < exitAt)
+                {
+                    return;
+                }
+
+                EditorApplication.update -= exitWhenDue;
+                // Why Exit rather than the quit the Editor menu runs: that quit asks whether to save
+                // modified scenes and waits for an answer nobody gives, while Exit discards them without
+                // asking and still saves the window layout.
+                EditorApplication.Exit(0);
+            };
+            // Why update rather than delayCall: an Editor in the background that is not repainting does not
+            // run delayCall, so the exit would never come.
+            EditorApplication.update += exitWhenDue;
             return new QuitEditorResponse();
         }
     }
