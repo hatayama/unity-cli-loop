@@ -608,3 +608,30 @@ func TestReportUnityExitDuringRequest(t *testing.T) {
 		})
 	}
 }
+
+// Verifies a process lookup that failed after a dispatched disconnect leaves a trace in the CLI vibe log,
+// as the same failure before dispatch does, since the command output keeps only the disconnect.
+func TestReportUnityExitDuringRequestLogsAFailedLookup(t *testing.T) {
+	enableCliVibeLog(t)
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*unityprocess.UnityProcess, error) {
+		return nil, errors.New("sysctl kern.proc.all: operation not permitted")
+	}
+	connection := unityipc.Connection{
+		ProjectRoot: t.TempDir(),
+		Endpoint:    unityipc.Endpoint{Address: "/tmp/uloop/sample.sock"},
+	}
+
+	_ = reportUnityExitDuringRequest(
+		context.Background(),
+		connection,
+		unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		io.EOF,
+		deps,
+	)
+
+	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
+	if entries := cliVibeEntriesForOperation(t, logContent, "cli_unity_process_probe_failed"); len(entries) != 1 {
+		t.Fatalf("probe failure entries = %d, want 1\n%s", len(entries), logContent)
+	}
+}

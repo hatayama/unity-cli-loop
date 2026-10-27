@@ -116,7 +116,11 @@ func reportUnityExitDuringRequest(
 		return err
 	}
 	runningProcess, processErr := deps.findRunningUnityProcess(ctx, connection.ProjectRoot)
-	if processErr != nil || runningProcess != nil {
+	if processErr != nil {
+		logUnityProcessProbeFailure(connection, err, processErr)
+		return err
+	}
+	if runningProcess != nil {
 		return err
 	}
 	return clicore.NewUnityNotRunningError(connection.ProjectRoot, connection.Endpoint.Address, err, true)
@@ -170,7 +174,7 @@ func logUnityProcessProbeFailure(connection unityipc.Connection, dialErr error, 
 	_ = vibelog.WriteCLIVibeLog(connection.ProjectRoot, vibelog.CLIVibeLogEntry{
 		Level:     "WARNING",
 		Operation: "cli_unity_process_probe_failed",
-		Message:   "Could not determine whether Unity is running while recovering an unreachable request.",
+		Message:   "Could not determine whether Unity is running after a request failed to reach it or lost its connection.",
 		Context: map[string]any{
 			"endpoint":   connection.Endpoint.Address,
 			"dial_cause": clicore.ErrorMessage(dialErr),
