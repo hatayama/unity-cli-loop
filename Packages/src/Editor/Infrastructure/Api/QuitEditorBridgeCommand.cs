@@ -22,20 +22,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         public static QuitEditorResponse Execute()
         {
-            double exitAt = EditorApplication.timeSinceStartup + ExitDelaySeconds;
+            // Why Exit rather than the quit the Editor menu runs: that quit asks whether to save modified
+            // scenes and waits for an answer nobody gives, while Exit discards them without asking and still
+            // saves the window layout.
+            DelayedEditorExit delayedExit = new(
+                EditorApplication.timeSinceStartup + ExitDelaySeconds,
+                EditorApplication.Exit);
             EditorApplication.CallbackFunction exitWhenDue = null;
             exitWhenDue = () =>
             {
-                if (EditorApplication.timeSinceStartup < exitAt)
+                if (!delayedExit.ExitIfDue(EditorApplication.timeSinceStartup))
                 {
                     return;
                 }
 
                 EditorApplication.update -= exitWhenDue;
-                // Why Exit rather than the quit the Editor menu runs: that quit asks whether to save
-                // modified scenes and waits for an answer nobody gives, while Exit discards them without
-                // asking and still saves the window layout.
-                EditorApplication.Exit(0);
             };
             // Why update rather than delayCall: an Editor in the background that is not repainting does not
             // run delayCall, so the exit would never come.
