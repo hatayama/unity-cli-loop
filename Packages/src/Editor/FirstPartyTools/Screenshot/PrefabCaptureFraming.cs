@@ -291,9 +291,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (Transform ancestor = rect.parent; ancestor != null; ancestor = ancestor.parent)
             {
-                if (ClipsChildren(ancestor))
+                Rect? clip = ClipRectOf(ancestor);
+                if (clip != null)
                 {
-                    visible = Intersect(visible, WorldRectOf((RectTransform)ancestor));
+                    visible = Intersect(visible, clip.Value);
                 }
 
                 // A Canvas that overrides sorting starts a new mask scope: masks on it still apply, masks above it do not.
@@ -341,15 +342,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return rootRect;
         }
 
-        // A Mask clips only while its Graphic is active, because uGUI counts the stencil depth from those masks alone.
-        private static bool ClipsChildren(Transform transform)
+        // The area an object lets its children show through, or null when it clips nothing. A Mask clips only while
+        // its Graphic is active, because uGUI counts the stencil depth from those masks alone. RectMask2D padding
+        // moves the edges as uGUI's Clipping does, so a negative padding lets children draw past the rect. Padding is
+        // in the outermost Canvas's units, which here is the capture Canvas at the world origin and scale 1.
+        private static Rect? ClipRectOf(Transform transform)
         {
+            Rect? clip = null;
             if (transform.TryGetComponent(out RectMask2D rectMask) && rectMask.isActiveAndEnabled)
             {
-                return true;
+                Rect rect = WorldRectOf((RectTransform)transform);
+                Vector4 padding = rectMask.padding;
+                clip = Rect.MinMaxRect(
+                    rect.xMin + padding.x,
+                    rect.yMin + padding.y,
+                    rect.xMax - padding.z,
+                    rect.yMax - padding.w);
             }
 
-            return transform.TryGetComponent(out Mask mask) && mask.MaskEnabled() && mask.graphic.IsActive();
+            if (transform.TryGetComponent(out Mask mask) && mask.MaskEnabled() && mask.graphic.IsActive())
+            {
+                Rect rect = WorldRectOf((RectTransform)transform);
+                clip = clip == null ? rect : Intersect(clip.Value, rect);
+            }
+
+            return clip;
         }
 
         private static Rect WorldRectOf(RectTransform rect)

@@ -390,6 +390,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a negative RectMask2D padding widens the clip past the mask's rect, as uGUI draws there.
+        /// </summary>
+        [Test]
+        public void Arrange_WithANegativeRectMask2DPadding_KeepsWhatThePaddingLetsThrough()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>().padding = new Vector4(-20f, 0f, 0f, 0f);
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(120, 100)));
+            Assert.That(_camera.transform.position.x, Is.EqualTo(-10f).Within(Tolerance));
+        }
+
+        /// <summary>
         /// Verifies a child that lies entirely outside a RectMask2D adds nothing to the capture.
         /// </summary>
         [Test]
