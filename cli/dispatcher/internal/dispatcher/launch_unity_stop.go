@@ -74,5 +74,11 @@ func sendUnityQuitRequest(ctx context.Context, connection unityipc.Connection, t
 	if err == nil {
 		return true
 	}
+	// Why rule out a rejection first: the disconnect check also matches on message text, and a rejection
+	// whose message mentions EOF comes from an Editor that is up and will not exit.
+	var rejection *unityipc.RPCError
+	if errors.As(err, &rejection) {
+		return false
+	}
 	return outcome.RequestDispatched && requestContext.Err() == nil && clierrors.IsTransportDisconnectError(err)
 }

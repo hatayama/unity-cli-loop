@@ -98,6 +98,18 @@ func TestSendUnityQuitRequestDoesNotTakeARejectedRequestAsAQuit(t *testing.T) {
 	}
 }
 
+// Verifies a rejection whose message reads like a dropped connection is still taken as a rejection, since
+// the Editor that sent it is up and will not exit.
+func TestSendUnityQuitRequestDoesNotTakeARejectionThatMentionsEOFAsAQuit(t *testing.T) {
+	connection, _ := quitRequestTestServer(t, func(conn net.Conn) {
+		_ = unityipc.Write(conn, []byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"unexpected EOF while reading settings"},"id":1}`))
+	})
+
+	if sendUnityQuitRequest(context.Background(), connection, quitRequestTestTimeout) {
+		t.Fatal("a rejected request must not be taken as a quit in progress, whatever its message says")
+	}
+}
+
 // Verifies an Editor whose server is not listening is not taken as quitting.
 func TestSendUnityQuitRequestDoesNotTakeAnUnreachableServerAsAQuit(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
