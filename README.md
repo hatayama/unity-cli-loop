@@ -286,7 +286,7 @@ uloop launch
 # Launch with build target (Android, iOS, StandaloneOSX, etc.)
 uloop launch -p Android
 
-# Kill running Unity and restart
+# Quit running Unity and restart
 uloop launch -r
 
 # Check .meta files, GUIDs, and conflict markers without Unity

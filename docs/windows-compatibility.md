@@ -133,6 +133,6 @@ Restart deletes the project's `Temp` directory once the old Editor has exited. O
 - Only `Temp/UnityLockfile` has to go. A leftover lockfile makes the next Editor refuse to open the project as already opened; everything else under `Temp` is a cache Unity recreates on startup.
 - The lockfile is deleted with a short retry (250 ms apart, up to 5 seconds) so a handle that is about to be released does not fail the restart. If it still cannot be deleted, restart stops with an error and does not launch Unity.
 - The rest of `Temp` is deleted on a best-effort basis. A failure prints one warning line to stderr and the launch continues.
-- Windows kills the Editor with `taskkill /PID <pid> /T /F` so its helper processes go down with it, instead of leaving them holding files. If `taskkill` cannot be run, restart falls back to killing the Editor process alone.
+- Restart first asks the Editor to quit, except in a V2 project, whose server predates the request; the kill below applies only when the Editor has to be force-killed instead. Windows then kills it with `taskkill /PID <pid> /T /F` so its helper processes go down with it, instead of leaving them holding files. If `taskkill` cannot be run, restart falls back to killing the Editor process alone.
 
 Unix does not need any of this: an open file can be unlinked there, so a helper process that outlives the Editor does not block the Temp cleanup.

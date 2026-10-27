@@ -118,17 +118,20 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 		return code
 	}
 
+	var previousStop launchStopMethod
 	if runningProcess != nil {
-		if handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, v2Project.IsV2, stdout, stderr, deps); handled {
+		stopMethod, handled, code := handleExistingLaunchProcess(ctx, options, projectRoot, runningProcess, v2Project.IsV2, stdout, stderr, deps)
+		if handled {
 			return code
 		}
+		previousStop = stopMethod
 	}
 
 	if options.quit {
-		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, launchNoProcessMessage)
+		return writeLaunchQuitResponse(stdout, stderr, projectRoot, nil, "")
 	}
 
-	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, v2Project.IsV2, previousV2ServerSessionID, stdout, stderr, deps)
+	return startUnityAndWaitForReadiness(ctx, options, projectRoot, runningProcess, previousStop, v2Project.IsV2, previousV2ServerSessionID, stdout, stderr, deps)
 }
 
 func writeLaunchProjectSearch(stdout io.Writer, options launchOptions, startPath string) {
@@ -184,29 +187,26 @@ func handleExistingLaunchProcess(
 	stdout io.Writer,
 	stderr io.Writer,
 	deps launchDeps,
-) (bool, int) {
+) (launchStopMethod, bool, int) {
 	if !options.restart && !options.quit {
 		if options.editorVersion != "" {
 			clierrors.WriteClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
-			return true, 1
+			return "", true, 1
 		}
 		if isV2 {
-			return true, waitForExistingV2LaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
+			return "", true, waitForExistingV2LaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
 		}
-		return true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
+		return "", true, waitForExistingLaunchReadiness(ctx, projectRoot, runningProcess.Pid, stdout, stderr, deps)
 	}
-	if err := deps.killUnityProcess(runningProcess.Pid); err != nil {
+	stopMethod, err := stopUnityProcess(ctx, projectRoot, runningProcess.Pid, isV2, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
-		return true, 1
-	}
-	if err := deps.waitForUnityProcessExit(ctx, projectRoot, runningProcess.Pid, launchProcessExitPoll, launchProcessExitTimeout); err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
-		return true, 1
+		return "", true, 1
 	}
 	if options.quit {
-		return true, writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.Pid, launchStoppedMessage)
+		return stopMethod, true, writeLaunchQuitResponse(stdout, stderr, projectRoot, &runningProcess.Pid, stopMethod)
 	}
-	return false, 0
+	return stopMethod, false, 0
 }
 
 func launchEditorVersionRequiresRestartError(editorVersion string) error {
@@ -239,6 +239,7 @@ func startUnityAndWaitForReadiness(
 	options launchOptions,
 	projectRoot string,
 	runningProcess *unityprocess.UnityProcess,
+	previousStop launchStopMethod,
 	isV2 bool,
 	previousV2ServerSessionID string,
 	stdout io.Writer,
@@ -289,7 +290,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 	if isV2 {
-		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
+		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, previousStop, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
 	}
 	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
@@ -306,7 +307,7 @@ func startUnityAndWaitForReadiness(
 	if runningProcess != nil {
 		previousPid = &runningProcess.Pid
 	}
-	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, currentPid)
+	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid)
 }
 
 func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
@@ -461,8 +462,8 @@ func printLaunchHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "  uloop launch [options] [project-path]")
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Options:")
-	clicore.WriteLine(stdout, "  -r, --restart          Kill an existing Unity process for the project before launching")
-	clicore.WriteLine(stdout, "  -q, --quit             Kill an existing Unity process for the project without launching")
+	clicore.WriteLine(stdout, "  -r, --restart          Quit an existing Unity process for the project before launching")
+	clicore.WriteLine(stdout, "  -q, --quit             Quit an existing Unity process for the project without launching")
 	clicore.WriteLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
 	clicore.WriteLine(stdout, "      --editor-version <version>")
 	clicore.WriteLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")

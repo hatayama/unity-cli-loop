@@ -82,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_GET_RUN_TESTS_STATUS = "get-run-tests-status";
         public const string COMMAND_NAME_GET_EDITOR_STATUS = "get-editor-status";
         public const string COMMAND_NAME_CANCEL_RUNNING_TOOL = "cancel-running-tool";
+        public const string COMMAND_NAME_QUIT_EDITOR = "quit-editor";
         public const string COMMAND_NAME_AWAIT_PAUSE_POINT = "await-pause-point";
         public const string SETTINGS_TOOL_NAME_PAUSE_POINT = "pause-point";
         public const string COMMAND_NAME_PAUSE_POINT_STATUS = "pause-point-status";

@@ -523,7 +523,8 @@ func TestRunLaunchForExistingV2ProjectWaitsForServerReady(t *testing.T) {
 	}
 }
 
-// Verifies -r captures the pre-kill serverSessionId and passes it to the V2 readiness probe.
+// Verifies -r captures the pre-kill serverSessionId and passes it to the V2 readiness probe, and reports
+// the force-kill that stopped the previous Editor.
 func TestRunLaunchForV2RestartPassesPreviousServerSessionID(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	writeV2PackageManifest(t, projectRoot)
@@ -572,6 +573,9 @@ func TestRunLaunchForV2RestartPassesPreviousServerSessionID(t *testing.T) {
 	response := decodeLaunchResponseFromOutput(t, stdout.String())
 	if !response.Success || !response.Ready || !response.ServerReady || !response.Restarted {
 		t.Fatalf("V2 restart response = %#v", response)
+	}
+	if response.StopMethod != string(launchStopMethodForceKill) {
+		t.Fatalf("V2 restart StopMethod = %q, want %q", response.StopMethod, launchStopMethodForceKill)
 	}
 }
 

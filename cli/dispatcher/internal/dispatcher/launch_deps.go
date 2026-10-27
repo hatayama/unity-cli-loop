@@ -14,6 +14,7 @@ type launchDeps struct {
 	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)
 	focusUnityProcess          func(context.Context, int) error
 	killUnityProcess           func(int) error
+	requestUnityQuit           func(context.Context, string) bool
 	resolveUnityExecutablePath func(string) (string, error)
 	waitForUnityProcessExit    func(context.Context, string, int, time.Duration, time.Duration) error
 	waitForUnityStartupMarker  func(context.Context, string, time.Duration, time.Duration) error
@@ -32,6 +33,7 @@ func defaultLaunchDeps() launchDeps {
 		findRunningUnityProcess:    unityprocess.FindRunningUnityProcess,
 		focusUnityProcess:          unityprocess.FocusUnityProcess,
 		killUnityProcess:           killUnityProcess,
+		requestUnityQuit:           requestUnityQuit,
 		resolveUnityExecutablePath: resolveUnityExecutablePath,
 		waitForUnityProcessExit:    waitForUnityProcessExit,
 		waitForUnityStartupMarker:  waitForUnityStartupMarkerOrTimeout,
