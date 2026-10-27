@@ -60,6 +60,21 @@ func IsPermanentConnectError(err error) bool {
 	return errors.Is(connectionErr, os.ErrPermission)
 }
 
+// IsUnityServerGoneError reports whether a failed request shows that Unity's server went away: the
+// connection dropped mid-request, or nobody was listening.
+func IsUnityServerGoneError(err error) bool {
+	if IsTransportDisconnectError(err) {
+		return true
+	}
+	var connectionErr *unityipc.ConnectionAttemptError
+	if !errors.As(err, &connectionErr) {
+		return false
+	}
+	// Why not a connect timeout or a denied connect: a Windows named pipe times out while all of its
+	// instances are busy, and a sandbox can deny the connect, both while the server is alive.
+	return !IsFinalResponseTimeoutError(err) && !IsPermanentConnectError(err)
+}
+
 // Reports whether the error is a connection deadline expiry. The Timeout() probe
 // runs through the unwrap chain because go-winio's named pipe deadline error is not
 // os.ErrDeadlineExceeded and os.IsTimeout does not unwrap fmt.Errorf("%w") wrapping.
