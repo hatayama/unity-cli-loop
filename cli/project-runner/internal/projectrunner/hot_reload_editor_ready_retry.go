@@ -86,7 +86,7 @@ func retryHotReloadAfterEditorReady(
 	// A plain line rather than the tool spinner: the spinner is off on a non-TTY stderr, and on a
 	// TTY its Stop erases its own line, so the reader would not see why the command paused.
 	_, _ = fmt.Fprintln(stderr, hotReloadEditorReadyWaitingLine)
-	waited, ready, err := waitForEditorReady(ctx, connection, hotReloadEditorReadyWaitDefaults)
+	waited, ready, err := waitForEditorReady(ctx, connection, hotReloadEditorReadyWaitDefaults, newUnityExitWatch(connection))
 	if err != nil {
 		clicore.WriteJSON(stdout, first.result)
 		writeHotReloadClassifiedError(stderr, connection, err)
@@ -200,19 +200,24 @@ func hotReloadRetryParams(params map[string]any, selectedFiles []string) map[str
 }
 
 // waitForEditorReady polls the Editor status until the Editor answers and is ready, the budget
-// runs out, or ctx is cancelled.
-// Why every probe error counts as "not yet": the domain reload that follows Unity's compile takes
-// the server down and brings it back.
+// runs out, the Editor exits, or ctx is cancelled.
+// Why every other probe error counts as "not yet": the domain reload that follows Unity's compile
+// takes the server down and brings it back.
 func waitForEditorReady(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options hotReloadEditorReadyWaitOptions,
+	exitWatch *clicore.UnityExitWatch,
 ) (time.Duration, bool, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.budget)
 	for {
-		if probeEditorReady(ctx, connection, options.probeTimeout) {
+		status, probeErr := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
+		if probeErr == nil && classifyEditorState(status) == statusStateReady {
 			return time.Since(startedAt), true, nil
+		}
+		if exitErr := exitWatch.Observe(ctx, probeErr); exitErr != nil {
+			return time.Since(startedAt), false, exitErr
 		}
 		if !time.Now().Before(deadline) {
 			return time.Since(startedAt), false, nil
@@ -225,18 +230,13 @@ func waitForEditorReady(
 	}
 }
 
-func probeEditorReady(ctx context.Context, connection unityipc.Connection, probeTimeout time.Duration) bool {
-	status, answered := probeHotReloadEditorStatus(ctx, connection, probeTimeout)
-	return answered && classifyEditorState(status) == statusStateReady
-}
-
-// probeHotReloadEditorStatus asks the Editor for its status once; answered is false when it did not answer
-// or the answer was not readable.
+// probeHotReloadEditorStatus asks the Editor for its status once. The error is non-nil when the Editor
+// did not answer or the answer was not readable.
 func probeHotReloadEditorStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
 	probeTimeout time.Duration,
-) (editorStatusResponse, bool) {
+) (editorStatusResponse, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	raw, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
@@ -244,13 +244,13 @@ func probeHotReloadEditorStatus(
 		editorStatusBridgeCommandName,
 		map[string]any{})
 	if err != nil {
-		return editorStatusResponse{}, false
+		return editorStatusResponse{}, err
 	}
 	var response editorStatusResponse
 	if err := json.Unmarshal(raw, &response); err != nil {
-		return editorStatusResponse{}, false
+		return editorStatusResponse{}, err
 	}
-	return response, true
+	return response, nil
 }
 
 // composeHotReloadEditorReadyNote appends sentence to the note an earlier wait in this command left

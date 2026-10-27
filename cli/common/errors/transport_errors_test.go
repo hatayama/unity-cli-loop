@@ -184,3 +184,39 @@ func TestIsFinalResponseTimeoutErrorUnwrapsTimeoutCauses(t *testing.T) {
 		t.Fatal("wrapped Timeout()-reporting error was not classified as timeout")
 	}
 }
+
+// Verifies a dropped connection and a dial nobody answered count as the server being gone, while a
+// dial timeout and a denied dial do not, because the server can be alive behind both.
+func TestIsUnityServerGoneErrorSeparatesAGoneServerFromALiveOne(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "dropped connection", err: fmt.Errorf("read: %w", io.EOF), want: true},
+		{
+			name: "nobody listening",
+			err:  &unityipc.ConnectionAttemptError{Cause: syscall.ECONNREFUSED},
+			want: true,
+		},
+		{
+			name: "dial timeout",
+			err:  &unityipc.ConnectionAttemptError{Cause: os.ErrDeadlineExceeded},
+			want: false,
+		},
+		{
+			name: "denied dial",
+			err:  &unityipc.ConnectionAttemptError{Cause: syscall.EPERM},
+			want: false,
+		},
+		{name: "unrelated error", err: fmt.Errorf("decode failed"), want: false},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := IsUnityServerGoneError(testCase.err); got != testCase.want {
+				t.Fatalf("IsUnityServerGoneError(%v) = %v, want %v", testCase.err, got, testCase.want)
+			}
+		})
+	}
+}

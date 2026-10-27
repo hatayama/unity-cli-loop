@@ -67,7 +67,7 @@ func sendHotReloadWaitingForBusyEditor(
 	logHotReloadBusyWaitDecided(connection, first.correlationID, err)
 	// A plain line for the same reason as the settle wait's: the spinner's Stop erases its own line.
 	_, _ = fmt.Fprintf(stderr, hotReloadBusyWaitingLineFormat+"\n", runningToolName)
-	wait, waitErr := waitForBusyEditor(ctx, connection, params, stderr, deps, hotReloadEditorReadyWaitDefaults)
+	wait, waitErr := waitForBusyEditor(ctx, connection, params, stderr, deps, hotReloadEditorReadyWaitDefaults, newUnityExitWatch(connection))
 	if waitErr != nil {
 		writeHotReloadClassifiedError(stderr, connection, waitErr)
 		logHotReloadBusyWaitComplete(connection, first.correlationID, wait, nil)
@@ -128,6 +128,7 @@ func waitForBusyEditor(
 	stderr io.Writer,
 	deps connectionRetryDeps,
 	options hotReloadEditorReadyWaitOptions,
+	exitWatch *clicore.UnityExitWatch,
 ) (hotReloadBusyWait, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.budget)
@@ -135,7 +136,12 @@ func waitForBusyEditor(
 	lastResend := startedAt
 	wait := hotReloadBusyWait{}
 	for {
-		status, answered := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
+		status, probeErr := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
+		answered := probeErr == nil
+		if exitErr := exitWatch.Observe(ctx, probeErr); exitErr != nil {
+			wait.waited = time.Since(startedAt)
+			return wait, exitErr
+		}
 		if answered && classifyEditorState(status) == statusStateReady {
 			wait.waited, wait.ready = time.Since(startedAt), true
 			return wait, nil

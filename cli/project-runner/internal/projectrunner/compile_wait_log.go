@@ -259,6 +259,30 @@ func logCompileWaitCancelled(
 	})
 }
 
+// logCompileWaitUnityExited closes the poll's start entry when the wait ended because the Editor exited,
+// so the log never shows a status poll that started and never finished.
+func logCompileWaitUnityExited(
+	options compileCompletionOptions,
+	startedAt time.Time,
+	attempts int,
+	lastStatus compileStatusResponse,
+	lastErr error,
+) {
+	writeCompileVibeLog(options.connection.ProjectRoot, func() vibelog.CLIVibeLogEntry {
+		return vibelog.CLIVibeLogEntry{
+			Level:     "WARNING",
+			Operation: "cli_compile_status_poll_unity_exited",
+			Message:   "Stopped polling Unity compile status because the Unity Editor process exited.",
+			Context: compileWaitLogContext(options, startedAt, map[string]any{
+				"poll_attempts":        attempts,
+				"last_status":          compileStatusLogContext(lastStatus),
+				"last_transport_error": clicore.ErrorMessage(lastErr),
+			}),
+			CorrelationID: options.requestID,
+		}
+	})
+}
+
 func compileWaitLogContext(
 	options compileCompletionOptions,
 	startedAt time.Time,

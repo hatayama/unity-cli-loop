@@ -14,6 +14,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 const editorStatusBridgeCommandName = "get-editor-status"
@@ -49,7 +50,7 @@ func defaultStatusCommandDeps() statusCommandDeps {
 		probeTimeout: 5 * time.Second,
 		reprobeDelay: 1 * time.Second,
 		isUnityProcessRunning: func(ctx context.Context, projectRoot string) (bool, error) {
-			process, err := clicore.FindRunningUnityProcess(ctx, projectRoot)
+			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
 	}
@@ -249,6 +250,10 @@ func reportFromUnreachableServer(
 	var report statusReport
 	running, lookupErr := deps.isUnityProcessRunning(ctx, projectRoot)
 	switch {
+	case errors.Is(lookupErr, unityprocess.ErrUnidentifiedUnityEditor):
+		report = newStatusReport(statusStateUnreachable,
+			"The uloop server is not accepting connections, and a running Unity Editor's command line "+
+				"does not name its project, so uloop cannot tell whether Unity is running for this project.")
 	case lookupErr != nil:
 		report = newStatusReport(statusStateUnreachable, fmt.Sprintf(
 			"The uloop server is not accepting connections, and the Unity process list could not be read: %s.",
@@ -260,10 +265,19 @@ func reportFromUnreachableServer(
 				"(uloop cannot run in Safe Mode).")
 		report.UnityProcessRunning = &running
 	default:
-		report = newStatusReport(statusStateNotRunning, "No Unity Editor is running for this project.")
+		report = notRunningStatusReport(projectRoot, probeErr)
 		report.UnityProcessRunning = &running
 	}
 	report.ConnectionError = probeErr.Error()
+	return report
+}
+
+// notRunningStatusReport words NotRunning as uloop's not-running error does, so status and a failed
+// command agree on whether the Editor shut down normally.
+func notRunningStatusReport(projectRoot string, probeErr error) statusReport {
+	notRunning := clicore.NewUnityNotRunningError(projectRoot, "", probeErr, false)
+	report := newStatusReport(statusStateNotRunning, notRunning.ToCLIError(clierrors.ErrorContext{}).Message)
+	report.NextActions = append(notRunning.EditorLogNextActions(), report.NextActions...)
 	return report
 }
 

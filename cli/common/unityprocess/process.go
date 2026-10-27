@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -22,39 +23,104 @@ const windowsPowerShellCommand = "powershell"
 var (
 	macUnityExecutablePattern     = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
 	windowsUnityExecutablePattern = regexp.MustCompile(`(?i)Unity\.exe`)
-	projectPathFlagPattern        = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
-	nextUnityFlagPattern          = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
+	// Why -createProject too: the Editor that creates a project opens it in the same session, and that
+	// session's command line may name the project only through -createProject.
+	projectPathFlagPattern = regexp.MustCompile(`(?i)-(?:projectpath|createproject)(?:=|\s+)(.+)$`)
+	nextUnityFlagPattern   = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
 )
 
 type UnityProcess struct {
-	Pid         int
+	Pid int
+	// projectPath is empty for an Editor whose command line does not name its project.
 	projectPath string
 }
 
+// ErrUnidentifiedUnityEditor reports that no Editor is listed for the project while an Editor whose
+// command line does not name its project is running, so that Editor may be the project's.
+var ErrUnidentifiedUnityEditor = errors.New(
+	"a Unity Editor whose command line does not name its project is running, so it may be this project's Editor")
+
 type RestoreFocusFunc func(context.Context) error
 
+// FindRunningUnityProcess returns the running Editor listed for projectRoot, or nil when none is.
 func FindRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, error) {
 	processes, err := listUnityProcesses(ctx)
 	if err != nil {
 		return nil, err
 	}
+	process, _, err := selectProjectProcess(processes, projectRoot)
+	return process, err
+}
 
-	normalizedTarget, err := normalizeComparablePath(projectRoot)
+// FindRunningUnityProcessDefinitively is FindRunningUnityProcess for callers that conclude from a nil
+// result that no Editor is running for the project: it returns nil only when no running Editor can be
+// the project's, and ErrUnidentifiedUnityEditor when an Editor whose project is unknown may be.
+func FindRunningUnityProcessDefinitively(ctx context.Context, projectRoot string) (*UnityProcess, error) {
+	processes, err := listUnityProcesses(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return selectProjectProcessDefinitively(processes, projectRoot)
+}
 
+func selectProjectProcessDefinitively(processes []UnityProcess, projectRoot string) (*UnityProcess, error) {
+	process, unidentifiedRunning, err := selectProjectProcess(processes, projectRoot)
+	if err == nil && process == nil && unidentifiedRunning {
+		return nil, ErrUnidentifiedUnityEditor
+	}
+	return process, err
+}
+
+// selectProjectProcess picks projectRoot's Editor from the listed Editors, and reports whether an Editor
+// whose project is unknown was listed.
+func selectProjectProcess(processes []UnityProcess, projectRoot string) (*UnityProcess, bool, error) {
+	if _, err := normalizeComparablePath(projectRoot); err != nil {
+		return nil, false, err
+	}
+
+	unidentifiedRunning := false
 	for _, candidate := range processes {
-		normalizedCandidate, err := normalizeComparablePath(candidate.projectPath)
-		if err != nil {
+		// Why not compare an empty path: filepath.Abs resolves it to the working directory, so it
+		// would match a project the command runs from.
+		if candidate.projectPath == "" {
+			unidentifiedRunning = true
 			continue
 		}
-		if normalizedCandidate == normalizedTarget {
+		if isProjectPath(candidate.projectPath, projectRoot) {
 			process := candidate
-			return &process, nil
+			return &process, unidentifiedRunning, nil
 		}
 	}
-	return nil, nil
+	return nil, unidentifiedRunning, nil
+}
+
+// isProjectPath reports whether path, as an Editor's command line or log records it, names the project at
+// projectRoot.
+func isProjectPath(path string, projectRoot string) bool {
+	normalizedPath, err := normalizeComparablePath(path)
+	if err != nil {
+		return false
+	}
+	normalizedRoot, err := normalizeComparablePath(projectRoot)
+	if err != nil {
+		return false
+	}
+	return normalizedPath == normalizedRoot || isSameDirectory(path, projectRoot)
+}
+
+// isSameDirectory reports whether both paths name one existing directory. Why on top of the string
+// comparison: a command's project root has its symlinks evaluated, while an Editor's command line keeps
+// the path it was started with, and a case-insensitive file system accepts either spelling.
+func isSameDirectory(first string, second string) bool {
+	firstInfo, err := os.Stat(first)
+	if err != nil {
+		return false
+	}
+	secondInfo, err := os.Stat(second)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(firstInfo, secondInfo)
 }
 
 func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
@@ -135,11 +201,7 @@ func matchMacUnityProcess(pid int, command string) (UnityProcess, bool) {
 	if !isUnityEditorCommand(command, macUnityExecutablePattern) {
 		return UnityProcess{}, false
 	}
-	projectPath := extractProjectPath(command)
-	if projectPath == "" {
-		return UnityProcess{}, false
-	}
-	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+	return UnityProcess{Pid: pid, projectPath: extractProjectPath(command)}, true
 }
 
 // parseMacProcArgs2 decodes the kern.procargs2 sysctl buffer layout: a leading int32
@@ -206,11 +268,7 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 	if hasNonEditorLinuxArg(args) {
 		return UnityProcess{}, false
 	}
-	projectPath := linuxProjectPathFromArgs(args)
-	if projectPath == "" {
-		return UnityProcess{}, false
-	}
-	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+	return UnityProcess{Pid: pid, projectPath: linuxProjectPathFromArgs(args)}, true
 }
 
 // isLinuxUnityEditorExecutable reports whether argv[0]'s basename is a Unity Editor
@@ -237,20 +295,21 @@ func hasNonEditorLinuxArg(args []string) bool {
 	return false
 }
 
-// linuxProjectPathFromArgs returns the value of Unity's -projectPath flag, accepting
+// linuxProjectPathFromArgs returns the value of Unity's -projectPath or -createProject flag, accepting
 // both the "-projectPath <path>" and "-projectPath=<path>" forms case-insensitively.
 func linuxProjectPathFromArgs(args []string) string {
-	const projectPathFlag = "-projectpath"
 	for index, arg := range args {
 		lowerArg := strings.ToLower(arg)
-		if lowerArg == projectPathFlag {
-			if index+1 >= len(args) {
-				return ""
+		for _, flag := range []string{"-projectpath", "-createproject"} {
+			if lowerArg == flag {
+				if index+1 >= len(args) {
+					return ""
+				}
+				return args[index+1]
 			}
-			return args[index+1]
-		}
-		if strings.HasPrefix(lowerArg, projectPathFlag+"=") {
-			return arg[len(projectPathFlag+"="):]
+			if strings.HasPrefix(lowerArg, flag+"=") {
+				return arg[len(flag+"="):]
+			}
 		}
 	}
 	return ""
@@ -283,12 +342,7 @@ func parseWindowsUnityProcesses(output string) []UnityProcess {
 		if !isUnityEditorCommand(command, windowsUnityExecutablePattern) {
 			continue
 		}
-		projectPath := extractProjectPath(command)
-		if projectPath == "" {
-			continue
-		}
-
-		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPath})
+		processes = append(processes, UnityProcess{Pid: pid, projectPath: extractProjectPath(command)})
 	}
 	return processes
 }

@@ -120,7 +120,7 @@ func runControlPlayModeWithStateWait(
 	}
 
 	spinner.Update("Waiting for play mode state...")
-	response, completed, waitErr := waitForControlPlayModeState(ctx, connection, action, timeout)
+	response, completed, waitErr := waitForControlPlayModeState(ctx, connection, action, timeout, newUnityExitWatch(connection))
 	spinner.Stop()
 	if waitErr != nil {
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
@@ -168,6 +168,7 @@ func waitForControlPlayModeState(
 	connection unityipc.Connection,
 	action string,
 	timeout time.Duration,
+	exitWatch *clicore.UnityExitWatch,
 ) (controlPlayModeResponse, bool, error) {
 	waitContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -179,6 +180,11 @@ func waitForControlPlayModeState(
 	defer ticker.Stop()
 	for {
 		response, err := requestControlPlayModeStatus(waitContext, connection, action)
+		// Why every poll, an answer included: an answer restarts the watch's count of lookups that
+		// found no Editor.
+		if exitErr := exitWatch.Observe(waitContext, err); exitErr != nil {
+			return lastResponse, false, exitErr
+		}
 		if err == nil {
 			lastResponse = response
 			hasResponse = true

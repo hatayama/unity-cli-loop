@@ -14,6 +14,7 @@ const (
 	ErrorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
 	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
 	ErrorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
+	ErrorCodeUnityNotRunning                 = "UNITY_NOT_RUNNING"
 	ErrorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
 	ErrorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
@@ -57,6 +58,7 @@ const (
 	ErrorPhaseExecution       = "execution"
 
 	commandRunTests = "run-tests"
+	commandLaunch   = "launch"
 
 	// Why this wording: --skip-compile only skips the CLI-side compile, so agents read a
 	// disconnect here as an IPC fault instead of the domain reload that discarded their patches.

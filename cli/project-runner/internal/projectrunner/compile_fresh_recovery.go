@@ -101,7 +101,7 @@ type compileRequestMissingTracker struct {
 // slot the first request still holds.
 func (tracker *compileRequestMissingTracker) observe(status compileStatusResponse, err error) bool {
 	if err != nil {
-		if isServerGoneError(err) {
+		if clierrors.IsUnityServerGoneError(err) {
 			tracker.serverRestartSeen = true
 		}
 		tracker.missingStreak = 0
@@ -116,21 +116,6 @@ func (tracker *compileRequestMissingTracker) observe(status compileStatusRespons
 	}
 	tracker.missingStreak++
 	return tracker.serverRestartSeen && tracker.missingStreak >= compileAttachMissingResultStreak
-}
-
-// isServerGoneError reports whether a failed status query shows that Unity's server went away: the
-// connection dropped mid-query, or nobody was listening.
-func isServerGoneError(err error) bool {
-	if clierrors.IsTransportDisconnectError(err) {
-		return true
-	}
-	var connectionErr *unityipc.ConnectionAttemptError
-	if !errors.As(err, &connectionErr) {
-		return false
-	}
-	// Why not a connect timeout or a denied connect: a Windows named pipe times out while all of its
-	// instances are busy, and a sandbox can deny the connect, both while the server is alive.
-	return !clierrors.IsFinalResponseTimeoutError(err) && !clierrors.IsPermanentConnectError(err)
 }
 
 // canResendCompile reports whether at least compileResendMinimumBudget is left before resendBefore.

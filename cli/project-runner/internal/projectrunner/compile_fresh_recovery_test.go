@@ -641,7 +641,7 @@ func TestStatusQueryAgainstNoListenerCountsAsTheServerBeingGone(t *testing.T) {
 	if errors.Is(err, os.ErrPermission) {
 		t.Skipf("the environment denied the connection itself, so it cannot show a missing listener: %v", err)
 	}
-	if !isServerGoneError(err) {
+	if !clierrors.IsUnityServerGoneError(err) {
 		t.Fatalf("a status query with no listener must count as the server being gone: %v", err)
 	}
 }

@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -183,7 +184,7 @@ func attachWaitForPendingCompile(
 	}, deps)
 	if waitErr != nil {
 		spinner.Stop()
-		logCompileAttachResult(connection, record.RequestID, "error", false)
+		logCompileAttachResult(connection, record.RequestID, "error", clearCompilePendingRecordAfterEditorExit(connection.ProjectRoot, waitErr))
 		clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
@@ -227,6 +228,18 @@ func attachWaitForPendingCompile(
 	}
 }
 
+// clearCompilePendingRecordAfterEditorExit removes the pending record when the wait ended because the
+// Editor exited, and reports whether it did. Why: the record points at a result held in the Editor's
+// memory, which went away with it, so the next compile would only spend its attach probes finding nothing.
+func clearCompilePendingRecordAfterEditorExit(projectRoot string, waitErr error) bool {
+	var notRunning clierrors.UnityNotRunningError
+	if !errors.As(waitErr, &notRunning) {
+		return false
+	}
+	clearCompilePendingRecord(projectRoot)
+	return true
+}
+
 func waitForAttachedCompileCompletion(
 	ctx context.Context,
 	options compileCompletionOptions,
@@ -243,6 +256,7 @@ func waitForAttachedCompileCompletion(
 
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
+	exitWatch := newCompileUnityExitWatch(options.connection, deps)
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -277,6 +291,10 @@ func waitForAttachedCompileCompletion(
 			}
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+		if exitErr := exitWatch.Observe(ctx, err); exitErr != nil {
+			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
+			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
+		}
 		observeCompileWaitInterim(&interim, deps, status, err)
 
 		select {
