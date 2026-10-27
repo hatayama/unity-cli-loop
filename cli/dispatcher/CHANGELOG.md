@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.13.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.12.0...dispatcher-v3.13.0) (2026-10-27)
+
+
+### Features
+
+* uloop launch --restart and --quit let Unity quit itself so it keeps the window layout ([#3403](https://github.com/hatayama/unity-cli-loop/issues/3403)) ([57108db](https://github.com/hatayama/unity-cli-loop/commit/57108dbaee73cc00703132451a65e792795bec62))
+
+
+### Bug Fixes
+
+* uloop no longer advertises verify-project in help, command lists, or installed skills ([#3406](https://github.com/hatayama/unity-cli-loop/issues/3406)) ([76ce3f2](https://github.com/hatayama/unity-cli-loop/commit/76ce3f2e30b1064a708be8d1709f4b452de3c31c))
+* uloop says the Unity Editor is not running instead of telling agents to wait and retry ([#3400](https://github.com/hatayama/unity-cli-loop/issues/3400)) ([fb876df](https://github.com/hatayama/unity-cli-loop/commit/fb876dfd50fef92b82f4a731a4ee4216d20e79c0))
+
 ## [3.12.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.11.0...dispatcher-v3.12.0) (2026-10-27)
 
 
