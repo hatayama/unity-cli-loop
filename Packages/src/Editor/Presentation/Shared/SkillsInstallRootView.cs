@@ -8,14 +8,14 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Display names for the skill install location picker; the members mirror SkillInstallRoot.
+    /// Display names for the skill install location picker; each member maps to one SkillInstallRoot.
     /// </summary>
     internal enum SkillsInstallRootChoice
     {
         [InspectorName("Unity Project Root")]
-        UnityProjectRoot = SkillInstallRoot.UnityProjectRoot,
+        UnityProjectRoot,
         [InspectorName("Git Repository Root")]
-        GitRepositoryRoot = SkillInstallRoot.GitRepositoryRoot
+        GitRepositoryRoot
     }
 
     /// <summary>
@@ -66,19 +66,39 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (_isFieldInitialized)
             {
-                ViewDataBinder.UpdateEnumField(_installRootField, (SkillsInstallRootChoice)currentRoot);
+                ViewDataBinder.UpdateEnumField(_installRootField, ToChoice(currentRoot));
                 return;
             }
 
-            _installRootField.Init((SkillsInstallRootChoice)currentRoot);
+            _installRootField.Init(ToChoice(currentRoot));
             _installRootField.RegisterValueChangedCallback(evt =>
             {
                 if (evt.newValue is SkillsInstallRootChoice newValue)
                 {
-                    OnInstallRootChanged?.Invoke((SkillInstallRoot)newValue);
+                    OnInstallRootChanged?.Invoke(ToRoot(newValue));
                 }
             });
             _isFieldInitialized = true;
+        }
+
+        private static SkillsInstallRootChoice ToChoice(SkillInstallRoot root)
+        {
+            return root switch
+            {
+                SkillInstallRoot.UnityProjectRoot => SkillsInstallRootChoice.UnityProjectRoot,
+                SkillInstallRoot.GitRepositoryRoot => SkillsInstallRootChoice.GitRepositoryRoot,
+                _ => throw new ArgumentOutOfRangeException(nameof(root), root, "Unknown skill install root")
+            };
+        }
+
+        private static SkillInstallRoot ToRoot(SkillsInstallRootChoice choice)
+        {
+            return choice switch
+            {
+                SkillsInstallRootChoice.UnityProjectRoot => SkillInstallRoot.UnityProjectRoot,
+                SkillsInstallRootChoice.GitRepositoryRoot => SkillInstallRoot.GitRepositoryRoot,
+                _ => throw new ArgumentOutOfRangeException(nameof(choice), choice, "Unknown skill install root choice")
+            };
         }
     }
 }
