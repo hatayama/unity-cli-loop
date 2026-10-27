@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                    methodName == UnityCliLoopConstants.COMMAND_NAME_EXTEND_PAUSE_POINT_STATUS ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_SET_CODE_OPTIMIZATION_DEBUG ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_SET_CODE_OPTIMIZATION_DEBUG_STARTUP ||
-                   methodName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_QUIT_EDITOR;
         }
 
         public static UnityCliLoopToolResponse Execute(
@@ -81,6 +82,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_SET_CODE_OPTIMIZATION_DEBUG_STARTUP)
             {
                 return SetCodeOptimizationDebugStartupBridgeCommand.Execute();
+            }
+
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_QUIT_EDITOR)
+            {
+                return QuitEditorBridgeCommand.Execute();
             }
 
             throw new ArgumentException($"Unknown internal bridge command: {methodName}", nameof(methodName));
