@@ -243,7 +243,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 22 Bundled Skills</summary>
+<summary>All 21 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-status` - Check whether Unity can take a command now, and cancel the command Unity is running when BUSY keeps rejecting commands
