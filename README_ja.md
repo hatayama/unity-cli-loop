@@ -243,11 +243,10 @@ V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Dow
 
 
 <details>
-<summary>バンドルされている全22個のSkills一覧</summary>
+<summary>バンドルされている全21個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
-- `/uloop-status` - Unityが今コマンドを受け付けられるかを確認
-- `/uloop-cancel` - BUSYでコマンドが拒否され続けるときに、Unityが実行中のコマンドをキャンセル
+- `/uloop-status` - Unityが今コマンドを受け付けられるかを確認し、BUSYでコマンドが拒否され続けるときは実行中のコマンドをキャンセル
 - `/uloop-compile` - コンパイルの実行
 - `/uloop-get-logs` - Consoleログの取得
 - `/uloop-run-tests` - テストの実行

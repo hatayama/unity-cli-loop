@@ -592,27 +592,32 @@ name: uloop-disabled-skill
 	}
 }
 
-// Verifies that installing skills removes the retired Record Input skill from both layouts.
-func TestInstallSkillsForTargetRemovesRetiredRecordInputSkill(t *testing.T) {
-	projectRoot := t.TempDir()
-	target := targetConfigs["claude"]
-	skillsRoot := filepath.Join(projectRoot, target.projectDir, "skills")
-	flatDir := filepath.Join(skillsRoot, "uloop-record-input")
-	groupedDir := filepath.Join(skillsRoot, managedSkillsDir, "uloop-record-input")
-	writeSkillFile(t, flatDir, "---\nname: uloop-record-input\n---\n")
-	writeSkillFile(t, groupedDir, "---\nname: uloop-record-input\n---\n")
+// Verifies that installing skills removes each retired skill from both layouts: the Record Input
+// skill, whose tool was retired, and the Cancel skill, whose command the uloop-status skill now documents.
+func TestInstallSkillsForTargetRemovesRetiredSkill(t *testing.T) {
+	for _, skillName := range []string{"uloop-record-input", "uloop-cancel"} {
+		t.Run(skillName, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			target := targetConfigs["claude"]
+			skillsRoot := filepath.Join(projectRoot, target.projectDir, "skills")
+			flatDir := filepath.Join(skillsRoot, skillName)
+			groupedDir := filepath.Join(skillsRoot, managedSkillsDir, skillName)
+			writeSkillFile(t, flatDir, "---\nname: "+skillName+"\n---\n")
+			writeSkillFile(t, groupedDir, "---\nname: "+skillName+"\n---\n")
 
-	result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{}, false, true)
-	if err != nil {
-		t.Fatalf("installSkillsForTarget failed: %v", err)
-	}
-	if result.deprecatedRemoved != 2 {
-		t.Fatalf("deprecated removal count mismatch: %#v", result)
-	}
-	for _, missingDir := range []string{flatDir, groupedDir} {
-		if _, err := os.Stat(missingDir); err == nil {
-			t.Fatalf("retired skill should be removed: %s", missingDir)
-		}
+			result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{}, false, true)
+			if err != nil {
+				t.Fatalf("installSkillsForTarget failed: %v", err)
+			}
+			if result.deprecatedRemoved != 2 {
+				t.Fatalf("deprecated removal count mismatch: %#v", result)
+			}
+			for _, missingDir := range []string{flatDir, groupedDir} {
+				if _, err := os.Stat(missingDir); err == nil {
+					t.Fatalf("retired skill should be removed: %s", missingDir)
+				}
+			}
+		})
 	}
 }
 

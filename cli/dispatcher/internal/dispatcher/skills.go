@@ -41,6 +41,7 @@ var deprecatedSkillNames = []string{
 	"uloop-execute-menu-item",
 	"uloop-raycast",
 	"uloop-record-input",
+	"uloop-cancel",
 }
 
 type skillTarget struct {

@@ -1,6 +1,6 @@
 ---
 name: uloop-status
-description: "Check whether the Unity Editor for this project can take a uloop command now, without side effects. Use before sending commands when Unity may be starting, compiling, busy, or closed."
+description: "Check whether the Unity Editor for this project can take a uloop command now, without side effects; also covers `uloop cancel` for stopping the command it is running. Use before sending commands when Unity may be starting, compiling, busy, or closed, and when BUSY does not clear or a command does not finish."
 ---
 
 # uloop status
@@ -52,7 +52,7 @@ Play Mode does not change the state: a paused Play Mode session is `Ready`, with
 ## Notes
 
 - Exits 0 only for Ready.
-- When `Busy` does not clear and the running command shows no sign of finishing, stop it with `uloop cancel`.
+- When `Busy` does not clear and the running command shows no sign of finishing, stop it with `uloop cancel`; its outcomes, what it cannot cancel, and what to do after it are in [references/cancel.md](references/cancel.md).
 - It never focuses the window, launches Unity, or takes the command slot, so it is safe to poll.
 - A sandboxed shell that cannot open the Unix socket gets an error, not NotRunning; run it outside the sandbox.
 - uloop cannot detect Safe Mode directly; ServerUnavailable that does not clear is the signal.
