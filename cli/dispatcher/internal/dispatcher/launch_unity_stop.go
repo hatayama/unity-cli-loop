@@ -65,7 +65,8 @@ func requestUnityQuit(ctx context.Context, projectRoot string) bool {
 
 // sendUnityQuitRequest sends quit-editor once. The Editor took the request when it answered, or when the
 // connection dropped after the request reached it, which is how an Editor that exits before its answer
-// is written looks. A rejection, an unreachable server, and no answer in time all mean it did not.
+// is written looks. A rejection, an answer without a result, an unreachable server, and no answer in time
+// all mean it did not.
 func sendUnityQuitRequest(ctx context.Context, connection unityipc.Connection, timeout time.Duration) bool {
 	requestContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -74,10 +75,16 @@ func sendUnityQuitRequest(ctx context.Context, connection unityipc.Connection, t
 	if err == nil {
 		return true
 	}
-	// Why rule out a rejection first: the disconnect check also matches on message text, and a rejection
-	// whose message mentions EOF comes from an Editor that is up and will not exit.
+	// Why rule out these answers first: the disconnect check also takes them as a dropped connection, but
+	// they come from an Editor that is up and did not run the request. The disconnect check matches a
+	// rejection whose message mentions EOF, and an answer without a result outright, while the quit handler
+	// always returns a result.
 	var rejection *unityipc.RPCError
 	if errors.As(err, &rejection) {
+		return false
+	}
+	var noResult *unityipc.NoResponseError
+	if errors.As(err, &noResult) {
 		return false
 	}
 	return outcome.RequestDispatched && requestContext.Err() == nil && clierrors.IsTransportDisconnectError(err)

@@ -110,6 +110,18 @@ func TestSendUnityQuitRequestDoesNotTakeARejectionThatMentionsEOFAsAQuit(t *test
 	}
 }
 
+// Verifies an answer that carries no result is not taken as quitting: the quit handler always returns one,
+// so the Editor that sent it did not run the request and will not exit.
+func TestSendUnityQuitRequestDoesNotTakeAnAnswerWithoutAResultAsAQuit(t *testing.T) {
+	connection, _ := quitRequestTestServer(t, func(conn net.Conn) {
+		_ = unityipc.Write(conn, []byte(`{"jsonrpc":"2.0","id":1}`))
+	})
+
+	if sendUnityQuitRequest(context.Background(), connection, quitRequestTestTimeout) {
+		t.Fatal("an answer without a result must not be taken as a quit in progress")
+	}
+}
+
 // Verifies an Editor whose server is not listening is not taken as quitting.
 func TestSendUnityQuitRequestDoesNotTakeAnUnreachableServerAsAQuit(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
