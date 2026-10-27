@@ -29,34 +29,69 @@ var (
 )
 
 type UnityProcess struct {
-	Pid         int
+	Pid int
+	// projectPath is empty for an Editor whose command line does not name its project.
 	projectPath string
 }
 
+// ErrUnidentifiedUnityEditor reports that no Editor is listed for the project while an Editor whose
+// command line does not name its project is running, so that Editor may be the project's.
+var ErrUnidentifiedUnityEditor = errors.New(
+	"a Unity Editor whose command line does not name its project is running, so it may be this project's Editor")
+
 type RestoreFocusFunc func(context.Context) error
 
+// FindRunningUnityProcess returns the running Editor listed for projectRoot, or nil when none is.
 func FindRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, error) {
+	process, _, err := findRunningUnityProcess(ctx, projectRoot)
+	return process, err
+}
+
+// FindRunningUnityProcessDefinitively is FindRunningUnityProcess for callers that conclude from a nil
+// result that no Editor is running for the project: it returns nil only when no running Editor can be
+// the project's, and ErrUnidentifiedUnityEditor when an Editor whose project is unknown may be.
+func FindRunningUnityProcessDefinitively(ctx context.Context, projectRoot string) (*UnityProcess, error) {
+	process, unidentifiedRunning, err := findRunningUnityProcess(ctx, projectRoot)
+	if err == nil && process == nil && unidentifiedRunning {
+		return nil, ErrUnidentifiedUnityEditor
+	}
+	return process, err
+}
+
+func findRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, bool, error) {
 	processes, err := listUnityProcesses(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	return selectProjectProcess(processes, projectRoot)
+}
 
+// selectProjectProcess picks projectRoot's Editor from the listed Editors, and reports whether an Editor
+// whose project is unknown was listed.
+func selectProjectProcess(processes []UnityProcess, projectRoot string) (*UnityProcess, bool, error) {
 	normalizedTarget, err := normalizeComparablePath(projectRoot)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
+	unidentifiedRunning := false
 	for _, candidate := range processes {
+		// Why not compare an empty path: filepath.Abs resolves it to the working directory, so it
+		// would match a project the command runs from.
+		if candidate.projectPath == "" {
+			unidentifiedRunning = true
+			continue
+		}
 		normalizedCandidate, err := normalizeComparablePath(candidate.projectPath)
 		if err != nil {
 			continue
 		}
 		if normalizedCandidate == normalizedTarget {
 			process := candidate
-			return &process, nil
+			return &process, unidentifiedRunning, nil
 		}
 	}
-	return nil, nil
+	return nil, unidentifiedRunning, nil
 }
 
 func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
@@ -137,11 +172,7 @@ func matchMacUnityProcess(pid int, command string) (UnityProcess, bool) {
 	if !isUnityEditorCommand(command, macUnityExecutablePattern) {
 		return UnityProcess{}, false
 	}
-	projectPath := extractProjectPath(command)
-	if projectPath == "" {
-		return UnityProcess{}, false
-	}
-	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+	return UnityProcess{Pid: pid, projectPath: extractProjectPath(command)}, true
 }
 
 // parseMacProcArgs2 decodes the kern.procargs2 sysctl buffer layout: a leading int32
@@ -208,11 +239,7 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 	if hasNonEditorLinuxArg(args) {
 		return UnityProcess{}, false
 	}
-	projectPath := linuxProjectPathFromArgs(args)
-	if projectPath == "" {
-		return UnityProcess{}, false
-	}
-	return UnityProcess{Pid: pid, projectPath: projectPath}, true
+	return UnityProcess{Pid: pid, projectPath: linuxProjectPathFromArgs(args)}, true
 }
 
 // isLinuxUnityEditorExecutable reports whether argv[0]'s basename is a Unity Editor
@@ -286,12 +313,7 @@ func parseWindowsUnityProcesses(output string) []UnityProcess {
 		if !isUnityEditorCommand(command, windowsUnityExecutablePattern) {
 			continue
 		}
-		projectPath := extractProjectPath(command)
-		if projectPath == "" {
-			continue
-		}
-
-		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPath})
+		processes = append(processes, UnityProcess{Pid: pid, projectPath: extractProjectPath(command)})
 	}
 	return processes
 }

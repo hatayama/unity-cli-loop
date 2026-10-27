@@ -471,6 +471,20 @@ func TestRunStatusCommandReportsAnAbnormalExitWhenTheLockfileWasLeftBehind(t *te
 	}
 }
 
+// Verifies a refused connection is Unreachable rather than NotRunning when an Editor whose project the
+// lookup cannot read is running, since that Editor may be this project's and alive.
+func TestRunStatusCommandReportsUnreachableWhileAnUnidentifiedEditorRuns(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	deps := statusTestDeps(t)
+	deps.isUnityProcessRunning = fakeUnityProcessLookup(t, projectRoot, false, unityprocess.ErrUnidentifiedUnityEditor)
+
+	run := runStatusForTest(context.Background(), unreachableConnection(projectRoot), nil, deps)
+
+	report := assertStatusReport(t, run, "Unreachable")
+	assertStatusMessage(t, report, "The uloop server is not accepting connections, and a running Unity Editor's command line "+
+		"does not name its project, so uloop cannot tell whether Unity is running for this project.")
+}
+
 // Verifies a refused connection whose process lookup fails is Unreachable, naming the lookup
 // error and leaving out the process flag it could not determine.
 func TestRunStatusCommandReportsUnreachableWhenProcessLookupFails(t *testing.T) {

@@ -28,10 +28,6 @@ func RunFocusWindow(ctx context.Context, projectRoot string, stdout io.Writer, s
 	return runFocusWindow(ctx, projectRoot, stdout, stderr, defaultFocusWindowDeps())
 }
 
-func FindRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, error) {
-	return unityprocess.FindRunningUnityProcess(ctx, projectRoot)
-}
-
 func FocusUnityProcess(ctx context.Context, pid int) error {
 	return unityprocess.FocusUnityProcess(ctx, pid)
 }

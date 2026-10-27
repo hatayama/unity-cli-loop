@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -12,14 +13,57 @@ import (
 	"testing"
 )
 
-// Verifies a Unity editor command without any -projectPath flag is not reported as a project's Editor.
-func TestMatchMacUnityProcessRejectsCommandWithoutProjectPath(t *testing.T) {
+// Verifies a Unity editor command without a project flag is kept as an Editor whose project is unknown,
+// so the lookup can tell it apart from no Editor at all.
+func TestMatchMacUnityProcessKeepsAnEditorWithoutProjectPathUnidentified(t *testing.T) {
 	process, matched := matchMacUnityProcess(
 		123,
 		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -useHub -hubIPC`)
 
-	if matched {
-		t.Fatalf("expected no match without a project path, got %#v", process)
+	if !matched || process.Pid != 123 || process.projectPath != "" {
+		t.Fatalf("expected an Editor with no project path, got matched = %v, %#v", matched, process)
+	}
+}
+
+// Verifies the project's Editor is picked by its project path, and that an Editor whose project is
+// unknown is reported beside the result and never matched, not even for a project at the working
+// directory, which an empty path would resolve to.
+func TestSelectProjectProcess(t *testing.T) {
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("reading the working directory failed: %v", err)
+	}
+	projectRoot := t.TempDir()
+	unidentified := UnityProcess{Pid: 1}
+	project := UnityProcess{Pid: 2, projectPath: projectRoot}
+	other := UnityProcess{Pid: 3, projectPath: filepath.Join(projectRoot, "Other")}
+	cases := []struct {
+		name             string
+		processes        []UnityProcess
+		projectRoot      string
+		wantPid          int
+		wantUnidentified bool
+	}{
+		{name: "project Editor beside an unidentified one", processes: []UnityProcess{unidentified, project}, projectRoot: projectRoot, wantPid: 2, wantUnidentified: true},
+		{name: "only another project's Editor", processes: []UnityProcess{other}, projectRoot: projectRoot},
+		{name: "only an unidentified Editor", processes: []UnityProcess{other, unidentified}, projectRoot: projectRoot, wantUnidentified: true},
+		{name: "unidentified Editor and a project at the working directory", processes: []UnityProcess{unidentified}, projectRoot: workingDirectory, wantUnidentified: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			process, unidentifiedRunning, err := selectProjectProcess(testCase.processes, testCase.projectRoot)
+			if err != nil {
+				t.Fatalf("selectProjectProcess failed: %v", err)
+			}
+			gotPid := 0
+			if process != nil {
+				gotPid = process.Pid
+			}
+			if gotPid != testCase.wantPid || unidentifiedRunning != testCase.wantUnidentified {
+				t.Fatalf("pid = %d, unidentified = %v, want pid = %d, unidentified = %v",
+					gotPid, unidentifiedRunning, testCase.wantPid, testCase.wantUnidentified)
+			}
+		})
 	}
 }
 
@@ -54,7 +98,6 @@ func TestParseWindowsUnityProcessesSkipsMalformedLines(t *testing.T) {
 	}{
 		{"no delimiter", validEditorCommand},
 		{"pid is not a number", "notapid|" + validEditorCommand},
-		{"editor command without project path", "456|" + encode(`C:\Editor\Unity.exe -useHub`)},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

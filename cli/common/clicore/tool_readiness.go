@@ -42,7 +42,7 @@ func WaitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, ti
 
 func defaultToolReadinessDeps() toolReadinessDeps {
 	return toolReadinessDeps{
-		findRunningUnityProcess:    unityprocess.FindRunningUnityProcess,
+		findRunningUnityProcess:    unityprocess.FindRunningUnityProcessDefinitively,
 		probeToolReadinessSequence: ProbeToolReadinessSequence,
 	}
 }

@@ -116,6 +116,17 @@ func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
 	}
 }
 
+// Verifies a Windows Editor whose command line does not name its project is kept with no project path.
+func TestParseWindowsUnityProcessesKeepsAnEditorWithoutProjectPathUnidentified(t *testing.T) {
+	output := "123|" + base64.StdEncoding.EncodeToString([]byte(`C:\Editor\Unity.exe -useHub -hubIPC`)) + "\r\n"
+
+	processes := parseWindowsUnityProcesses(output)
+
+	if len(processes) != 1 || processes[0].Pid != 123 || processes[0].projectPath != "" {
+		t.Fatalf("expected one Editor with no project path, got %#v", processes)
+	}
+}
+
 // Verifies non-ASCII project paths survive the PowerShell boundary because command lines travel as UTF-8 Base64.
 func TestParseWindowsUnityProcessesPreservesNonASCIIProjectPath(t *testing.T) {
 	projectPath := `C:\Users\<USER_NAME>\test[1] 検証用\proj`
@@ -261,6 +272,25 @@ func TestMatchLinuxUnityProcessExtractsProjectPath(t *testing.T) {
 	}
 }
 
+// Verifies a Linux Editor whose command line does not name its project is kept with no project path.
+func TestMatchLinuxUnityProcessKeepsAnEditorWithoutProjectPathUnidentified(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"no project path flag", []string{"/opt/Unity/Editor/Unity"}},
+		{"project path flag without value", []string{"/opt/Unity/Editor/Unity", "-projectpath"}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			process, matched := matchLinuxUnityProcess(42, testCase.args)
+			if !matched || process.Pid != 42 || process.projectPath != "" {
+				t.Fatalf("expected an Editor with no project path, got matched = %v, %#v", matched, process)
+			}
+		})
+	}
+}
+
 // Verifies Linux Unity process matching rejects each non-Editor shape independently.
 func TestMatchLinuxUnityProcessRejectsNonEditorProcesses(t *testing.T) {
 	cases := []struct {
@@ -272,8 +302,6 @@ func TestMatchLinuxUnityProcessRejectsNonEditorProcesses(t *testing.T) {
 		{"executable name is not Unity", []string{"/opt/Unity/Editor/Data/Tools/UnityShaderCompiler", "-projectpath", "/work/p"}},
 		{"asset import worker with relative hub hardlink name", []string{"unityhub-unity-editor-2022.3.62f3", "-batchMode", "-name", "AssetImportWorker0", "-projectPath", "/home/user/project"}},
 		{"unrelated executable with unityhub prefix in directory only", []string{"/home/user/Unity/Hub/Editor/2022.3.62f3/Editor/Data/Tools/UnityShaderCompiler", "-projectpath", "/home/user/project"}},
-		{"no project path flag", []string{"/opt/Unity/Editor/Unity"}},
-		{"project path flag without value", []string{"/opt/Unity/Editor/Unity", "-projectpath"}},
 		{"empty argv", []string{}},
 	}
 	for _, testCase := range cases {
