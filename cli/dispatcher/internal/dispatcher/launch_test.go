@@ -696,6 +696,29 @@ func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
 	}
 }
 
+func TestWaitForLaunchReadinessReportsAnEditorThatExitedDuringStartup(t *testing.T) {
+	// Verifies an Editor that exited while launch waited for it is reported as not running, with launch
+	// still safe to run again, rather than as a startup timeout that says Unity is running.
+	deps := defaultLaunchDeps()
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration) error {
+		return clierrors.UnityNotRunningError{ProjectRoot: projectRoot, ExitedDuringCommand: true}
+	}
+
+	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), deps)
+
+	var startupErr launchStartupTimeoutError
+	if errors.As(err, &startupErr) {
+		t.Fatalf("an exited Editor must not be classified as a startup timeout: %v", err)
+	}
+	cliErr := clierrors.ClassifyError(err, clierrors.ErrorContext{Command: clicore.LaunchCommandName})
+	if cliErr.ErrorCode != clierrors.ErrorCodeUnityNotRunning || !cliErr.SafeToRetry {
+		t.Fatalf("expected a SafeToRetry %s, got %#v", clierrors.ErrorCodeUnityNotRunning, cliErr)
+	}
+	if !strings.HasPrefix(cliErr.Message, "Unity exited before it finished starting") {
+		t.Fatalf("message should say the Editor exited during startup: %#v", cliErr)
+	}
+}
+
 func TestWaitForLaunchReadinessPreservesParentCancellation(t *testing.T) {
 	// Verifies caller cancellation is not converted into a launch startup timeout.
 	deps := defaultLaunchDeps()

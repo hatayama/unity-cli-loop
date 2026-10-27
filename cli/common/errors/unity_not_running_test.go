@@ -165,3 +165,28 @@ func TestWriteToolFailureReportsUnityNotRunningForADispatchedRequest(t *testing.
 		t.Fatalf("expected %s, got %#v", ErrorCodeUnityNotRunning, envelope.Error)
 	}
 }
+
+// Verifies an Editor that exited while launch waited for it is reported as a startup that did not
+// finish: launch stays safe to run again, and no step tells the caller to run launch and then launch.
+func TestUnityNotRunningErrorAfterUnityExitedDuringLaunch(t *testing.T) {
+	err := UnityNotRunningError{ExitedDuringCommand: true, LockfileLeftBehind: true, EditorLogPath: unityNotRunningTestEditorLog}
+
+	cliErr := err.ToCLIError(ErrorContext{Command: "launch"})
+
+	if !cliErr.SafeToRetry {
+		t.Fatal("running launch again cannot double-apply anything, so it must stay SafeToRetry")
+	}
+	if !strings.HasPrefix(cliErr.Message, "Unity exited before it finished starting") ||
+		!strings.Contains(cliErr.Message, "may have crashed") {
+		t.Fatalf("expected the startup-exit message with the abnormal-exit note, got %q", cliErr.Message)
+	}
+	if len(cliErr.NextActions) != 2 {
+		t.Fatalf("expected the Editor log step and the launch step, got %#v", cliErr.NextActions)
+	}
+	if !strings.Contains(cliErr.NextActions[0], unityNotRunningTestEditorLog) {
+		t.Fatalf("expected the Editor log step first, got %q", cliErr.NextActions[0])
+	}
+	if cliErr.NextActions[1] != "Run `uloop launch` again." {
+		t.Fatalf("expected launch to be run again, got %q", cliErr.NextActions[1])
+	}
+}

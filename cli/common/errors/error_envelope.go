@@ -58,6 +58,7 @@ const (
 	ErrorPhaseExecution       = "execution"
 
 	commandRunTests = "run-tests"
+	commandLaunch   = "launch"
 
 	// Why this wording: --skip-compile only skips the CLI-side compile, so agents read a
 	// disconnect here as an IPC fault instead of the domain reload that discarded their patches.

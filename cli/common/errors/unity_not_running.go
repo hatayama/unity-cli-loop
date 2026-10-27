@@ -30,30 +30,34 @@ func (err UnityNotRunningError) Error() string {
 }
 
 func (err UnityNotRunningError) ToCLIError(context ErrorContext) CLIError {
+	launching := err.ExitedDuringCommand && context.Command == commandLaunch
 	phase := ErrorPhaseConnection
 	safeToRetry := true
-	if err.ExitedDuringCommand {
+	// Why launch stays safe: running it again starts a new Editor and cannot double-apply anything.
+	if err.ExitedDuringCommand && !launching {
 		phase = ErrorPhaseResponseWaiting
 		safeToRetry = isSafeRetryCommand(context.Command)
 	}
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotRunning,
 		Phase:       phase,
-		Message:     err.message(),
+		Message:     err.message(launching),
 		Retryable:   false,
 		SafeToRetry: safeToRetry,
 		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
 		Command:     context.Command,
-		NextActions: err.nextActions(safeToRetry),
+		NextActions: err.nextActions(launching, safeToRetry),
 		Details:     err.details(),
 	}
 }
 
 // Why "may have crashed" and not "crashed": a lockfile left behind proves only that the normal shutdown
 // did not finish, which a forced quit or an interrupted cleanup also leaves.
-func (err UnityNotRunningError) message() string {
+func (err UnityNotRunningError) message(launching bool) string {
 	message := "No Unity Editor is running for this project."
-	if err.ExitedDuringCommand {
+	if launching {
+		message = "Unity exited before it finished starting; no Unity Editor is running for this project now."
+	} else if err.ExitedDuringCommand {
 		message = "Unity exited while this command was running; no Unity Editor is running for this project now."
 	}
 	if err.LockfileLeftBehind {
@@ -62,10 +66,13 @@ func (err UnityNotRunningError) message() string {
 	return message
 }
 
-func (err UnityNotRunningError) nextActions(safeToRetry bool) []string {
+func (err UnityNotRunningError) nextActions(launching bool, safeToRetry bool) []string {
 	actions := []string{}
 	if err.LockfileLeftBehind {
 		actions = append(actions, err.EditorLogNextAction())
+	}
+	if launching {
+		return append(actions, "Run `uloop launch` again.")
 	}
 	if !safeToRetry {
 		actions = append(actions, "The command may have partly run before Unity exited; check the project and scene state before running it again.")
