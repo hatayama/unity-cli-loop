@@ -42,7 +42,7 @@ The final JSON payload includes:
 - `Restarted`: whether this command stopped an existing process and launched a new one
 - `Quit`: whether this command stopped Unity without launching a new process
 - `PreviousProcessId`: process ID stopped by restart or quit, when available
-- `StopMethod`: how restart or quit stopped that process — `Quit` when Unity exited on request, `ForceKill` when it had to be killed
+- `StopMethod`: how restart or quit stopped that process, omitted when there was none — `Quit` when Unity exited on request, `ForceKill` when it had to be killed
 - `CurrentProcessId`: current Unity process ID, when available
 - `ProjectRoot`: resolved project root
 - `Message`: readiness summary
