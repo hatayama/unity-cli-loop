@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.11.0...dispatcher-v3.12.0) (2026-10-27)
+
+
+### Features
+
+* Choose whether skills install at the Unity project root or the Git repository root ([#3395](https://github.com/hatayama/unity-cli-loop/issues/3395)) ([a16951e](https://github.com/hatayama/unity-cli-loop/commit/a16951ebb371e5231d5d22d15d06320efec3ad7b))
+
 ## [3.11.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.10.0...dispatcher-v3.11.0) (2026-10-22)
 
 
