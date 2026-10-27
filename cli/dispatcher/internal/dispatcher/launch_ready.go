@@ -15,7 +15,8 @@ const (
 	launchReadinessMessage           = "Waiting for Unity CLI Loop server readiness..."
 	launchReadyMessage               = "Unity CLI Loop is ready."
 	launchAlreadyRunningReadyMessage = "Unity is already running and ready."
-	launchStoppedMessage             = "Unity process stopped."
+	launchQuitStoppedMessage         = "Unity quit. It saved its window layout and discarded unsaved scene changes."
+	launchForceKillStoppedMessage    = "Unity was force-killed because it did not take the quit request or did not exit in time. Its window layout was not saved, and unsaved scene changes were lost."
 	launchNoProcessMessage           = "No matching Unity process was found; it may have already exited."
 )
 
@@ -29,6 +30,7 @@ type launchReadyResponse struct {
 	Restarted         bool   `json:"Restarted"`
 	Quit              bool   `json:"Quit"`
 	PreviousProcessId *int   `json:"PreviousProcessId,omitempty"`
+	StopMethod        string `json:"StopMethod,omitempty"`
 	CurrentProcessId  *int   `json:"CurrentProcessId,omitempty"`
 	ProjectRoot       string `json:"ProjectRoot"`
 	Message           string `json:"Message"`
@@ -88,6 +90,7 @@ func writeLaunchedReadyResponse(
 	stderr io.Writer,
 	projectRoot string,
 	previousPid *int,
+	previousStop launchStopMethod,
 	currentPid int,
 ) int {
 	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
@@ -98,6 +101,7 @@ func writeLaunchedReadyResponse(
 		Launched:          true,
 		Restarted:         previousPid != nil,
 		PreviousProcessId: previousPid,
+		StopMethod:        string(previousStop),
 		CurrentProcessId:  &currentPid,
 		ProjectRoot:       projectRoot,
 		Message:           launchReadyMessage,
@@ -130,15 +134,28 @@ func writeLaunchQuitResponse(
 	stderr io.Writer,
 	projectRoot string,
 	previousPid *int,
-	message string,
+	stopMethod launchStopMethod,
 ) int {
 	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
 		Success:           true,
 		Quit:              true,
 		PreviousProcessId: previousPid,
+		StopMethod:        string(stopMethod),
 		ProjectRoot:       projectRoot,
-		Message:           message,
+		Message:           launchQuitMessage(stopMethod),
 	})
+}
+
+// launchQuitMessage words the --quit result for how the Editor stopped, or for no Editor to stop.
+func launchQuitMessage(stopMethod launchStopMethod) string {
+	switch stopMethod {
+	case launchStopMethodQuit:
+		return launchQuitStoppedMessage
+	case launchStopMethodForceKill:
+		return launchForceKillStoppedMessage
+	default:
+		return launchNoProcessMessage
+	}
 }
 
 func writeLaunchResponse(stdout io.Writer, stderr io.Writer, response launchReadyResponse) int {
