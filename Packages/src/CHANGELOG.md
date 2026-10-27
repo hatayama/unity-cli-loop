@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.20.0](https://github.com/hatayama/unity-cli-loop/compare/v3.19.0...v3.20.0) (2026-10-27)
+
+
+### Features
+
+* Choose whether skills install at the Unity project root or the Git repository root ([#3395](https://github.com/hatayama/unity-cli-loop/issues/3395)) ([a16951e](https://github.com/hatayama/unity-cli-loop/commit/a16951ebb371e5231d5d22d15d06320efec3ad7b))
+
+
+### Bug Fixes
+
+* prefab screenshots of UI parts leave out what masks and the root Canvas hide ([#3399](https://github.com/hatayama/unity-cli-loop/issues/3399)) ([ce039c6](https://github.com/hatayama/unity-cli-loop/commit/ce039c6c145df83fb05d1d025bf0b985fd492b80))
+
 ## [3.19.0](https://github.com/hatayama/unity-cli-loop/compare/v3.18.0...v3.19.0) (2026-10-23)
 
 
