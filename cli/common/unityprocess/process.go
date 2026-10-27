@@ -22,8 +22,10 @@ const windowsPowerShellCommand = "powershell"
 var (
 	macUnityExecutablePattern     = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
 	windowsUnityExecutablePattern = regexp.MustCompile(`(?i)Unity\.exe`)
-	projectPathFlagPattern        = regexp.MustCompile(`(?i)-projectpath(?:=|\s+)(.+)$`)
-	nextUnityFlagPattern          = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
+	// Why -createProject too: the Editor that creates a project opens it in the same session, and that
+	// session's command line may name the project only through -createProject.
+	projectPathFlagPattern = regexp.MustCompile(`(?i)-(?:projectpath|createproject)(?:=|\s+)(.+)$`)
+	nextUnityFlagPattern   = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
 )
 
 type UnityProcess struct {
@@ -237,20 +239,21 @@ func hasNonEditorLinuxArg(args []string) bool {
 	return false
 }
 
-// linuxProjectPathFromArgs returns the value of Unity's -projectPath flag, accepting
+// linuxProjectPathFromArgs returns the value of Unity's -projectPath or -createProject flag, accepting
 // both the "-projectPath <path>" and "-projectPath=<path>" forms case-insensitively.
 func linuxProjectPathFromArgs(args []string) string {
-	const projectPathFlag = "-projectpath"
 	for index, arg := range args {
 		lowerArg := strings.ToLower(arg)
-		if lowerArg == projectPathFlag {
-			if index+1 >= len(args) {
-				return ""
+		for _, flag := range []string{"-projectpath", "-createproject"} {
+			if lowerArg == flag {
+				if index+1 >= len(args) {
+					return ""
+				}
+				return args[index+1]
 			}
-			return args[index+1]
-		}
-		if strings.HasPrefix(lowerArg, projectPathFlag+"=") {
-			return arg[len(projectPathFlag+"="):]
+			if strings.HasPrefix(lowerArg, flag+"=") {
+				return arg[len(flag+"="):]
+			}
 		}
 	}
 	return ""

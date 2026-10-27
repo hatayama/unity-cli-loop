@@ -180,6 +180,21 @@ func TestExtractProjectPathSupportsEqualsAndSpaces(t *testing.T) {
 	}
 }
 
+// Verifies an Editor started to create a project is read as having that project open, since the Editor
+// that creates a project opens it in the same session without a -projectPath flag.
+func TestExtractProjectPathReadsCreateProject(t *testing.T) {
+	cases := map[string]string{
+		`Unity -createProject "/Users/<USER_NAME>/New Project" -cloneFromTemplate /tmp/template.tgz -useHub`: "/Users/<USER_NAME>/New Project",
+		`Unity -createproject=/Users/<USER_NAME>/Plain -useHub`:                                              "/Users/<USER_NAME>/Plain",
+	}
+
+	for command, expected := range cases {
+		if actual := extractProjectPath(command); actual != expected {
+			t.Fatalf("project path mismatch for %q: %q", command, actual)
+		}
+	}
+}
+
 // Verifies comparable project paths preserve case on case-sensitive-capable platforms.
 func TestNormalizeComparablePathPreservesCaseOutsideWindows(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -229,6 +244,8 @@ func TestMatchLinuxUnityProcessExtractsProjectPath(t *testing.T) {
 		{"equals form with mixed case", []string{"/opt/Unity/Editor/Unity", "-projectPath=/work/p"}, "/work/p"},
 		{"project path containing batchmode", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/nightly-batchmode"}, "/work/nightly-batchmode"},
 		{"project path containing assetimportworker", []string{"/opt/Unity/Editor/Unity", "-projectpath", "/work/AssetImportWorker-lab"}, "/work/AssetImportWorker-lab"},
+		{"create project", []string{"/opt/Unity/Editor/Unity", "-createProject", "/work/New Project", "-cloneFromTemplate", "/tmp/template.tgz"}, "/work/New Project"},
+		{"create project equals form", []string{"/opt/Unity/Editor/Unity", "-createproject=/work/new"}, "/work/new"},
 		{"unity hub hardlink name with lowercase projectpath", []string{"/home/user/Unity/Hub/Editor/2022.3.62f3/Editor/unityhub-unity-editor-2022.3.62f3", "-projectpath", "/home/user/project", "-acceptSoftwareTermsForThisRunOnly", "-useHub", "-hubIPC", "-cloudEnvironment", "production", "-licensingIpc", "LicenseClient-user", "-hubSessionId", "session-placeholder", "-accessToken", "token-placeholder"}, "/home/user/project"},
 	}
 	for _, testCase := range cases {
