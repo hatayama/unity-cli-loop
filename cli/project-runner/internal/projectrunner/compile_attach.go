@@ -243,6 +243,7 @@ func waitForAttachedCompileCompletion(
 
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
+	exitWatch := newCompileUnityExitWatch(options.connection, deps)
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -277,6 +278,9 @@ func waitForAttachedCompileCompletion(
 			}
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+		if exitErr := exitWatch.Observe(ctx, err); exitErr != nil {
+			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
+		}
 		observeCompileWaitInterim(&interim, deps, status, err)
 
 		select {

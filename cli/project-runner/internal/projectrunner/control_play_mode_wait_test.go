@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -925,11 +926,13 @@ func TestWaitForControlPlayModeStateTimesOutWithLastError(t *testing.T) {
 	controlPlayModeStatePoll = time.Millisecond
 	t.Cleanup(func() { controlPlayModeStatePoll = originalPoll })
 
+	connection := unreachableConnection(t.TempDir())
 	_, completed, err := waitForControlPlayModeState(
 		context.Background(),
-		unreachableConnection(t.TempDir()),
+		connection,
 		"Play",
 		20*time.Millisecond,
+		clicore.NewUnityExitWatch(connection.ProjectRoot, "", runningUnityProcessLookup, nil),
 	)
 
 	if completed || err == nil {

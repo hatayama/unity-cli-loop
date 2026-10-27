@@ -1055,6 +1055,8 @@ func compileWaitTestDeps(
 		attachProbeTimeout:     40 * time.Millisecond,
 		attachProbeInterval:    5 * time.Millisecond,
 		attachWaitPollInterval: 5 * time.Millisecond,
+		// The scripted status answers stand in for a running Editor, whose server a reload takes down.
+		findRunningUnityProcess: runningUnityProcessLookup,
 	}
 }
 

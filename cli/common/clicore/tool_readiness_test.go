@@ -264,3 +264,29 @@ func assertConnectionAttemptToProject(t *testing.T, err error, projectRoot strin
 		t.Fatalf("connection endpoint = %q, want %q", attemptErr.Endpoint, expected)
 	}
 }
+
+// Verifies a readiness wait whose Editor exited ends as soon as the exit is confirmed, instead of
+// polling a server that cannot come back until the wait times out.
+func TestWaitForToolReadinessStopsOnceUnityHasExited(t *testing.T) {
+	clock := time.Unix(1_700_000_000, 0)
+	deps := toolReadinessDeps{
+		probeToolReadinessSequence: func(context.Context, string) error {
+			return &unityipc.ConnectionAttemptError{Cause: syscall.ECONNREFUSED}
+		},
+		findRunningUnityProcess: func(context.Context, string) (*UnityProcess, error) {
+			return nil, nil
+		},
+		// Each reading moves a full confirm interval, so the second poll can already confirm.
+		now: func() time.Time {
+			clock = clock.Add(unityExitConfirmInterval)
+			return clock
+		},
+	}
+
+	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), time.Hour, deps)
+
+	var notRunning clierrors.UnityNotRunningError
+	if !errors.As(err, &notRunning) {
+		t.Fatalf("expected UnityNotRunningError, got %v", err)
+	}
+}

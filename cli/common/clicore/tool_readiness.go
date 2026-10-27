@@ -28,6 +28,8 @@ const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code pr
 type toolReadinessDeps struct {
 	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)
 	probeToolReadinessSequence func(context.Context, string) error
+	// now is the clock the Unity exit watch spaces its lookups with; nil uses time.Now.
+	now func() time.Time
 }
 
 func WaitForToolReadiness(ctx context.Context, projectRoot string) error {
@@ -52,6 +54,7 @@ func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeo
 	defer cancel()
 
 	var lastErr error
+	exitWatch := NewUnityExitWatch(projectRoot, resolveProjectEndpointAddress(projectRoot), deps.findRunningUnityProcess, deps.now)
 	ticker := time.NewTicker(ToolReadinessPoll)
 	defer ticker.Stop()
 	for {
@@ -66,6 +69,11 @@ func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeo
 			// guidance the caller cannot act on.
 			if clierrors.IsPermanentConnectError(err) {
 				return err
+			}
+			// Why abort: an Editor that exited cannot become ready, and launch would otherwise wait
+			// its whole ten minutes for it.
+			if exitErr := exitWatch.Observe(timeoutContext, err); exitErr != nil {
+				return exitErr
 			}
 			lastErr = err
 		}

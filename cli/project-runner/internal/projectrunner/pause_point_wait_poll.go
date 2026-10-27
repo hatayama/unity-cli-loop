@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -265,6 +266,7 @@ type pausePointWaitLoopState struct {
 	baselineSequence int
 	hasBaseline      bool
 	baselineDecided  bool
+	exitWatch        *clicore.UnityExitWatch
 }
 
 func waitForPausePointStatus(
@@ -284,13 +286,14 @@ func waitForPausePointStatus(
 		baselineSequence: baselineSequence,
 		hasBaseline:      hasBaseline,
 		baselineDecided:  baselineDecided,
+		exitWatch:        newUnityExitWatch(connection),
 	}
 	triggerDone := triggerHandle.doneChannel()
 	ticker := time.NewTicker(pausePointStatusPoll)
 	defer ticker.Stop()
 	for {
 		response, err := queryPausePointStatus(waitContext, connection, options.id)
-		waitState, done, pollErr := applyPausePointWaitPoll(&state, response, err, options.markerJustEnabled)
+		waitState, done, pollErr := applyPausePointWaitPoll(waitContext, &state, response, err, options.markerJustEnabled)
 		if done {
 			return state.lastResponse, waitState, state.triggerResult, state.hasBaseline, pollErr
 		}
@@ -315,14 +318,18 @@ func waitForPausePointStatus(
 }
 
 // applyPausePointWaitPoll records one status query. Why abort on a permanent
-// connect error: every poll dials again, so a refused connect would otherwise
-// burn the whole --timeout before the refusal is reported.
+// connect error or an exited Editor: every poll dials again, so either would
+// otherwise burn the whole --timeout before it is reported.
 func applyPausePointWaitPoll(
+	ctx context.Context,
 	state *pausePointWaitLoopState,
 	response pausePointStatusResponse,
 	err error,
 	markerJustEnabled bool,
 ) (pausePointWaitState, bool, error) {
+	if exitErr := state.exitWatch.Observe(ctx, err); exitErr != nil {
+		return "", true, exitErr
+	}
 	if err != nil {
 		if clierrors.IsPermanentConnectError(err) {
 			return "", true, err

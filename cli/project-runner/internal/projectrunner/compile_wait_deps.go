@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 type compileSendFunc func(
@@ -28,6 +30,19 @@ type compileWaitDeps struct {
 	// Zero keeps compileWaitPollInterval for a fresh compile's status wait. Tests shorten it so
 	// they do not wait 1s between status queries.
 	freshWaitPollInterval time.Duration
+	// findRunningUnityProcess is the Editor process lookup a status wait uses to notice that Unity
+	// exited.
+	findRunningUnityProcess func(context.Context, string) (*unityprocess.UnityProcess, error)
+}
+
+// newCompileUnityExitWatch creates the exit watch for one compile status wait, on the wait's clock.
+func newCompileUnityExitWatch(connection unityipc.Connection, deps compileWaitDeps) *clicore.UnityExitWatch {
+	return clicore.NewUnityExitWatch(
+		connection.ProjectRoot,
+		connection.Endpoint.Address,
+		deps.findRunningUnityProcess,
+		func() time.Time { return compileWaitNow(deps) },
+	)
 }
 
 func freshWaitPollIntervalFor(deps compileWaitDeps) time.Duration {
@@ -46,9 +61,10 @@ func compileSendOrDefault(deps compileWaitDeps) compileSendFunc {
 
 func defaultCompileWaitDeps() compileWaitDeps {
 	return compileWaitDeps{
-		queryCompileStatus:     queryCompileStatusFromUnity,
-		attachProbeTimeout:     compileAttachProbeTimeout,
-		attachProbeInterval:    compileAttachProbeInterval,
-		attachWaitPollInterval: compileWaitPollInterval,
+		queryCompileStatus:      queryCompileStatusFromUnity,
+		attachProbeTimeout:      compileAttachProbeTimeout,
+		attachProbeInterval:     compileAttachProbeInterval,
+		attachWaitPollInterval:  compileWaitPollInterval,
+		findRunningUnityProcess: unityProcessLookup,
 	}
 }

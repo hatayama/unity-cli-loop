@@ -195,6 +195,7 @@ func waitForCompileCompletionWithDeps(
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
 	missing := compileRequestMissingTracker{serverRestartSeen: options.serverRestartSeen}
+	exitWatch := newCompileUnityExitWatch(options.connection, deps)
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -224,6 +225,9 @@ func waitForCompileCompletionWithDeps(
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), errCompileRequestMissing
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+		if exitErr := exitWatch.Observe(ctx, err); exitErr != nil {
+			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
+		}
 		observeCompileWaitInterim(&interim, deps, status, err)
 
 		select {
