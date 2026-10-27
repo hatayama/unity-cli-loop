@@ -56,6 +56,25 @@ func TestWaitForCompileCompletionStopsOnceUnityHasExited(t *testing.T) {
 	assertUnityExitedDuringCommand(t, err)
 }
 
+// Verifies a compile status wait that stops on an exited Editor closes its start entry in the CLI vibe
+// log, so the log does not show a poll that started and never ended.
+func TestWaitForCompileCompletionLogsTheEditorExit(t *testing.T) {
+	enableCliVibeLog(t)
+	connection := compileWaitTestConnection(t)
+
+	_, _, _, _ = waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    "compile_unity_exited_log",
+		timeout:      5 * time.Second,
+		pollInterval: time.Millisecond,
+	}, exitedEditorCompileDeps())
+
+	logContent := readOnlyCliVibeLog(t, connection.ProjectRoot)
+	if entries := cliVibeEntriesForOperation(t, logContent, "cli_compile_status_poll_unity_exited"); len(entries) != 1 {
+		t.Fatalf("unity-exited entries = %d, want 1\n%s", len(entries), logContent)
+	}
+}
+
 // Verifies the attach wait stops the same way when the Editor running the earlier compile is gone.
 func TestWaitForAttachedCompileCompletionStopsOnceUnityHasExited(t *testing.T) {
 	_, outcome, _, err := waitForAttachedCompileCompletion(context.Background(), compileCompletionOptions{
@@ -111,5 +130,34 @@ func TestRunCompileReportsUnityNotRunningWhenTheEditorExitsDuringTheWait(t *test
 	}
 	if envelope.Error.ErrorCode != clierrors.ErrorCodeUnityNotRunning {
 		t.Fatalf("ErrorCode = %q, want %q\n%s", envelope.Error.ErrorCode, clierrors.ErrorCodeUnityNotRunning, stderr.String())
+	}
+}
+
+// Verifies an attach wait that ended because the Editor exited drops the pending record, whose result
+// lived in the exited Editor, while any other failure keeps it for the next compile to reattach to.
+func TestClearCompilePendingRecordAfterEditorExit(t *testing.T) {
+	cases := []struct {
+		name        string
+		waitErr     error
+		wantCleared bool
+	}{
+		{name: "Editor exited", waitErr: clierrors.UnityNotRunningError{ExitedDuringCommand: true}, wantCleared: true},
+		{name: "other failure", waitErr: errors.New("status query failed"), wantCleared: false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			projectRoot := t.TempDir()
+			record := compilePendingRecord{RequestID: "compile_pending", TimedOutAtUtc: time.Now().UTC()}
+			if err := writeCompilePendingRecord(projectRoot, record); err != nil {
+				t.Fatalf("writing the pending record failed: %v", err)
+			}
+
+			cleared := clearCompilePendingRecordAfterEditorExit(projectRoot, testCase.waitErr)
+
+			_, kept := readCompilePendingRecord(projectRoot)
+			if cleared != testCase.wantCleared || kept == testCase.wantCleared {
+				t.Fatalf("cleared = %v, record kept = %v, want cleared = %v", cleared, kept, testCase.wantCleared)
+			}
+		})
 	}
 }

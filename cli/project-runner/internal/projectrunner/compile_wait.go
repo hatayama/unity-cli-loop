@@ -226,6 +226,7 @@ func waitForCompileCompletionWithDeps(
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 		if exitErr := exitWatch.Observe(ctx, err); exitErr != nil {
+			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
