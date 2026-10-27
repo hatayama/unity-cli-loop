@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.1](https://github.com/hatayama/unity-cli-loop/compare/v3.21.0...v3.21.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* The uloop-status skill now covers cancelling a stuck command, replacing the separate uloop-cancel skill ([#3404](https://github.com/hatayama/unity-cli-loop/issues/3404)) ([7cb3517](https://github.com/hatayama/unity-cli-loop/commit/7cb3517ed7726d01bf017d521566153205ca6ec5))
+
 ## [3.21.0](https://github.com/hatayama/unity-cli-loop/compare/v3.20.0...v3.21.0) (2026-10-27)
 
 
