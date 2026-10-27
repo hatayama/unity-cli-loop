@@ -40,7 +40,9 @@ var NativeCommands = []NativeCommandEntry{
 	// Why compile-check is hidden: its place beside `uloop compile` is not settled, so it stays
 	// runnable for development while nothing user-facing advertises it (ADR 0018, amendment).
 	{Name: CompileCheckCommandName, Description: "Compile changed assemblies with the Editor's bundled C# compiler without launching Unity", Owner: DispatcherOwned, Hidden: true},
-	{Name: VerifyProjectCommandName, Description: "Check .meta files, GUIDs, merge conflict markers, and Packages/manifest.json without Unity", Owner: DispatcherOwned},
+	// Why verify-project is hidden: Unity's official CLI already covers these project-file checks,
+	// so this project does not need to offer its own.
+	{Name: VerifyProjectCommandName, Description: "Check .meta files, GUIDs, merge conflict markers, and Packages/manifest.json without Unity", Owner: DispatcherOwned, Hidden: true},
 	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
 	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
 	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},

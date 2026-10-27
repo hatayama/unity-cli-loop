@@ -243,13 +243,12 @@ V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Dow
 
 
 <details>
-<summary>バンドルされている全23個のSkills一覧</summary>
+<summary>バンドルされている全22個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-status` - Unityが今コマンドを受け付けられるかを確認
 - `/uloop-cancel` - BUSYでコマンドが拒否され続けるときに、Unityが実行中のコマンドをキャンセル
 - `/uloop-compile` - コンパイルの実行
-- `/uloop-verify-project` - Unityを起動せずに.metaファイル・GUID・コンフリクトマーカー・パッケージmanifestを検査
 - `/uloop-get-logs` - Consoleログの取得
 - `/uloop-run-tests` - テストの実行
 - `/uloop-hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
@@ -288,9 +287,6 @@ uloop launch -p Android
 
 # 実行中のUnityを終了して再起動
 uloop launch -r
-
-# Unityを起動せずに.metaファイル・GUID・コンフリクトマーカーを検査
-uloop verify-project
 
 # コンパイルを実行
 uloop compile

@@ -1,6 +1,7 @@
 ---
 name: uloop-verify-project
 description: "Check a Unity project's files without starting Unity: missing or orphaned .meta files, invalid or duplicate GUIDs, leftover merge conflict markers, and a broken Packages/manifest.json. Use after adding, moving, renaming, deleting, or merging assets, and before committing."
+internal: true
 ---
 
 # uloop verify-project

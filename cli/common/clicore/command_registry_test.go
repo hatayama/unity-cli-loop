@@ -141,23 +141,34 @@ func TestVisibleNativeCommandsLeaveOutAHiddenEntry(t *testing.T) {
 	}
 }
 
-// Verifies compile-check is registered as a hidden dispatcher-owned command: routable by name but
-// left out of the listed commands and of completion while its place beside `uloop compile` is open.
-func TestCompileCheckIsRoutableButNotListed(t *testing.T) {
-	if !IsDispatcherOwnedCommandName(CompileCheckCommandName) {
-		t.Fatalf("%s must stay registered as a dispatcher-owned command", CompileCheckCommandName)
+// Verifies compile-check and verify-project are registered as hidden dispatcher-owned commands:
+// routable by name but left out of the listed commands and of completion, and that no other
+// command is hidden.
+func TestHiddenDispatcherCommandsAreRoutableButNotListed(t *testing.T) {
+	hiddenCommands := []string{CompileCheckCommandName, VerifyProjectCommandName}
+	for _, command := range hiddenCommands {
+		assertRoutableButNotListed(t, command)
+	}
+	if len(VisibleNativeCommands()) != len(NativeCommands)-len(hiddenCommands) {
+		t.Fatalf("only %v should be hidden: %#v", hiddenCommands, VisibleNativeCommands())
+	}
+}
+
+// assertRoutableButNotListed fails the test unless command stays dispatcher-owned while help and
+// completion leave it out.
+func assertRoutableButNotListed(t *testing.T, command string) {
+	t.Helper()
+	if !IsDispatcherOwnedCommandName(command) {
+		t.Fatalf("%s must stay registered as a dispatcher-owned command", command)
 	}
 	for _, entry := range VisibleNativeCommands() {
-		if entry.Name == CompileCheckCommandName {
-			t.Fatalf("%s must not be listed: %#v", CompileCheckCommandName, VisibleNativeCommands())
+		if entry.Name == command {
+			t.Fatalf("%s must not be listed: %#v", command, VisibleNativeCommands())
 		}
 	}
 	for _, name := range NativeCommandNamesForCompletion() {
-		if name == CompileCheckCommandName {
-			t.Fatalf("%s must not be offered as a completion: %#v", CompileCheckCommandName, NativeCommandNamesForCompletion())
+		if name == command {
+			t.Fatalf("%s must not be offered as a completion: %#v", command, NativeCommandNamesForCompletion())
 		}
-	}
-	if len(VisibleNativeCommands()) != len(NativeCommands)-1 {
-		t.Fatalf("only %s should be hidden: %#v", CompileCheckCommandName, VisibleNativeCommands())
 	}
 }
