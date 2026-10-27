@@ -290,7 +290,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 	if isV2 {
-		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
+		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, previousStop, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
 	}
 	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})

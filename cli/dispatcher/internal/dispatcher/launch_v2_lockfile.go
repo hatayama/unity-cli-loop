@@ -78,6 +78,7 @@ func waitForV2ProjectOpened(
 	ctx context.Context,
 	projectRoot string,
 	runningProcess *unityprocess.UnityProcess,
+	previousStop launchStopMethod,
 	currentPid int,
 	stdout io.Writer,
 	stderr io.Writer,
@@ -109,5 +110,5 @@ func waitForV2ProjectOpened(
 	if runningProcess != nil {
 		previousPid = &runningProcess.Pid
 	}
-	return writeLaunchedV2ReadyResponse(stdout, stderr, projectRoot, previousPid, currentPid)
+	return writeLaunchedV2ReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid)
 }

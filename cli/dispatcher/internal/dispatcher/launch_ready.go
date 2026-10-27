@@ -113,6 +113,7 @@ func writeLaunchedV2ReadyResponse(
 	stderr io.Writer,
 	projectRoot string,
 	previousPid *int,
+	previousStop launchStopMethod,
 	currentPid int,
 ) int {
 	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
@@ -123,6 +124,7 @@ func writeLaunchedV2ReadyResponse(
 		Launched:          true,
 		Restarted:         previousPid != nil,
 		PreviousProcessId: previousPid,
+		StopMethod:        string(previousStop),
 		CurrentProcessId:  &currentPid,
 		ProjectRoot:       projectRoot,
 		Message:           "Unity started and the V2 uloop server is ready. This project uses uloop V2; commands run through the V2 CLI.",
