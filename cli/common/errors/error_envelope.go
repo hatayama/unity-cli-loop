@@ -14,6 +14,7 @@ const (
 	ErrorCodeUnknownCommand                  = "UNKNOWN_COMMAND"
 	errorCodeProjectNotFound                 = "PROJECT_NOT_FOUND"
 	ErrorCodeUnityNotReachable               = "UNITY_NOT_REACHABLE"
+	ErrorCodeUnityNotRunning                 = "UNITY_NOT_RUNNING"
 	ErrorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
 	ErrorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"

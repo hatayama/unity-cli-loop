@@ -34,8 +34,8 @@ const (
 	launchFreshFocusRetryDelay = 2 * time.Second
 	projectVersionFilePath     = "ProjectSettings/ProjectVersion.txt"
 	recoveryDirectoryPath      = "Assets/_Recovery"
-	launchTempDirectoryName    = "Temp"
-	unityLockfileName          = "UnityLockfile"
+	launchTempDirectoryName    = unityprocess.TempDirectoryName
+	unityLockfileName          = unityprocess.LockfileName
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -405,7 +405,7 @@ func waitForUnityStartupMarkerOrTimeout(ctx context.Context, lockfilePath string
 }
 
 func unityLockfilePath(projectRoot string) string {
-	return filepath.Join(projectRoot, launchTempDirectoryName, unityLockfileName)
+	return unityprocess.LockfilePath(projectRoot)
 }
 
 func resolveLaunchProjectRoot(startPath string, options launchOptions) (string, error) {

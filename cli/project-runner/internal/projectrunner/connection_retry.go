@@ -33,7 +33,7 @@ type connectionRetryDeps struct {
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
 	return connectionRetryDeps{
-		findRunningUnityProcess: unityprocess.FindRunningUnityProcess,
+		findRunningUnityProcess: unityProcessLookup,
 		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
@@ -277,7 +277,7 @@ func sendWithTransientConnectionRetryWithDeps(
 			continue
 		}
 		if !shouldRetryUndispatchedConnection(err, outcome) {
-			return finishNonRetryableConnectionAttempt(
+			finalOutcome, finalErr := finishNonRetryableConnectionAttempt(
 				ctx,
 				connection,
 				sendAttempt{
@@ -291,6 +291,7 @@ func sendWithTransientConnectionRetryWithDeps(
 				responseTimeout,
 				focusController,
 			)
+			return finalOutcome, reportUnityExitDuringRequest(ctx, connection, finalOutcome, finalErr, deps)
 		}
 
 		// A caller that cancelled the command gets that cancellation back, as everywhere else that

@@ -887,6 +887,7 @@ func serveDroppedConnections(listener net.Listener, onSecondAccept func()) {
 // Verifies a disconnect during the action request moves on to the state wait, and the caller's
 // context ending during that wait is reported as a failure.
 func TestRunControlPlayModeWithStateWaitReportsContextEndDuringWait(t *testing.T) {
+	useRunningUnityProcess(t)
 	originalPoll := controlPlayModeStatePoll
 	controlPlayModeStatePoll = time.Millisecond
 	t.Cleanup(func() { controlPlayModeStatePoll = originalPoll })

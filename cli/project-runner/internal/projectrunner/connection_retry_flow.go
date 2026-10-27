@@ -101,16 +101,36 @@ func finishNonRetryableConnectionAttempt(
 	return currentAttempt.outcome, currentAttempt.err
 }
 
+// reportUnityExitDuringRequest turns a connection that dropped after the request reached Unity into
+// UnityNotRunningError when a process lookup finds no Editor, and returns err unchanged otherwise.
+// Why one lookup and no wait: an Editor still listed while it tears down keeps the disconnect, and the
+// caller's next command then fails before dispatch, where the same lookup reports the exit.
+func reportUnityExitDuringRequest(
+	ctx context.Context,
+	connection unityipc.Connection,
+	outcome unityipc.UnitySendOutcome,
+	err error,
+	deps connectionRetryDeps,
+) error {
+	if ctx.Err() != nil || !outcome.RequestDispatched || !clierrors.IsTransportDisconnectError(err) {
+		return err
+	}
+	runningProcess, processErr := deps.findRunningUnityProcess(ctx, connection.ProjectRoot)
+	if processErr != nil || runningProcess != nil {
+		return err
+	}
+	return clicore.NewUnityNotRunningError(connection.ProjectRoot, connection.Endpoint.Address, err, true)
+}
+
 type sendAttempt struct {
 	outcome unityipc.UnitySendOutcome
 	err     error
 }
 
 // finishUndispatchedRetryProbe decides whether the retry loop keeps waiting after a dial that
-// never reached Unity. The process probe's only job here is to promote the diagnosis from "not
-// reachable" to "running but not responding", so a probe that failed cannot promote anything: it
-// observed no process, and claiming one would be an assertion this code has no evidence for.
-// Both probe outcomes therefore report the dial error the caller can act on, and the probe
+// never reached Unity. A probe that found the process keeps the loop waiting for its server, and a
+// probe that answered without one reports that no Editor is running. A probe that failed observed
+// nothing, so it can claim neither: it reports the dial error the caller can act on, and the probe
 // failure goes to the CLI vibe log instead of replacing that error.
 func finishUndispatchedRetryProbe(
 	retryContext context.Context,
@@ -125,6 +145,14 @@ func finishUndispatchedRetryProbe(
 	}
 	if runningProcess != nil {
 		return false, currentAttempt.outcome, nil
+	}
+	if processErr == nil {
+		return true, currentAttempt.outcome, clicore.NewUnityNotRunningError(
+			connection.ProjectRoot,
+			connection.Endpoint.Address,
+			currentAttempt.err,
+			false,
+		)
 	}
 	// A busy response seen during the window proves a server answered moments ago, so it is a
 	// truer diagnosis than a final dial cut short by the expiring retry context.

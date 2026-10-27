@@ -1685,9 +1685,8 @@ func TestSendWithTransientConnectionRetrySurfacesADroppedConnectionAfterBusy(t *
 	deps := defaultConnectionRetryDeps()
 	deps.retryTimeout = 150 * time.Millisecond
 	deps.retryPoll = 5 * time.Millisecond
-	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
-		return nil, nil
-	}
+	// The Editor is still running: the connection dropped for a domain reload, not an exit.
+	deps.findRunningUnityProcess = runningUnityProcessLookup
 	connection := busyFirstServerConnection(t, func(conn net.Conn) {
 		accepted := `{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`
 		_ = unityipc.Write(conn, []byte(accepted))

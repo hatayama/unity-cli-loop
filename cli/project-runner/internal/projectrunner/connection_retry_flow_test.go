@@ -146,6 +146,47 @@ func TestFinishUndispatchedRetryProbeContinuesWhenUnityIsRunning(t *testing.T) {
 	}
 }
 
+// Verifies a probe that answered without a process ends the retry loop with UnityNotRunningError
+// instead of the dial error, whose guidance tells the caller to wait for an Editor that is not there.
+// Why a busy answer earlier in the window does not win: the server that answered it is gone now.
+func TestFinishUndispatchedRetryProbeReportsUnityNotRunningWhenNoProcessIsFound(t *testing.T) {
+	busyAttempt := sendAttempt{
+		err: &unityipc.RPCError{
+			Code:    -32603,
+			Message: "Unity is busy running 'compile'.",
+			Data:    []byte(`{"type":"server_busy"}`),
+		},
+	}
+	connection := unityipc.Connection{
+		ProjectRoot: t.TempDir(),
+		Endpoint:    unityipc.Endpoint{Address: "/tmp/uloop/sample.sock"},
+	}
+	currentAttempt := refusedDialAttempt()
+
+	finished, _, err := finishUndispatchedRetryProbe(
+		expiredRetryContext(),
+		connection,
+		currentAttempt,
+		nil,
+		nil,
+		busyAttempt,
+	)
+
+	if !finished {
+		t.Fatal("expected the retry loop to finish when no Unity process is running")
+	}
+	var notRunning clierrors.UnityNotRunningError
+	if !errors.As(err, &notRunning) {
+		t.Fatalf("expected UnityNotRunningError, got %v", err)
+	}
+	if notRunning.ExitedDuringCommand {
+		t.Fatal("an undispatched request never reached Unity, so it cannot have exited during it")
+	}
+	if notRunning.Cause != currentAttempt.err || notRunning.Endpoint != connection.Endpoint.Address {
+		t.Fatalf("expected the dial error and endpoint to be kept, got %#v", notRunning)
+	}
+}
+
 // Verifies the swallowed probe failure is still recorded: dropping the diagnosis from the error
 // must not drop it from the diagnostics too.
 func TestFinishUndispatchedRetryProbeRecordsTheProbeFailureInTheVibeLog(t *testing.T) {
@@ -508,5 +549,62 @@ func TestFinishUnityAliveRetryWaitWhenRetryContextEnds(t *testing.T) {
 	var notResponding clierrors.UnityServerNotRespondingError
 	if !finished || !errors.As(err, &notResponding) {
 		t.Fatalf("finished=%v err=%v, want UnityServerNotRespondingError", finished, err)
+	}
+}
+
+// Verifies a connection that dropped after the request reached Unity becomes UnityNotRunningError only
+// when a lookup that answered finds no Editor, and stays the disconnect in every other case, so a domain
+// reload still reaches the callers that wait it out.
+func TestReportUnityExitDuringRequest(t *testing.T) {
+	dispatched := unityipc.UnitySendOutcome{RequestDispatched: true}
+	accepted := unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}
+	failedLookup := func(context.Context, string) (*unityprocess.UnityProcess, error) {
+		return nil, errors.New("sysctl kern.proc.all: operation not permitted")
+	}
+	cases := []struct {
+		name        string
+		ctx         context.Context
+		outcome     unityipc.UnitySendOutcome
+		err         error
+		lookup      func(context.Context, string) (*unityprocess.UnityProcess, error)
+		wantExitErr bool
+	}{
+		{name: "dropped before the accept, no Editor", outcome: dispatched, err: io.EOF, lookup: noUnityProcessLookup, wantExitErr: true},
+		{name: "dropped after the accept, no Editor", outcome: accepted, err: io.ErrUnexpectedEOF, lookup: noUnityProcessLookup, wantExitErr: true},
+		{name: "dropped, Editor running", outcome: accepted, err: io.EOF, lookup: runningUnityProcessLookup},
+		{name: "dropped, lookup failed", outcome: accepted, err: io.EOF, lookup: failedLookup},
+		{name: "dropped before dispatch", outcome: unityipc.UnitySendOutcome{}, err: io.EOF, lookup: noUnityProcessLookup},
+		{name: "caller cancelled", ctx: cancelledContext(), outcome: accepted, err: io.EOF, lookup: noUnityProcessLookup},
+		{name: "not a disconnect", outcome: accepted, err: os.ErrDeadlineExceeded, lookup: noUnityProcessLookup},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx := testCase.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			deps := defaultConnectionRetryDeps()
+			deps.findRunningUnityProcess = testCase.lookup
+			connection := unityipc.Connection{
+				ProjectRoot: t.TempDir(),
+				Endpoint:    unityipc.Endpoint{Address: "/tmp/uloop/sample.sock"},
+			}
+
+			err := reportUnityExitDuringRequest(ctx, connection, testCase.outcome, testCase.err, deps)
+
+			var notRunning clierrors.UnityNotRunningError
+			if !testCase.wantExitErr {
+				if err != testCase.err {
+					t.Fatalf("err = %v, want the original error %v", err, testCase.err)
+				}
+				return
+			}
+			if !errors.As(err, &notRunning) {
+				t.Fatalf("err = %v, want UnityNotRunningError", err)
+			}
+			if !notRunning.ExitedDuringCommand || notRunning.Cause != testCase.err {
+				t.Fatalf("expected an exit during the command caused by the disconnect, got %#v", notRunning)
+			}
+		})
 	}
 }

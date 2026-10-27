@@ -175,6 +175,7 @@ func runScriptedHotReload(
 	compileResult compileExecutionResult,
 ) editorReadyRetryRun {
 	t.Helper()
+	useRunningUnityProcess(t)
 	listener := newLoopbackIpcListener(t)
 	requests := make(chan scriptedIPCRequest, len(steps)+1)
 	serverErr := make(chan error, len(steps)+1)

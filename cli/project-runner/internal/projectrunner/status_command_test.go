@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 const statusTestAcceptedResponse = `{"jsonrpc":"2.0","id":1,"uloop":{"phase":"accepted"}}`
@@ -434,6 +436,39 @@ func TestRunStatusCommandReportsNotRunning(t *testing.T) {
 	assertStatusMessage(t, report, "No Unity Editor is running for this project.")
 	assertStatusValue(t, report, "UnityProcessRunning", false)
 	assertStatusConnectionError(t, report, "")
+}
+
+// Verifies NotRunning says the Editor did not shut down normally when it left its lockfile behind, and
+// points at the Editor log before the launch step, because the next launch renames that log.
+func TestRunStatusCommandReportsAnAbnormalExitWhenTheLockfileWasLeftBehind(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	lockfilePath := unityprocess.LockfilePath(projectRoot)
+	if err := os.MkdirAll(filepath.Dir(lockfilePath), 0o755); err != nil {
+		t.Fatalf("creating Temp failed: %v", err)
+	}
+	if err := os.WriteFile(lockfilePath, []byte{}, 0o644); err != nil {
+		t.Fatalf("writing the lockfile failed: %v", err)
+	}
+	deps := statusTestDeps(t)
+	deps.isUnityProcessRunning = fakeUnityProcessLookup(t, projectRoot, false, nil)
+
+	run := runStatusForTest(context.Background(), unreachableConnection(projectRoot), nil, deps)
+
+	report := assertStatusReport(t, run, "NotRunning")
+	message, _ := report["Message"].(string)
+	if !strings.HasPrefix(message, "No Unity Editor is running for this project.") || !strings.Contains(message, "may have crashed") {
+		t.Fatalf("Message = %q, want the abnormal-exit message", message)
+	}
+	nextActions, _ := report["NextActions"].([]any)
+	if len(nextActions) != 2 {
+		t.Fatalf("NextActions = %#v, want the Editor log step and the launch step", report["NextActions"])
+	}
+	if first, _ := nextActions[0].(string); !strings.Contains(first, "Editor log") {
+		t.Fatalf("NextActions[0] = %q, want the Editor log step", first)
+	}
+	if second, _ := nextActions[1].(string); second != "Start it with uloop launch." {
+		t.Fatalf("NextActions[1] = %q, want the launch step", second)
+	}
 }
 
 // Verifies a refused connection whose process lookup fails is Unreachable, naming the lookup
