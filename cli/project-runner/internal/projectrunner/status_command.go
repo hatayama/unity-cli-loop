@@ -277,9 +277,7 @@ func reportFromUnreachableServer(
 func notRunningStatusReport(projectRoot string, probeErr error) statusReport {
 	notRunning := clicore.NewUnityNotRunningError(projectRoot, "", probeErr, false)
 	report := newStatusReport(statusStateNotRunning, notRunning.ToCLIError(clierrors.ErrorContext{}).Message)
-	if notRunning.LockfileLeftBehind {
-		report.NextActions = append([]string{notRunning.EditorLogNextAction()}, report.NextActions...)
-	}
+	report.NextActions = append(notRunning.EditorLogNextActions(), report.NextActions...)
 	return report
 }
 

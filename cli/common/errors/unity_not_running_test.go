@@ -51,7 +51,7 @@ func TestUnityNotRunningErrorBeforeTheCommandReachedUnity(t *testing.T) {
 }
 
 // Verifies a lockfile left behind is reported as an abnormal exit without asserting a crash, and that
-// the Editor log is named before launch because the next launch moves it to Editor-prev.log.
+// the Editor's own log is named before launch because the next Editor start moves or replaces it.
 func TestUnityNotRunningErrorPointsAtTheEditorLogWhenTheLockfileWasLeftBehind(t *testing.T) {
 	err := UnityNotRunningError{
 		ProjectRoot:        "/projects/sample",
@@ -69,7 +69,7 @@ func TestUnityNotRunningErrorPointsAtTheEditorLogWhenTheLockfileWasLeftBehind(t 
 		t.Fatalf("expected the log step and the launch step, got %#v", cliErr.NextActions)
 	}
 	if !strings.Contains(cliErr.NextActions[0], unityNotRunningTestEditorLog) ||
-		!strings.Contains(cliErr.NextActions[0], "Editor-prev.log") {
+		!strings.Contains(cliErr.NextActions[0], "next Editor start") {
 		t.Fatalf("expected the Editor log step first, got %q", cliErr.NextActions[0])
 	}
 	if !strings.Contains(cliErr.NextActions[1], "`uloop launch`") {
@@ -80,18 +80,18 @@ func TestUnityNotRunningErrorPointsAtTheEditorLogWhenTheLockfileWasLeftBehind(t 
 	}
 }
 
-// Verifies the Editor log step still appears, without a path, when the default log location could not
-// be resolved.
-func TestUnityNotRunningErrorNamesTheEditorLogWithoutAPath(t *testing.T) {
+// Verifies no Editor log step appears when no log at the default location is this Editor's, since
+// pointing at another Editor's log would send the caller to the wrong reason for the exit.
+func TestUnityNotRunningErrorOmitsTheEditorLogStepWithoutTheEditorsLog(t *testing.T) {
 	err := UnityNotRunningError{LockfileLeftBehind: true}
 
 	cliErr := err.ToCLIError(ErrorContext{Command: "get-logs"})
 
-	if len(cliErr.NextActions) != 2 || !strings.Contains(cliErr.NextActions[0], "Editor log") {
-		t.Fatalf("expected an Editor log step, got %#v", cliErr.NextActions)
+	if len(cliErr.NextActions) != 1 || !strings.Contains(cliErr.NextActions[0], "`uloop launch`") {
+		t.Fatalf("expected the launch step only, got %#v", cliErr.NextActions)
 	}
 	if _, ok := cliErr.Details["EditorLog"]; ok {
-		t.Fatalf("an unresolved log path must not appear in Details, got %#v", cliErr.Details)
+		t.Fatalf("no log path may appear in Details, got %#v", cliErr.Details)
 	}
 }
 

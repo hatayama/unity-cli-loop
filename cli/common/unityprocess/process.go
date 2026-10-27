@@ -70,8 +70,7 @@ func findRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityPro
 // selectProjectProcess picks projectRoot's Editor from the listed Editors, and reports whether an Editor
 // whose project is unknown was listed.
 func selectProjectProcess(processes []UnityProcess, projectRoot string) (*UnityProcess, bool, error) {
-	normalizedTarget, err := normalizeComparablePath(projectRoot)
-	if err != nil {
+	if _, err := normalizeComparablePath(projectRoot); err != nil {
 		return nil, false, err
 	}
 
@@ -83,16 +82,26 @@ func selectProjectProcess(processes []UnityProcess, projectRoot string) (*UnityP
 			unidentifiedRunning = true
 			continue
 		}
-		normalizedCandidate, err := normalizeComparablePath(candidate.projectPath)
-		if err != nil {
-			continue
-		}
-		if normalizedCandidate == normalizedTarget || isSameDirectory(candidate.projectPath, projectRoot) {
+		if isProjectPath(candidate.projectPath, projectRoot) {
 			process := candidate
 			return &process, unidentifiedRunning, nil
 		}
 	}
 	return nil, unidentifiedRunning, nil
+}
+
+// isProjectPath reports whether path, as an Editor's command line or log records it, names the project at
+// projectRoot.
+func isProjectPath(path string, projectRoot string) bool {
+	normalizedPath, err := normalizeComparablePath(path)
+	if err != nil {
+		return false
+	}
+	normalizedRoot, err := normalizeComparablePath(projectRoot)
+	if err != nil {
+		return false
+	}
+	return normalizedPath == normalizedRoot || isSameDirectory(path, projectRoot)
 }
 
 // isSameDirectory reports whether both paths name one existing directory. Why on top of the string

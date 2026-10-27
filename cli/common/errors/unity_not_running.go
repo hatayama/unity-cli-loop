@@ -15,7 +15,8 @@ type UnityNotRunningError struct {
 	// LockfileLeftBehind is true when Temp/UnityLockfile, which Unity removes when it shuts down normally,
 	// is still there.
 	LockfileLeftBehind bool
-	// EditorLogPath is Unity's default Editor log location; empty when it could not be resolved.
+	// EditorLogPath is the log this Editor wrote at Unity's default location; empty when no log there is
+	// this Editor's.
 	EditorLogPath string
 	// ExitedDuringCommand is true when this command had reached Unity before it went away, so the command
 	// may have partly run.
@@ -67,10 +68,7 @@ func (err UnityNotRunningError) message(launching bool) string {
 }
 
 func (err UnityNotRunningError) nextActions(launching bool, safeToRetry bool) []string {
-	actions := []string{}
-	if err.LockfileLeftBehind {
-		actions = append(actions, err.EditorLogNextAction())
-	}
+	actions := err.EditorLogNextActions()
 	if launching {
 		return append(actions, "Run `uloop launch` again.")
 	}
@@ -80,15 +78,16 @@ func (err UnityNotRunningError) nextActions(launching bool, safeToRetry bool) []
 	return append(actions, "Run `uloop launch` to start Unity, then run the command again.")
 }
 
-// EditorLogNextAction is the step that sends the caller to the Editor log before launching Unity again.
-// Why before the launch step: Unity renames Editor.log to Editor-prev.log when it starts, and keeps only
-// that one previous log, so a second launch loses the record of why the Editor went away.
-func (err UnityNotRunningError) EditorLogNextAction() string {
-	if err.EditorLogPath == "" {
-		return "Before launching, read the end of Unity's Editor log for why it exited; the next launch renames it to Editor-prev.log."
+// EditorLogNextActions returns the step that sends the caller to this Editor's log before launching Unity
+// again, or no step when the Editor shut down normally or no log of it was found.
+// Why before the launch step: every Editor start renames Editor.log to Editor-prev.log and replaces the
+// previous Editor-prev.log, so launching first can lose the record of why the Editor went away.
+func (err UnityNotRunningError) EditorLogNextActions() []string {
+	if !err.LockfileLeftBehind || err.EditorLogPath == "" {
+		return []string{}
 	}
-	return "Before launching, read the end of the Editor log for why it exited: " + err.EditorLogPath +
-		" (the next launch renames it to Editor-prev.log)."
+	return []string{"Before launching, read the end of this Editor's log for why it exited: " + err.EditorLogPath +
+		" (the next Editor start moves or replaces it)."}
 }
 
 func (err UnityNotRunningError) details() map[string]any {

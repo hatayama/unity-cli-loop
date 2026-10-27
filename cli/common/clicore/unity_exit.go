@@ -18,20 +18,26 @@ const (
 )
 
 // NewUnityNotRunningError describes a project whose Unity Editor a successful process lookup did not
-// find, noting whether the Editor left its lockfile behind. exitedDuringCommand says the command had
-// reached Unity before it went away.
+// find, noting whether the Editor left its lockfile behind and, if so, where its log is. exitedDuringCommand
+// says the command had reached Unity before it went away.
 func NewUnityNotRunningError(
 	projectRoot string,
 	endpoint string,
 	cause error,
 	exitedDuringCommand bool,
 ) clierrors.UnityNotRunningError {
+	leftBehind := lockfileLeftBehind(projectRoot)
+	editorLogPath := ""
+	// Why only after an abnormal exit: the log is pointed at only then, and finding it reads two logs.
+	if leftBehind {
+		editorLogPath = unityprocess.EditorLogPathFor(projectRoot)
+	}
 	return clierrors.UnityNotRunningError{
 		ProjectRoot:         projectRoot,
 		Endpoint:            endpoint,
 		Cause:               cause,
-		LockfileLeftBehind:  lockfileLeftBehind(projectRoot),
-		EditorLogPath:       unityprocess.DefaultEditorLogPath(),
+		LockfileLeftBehind:  leftBehind,
+		EditorLogPath:       editorLogPath,
 		ExitedDuringCommand: exitedDuringCommand,
 	}
 }

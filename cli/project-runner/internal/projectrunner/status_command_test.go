@@ -449,6 +449,18 @@ func TestRunStatusCommandReportsAnAbnormalExitWhenTheLockfileWasLeftBehind(t *te
 	if err := os.WriteFile(lockfilePath, []byte{}, 0o644); err != nil {
 		t.Fatalf("writing the lockfile failed: %v", err)
 	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LOCALAPPDATA", home)
+	editorLogPath := unityprocess.DefaultEditorLogPath()
+	if err := os.MkdirAll(filepath.Dir(editorLogPath), 0o755); err != nil {
+		t.Fatalf("creating the log directory failed: %v", err)
+	}
+	logContent := "COMMAND LINE ARGUMENTS:\nSuccessfully changed project path to: " + projectRoot + "\n"
+	if err := os.WriteFile(editorLogPath, []byte(logContent), 0o644); err != nil {
+		t.Fatalf("writing the Editor log failed: %v", err)
+	}
 	deps := statusTestDeps(t)
 	deps.isUnityProcessRunning = fakeUnityProcessLookup(t, projectRoot, false, nil)
 
@@ -463,7 +475,7 @@ func TestRunStatusCommandReportsAnAbnormalExitWhenTheLockfileWasLeftBehind(t *te
 	if len(nextActions) != 2 {
 		t.Fatalf("NextActions = %#v, want the Editor log step and the launch step", report["NextActions"])
 	}
-	if first, _ := nextActions[0].(string); !strings.Contains(first, "Editor log") {
+	if first, _ := nextActions[0].(string); !strings.Contains(first, editorLogPath) {
 		t.Fatalf("NextActions[0] = %q, want the Editor log step", first)
 	}
 	if second, _ := nextActions[1].(string); second != "Start it with uloop launch." {

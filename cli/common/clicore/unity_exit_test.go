@@ -175,8 +175,27 @@ func TestUnityExitWatchTreatsADroppedConnectionAsTheServerGoingAway(t *testing.T
 	}
 }
 
+// writeProjectEditorLogForTest points Unity's default log location at a temporary home and writes a log
+// there that records projectRoot as its project, returning the log's path.
+func writeProjectEditorLogForTest(t *testing.T, projectRoot string) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LOCALAPPDATA", home)
+	editorLogPath := unityprocess.DefaultEditorLogPath()
+	if err := os.MkdirAll(filepath.Dir(editorLogPath), 0o755); err != nil {
+		t.Fatalf("creating the log directory failed: %v", err)
+	}
+	content := "COMMAND LINE ARGUMENTS:\nSuccessfully changed project path to: " + projectRoot + "\n"
+	if err := os.WriteFile(editorLogPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing the Editor log failed: %v", err)
+	}
+	return editorLogPath
+}
+
 // Verifies the not-running error records a lockfile left behind, which only a shutdown that did not
-// finish leaves, along with the Editor log location.
+// finish leaves, along with the log that Editor wrote.
 func TestNewUnityNotRunningErrorRecordsALockfileLeftBehind(t *testing.T) {
 	projectRoot := t.TempDir()
 	lockfilePath := unityprocess.LockfilePath(projectRoot)
@@ -187,13 +206,15 @@ func TestNewUnityNotRunningErrorRecordsALockfileLeftBehind(t *testing.T) {
 		t.Fatalf("writing the lockfile failed: %v", err)
 	}
 
+	editorLogPath := writeProjectEditorLogForTest(t, projectRoot)
+
 	err := NewUnityNotRunningError(projectRoot, "/tmp/uloop/sample.sock", io.EOF, true)
 
 	if !err.LockfileLeftBehind {
 		t.Fatal("expected the lockfile left behind to be recorded")
 	}
-	if err.EditorLogPath != unityprocess.DefaultEditorLogPath() {
-		t.Fatalf("EditorLogPath = %q, want the default Editor log path", err.EditorLogPath)
+	if err.EditorLogPath != editorLogPath {
+		t.Fatalf("EditorLogPath = %q, want the project's Editor log %q", err.EditorLogPath, editorLogPath)
 	}
 	if err.ProjectRoot != projectRoot || err.Endpoint != "/tmp/uloop/sample.sock" || err.Cause != io.EOF ||
 		!err.ExitedDuringCommand {
