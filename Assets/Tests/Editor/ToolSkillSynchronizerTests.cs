@@ -1491,6 +1491,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Installed));
         }
 
+        // Tests that installing skills removes deprecated and retired skill directories from both layouts.
         [Test]
         public async Task InstallSkillFilesAtProjectRoot_WhenDeprecatedManagedSkillDirectoryExists_RemovesIt()
         {
@@ -1528,6 +1529,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "uloop-record-input");
             WriteSkillFile(flatRetiredRecordInputSkillDir, "---\nname: uloop-record-input\n---\n");
             WriteSkillFile(groupedRetiredRecordInputSkillDir, "---\nname: uloop-record-input\n---\n");
+            string flatRetiredCancelSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                "uloop-cancel");
+            string groupedRetiredCancelSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-cancel");
+            WriteSkillFile(flatRetiredCancelSkillDir, "---\nname: uloop-cancel\n---\n");
+            WriteSkillFile(groupedRetiredCancelSkillDir, "---\nname: uloop-cancel\n---\n");
 
             ToolSkillSynchronizer.SkillTargetInfo target = new(
                 "Claude Code",
@@ -1557,6 +1569,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(Directory.Exists(executeMenuItemSkillDir), Is.False);
             Assert.That(Directory.Exists(flatRetiredRecordInputSkillDir), Is.False);
             Assert.That(Directory.Exists(groupedRetiredRecordInputSkillDir), Is.False);
+            Assert.That(Directory.Exists(flatRetiredCancelSkillDir), Is.False);
+            Assert.That(Directory.Exists(groupedRetiredCancelSkillDir), Is.False);
             Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(File.ReadAllText(Path.Combine(installedSkillDir, "reference.md")), Is.EqualTo("reference"));
         }

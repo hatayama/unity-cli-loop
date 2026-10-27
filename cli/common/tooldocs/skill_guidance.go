@@ -27,7 +27,9 @@ var commandSkillNames = map[string]string{
 
 	"launch": "uloop-launch",
 	"status": "uloop-status",
-	"cancel": "uloop-cancel",
+	// The status skill documents cancel in references/cancel.md: cancel is the way out of a Busy
+	// that status reports, and a skill of its own would sit in every session for a rare recovery.
+	"cancel": "uloop-status",
 
 	// One skill covers the four pause-point commands and the three watch commands: watch
 	// expressions are documented by the pause-point skill's references/watch-expressions.md.

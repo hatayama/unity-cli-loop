@@ -141,7 +141,8 @@ func TestStatusHelpPrintsUsage(t *testing.T) {
 }
 
 // Verifies cancel --help prints its usage line and registry description with only the global
-// option, since cancel takes no options of its own, and ends by pointing at the cancel skill.
+// option, since cancel takes no options of its own, and ends by pointing at the status skill
+// that documents it.
 func TestCancelHelpPrintsUsage(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
@@ -160,7 +161,7 @@ func TestCancelHelpPrintsUsage(t *testing.T) {
 		"Global options:\n" +
 		"  --project-path <path>   Run against a Unity project outside the current directory\n" +
 		"\n" +
-		"Load the uloop-cancel skill for workflow rules and response fields that --help does not cover.\n"
+		"Load the uloop-status skill for workflow rules and response fields that --help does not cover.\n"
 	if stdout.String() != expected {
 		t.Fatalf("cancel --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
 	}

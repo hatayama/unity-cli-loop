@@ -246,8 +246,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 <summary>All 23 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
-- `/uloop-status` - Check whether Unity can take a command now
-- `/uloop-cancel` - Cancel the command Unity is running now, when BUSY keeps rejecting commands
+- `/uloop-status` - Check whether Unity can take a command now, and cancel the command Unity is running when BUSY keeps rejecting commands
 - `/uloop-compile` - Execute compilation
 - `/uloop-verify-project` - Check .meta files, GUIDs, conflict markers, and the package manifest without Unity
 - `/uloop-get-logs` - Get console logs
