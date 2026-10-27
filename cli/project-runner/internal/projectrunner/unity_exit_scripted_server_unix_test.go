@@ -72,3 +72,38 @@ func TestWaitForControlPlayModeStateRestartsTheExitCountAfterAnAnswer(t *testing
 		t.Fatalf("lookups = %d, want 3: one before the answer, then two that confirm the exit", lookups)
 	}
 }
+
+// Verifies a connection that drops after the request reached Unity comes back from the send as
+// UnityNotRunningError when no Editor process is left, rather than as a disconnect to wait out.
+func TestSendWithTransientConnectionRetryReportsAnEditorThatExitedAfterDispatch(t *testing.T) {
+	deps := defaultConnectionRetryDeps()
+	deps.findRunningUnityProcess = noUnityProcessLookup
+	listener := newLoopbackIpcListener(t)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		if _, err := unityipc.Read(bufio.NewReader(conn)); err != nil {
+			return
+		}
+		accepted := `{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted"},"id":1}`
+		_ = unityipc.Write(conn, []byte(accepted))
+	}()
+	connection := unityipc.Connection{
+		ProjectRoot: t.TempDir(),
+		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: listener.Addr().String()},
+	}
+
+	outcome, err := sendWithTransientConnectionRetryWithDeps(
+		context.Background(), connection, "compile", map[string]any{}, nil, 0, deps)
+
+	var notRunning clierrors.UnityNotRunningError
+	if !errors.As(err, &notRunning) || !notRunning.ExitedDuringCommand {
+		t.Fatalf("err = %v, want UnityNotRunningError for an exit during the command", err)
+	}
+	if !outcome.RequestDispatched {
+		t.Fatalf("outcome = %+v, want a dispatched request", outcome)
+	}
+}

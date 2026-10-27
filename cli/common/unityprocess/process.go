@@ -44,7 +44,11 @@ type RestoreFocusFunc func(context.Context) error
 
 // FindRunningUnityProcess returns the running Editor listed for projectRoot, or nil when none is.
 func FindRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, error) {
-	process, _, err := findRunningUnityProcess(ctx, projectRoot)
+	processes, err := listUnityProcesses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	process, _, err := selectProjectProcess(processes, projectRoot)
 	return process, err
 }
 
@@ -52,19 +56,19 @@ func FindRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityPro
 // result that no Editor is running for the project: it returns nil only when no running Editor can be
 // the project's, and ErrUnidentifiedUnityEditor when an Editor whose project is unknown may be.
 func FindRunningUnityProcessDefinitively(ctx context.Context, projectRoot string) (*UnityProcess, error) {
-	process, unidentifiedRunning, err := findRunningUnityProcess(ctx, projectRoot)
+	processes, err := listUnityProcesses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return selectProjectProcessDefinitively(processes, projectRoot)
+}
+
+func selectProjectProcessDefinitively(processes []UnityProcess, projectRoot string) (*UnityProcess, error) {
+	process, unidentifiedRunning, err := selectProjectProcess(processes, projectRoot)
 	if err == nil && process == nil && unidentifiedRunning {
 		return nil, ErrUnidentifiedUnityEditor
 	}
 	return process, err
-}
-
-func findRunningUnityProcess(ctx context.Context, projectRoot string) (*UnityProcess, bool, error) {
-	processes, err := listUnityProcesses(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	return selectProjectProcess(processes, projectRoot)
 }
 
 // selectProjectProcess picks projectRoot's Editor from the listed Editors, and reports whether an Editor

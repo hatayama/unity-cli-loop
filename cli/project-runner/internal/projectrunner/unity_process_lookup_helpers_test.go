@@ -2,7 +2,9 @@ package projectrunner
 
 import (
 	"context"
+	"errors"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
@@ -36,4 +38,22 @@ func runningUnityProcessLookup(context.Context, string) (*unityprocess.UnityProc
 
 func noUnityProcessLookup(context.Context, string) (*unityprocess.UnityProcess, error) {
 	return nil, nil
+}
+
+// Verifies the lookup behind every default dependency set, status included, is the one that reports an
+// Editor of unknown project instead of "none", since those callers conclude from "none" that Unity is
+// not running.
+func TestDefaultUnityProcessLookupDoesNotTakeAnUnidentifiedEditorAsNone(t *testing.T) {
+	if reflect.ValueOf(unityProcessLookup).Pointer() != reflect.ValueOf(unityprocess.FindRunningUnityProcessDefinitively).Pointer() {
+		t.Fatal("the default lookup must be unityprocess.FindRunningUnityProcessDefinitively")
+	}
+	useUnityProcessLookup(t, func(context.Context, string) (*unityprocess.UnityProcess, error) {
+		return nil, unityprocess.ErrUnidentifiedUnityEditor
+	})
+
+	_, err := defaultStatusCommandDeps().isUnityProcessRunning(context.Background(), t.TempDir())
+
+	if !errors.Is(err, unityprocess.ErrUnidentifiedUnityEditor) {
+		t.Fatalf("status lookup err = %v, want the default lookup's answer", err)
+	}
 }

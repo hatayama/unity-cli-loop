@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -288,5 +289,15 @@ func TestWaitForToolReadinessStopsOnceUnityHasExited(t *testing.T) {
 	var notRunning clierrors.UnityNotRunningError
 	if !errors.As(err, &notRunning) {
 		t.Fatalf("expected UnityNotRunningError, got %v", err)
+	}
+}
+
+// Verifies the readiness wait's default lookup is the one that reports an Editor of unknown project
+// instead of "none", since its exit watch concludes from "none" that Unity is not running.
+func TestDefaultToolReadinessLookupDoesNotTakeAnUnidentifiedEditorAsNone(t *testing.T) {
+	lookup := defaultToolReadinessDeps().findRunningUnityProcess
+
+	if reflect.ValueOf(lookup).Pointer() != reflect.ValueOf(unityprocess.FindRunningUnityProcessDefinitively).Pointer() {
+		t.Fatal("the default lookup must be unityprocess.FindRunningUnityProcessDefinitively")
 	}
 }

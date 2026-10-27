@@ -67,6 +67,39 @@ func TestSelectProjectProcess(t *testing.T) {
 	}
 }
 
+// Verifies the lookup for callers that conclude Unity is not running answers "none" only when no listed
+// Editor can be the project's: an Editor of unknown project turns "none" into ErrUnidentifiedUnityEditor,
+// while the project's own Editor is still returned beside one.
+func TestSelectProjectProcessDefinitively(t *testing.T) {
+	projectRoot := t.TempDir()
+	unidentified := UnityProcess{Pid: 1}
+	project := UnityProcess{Pid: 2, projectPath: projectRoot}
+	other := UnityProcess{Pid: 3, projectPath: filepath.Join(projectRoot, "Other")}
+	cases := []struct {
+		name      string
+		processes []UnityProcess
+		wantPid   int
+		wantErr   error
+	}{
+		{name: "unidentified Editor only", processes: []UnityProcess{other, unidentified}, wantErr: ErrUnidentifiedUnityEditor},
+		{name: "project Editor beside an unidentified one", processes: []UnityProcess{unidentified, project}, wantPid: 2},
+		{name: "no Editor can be the project's", processes: []UnityProcess{other}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			process, err := selectProjectProcessDefinitively(testCase.processes, projectRoot)
+
+			gotPid := 0
+			if process != nil {
+				gotPid = process.Pid
+			}
+			if gotPid != testCase.wantPid || !errors.Is(err, testCase.wantErr) || (testCase.wantErr == nil && err != nil) {
+				t.Fatalf("pid = %d, err = %v, want pid = %d, err = %v", gotPid, err, testCase.wantPid, testCase.wantErr)
+			}
+		})
+	}
+}
+
 // Verifies an Editor started with a path through a symlink is matched to the project root a command
 // resolves, which has its symlinks evaluated, so the lookup does not report that Editor as missing.
 func TestSelectProjectProcessMatchesAPathThroughASymlink(t *testing.T) {

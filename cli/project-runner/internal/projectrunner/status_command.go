@@ -50,7 +50,7 @@ func defaultStatusCommandDeps() statusCommandDeps {
 		probeTimeout: 5 * time.Second,
 		reprobeDelay: 1 * time.Second,
 		isUnityProcessRunning: func(ctx context.Context, projectRoot string) (bool, error) {
-			process, err := unityprocess.FindRunningUnityProcessDefinitively(ctx, projectRoot)
+			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
 	}
