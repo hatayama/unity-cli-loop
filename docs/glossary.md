@@ -141,8 +141,8 @@ The directory whose agent directories (`.claude/skills`, `.agents/skills`, ...) 
 project-local skills: the Unity project root (`unity`, the default) or the root of the Git
 repository that contains it (`git`, the nearest ancestor of the Unity project root, inclusive,
 holding a `.git` directory or file). The Editor saves the choice in
-`.uloop/settings.skills.json`; `uloop skills` follows it and `--root` overrides it for one
-invocation. Only the destination moves — skill sources and tool settings always come from the
+`.uloop/settings.skills.json`, which a team can commit to share it; `uloop skills` follows it
+and `--root` overrides it for one invocation. Only the destination moves — skill sources and tool settings always come from the
 Unity project root. Distinct from the *project root*, which always means the Unity project.
 
 ### UseCase

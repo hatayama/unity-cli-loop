@@ -342,6 +342,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 |------|---------|------------|
 | `project-runner-pin.json` | Project runner version contract used by the global dispatcher | Yes |
 | `settings.tools.json` | Per-tool enable/disable preferences | Optional |
+| `settings.skills.json` | Skill install location (Unity project root or Git repository root) | Optional |
 | `tools.json` | Auto-generated CLI tool registry | No |
 | `outputs/` | Runtime outputs (test results, screenshots, hierarchy dumps) | No |
 
@@ -352,10 +353,11 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 > **/.uloop/*
 > !**/.uloop/project-runner-pin.json
 > !**/.uloop/settings.tools.json
+> !**/.uloop/settings.skills.json
 > ```
 >
 > This ignores auto-generated files and runtime outputs while allowing the dispatcher pin and team-shared configuration to be tracked.
-> Remove the `!` line if you don't need to share tool enable/disable preferences.
+> Remove a `!` line if you don't need to share that setting (tool enable/disable preferences or the skill install location).
 
 ## License
 MIT License
