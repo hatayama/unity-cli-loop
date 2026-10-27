@@ -59,6 +59,6 @@ uloop stops waiting for the snippet and frees the Editor for the next command. A
 
 What the CLI that sent the snippet sees depends on why `ct` fired:
 
-- Yielded to a foreground request, or stopped by `uloop cancel`: the connection is still open, so the CLI receives `Success: false` with `ErrorMessage` "Execution was cancelled or timed out". While a command blocks Unity's main thread, the snippet cannot return; its slot is freed about 5 seconds later, when another command arrives.
+- Yielded to a foreground request, or stopped by `uloop cancel`: the connection is still open, so the CLI receives `Success: false` with `ErrorMessage` "Execution was cancelled or timed out". While a command blocks Unity's main thread, the snippet cannot return, and `uloop status` alone never frees its slot. The first tool command other than `execute-dynamic-code` that arrives after the cancel is rejected as BUSY and starts a 5-second grace period; one sent after that period takes the slot back.
 - The CLI disconnected: no response is sent; the CLI that was waiting is already gone.
 - Domain reload, Editor quit, or server stop/restart: no response arrives. The CLI treats it as a lost connection: after a domain reload it prints "Connection lost during execute-dynamic-code", waits for the Editor to come back, and then reports the disconnect as an error. Check the Editor with `uloop status` before sending the next command.

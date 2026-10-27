@@ -51,3 +51,5 @@ Most commands fail with `ErrorCode` `TOOL_CANCELLED` (not retryable). `execute-d
 ## After Cancelling
 
 Run `uloop status` and wait for `Ready` before the next command. `Cancelled` means the command was asked to stop, not that it already stopped: a tool that ignores its cancellation token keeps the slot until it returns on its own.
+
+The exception is an `execute-dynamic-code` snippet that still cannot return, for example because a command blocks Unity's main thread. Polling `uloop status` never frees its slot, because status only reads the slot. Send a tool command other than `execute-dynamic-code` (such as `uloop get-logs`): it is rejected as BUSY and starts a 5-second grace period. Send it again after those 5 seconds, and that request takes the slot back.
