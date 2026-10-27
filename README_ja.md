@@ -168,6 +168,9 @@ uloop skills install --claude
 # Codex など .agents/skills を読むツール
 uloop skills install --agents
 
+# Unity プロジェクトを含む Git リポジトリのルートにインストール
+uloop skills install --claude --root git
+
 # プロジェクトではなくグローバルにインストール
 uloop skills install --claude --global
 
@@ -393,6 +396,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 |---------|------|---------|
 | `project-runner-pin.json` | グローバルdispatcherが使うproject runnerのバージョン契約 | Yes |
 | `settings.tools.json` | ツールごとの有効・無効設定 | 任意 |
+| `settings.skills.json` | スキルのインストール先（Unityプロジェクトルート / Gitリポジトリルート） | 任意 |
 | `tools.json` | 自動生成されるCLIツールレジストリ | No |
 | `outputs/` | ランタイム出力（テスト結果、スクリーンショット、ヒエラルキーダンプ） | No |
 
@@ -403,10 +407,11 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 > **/.uloop/*
 > !**/.uloop/project-runner-pin.json
 > !**/.uloop/settings.tools.json
+> !**/.uloop/settings.skills.json
 > ```
 >
 > 自動生成ファイルやランタイム出力を無視しつつ、dispatcherのpinとチーム共有の設定ファイルをgit管理できます。
-> ツールの有効・無効設定を共有しない場合は、`!` の行を削除してください。
+> ツールの有効・無効設定やスキルのインストール先を共有しない場合は、該当する `!` の行を削除してください。
 
 ## ライセンス
 MIT License

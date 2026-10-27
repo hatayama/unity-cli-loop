@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         internal static void InstallSkillsForTarget(
-            string projectRoot,
+            string installRoot,
             ToolSkillSynchronizer.SkillTargetInfo target,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> enabledSkills,
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct)
         {
             InstallSkillsForTargetCore(
-                projectRoot,
+                installRoot,
                 target,
                 disabledSkills,
                 enabledSkills,
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         internal static void InstallSpecificSkillsForTarget(
-            string projectRoot,
+            string installRoot,
             ToolSkillSynchronizer.SkillTargetInfo target,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> skills,
@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct)
         {
             InstallSkillsForTargetCore(
-                projectRoot,
+                installRoot,
                 target,
                 disabledSkills,
                 skills,
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         private static void InstallSkillsForTargetCore(
-            string projectRoot,
+            string installRoot,
             ToolSkillSynchronizer.SkillTargetInfo target,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> disabledSkills,
             IReadOnlyCollection<SkillInstallLayout.SkillSourceInfo> skills,
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            string targetRoot = Path.Combine(projectRoot, target.DirName);
+            string targetRoot = Path.Combine(installRoot, target.DirName);
             string skillsRoot = SkillInstallLayout.GetSkillsRoot(targetRoot);
             Directory.CreateDirectory(skillsRoot);
 

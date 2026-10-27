@@ -31,6 +31,12 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 				return skillCommandOptions{}, err
 			}
 			index = nextIndex
+		case arg == skillsRootFlagName || strings.HasPrefix(arg, skillsRootFlagName+"="):
+			nextIndex, err := parseRootOption(&options, args, index)
+			if err != nil {
+				return skillCommandOptions{}, err
+			}
+			index = nextIndex
 		default:
 			if err := appendSkillTarget(&options, seenTargets, arg); err != nil {
 				return skillCommandOptions{}, err
@@ -112,11 +118,23 @@ func missingSkillsOutputDirValueError() error {
 
 // validateSkillsOptions rejects flag combinations whose destinations conflict:
 // --output-dir already names one exact destination and always installs flat, so
-// combining it with the location flags (--global or a target flag) or the layout
-// flag (--flat) would make the request ambiguous.
+// combining it with the location flags (--global, --root, or a target flag) or
+// the layout flag (--flat) would make the request ambiguous. --root picks a
+// project-local install root, which a --global install does not have.
 func validateSkillsOptions(options skillCommandOptions) error {
+	if options.root != "" && options.global {
+		return &clierrors.ArgumentError{
+			Message:     "The " + skillsRootFlagName + " option cannot be combined with --global.",
+			Option:      skillsRootFlagName,
+			Command:     clicore.SkillsCommandName,
+			NextActions: []string{"Use --global alone, or drop it to install into the chosen project-local root."},
+		}
+	}
 	if options.outputDir == "" {
 		return nil
+	}
+	if options.root != "" {
+		return skillsOutputDirConflictError(skillsRootFlagName)
 	}
 	if len(options.targets) > 0 {
 		return skillsOutputDirConflictError("--" + options.targets[0].id)

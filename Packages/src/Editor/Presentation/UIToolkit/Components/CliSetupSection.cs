@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public event Action OnRefreshSkillsState;
         public event Action<SkillsTarget> OnSkillsTargetChanged;
         public event Action<bool> OnGroupSkillsChanged;
+        public event Action<SkillInstallRoot> OnSkillsInstallRootChanged;
 
         public CliSetupSection(VisualElement root)
         {
@@ -68,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _skillsSetupPanelView.OnRefreshClicked += () => OnRefreshSkillsState?.Invoke();
             _skillsSetupPanelView.OnTargetChanged += value => OnSkillsTargetChanged?.Invoke(value);
             _skillsSetupPanelView.OnGroupSkillsChanged += value => OnGroupSkillsChanged?.Invoke(value);
+            _skillsSetupPanelView.OnInstallRootChanged += value => OnSkillsInstallRootChanged?.Invoke(value);
         }
 
         public void ShowInstallProgress() => _installProgressView.Show();
@@ -173,6 +175,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateSkillsPanel(CliSetupData data)
         {
+            _skillsSetupPanelView.UpdateInstallRoot(
+                data.SkillInstallRootSelection,
+                data.IsCliInstalled && !data.IsInstallingSkills);
             _skillsSetupPanelView.UpdateGroupSkillsToggle(
                 data.GroupSkillsUnderUnityCliLoop,
                 data.IsCliInstalled && !data.IsInstallingSkills);

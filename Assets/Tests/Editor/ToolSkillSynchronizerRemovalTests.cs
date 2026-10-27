@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             WriteInstalledSkillFile(groupedSkillDirectory, "---\nname: uloop-get-logs\n---\n");
             WriteInstalledSkillFile(flatSkillDirectory, "---\nname: uloop-run-tests\n---\n");
 
-            ToolSkillSynchronizer.RemoveSkillFilesAtProjectRoot(_temporaryProjectRoot, "compile");
+            ToolSkillSynchronizer.RemoveSkillFilesAtInstallRoot(_temporaryProjectRoot, "compile");
 
             Assert.That(File.Exists(Path.Combine(groupedSkillDirectory, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(File.Exists(Path.Combine(flatSkillDirectory, SkillInstallLayout.SkillFileName)), Is.True);

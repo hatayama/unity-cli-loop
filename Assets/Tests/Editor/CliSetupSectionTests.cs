@@ -589,6 +589,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             root.Add(new Button { name = "refresh-skills-state-button" });
             VisualElement skillsSubsection = new() { name = "skills-subsection" };
             VisualElement skillsSetupPanel = new() { name = "skills-setup-panel" };
+            skillsSetupPanel.Add(new EnumField { name = "skills-install-root-field" });
+            skillsSetupPanel.Add(new Label { name = "skills-install-root-location" });
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-list" });
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-divider" });
             skillsSetupPanel.Add(new Label { name = "skill-target-status-summary" });
@@ -642,7 +644,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SkillsTarget.Claude,
                 groupSkillsUnderUnityCliLoop: false,
                 isInstallingSkills: false,
-                installableSkillTargets: installableSkillTargets ?? new List<SkillSetupTargetInfo>());
+                installableSkillTargets: installableSkillTargets ?? new List<SkillSetupTargetInfo>(),
+                skillInstallRootSelection: default);
         }
     }
 }

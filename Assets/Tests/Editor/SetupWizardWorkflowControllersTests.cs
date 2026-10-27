@@ -434,6 +434,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a bulk install into an unavailable Git repository root explains why and installs nothing.
+        /// </summary>
+        [Test]
+        public async Task SkillsHandleInstallSkillsAsync_WhenTheGitRootIsUnavailable_ExplainsAndInstallsNothing()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.GitRepositoryRoot,
+                "<PROJECT_ROOT>/unity",
+                null);
+            _skillPort.FullTargets = new List<SkillSetupTargetInfo>
+            {
+                CreateTarget("Claude Code", ".claude", SkillInstallState.Missing)
+            };
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            await controller.HandleInstallSkillsAsync(isBulkInstall: true, CancellationToken.None);
+
+            Assert.That(_skillPort.InstalledTargetDirs, Is.Empty);
+            Assert.That(_dialogs.MessageTitles, Is.EqualTo(new List<string> { "No Git Repository" }));
+        }
+
+        /// <summary>
+        /// Verifies choosing an install location in the wizard saves it and shows where skills go.
+        /// </summary>
+        [Test]
+        public void SkillsHandleInstallRootChanged_SavesTheRootAndShowsTheLocation()
+        {
+            _cliDetector.CliVersion = "3.1.0";
+            _skillPort.InstallRootSelection = new SkillInstallRootSelection(
+                SkillInstallRoot.UnityProjectRoot,
+                "<PROJECT_ROOT>/unity",
+                "<PROJECT_ROOT>");
+            SetupWizardSkillsWorkflowController controller = CreateSkillsWorkflow();
+
+            controller.HandleInstallRootChanged(SkillInstallRoot.GitRepositoryRoot);
+
+            Assert.That(
+                _skillPort.SavedInstallRoots,
+                Is.EqualTo(new List<SkillInstallRoot> { SkillInstallRoot.GitRepositoryRoot }));
+            Assert.That(
+                _root.Q<Label>("skills-install-root-location").text,
+                Is.EqualTo("Skills are installed under <PROJECT_ROOT>"));
+        }
+
+        /// <summary>
         /// Verifies a bulk install installs every target with a skills directory with the caller's token, disables the layout toggle while
         /// installing, shows the installed dialog, and refreshes the section afterwards.
         /// </summary>
@@ -787,6 +833,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             root.Add(new Button { name = "refresh-skills-state-button" });
             VisualElement skillsSetupPanel = new VisualElement { name = "skills-setup-panel" };
+            skillsSetupPanel.Add(new EnumField { name = "skills-install-root-field" });
+            skillsSetupPanel.Add(new Label { name = "skills-install-root-location" });
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-list" });
             skillsSetupPanel.Add(new VisualElement { name = "skill-target-status-divider" });
             skillsSetupPanel.Add(new Label { name = "skill-target-status-summary" });
@@ -991,6 +1039,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 FullScanCount++;
                 OnFullScan?.Invoke();
                 return FullTargets;
+            }
+
+            // The default (unset) selection means the Unity project root of the queried project.
+            internal SkillInstallRootSelection InstallRootSelection { get; set; }
+            internal List<SkillInstallRoot> SavedInstallRoots { get; } = new List<SkillInstallRoot>();
+
+            public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
+                string.IsNullOrEmpty(InstallRootSelection.UnityProjectRootPath)
+                    ? new SkillInstallRootSelection(SkillInstallRoot.UnityProjectRoot, projectRoot, null)
+                    : InstallRootSelection;
+
+            public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root)
+            {
+                SavedInstallRoots.Add(root);
+                SkillInstallRootSelection current = GetSkillInstallRootSelection(projectRoot);
+                InstallRootSelection = new SkillInstallRootSelection(
+                    root,
+                    current.UnityProjectRootPath,
+                    current.GitRepositoryRootPath);
             }
 
             public void RemoveSkillFiles(string toolName) => throw new NotSupportedException();

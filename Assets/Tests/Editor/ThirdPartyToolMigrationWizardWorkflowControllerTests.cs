@@ -396,6 +396,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class NoOpSkillSetupPort : ISkillSetupPort
         {
+            public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
+                new(SkillInstallRoot.UnityProjectRoot, projectRoot, null);
+
+            public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root) =>
+                throw new NotSupportedException();
+
             public void RemoveSkillFiles(string toolName)
             {
             }

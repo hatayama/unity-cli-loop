@@ -17,5 +17,11 @@
             </ui:VisualElement>
             <ui:Button name="install-selected-skills-button" text="Install Skills" class="skills-setup-panel__install-button" />
         </ui:Foldout>
+        <ui:VisualElement name="skills-install-root-divider" class="skills-setup-panel__install-root-divider" />
+        <ui:VisualElement name="skills-install-root-row" class="skills-setup-panel__target-row">
+            <ui:Label text="Location:" class="skills-setup-panel__install-root-label" />
+            <uie:EnumField name="skills-install-root-field" class="skills-setup-panel__target-field" />
+        </ui:VisualElement>
+        <ui:Label name="skills-install-root-location" text="" class="skills-install-root-location" />
     </ui:VisualElement>
 </ui:UXML>

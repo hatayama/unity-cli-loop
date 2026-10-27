@@ -316,7 +316,7 @@ name: uloop-sample
 	}
 	target := targetConfigs["claude"]
 
-	result, err := installSkillsForTarget(projectRoot, target, []skillDefinition{skill}, false, true)
+	result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{skill}, false, true)
 	if err != nil {
 		t.Fatalf("installSkillsForTarget failed: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestInstallSkillsNormalizesCRLFLineEndings(t *testing.T) {
 		sourceDirectory: sourceDir,
 	}
 
-	result, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, true)
+	result, err := installSkillsForTarget(projectRoot, projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, true)
 	if err != nil {
 		t.Fatalf("installSkillsForTarget failed: %v", err)
 	}
@@ -561,7 +561,7 @@ name: uloop-disabled-skill
 	writeSkillFile(t, deprecatedFlatDir, "---\nname: uloop-capture-window\n---\n")
 	writeSkillFile(t, deprecatedGroupedDir, "---\nname: uloop-capture-window\n---\n")
 
-	result, err := installSkillsForTarget(projectRoot, target, []skillDefinition{
+	result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{
 		{
 			name:            "uloop-enabled-skill",
 			content:         []byte("---\nname: uloop-enabled-skill\n---\n\n# enabled\n"),
@@ -602,7 +602,7 @@ func TestInstallSkillsForTargetRemovesRetiredRecordInputSkill(t *testing.T) {
 	writeSkillFile(t, flatDir, "---\nname: uloop-record-input\n---\n")
 	writeSkillFile(t, groupedDir, "---\nname: uloop-record-input\n---\n")
 
-	result, err := installSkillsForTarget(projectRoot, target, []skillDefinition{}, false, true)
+	result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{}, false, true)
 	if err != nil {
 		t.Fatalf("installSkillsForTarget failed: %v", err)
 	}
@@ -642,7 +642,7 @@ name: uloop-sample
 	groupedDir := getPreferredSkillDir(baseDir, skill.name, true)
 	writeSkillFile(t, flatDir, skillContent)
 
-	result, err := installSkillsForTarget(projectRoot, target, []skillDefinition{skill}, false, true)
+	result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{skill}, false, true)
 	if err != nil {
 		t.Fatalf("installSkillsForTarget failed: %v", err)
 	}
@@ -682,7 +682,7 @@ name: uloop-sample
 	flatDir := getPreferredSkillDir(baseDir, skill.name, false)
 	writeSkillFile(t, groupedDir, "# grouped\n")
 
-	result, err := installSkillsForTarget(projectRoot, target, []skillDefinition{skill}, false, false)
+	result, err := installSkillsForTarget(projectRoot, projectRoot, target, []skillDefinition{skill}, false, false)
 	if err != nil {
 		t.Fatalf("installSkillsForTarget failed: %v", err)
 	}
@@ -1546,7 +1546,7 @@ func TestInstallSkillsForTargetGlobalIgnoresProjectToolSettings(t *testing.T) {
 	homeDir := t.TempDir()
 	stubSkillsUserHomeDir(t, homeDir, nil)
 
-	result, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{sampleSkillWithSource(t)}, true, false)
+	result, err := installSkillsForTarget(projectRoot, projectRoot, targetConfigs["claude"], []skillDefinition{sampleSkillWithSource(t)}, true, false)
 
 	if err != nil || result.installed != 1 {
 		t.Fatalf("unexpected result: %+v err=%v", result, err)
@@ -1604,7 +1604,7 @@ func TestInstallSkillsForTargetReportsFailures(t *testing.T) {
 			skill := sampleSkillWithSource(t)
 			testCase.setup(t, baseDir, &skill)
 
-			_, err := installSkillsForTarget(projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, testCase.grouped)
+			_, err := installSkillsForTarget(projectRoot, projectRoot, targetConfigs["claude"], []skillDefinition{skill}, false, testCase.grouped)
 			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
 				t.Fatalf("expected an error containing %q, got %v", testCase.wantMessage, err)
 			}
@@ -1616,7 +1616,7 @@ func TestInstallSkillsForTargetReportsHomeLookupFailure(t *testing.T) {
 	// Verifies a global install fails when the home directory cannot be resolved.
 	stubSkillsUserHomeDir(t, "", errors.New("home unavailable"))
 
-	_, err := installSkillsForTarget(t.TempDir(), targetConfigs["claude"], nil, true, false)
+	_, err := installSkillsForTarget(t.TempDir(), t.TempDir(), targetConfigs["claude"], nil, true, false)
 
 	if err == nil || !strings.Contains(err.Error(), "home unavailable") {
 		t.Fatalf("expected the home error, got %v", err)

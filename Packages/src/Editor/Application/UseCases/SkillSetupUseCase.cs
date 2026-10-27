@@ -22,6 +22,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _skillSetupPort = skillSetupPort ?? throw new ArgumentNullException(nameof(skillSetupPort));
         }
 
+        public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot)
+        {
+            return _skillSetupPort.GetSkillInstallRootSelection(projectRoot);
+        }
+
+        public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root)
+        {
+            _skillSetupPort.SaveSkillInstallRoot(projectRoot, root);
+        }
+
         public void RemoveSkillFiles(string toolName)
         {
             _skillSetupPort.RemoveSkillFiles(toolName);

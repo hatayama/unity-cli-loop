@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private readonly EnumField _skillsTargetField;
         private readonly Button _refreshSkillsStateButton;
         private readonly Button _installSelectedSkillsButton;
+        private readonly SkillsInstallRootView _installRootView;
 
         private bool _isTargetFieldInitialized;
         private bool? _lastAppliedFoldoutDefault;
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal event System.Action OnRefreshClicked;
         internal event System.Action<SkillsTarget> OnTargetChanged;
         internal event System.Action<bool> OnGroupSkillsChanged;
+        internal event System.Action<SkillInstallRoot> OnInstallRootChanged;
 
         internal SkillsSetupPanelView(VisualElement panelRoot, Button refreshSkillsStateButton)
         {
@@ -53,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _groupSkillsToggle = elements.GroupSkillsToggle;
             _skillsTargetField = elements.SkillsTargetField;
             _installSelectedSkillsButton = elements.InstallSelectedButton;
+            _installRootView = new SkillsInstallRootView(root);
 
             _installSpecificTargetFoldout.SetValueWithoutNotify(false);
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
@@ -113,6 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 OnGroupSkillsChanged?.Invoke(evt.newValue);
             });
             _groupSkillsRow.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
+            _installRootView.OnInstallRootChanged += value => OnInstallRootChanged?.Invoke(value);
         }
 
         private readonly struct RequiredSkillsPanelElements
@@ -262,6 +266,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshSkillsStateButton.SetEnabled(!isInstallingSkills);
             _skillsTargetField.SetEnabled(
                 isCliInstalled && installState != SkillInstallState.Checking);
+        }
+
+        internal void UpdateInstallRoot(SkillInstallRootSelection selection, bool canEdit)
+        {
+            _installRootView.Update(selection, canEdit);
         }
 
         internal void UpdateGroupSkillsToggle(bool groupSkillsUnderUnityCliLoop, bool isEnabled)

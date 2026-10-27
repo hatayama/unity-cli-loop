@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillsTarget skillsTarget,
             bool isInstallingSkills,
             IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets,
-            bool hasSkillTargetScanResult)
+            bool hasSkillTargetScanResult,
+            SkillInstallRootSelection skillInstallRootSelection)
         {
             InstallSkillsFlat = installSkillsFlat;
             SelectedTargetInstallState = selectedTargetInstallState;
@@ -30,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IsInstallingSkills = isInstallingSkills;
             InstallableSkillTargets = installableSkillTargets;
             HasSkillTargetScanResult = hasSkillTargetScanResult;
+            SkillInstallRootSelection = skillInstallRootSelection;
         }
 
         internal bool InstallSkillsFlat { get; }
@@ -38,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal bool IsInstallingSkills { get; }
         internal IReadOnlyList<SkillSetupTargetInfo> InstallableSkillTargets { get; }
         internal bool HasSkillTargetScanResult { get; }
+        internal SkillInstallRootSelection SkillInstallRootSelection { get; }
     }
 
     /// <summary>
@@ -62,6 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private SkillInstallState _selectedTargetInstallState = SkillInstallState.Missing;
         private List<SkillSetupTargetInfo> _installableTargets = new();
         private bool _hasSkillTargetScanResult;
+        private SkillInstallRootSelection _installRootSelection;
         private CancellationTokenSource _skillInstallStateRefreshCts;
 
         internal UnityCliLoopSettingsSkillsPresenter(
@@ -106,7 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _skillsTarget,
                 _isInstallingSkills,
                 _installableTargets,
-                _hasSkillTargetScanResult);
+                _hasSkillTargetScanResult,
+                _installRootSelection);
         }
 
         internal void MarkSelectedTargetInstallStateChecking()
@@ -117,6 +122,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal void HandleSkillsTargetChanged(SkillsTarget value)
         {
             _skillsTarget = value;
+            RefreshSelectedTargetInstallStateFast();
+            RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
+        }
+
+        internal void HandleSkillsInstallRootChanged(SkillInstallRoot root)
+        {
+            _skillSetupUseCase.SaveSkillInstallRoot(UnityCliLoopPathResolver.GetProjectRoot(), root);
             RefreshSelectedTargetInstallStateFast();
             RefreshSelectedTargetInstallStateInBackground(allowDuringCliRefresh: true);
         }
@@ -155,6 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void RefreshSelectedTargetInstallStateFast()
         {
+            RefreshInstallRootSelection();
             if (!_cliSetupApplicationService.IsCliInstalled())
             {
                 _selectedTargetInstallState = SkillInstallState.Missing;
@@ -176,6 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal void RefreshSelectedTargetInstallStateInBackground(bool allowDuringCliRefresh = false)
         {
+            bool installRootChanged = RefreshInstallRootSelection();
             CancelSkillInstallStateRefresh();
             bool isCliInstalled = _cliSetupApplicationService.IsCliInstalled();
             if (!UnityCliLoopSettingsWindowRefreshPolicy.ShouldStartSkillInstallStateRefresh(
@@ -188,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     UnityCliLoopSettingsWindowRefreshPolicy.ResolveSkillInstallStateWhenRefreshCannotStart(
                         isCliInstalled,
                         _selectedTargetInstallState);
-                if (_selectedTargetInstallState != resolvedInstallState)
+                if (_selectedTargetInstallState != resolvedInstallState || installRootChanged)
                 {
                     _selectedTargetInstallState = resolvedInstallState;
                     RefreshCliSetupSection();
@@ -212,6 +226,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            if (!EnsureInstallRootAvailable(projectRoot))
+            {
+                return;
+            }
+
             (SkillSetupTargetInfo selectedTargetInfo, List<SkillSetupTargetInfo> _) =
                 GetSelectedTargetInfo(projectRoot, includeFreshnessCheck: true);
             bool shouldShowSkillsInstalledDialog =
@@ -263,6 +282,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 _dialogs.ShowMessage(
                     "CLI Not Found",
                     "uloop CLI is not installed. Please install the CLI first.");
+                return;
+            }
+
+            if (!EnsureInstallRootAvailable(UnityCliLoopPathResolver.GetProjectRoot()))
+            {
                 return;
             }
 
@@ -324,7 +348,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     !_installSkillsFlat,
                     CancellationToken.None);
 
-                if (!_skillSetupUseCase.IsSkillInstalled(toolName))
+                // The skill setup port already explained a sync skipped for an unavailable install root;
+                // blaming the skill source here would point the user at the wrong cause.
+                SkillInstallRootSelection installRootSelection =
+                    _skillSetupUseCase.GetSkillInstallRootSelection(UnityCliLoopPathResolver.GetProjectRoot());
+                if (installRootSelection.IsSelectedRootAvailable && !_skillSetupUseCase.IsSkillInstalled(toolName))
                 {
                     Debug.LogWarning(
                         $"[UnityCliLoop] Skill for '{toolName}' was not installed after enabling. " +
@@ -367,6 +395,31 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 .FirstOrDefault(target => target.DirName == selection.DirectoryName);
 
             return (targetInfo, targets);
+        }
+
+        // Read on every refresh so a choice saved by the Setup Wizard or edited on disk shows up here.
+        private bool RefreshInstallRootSelection()
+        {
+            SkillInstallRootSelection previous = _installRootSelection;
+            _installRootSelection = _skillSetupUseCase.GetSkillInstallRootSelection(
+                UnityCliLoopPathResolver.GetProjectRoot());
+            return !_installRootSelection.Equals(previous);
+        }
+
+        // Checked before installing because the install would otherwise throw from the skill setup port.
+        private bool EnsureInstallRootAvailable(string projectRoot)
+        {
+            _installRootSelection = _skillSetupUseCase.GetSkillInstallRootSelection(projectRoot);
+            if (_installRootSelection.IsSelectedRootAvailable)
+            {
+                return true;
+            }
+
+            _dialogs.ShowMessage(
+                SkillsInstallRootText.UnavailableDialogTitle,
+                SkillsInstallRootText.UnavailableDialogMessage);
+            RefreshCliSetupSection();
+            return false;
         }
 
         private void RefreshCliSetupSection(bool includeSkillDirectoryChecks = true)

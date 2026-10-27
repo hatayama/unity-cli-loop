@@ -589,6 +589,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             internal List<bool> DetectGroupFlags { get; } = new List<bool>();
             internal bool ReturnOutdatedTarget { get; set; }
 
+            public SkillInstallRootSelection GetSkillInstallRootSelection(string projectRoot) =>
+                new(SkillInstallRoot.UnityProjectRoot, projectRoot, null);
+
+            public void SaveSkillInstallRoot(string projectRoot, SkillInstallRoot root) =>
+                throw new NotSupportedException();
+
             public void RemoveSkillFiles(string toolName) => throw new NotSupportedException();
             public bool IsSkillInstalled(string toolName) => throw new NotSupportedException();
 

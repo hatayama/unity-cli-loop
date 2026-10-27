@@ -332,6 +332,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                     GroupMigrationSkillUnderUnityCliLoop);
             bool shouldRemoveMigrationSkill =
                 ThirdPartyToolMigrationWizardWindow.ShouldRemoveMigrationSkill(currentInstallState);
+            // Checked before installing because the install would otherwise throw from the skill setup port.
+            SkillInstallRootSelection installRootSelection =
+                _skillSetupUseCase.GetSkillInstallRootSelection(projectRoot);
+            if (!shouldRemoveMigrationSkill && !installRootSelection.IsSelectedRootAvailable)
+            {
+                CompleteMigrationSkillOperation(ct);
+                _dialogs.ShowMessage(
+                    SkillsInstallRootText.UnavailableDialogTitle,
+                    SkillsInstallRootText.UnavailableDialogMessage);
+                _migrationSkillInstallState = currentInstallState;
+                UpdateMigrationSkillState();
+                return;
+            }
+
             List<SkillSetupTargetInfo> targets = new List<SkillSetupTargetInfo> { target };
             _migrationSkillInstallState = currentInstallState;
             _isUpdatingMigrationSkill = true;

@@ -135,6 +135,16 @@ the contract first when the rule changes.
 A destination agent environment into which skills are installed (for example Claude Code,
 Codex CLI). Each target defines where its skill copies live and which folder layout it uses.
 
+### Skill install root
+
+The directory whose agent directories (`.claude/skills`, `.agents/skills`, ...) receive
+project-local skills: the Unity project root (`unity`, the default) or the root of the Git
+repository that contains it (`git`, the nearest ancestor of the Unity project root, inclusive,
+holding a `.git` directory or file). The Editor saves the choice in
+`.uloop/settings.skills.json`, which a team can commit to share it; `uloop skills` follows it
+and `--root` overrides it for one invocation. Only the destination moves — skill sources and tool settings always come from the
+Unity project root. Distinct from the *project root*, which always means the Unity project.
+
 ### UseCase
 
 An Application-layer orchestration class that coordinates one tool execution flow across

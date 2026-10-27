@@ -39,19 +39,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         internal static List<ToolSkillSynchronizer.SkillTargetInfo> DetectTargetsForLayoutStateAtProjectRoot(
             string projectRoot,
+            string installRoot,
             bool requireSkillsDirectory,
             bool groupSkillsUnderUnityCliLoop,
             bool includeFreshnessCheck,
             IReadOnlyCollection<string> disabledTools)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
+            Debug.Assert(!string.IsNullOrEmpty(installRoot), "installRoot must not be null or empty");
             Debug.Assert(disabledTools != null, "disabledTools must not be null");
 
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = new();
 
             foreach (SkillTargetDefinition target in SkillTargets)
             {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
+                string targetRoot = Path.Combine(installRoot, target.DirName);
                 if (!Directory.Exists(targetRoot))
                 {
                     continue;
@@ -88,12 +90,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return targets;
         }
 
-        internal static List<ToolSkillSynchronizer.SkillTargetInfo> DetectTargetsWithSkillsDirectory(string projectRoot)
+        internal static List<ToolSkillSynchronizer.SkillTargetInfo> DetectTargetsWithSkillsDirectory(string installRoot)
         {
             List<ToolSkillSynchronizer.SkillTargetInfo> targets = new();
             foreach (SkillTargetDefinition target in SkillTargets)
             {
-                string targetRoot = Path.Combine(projectRoot, target.DirName);
+                string targetRoot = Path.Combine(installRoot, target.DirName);
                 if (!Directory.Exists(targetRoot))
                 {
                     continue;

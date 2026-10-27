@@ -79,7 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 skills.SkillsTarget,
                 skills.IsInstallingSkills,
                 skills.InstallableSkillTargets,
-                skills.HasSkillTargetScanResult);
+                skills.HasSkillTargetScanResult,
+                skills.SkillInstallRootSelection);
         }
 
         internal void Update(
@@ -93,7 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillsTarget skillsTarget,
             bool isInstallingSkills,
             System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets,
-            bool hasSkillTargetScanResult)
+            bool hasSkillTargetScanResult,
+            SkillInstallRootSelection skillInstallRootSelection)
         {
             CliSetupData cliData = CreateCliSetupData(
                 needsCliPathSetup,
@@ -106,7 +108,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 skillsTarget,
                 isInstallingSkills,
                 installableSkillTargets,
-                hasSkillTargetScanResult);
+                hasSkillTargetScanResult,
+                skillInstallRootSelection);
             _view.UpdateCliSetup(cliData);
         }
 
@@ -435,7 +438,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             SkillsTarget skillsTarget,
             bool isInstallingSkills,
             System.Collections.Generic.IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets,
-            bool hasSkillTargetScanResult)
+            bool hasSkillTargetScanResult,
+            SkillInstallRootSelection skillInstallRootSelection)
         {
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
@@ -484,7 +488,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 skillsTarget,
                 groupSkillsUnderUnityCliLoop,
                 isInstallingSkills,
-                installableSkillTargets);
+                installableSkillTargets,
+                skillInstallRootSelection);
         }
     }
 }

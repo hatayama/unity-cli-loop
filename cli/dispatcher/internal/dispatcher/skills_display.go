@@ -38,13 +38,6 @@ func isSafeSkillName(name string) bool {
 		!strings.Contains(name, "/") && !strings.Contains(name, `\`)
 }
 
-func skillLocationName(global bool) string {
-	if global {
-		return "global"
-	}
-	return "project"
-}
-
 func statusIcon(status string) string {
 	switch status {
 	case "installed":
@@ -93,16 +86,22 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "Options:")
 	clicore.WriteLine(stdout, "  -g, --global")
 	clicore.WriteLine(stdout, "      --flat")
+	clicore.WriteLine(stdout, "      "+skillsRootFlagName+" <unity|git>")
 	if skillsSubcommandSupportsOutputDir(command) {
 		clicore.WriteLine(stdout, "      "+skillsOutputDirFlagName+" <path>")
 	}
 	printSkillTargetFlagLines(stdout, "      ")
 	clicore.WriteLine(stdout, "")
 	if command == "install" {
-		clicore.WriteLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
-		clicore.WriteLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		clicore.WriteLine(stdout, "Targets under the install root that already contain uloop skills are refreshed")
+		clicore.WriteLine(stdout, "automatically, even when their flag is omitted, so previously installed copies")
+		clicore.WriteLine(stdout, "never go stale. Copies under the other root are left untouched when the root changes.")
 		clicore.WriteLine(stdout, "")
 	}
+	clicore.WriteLine(stdout, "Project-local skills go under the Unity project root by default. --root git")
+	clicore.WriteLine(stdout, "uses the root of the Git repository that contains the Unity project instead.")
+	clicore.WriteLine(stdout, "Without --root, the install root chosen in the Unity Editor settings is used.")
+	clicore.WriteLine(stdout, "")
 	if skillsSubcommandSupportsOutputDir(command) {
 		clicore.WriteLine(stdout, "With --output-dir, skills are managed flat as <path>/<skill-name> with no")
 		clicore.WriteLine(stdout, "target subdirectories. Top-level files uloop does not manage are left untouched,")

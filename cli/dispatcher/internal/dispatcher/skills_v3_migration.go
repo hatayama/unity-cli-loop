@@ -12,10 +12,10 @@ import (
 
 func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
-	clicore.WriteFormat(stdout, "Installing V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
+	clicore.WriteFormat(stdout, "Installing V3 CLI invocation migration skill (%s)...\n", skillLocationName(options))
 	clicore.WriteLine(stdout, "")
 	for _, target := range options.targets {
-		result, err := installV3MigrationSkillForTarget(projectRoot, target, skills, options.global, groupManagedSkillsForOptions(options))
+		result, err := installV3MigrationSkillForTarget(skillsInstallRootFor(projectRoot, options), target, skills, options.global, groupManagedSkillsForOptions(options))
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -24,7 +24,7 @@ func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, op
 		clicore.WriteFormat(stdout, "  Installed: %d\n", result.installed)
 		clicore.WriteFormat(stdout, "  Updated: %d\n", result.updated)
 		clicore.WriteFormat(stdout, "  Skipped: %d\n", result.skipped)
-		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		baseDir, err := getSkillsBaseDir(skillsInstallRootFor(projectRoot, options), target, options.global)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -36,11 +36,11 @@ func runV3MigrationSkillInstall(projectRoot string, skills []skillDefinition, op
 
 func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
-	clicore.WriteFormat(stdout, "Uninstalling V3 CLI invocation migration skill (%s)...\n", skillLocationName(options.global))
+	clicore.WriteFormat(stdout, "Uninstalling V3 CLI invocation migration skill (%s)...\n", skillLocationName(options))
 	clicore.WriteLine(stdout, "")
 	for _, target := range options.targets {
 		grouped := groupManagedSkillsForOptions(options)
-		removed, notFound, err := uninstallV3MigrationSkillForTarget(projectRoot, target, options.global, grouped)
+		removed, notFound, err := uninstallV3MigrationSkillForTarget(skillsInstallRootFor(projectRoot, options), target, options.global, grouped)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -48,7 +48,7 @@ func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOption
 		clicore.WriteFormat(stdout, "%s:\n", target.displayName)
 		clicore.WriteFormat(stdout, "  Removed: %d\n", removed)
 		clicore.WriteFormat(stdout, "  Not found: %d\n", notFound)
-		baseDir, err := getSkillsBaseDir(projectRoot, target, options.global)
+		baseDir, err := getSkillsBaseDir(skillsInstallRootFor(projectRoot, options), target, options.global)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.SkillsCommandName})
 			return 1
@@ -58,9 +58,9 @@ func runV3MigrationSkillUninstall(projectRoot string, options skillCommandOption
 	return 0
 }
 
-func installV3MigrationSkillForTarget(projectRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (skillInstallResult, error) {
+func installV3MigrationSkillForTarget(installRoot string, target skillTarget, skills []skillDefinition, global bool, grouped bool) (skillInstallResult, error) {
 	result := skillInstallResult{}
-	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
+	baseDir, err := getSkillsBaseDir(installRoot, target, global)
 	if err != nil {
 		return skillInstallResult{}, err
 	}
@@ -92,10 +92,10 @@ func installV3MigrationSkillForTarget(projectRoot string, target skillTarget, sk
 	return result, nil
 }
 
-func uninstallV3MigrationSkillForTarget(projectRoot string, target skillTarget, global bool, grouped bool) (int, int, error) {
+func uninstallV3MigrationSkillForTarget(installRoot string, target skillTarget, global bool, grouped bool) (int, int, error) {
 	removed := 0
 	notFound := 0
-	baseDir, err := getSkillsBaseDir(projectRoot, target, global)
+	baseDir, err := getSkillsBaseDir(installRoot, target, global)
 	if err != nil {
 		return removed, notFound, err
 	}
