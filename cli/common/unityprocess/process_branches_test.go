@@ -67,6 +67,22 @@ func TestSelectProjectProcess(t *testing.T) {
 	}
 }
 
+// Verifies an Editor started with a path through a symlink is matched to the project root a command
+// resolves, which has its symlinks evaluated, so the lookup does not report that Editor as missing.
+func TestSelectProjectProcessMatchesAPathThroughASymlink(t *testing.T) {
+	projectRoot := t.TempDir()
+	linkedRoot := filepath.Join(t.TempDir(), "linked")
+	if err := os.Symlink(projectRoot, linkedRoot); err != nil {
+		t.Skipf("creating a symlink is not permitted here: %v", err)
+	}
+
+	process, _, err := selectProjectProcess([]UnityProcess{{Pid: 7, projectPath: linkedRoot}}, projectRoot)
+
+	if err != nil || process == nil || process.Pid != 7 {
+		t.Fatalf("expected the Editor started through the symlink, got %#v, %v", process, err)
+	}
+}
+
 // Verifies a procargs2 buffer whose last argv entry lacks its NUL terminator keeps only the complete entries.
 func TestParseMacProcArgs2StopsAtUnterminatedArgument(t *testing.T) {
 	buf := make([]byte, 4)

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -86,12 +87,27 @@ func selectProjectProcess(processes []UnityProcess, projectRoot string) (*UnityP
 		if err != nil {
 			continue
 		}
-		if normalizedCandidate == normalizedTarget {
+		if normalizedCandidate == normalizedTarget || isSameDirectory(candidate.projectPath, projectRoot) {
 			process := candidate
 			return &process, unidentifiedRunning, nil
 		}
 	}
 	return nil, unidentifiedRunning, nil
+}
+
+// isSameDirectory reports whether both paths name one existing directory. Why on top of the string
+// comparison: a command's project root has its symlinks evaluated, while an Editor's command line keeps
+// the path it was started with, and a case-insensitive file system accepts either spelling.
+func isSameDirectory(first string, second string) bool {
+	firstInfo, err := os.Stat(first)
+	if err != nil {
+		return false
+	}
+	secondInfo, err := os.Stat(second)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(firstInfo, secondInfo)
 }
 
 func listUnityProcesses(ctx context.Context) ([]UnityProcess, error) {
