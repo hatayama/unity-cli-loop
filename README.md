@@ -248,7 +248,6 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-status` - Check whether Unity can take a command now, and cancel the command Unity is running when BUSY keeps rejecting commands
 - `/uloop-compile` - Execute compilation
-- `/uloop-verify-project` - Check .meta files, GUIDs, conflict markers, and the package manifest without Unity
 - `/uloop-get-logs` - Get console logs
 - `/uloop-run-tests` - Run tests
 - `/uloop-hot-reload` - Apply method-body changes to running code instantly, without recompiling
@@ -285,11 +284,8 @@ uloop launch
 # Launch with build target (Android, iOS, StandaloneOSX, etc.)
 uloop launch -p Android
 
-# Kill running Unity and restart
+# Quit running Unity and restart
 uloop launch -r
-
-# Check .meta files, GUIDs, and conflict markers without Unity
-uloop verify-project
 
 # Execute compilation
 uloop compile

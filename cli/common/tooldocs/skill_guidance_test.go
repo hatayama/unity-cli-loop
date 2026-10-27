@@ -19,12 +19,14 @@ func TestSkillGuidanceLineNamesTheMatchingSkill(t *testing.T) {
 	}
 }
 
-// Verifies the hidden compile-check command gets no skill guidance line: its skill is internal and
-// not installed, so pointing at it would send the reader to a skill that does not exist.
-func TestSkillGuidanceLineLeavesOutTheHiddenCompileCheckCommand(t *testing.T) {
-	line, ok := SkillGuidanceLine("compile-check")
-	if ok {
-		t.Errorf("guidance line = %q, want none while compile-check is hidden", line)
+// Verifies the hidden compile-check and verify-project commands get no skill guidance line: their
+// skills are internal and not installed, so pointing at one would send the reader to a skill that
+// does not exist.
+func TestSkillGuidanceLineLeavesOutHiddenCommands(t *testing.T) {
+	for _, command := range []string{"compile-check", "verify-project"} {
+		if line, ok := SkillGuidanceLine(command); ok {
+			t.Errorf("%s guidance line = %q, want none while the command is hidden", command, line)
+		}
 	}
 }
 
