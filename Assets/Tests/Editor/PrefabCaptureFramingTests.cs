@@ -493,6 +493,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a sorting-override Canvas between the mask and an element stops the mask from reaching the element.
+        /// </summary>
+        [Test]
+        public void Arrange_WithASortingOverrideCanvasBetweenTheMaskAndTheChild_IncludesTheOverflowingChild()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>();
+            Transform child = viewport.transform.GetChild(0);
+            GameObject middle = new GameObject("Middle", typeof(RectTransform));
+            middle.transform.SetParent(viewport.transform, false);
+            ((RectTransform)middle.transform).sizeDelta = new Vector2(100f, 100f);
+            child.SetParent(middle.transform, false);
+            Canvas canvas = AddSortingOverrideCanvas(middle, root);
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(canvas.overrideSorting, Is.True);
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(130, 100)));
+        }
+
+        /// <summary>
         /// Verifies a mask on the same object as a sorting-override Canvas still clips the children below it.
         /// </summary>
         [Test]
