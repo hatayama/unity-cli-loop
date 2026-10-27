@@ -16,7 +16,7 @@ const (
 	launchReadyMessage               = "Unity CLI Loop is ready."
 	launchAlreadyRunningReadyMessage = "Unity is already running and ready."
 	launchQuitStoppedMessage         = "Unity quit. It saved its window layout and discarded unsaved scene changes."
-	launchForceKillStoppedMessage    = "Unity was force-killed because it did not take the quit request or did not exit in time. Its window layout was not saved, and unsaved scene changes were lost."
+	launchForceKillStoppedMessage    = "Unity was force-killed. Its window layout was not saved, and unsaved scene changes were lost."
 	launchNoProcessMessage           = "No matching Unity process was found; it may have already exited."
 )
 
