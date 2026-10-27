@@ -412,7 +412,7 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 > This ignores auto-generated files and runtime outputs while allowing team-shared configuration to be tracked.
 > Remove a `!` line if you don't need to share that setting (tool enable/disable preferences or the skill install location).
 >
-> `project-runner-pin.json` does not need to be tracked: the Editor rewrites it every time it opens the project, and `uloop` falls back to the pin inside the installed package. Track it (add `!**/.uloop/project-runner-pin.json`) only if you run `uloop` commands other than `launch` in a fresh clone that has never been opened in Unity, such as on CI.
+> `project-runner-pin.json` does not need to be tracked: the Editor rewrites it every time it opens the project, and `uloop` falls back to the pin inside the installed package. Track it (add `!**/.uloop/project-runner-pin.json`) only if you run `uloop` commands that use the pinned runner in a fresh clone that has never been opened in Unity, such as on CI.
 
 ## License
 MIT License

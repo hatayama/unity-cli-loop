@@ -412,7 +412,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 > 自動生成ファイルやランタイム出力を無視しつつ、チーム共有の設定ファイルをgit管理できます。
 > ツールの有効・無効設定やスキルのインストール先を共有しない場合は、該当する `!` の行を削除してください。
 >
-> `project-runner-pin.json` はgit管理しなくても動きます。エディタがプロジェクトを開くたびに書き直し、`uloop` はインストール済みパッケージ内のpinにもフォールバックするためです。Unityで一度も開いていない新規クローン（CIなど）で `launch` 以外の `uloop` コマンドを実行する場合だけ、`!**/.uloop/project-runner-pin.json` を追加してgit管理してください。
+> `project-runner-pin.json` はgit管理しなくても動きます。エディタがプロジェクトを開くたびに書き直し、`uloop` はインストール済みパッケージ内のpinにもフォールバックするためです。Unityで一度も開いていない新規クローン（CIなど）で、pinで決まるproject runnerを使う `uloop` コマンドを実行する場合だけ、`!**/.uloop/project-runner-pin.json` を追加してgit管理してください。
 
 ## ライセンス
 MIT License
