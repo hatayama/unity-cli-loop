@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -324,6 +325,205 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a root that is its own world-space Canvas is captured at the Canvas size, not widened by a child that overflows it.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAWorldSpaceCanvasRootAndAnOverflowingChild_SizesToTheCanvas()
+        {
+            GameObject root = CreateUiPartWithOverflowingChild(out GameObject _);
+            root.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.Kind, Is.EqualTo(PrefabCaptureKind.UiPart));
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(100, 100)));
+            Assert.That(_camera.transform.position.x, Is.EqualTo(0f).Within(Tolerance));
+        }
+
+        /// <summary>
+        /// Verifies a zero-sized world-space Canvas root does not hide its children: they still decide the image size.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAZeroSizedWorldSpaceCanvasRoot_SizesToItsChildren()
+        {
+            GameObject root = CreateUiPartWithOverflowingChild(out GameObject child);
+            ((RectTransform)root.transform).sizeDelta = Vector2.zero;
+            // The child covers the root's pivot, so the zero-sized root adds nothing beyond the child.
+            ((RectTransform)child.transform).anchoredPosition = new Vector2(-10f, 0f);
+            root.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(40, 20)));
+            Assert.That(_camera.transform.position.x, Is.EqualTo(-10f).Within(Tolerance));
+        }
+
+        /// <summary>
+        /// Verifies a disabled Canvas on the root does not bound the capture, so an overflowing child still widens it.
+        /// </summary>
+        [Test]
+        public void Arrange_WithADisabledCanvasRootAndAnOverflowingChild_IncludesTheChild()
+        {
+            GameObject root = CreateUiPartWithOverflowingChild(out GameObject _);
+            Canvas canvas = root.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.enabled = false;
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(140, 100)));
+        }
+
+        /// <summary>
+        /// Verifies the part of a child that a RectMask2D clips away does not widen the capture.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAChildPartlyClippedByARectMask2D_IgnoresTheClippedPart()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>();
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(100, 100)));
+            Assert.That(_camera.transform.position.x, Is.EqualTo(0f).Within(Tolerance));
+        }
+
+        /// <summary>
+        /// Verifies a child that lies entirely outside a RectMask2D adds nothing to the capture.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAChildEntirelyOutsideARectMask2D_IgnoresTheChild()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-100f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>();
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(100, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a disabled RectMask2D clips nothing, so the overflowing child still widens the capture.
+        /// </summary>
+        [Test]
+        public void Arrange_WithADisabledRectMask2D_IncludesTheOverflowingChild()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>().enabled = false;
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(130, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a stencil Mask with a Graphic clips its children like a RectMask2D does.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAChildClippedByAMaskWithAGraphic_IgnoresTheClippedPart()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<Image>();
+            viewport.AddComponent<Mask>();
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(100, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a Mask without a Graphic masks nothing, so the overflowing child still widens the capture.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAMaskWithoutAGraphic_IncludesTheOverflowingChild()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<Mask>();
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(130, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a Mask whose Graphic is disabled masks nothing, as uGUI skips it when counting stencil depth.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAMaskWhoseGraphicIsDisabled_IncludesTheOverflowingChild()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<Image>().enabled = false;
+            viewport.AddComponent<Mask>();
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(130, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a Graphic with maskable turned off is not clipped, because no mask reaches it in the game.
+        /// </summary>
+        [Test]
+        public void Arrange_WithAnUnmaskableGraphicUnderARectMask2D_IncludesTheGraphic()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>();
+            viewport.transform.GetChild(0).gameObject.AddComponent<Image>().maskable = false;
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(130, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a sorting-override Canvas on the masked element shields it from the mask above, as uGUI does.
+        /// </summary>
+        [Test]
+        public void Arrange_WithASortingOverrideCanvasBelowTheMask_IncludesTheOverflowingChild()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>();
+            Canvas canvas = AddSortingOverrideCanvas(viewport.transform.GetChild(0).gameObject, root);
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(canvas.overrideSorting, Is.True);
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(130, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a mask on the same object as a sorting-override Canvas still clips the children below it.
+        /// </summary>
+        [Test]
+        public void Arrange_WithASortingOverrideCanvasOnTheMaskObject_StillClips()
+        {
+            GameObject viewport = CreateUiPartWithMaskedChild(new Vector2(-60f, 0f), out GameObject root);
+            viewport.AddComponent<RectMask2D>();
+            Canvas canvas = AddSortingOverrideCanvas(viewport, root);
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(canvas.overrideSorting, Is.True);
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(100, 100)));
+        }
+
+        /// <summary>
+        /// Verifies a RectMask2D on the root itself limits the capture to the root.
+        /// </summary>
+        [Test]
+        public void Arrange_WithARectMask2DOnTheRoot_SizesToTheRoot()
+        {
+            GameObject root = CreateUiPartWithOverflowingChild(out GameObject _);
+            root.AddComponent<RectMask2D>();
+
+            PrefabCaptureFrame frame = PrefabCaptureFraming.Arrange(root, _camera, GameViewSize);
+
+            Assert.That(frame.ImageSize, Is.EqualTo(new Vector2Int(100, 100)));
+            Assert.That(_camera.transform.position.x, Is.EqualTo(0f).Within(Tolerance));
+        }
+
+        /// <summary>
         /// Verifies disabled screen-space Canvases do not make a prefab screen UI.
         /// </summary>
         [Test]
@@ -470,6 +670,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             childRect.sizeDelta = new Vector2(40f, 20f);
             childRect.anchoredPosition = new Vector2(-70f, 0f);
             return root;
+        }
+
+        // Root 100x100 with a 100x100 viewport child; a 40x20 grandchild under the viewport sits at childPosition.
+        private GameObject CreateUiPartWithMaskedChild(Vector2 childPosition, out GameObject root)
+        {
+            root = CreateRectInScene("Root");
+            ((RectTransform)root.transform).sizeDelta = new Vector2(100f, 100f);
+            GameObject viewport = new GameObject("Viewport", typeof(RectTransform));
+            viewport.transform.SetParent(root.transform, false);
+            ((RectTransform)viewport.transform).sizeDelta = new Vector2(100f, 100f);
+            GameObject child = new GameObject("Child", typeof(RectTransform));
+            child.transform.SetParent(viewport.transform, false);
+            RectTransform childRect = (RectTransform)child.transform;
+            childRect.sizeDelta = new Vector2(40f, 20f);
+            childRect.anchoredPosition = childPosition;
+            return viewport;
+        }
+
+        // Unity keeps overrideSorting only on a nested Canvas, so a temporary Canvas on the root makes the target
+        // nested while the flag is set; the stored flag survives once the root Canvas is gone.
+        private static Canvas AddSortingOverrideCanvas(GameObject target, GameObject root)
+        {
+            Canvas temporaryRootCanvas = root.AddComponent<Canvas>();
+            Canvas canvas = target.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            Object.DestroyImmediate(temporaryRootCanvas);
+            return canvas;
         }
 
         private static RectTransform CreateWorldSpaceCanvasChild(GameObject parent)

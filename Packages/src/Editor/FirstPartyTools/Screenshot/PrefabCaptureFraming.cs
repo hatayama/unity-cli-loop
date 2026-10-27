@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -197,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // LayoutGroup and ContentSizeFitter sizes must settle before the rects are measured.
             Canvas.ForceUpdateCanvases();
 
-            Rect union = UnionOfWorldRects(root);
+            Rect union = VisibleUiArea(root);
             Vector3 rootScale = root.transform.lossyScale;
             float unitsPerPixelX = Mathf.Abs(rootScale.x);
             float unitsPerPixelY = Mathf.Abs(rootScale.y);
@@ -244,26 +245,149 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return layer;
         }
 
-        private static Rect UnionOfWorldRects(GameObject root)
+        // The union of what the game can show of every active RectTransform. Overflow that a RectMask2D or Mask
+        // hides is left out, and a root that is its own Canvas bounds its content to the surface its author laid out.
+        private static Rect VisibleUiArea(GameObject root)
+        {
+            RectTransform rootRect = (RectTransform)root.transform;
+            Rect? rootBound = RootCanvasBound(root);
+            // The root's own rect is never clipped: a mask clips its children, not itself.
+            Rect union = WorldRectOf(rootRect);
+            foreach (RectTransform rect in root.GetComponentsInChildren<RectTransform>(false))
+            {
+                if (rect == rootRect)
+                {
+                    continue;
+                }
+
+                Rect visible = ClipByAncestors(WorldRectOf(rect), rect, rootRect);
+                if (rootBound != null)
+                {
+                    visible = Intersect(visible, rootBound.Value);
+                }
+
+                // A negative extent means the rect lies wholly outside a clip; a zero extent is still a point
+                // inside it, which the union kept before masks were considered.
+                if (visible.width < 0f || visible.height < 0f)
+                {
+                    continue;
+                }
+
+                union = UnionOf(union, visible);
+            }
+
+            return union;
+        }
+
+        // Walks from the rect's parent up to and including the root, so a mask on the root clips its children too.
+        // Follows uGUI's own rules for which masks reach an element (MaskUtilities and MaskableGraphic), so the
+        // capture does not cut off content the game still draws.
+        private static Rect ClipByAncestors(Rect visible, RectTransform rect, RectTransform rootRect)
+        {
+            if (!IsMaskable(rect) || HasSortingOverrideCanvas(rect))
+            {
+                return visible;
+            }
+
+            for (Transform ancestor = rect.parent; ancestor != null; ancestor = ancestor.parent)
+            {
+                if (ClipsChildren(ancestor))
+                {
+                    visible = Intersect(visible, WorldRectOf((RectTransform)ancestor));
+                }
+
+                // A Canvas that overrides sorting starts a new mask scope: masks on it still apply, masks above it do not.
+                if (ancestor == rootRect || HasSortingOverrideCanvas(ancestor))
+                {
+                    break;
+                }
+            }
+
+            return visible;
+        }
+
+        // Masks reach only MaskableGraphics with maskable on. A RectTransform with no Graphic draws nothing itself,
+        // so clipping it only keeps empty containers from widening the capture.
+        private static bool IsMaskable(RectTransform rect)
+        {
+            if (!rect.TryGetComponent(out Graphic graphic))
+            {
+                return true;
+            }
+
+            return graphic is MaskableGraphic maskableGraphic && maskableGraphic.maskable;
+        }
+
+        private static bool HasSortingOverrideCanvas(Transform transform)
+        {
+            return transform.TryGetComponent(out Canvas canvas) && canvas.overrideSorting;
+        }
+
+        // A zero-sized root Canvas lays nothing out itself, so bounding by it would hide content that the
+        // capture showed before; only a Canvas with an area marks the authored surface.
+        private static Rect? RootCanvasBound(GameObject root)
+        {
+            if (!HasEnabledCanvas(root))
+            {
+                return null;
+            }
+
+            Rect rootRect = WorldRectOf((RectTransform)root.transform);
+            if (rootRect.width <= 0f || rootRect.height <= 0f)
+            {
+                return null;
+            }
+
+            return rootRect;
+        }
+
+        // A Mask clips only while its Graphic is active, because uGUI counts the stencil depth from those masks alone.
+        private static bool ClipsChildren(Transform transform)
+        {
+            if (transform.TryGetComponent(out RectMask2D rectMask) && rectMask.isActiveAndEnabled)
+            {
+                return true;
+            }
+
+            return transform.TryGetComponent(out Mask mask) && mask.MaskEnabled() && mask.graphic.IsActive();
+        }
+
+        private static Rect WorldRectOf(RectTransform rect)
         {
             Vector3[] corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
             float minX = float.PositiveInfinity;
             float minY = float.PositiveInfinity;
             float maxX = float.NegativeInfinity;
             float maxY = float.NegativeInfinity;
-            foreach (RectTransform rect in root.GetComponentsInChildren<RectTransform>(false))
+            foreach (Vector3 corner in corners)
             {
-                rect.GetWorldCorners(corners);
-                foreach (Vector3 corner in corners)
-                {
-                    minX = Mathf.Min(minX, corner.x);
-                    minY = Mathf.Min(minY, corner.y);
-                    maxX = Mathf.Max(maxX, corner.x);
-                    maxY = Mathf.Max(maxY, corner.y);
-                }
+                minX = Mathf.Min(minX, corner.x);
+                minY = Mathf.Min(minY, corner.y);
+                maxX = Mathf.Max(maxX, corner.x);
+                maxY = Mathf.Max(maxY, corner.y);
             }
 
             return Rect.MinMaxRect(minX, minY, maxX, maxY);
+        }
+
+        // Keeps negative extents when the rects do not overlap, so callers can tell "outside" from "a point".
+        private static Rect Intersect(Rect a, Rect b)
+        {
+            return Rect.MinMaxRect(
+                Mathf.Max(a.xMin, b.xMin),
+                Mathf.Max(a.yMin, b.yMin),
+                Mathf.Min(a.xMax, b.xMax),
+                Mathf.Min(a.yMax, b.yMax));
+        }
+
+        private static Rect UnionOf(Rect a, Rect b)
+        {
+            return Rect.MinMaxRect(
+                Mathf.Min(a.xMin, b.xMin),
+                Mathf.Min(a.yMin, b.yMin),
+                Mathf.Max(a.xMax, b.xMax),
+                Mathf.Max(a.yMax, b.yMax));
         }
 
         private static PrefabCaptureFrame ArrangeObject(GameObject root, Camera camera, Vector2Int gameViewSize)
