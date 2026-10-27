@@ -180,6 +180,11 @@ func waitForControlPlayModeState(
 	defer ticker.Stop()
 	for {
 		response, err := requestControlPlayModeStatus(waitContext, connection, action)
+		// Why every poll, an answer included: an answer restarts the watch's count of lookups that
+		// found no Editor.
+		if exitErr := exitWatch.Observe(waitContext, err); exitErr != nil {
+			return lastResponse, false, exitErr
+		}
 		if err == nil {
 			lastResponse = response
 			hasResponse = true
@@ -191,9 +196,6 @@ func waitForControlPlayModeState(
 			}
 		} else {
 			lastErr = err
-			if exitErr := exitWatch.Observe(waitContext, err); exitErr != nil {
-				return lastResponse, false, exitErr
-			}
 		}
 
 		select {
