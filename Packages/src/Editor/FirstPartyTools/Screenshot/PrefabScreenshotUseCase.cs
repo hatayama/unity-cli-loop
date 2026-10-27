@@ -166,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return frame.Kind switch
             {
-                PrefabCaptureKind.UiPart => $"Rendered {path} as a UI part, sized to all of its RectTransforms.",
+                PrefabCaptureKind.UiPart => $"Rendered {path} as a UI part, sized to the visible area of its RectTransforms (masks and a World Space root Canvas cut off what they hide).",
                 PrefabCaptureKind.ScreenUi => $"Rendered {path} as screen UI at the Game View size.",
                 PrefabCaptureKind.Object3D => $"Rendered {path} as a 3D object framed from the front-left at the Game View size.",
                 PrefabCaptureKind.Flat2D => $"Rendered {path} as a flat object framed straight on at the Game View size.",
