@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.3](https://github.com/hatayama/unity-cli-loop/compare/v3.21.2...v3.21.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* Unity package now ships project runner 3.12.3, which reports MAIN_THREAD_BLOCKED and the stall notice ([#3418](https://github.com/hatayama/unity-cli-loop/issues/3418)) ([cc95f3b](https://github.com/hatayama/unity-cli-loop/commit/cc95f3b86e9dc2f90b1b983966c4da9b123991da))
+
 ## [3.21.2](https://github.com/hatayama/unity-cli-loop/compare/v3.21.1...v3.21.2) (2026-10-29)
 
 
