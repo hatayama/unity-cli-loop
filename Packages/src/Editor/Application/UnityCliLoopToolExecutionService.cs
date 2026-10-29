@@ -16,15 +16,18 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         private readonly IEditorRuntimeStatePort _editorRuntimeStatePort;
         private readonly ToolExecutionSession _executionSession;
+        private readonly IMainThreadEntryWatchdog _watchdog;
 
         internal UnityCliLoopToolExecutionService(
             IEditorRuntimeStatePort editorRuntimeStatePort,
-            ToolExecutionSession executionSession = null)
+            ToolExecutionSession executionSession = null,
+            IMainThreadEntryWatchdog watchdog = null)
         {
             Debug.Assert(editorRuntimeStatePort != null, "editorRuntimeStatePort must not be null");
 
             _editorRuntimeStatePort = editorRuntimeStatePort ?? throw new ArgumentNullException(nameof(editorRuntimeStatePort));
             _executionSession = executionSession ?? new ToolExecutionSession();
+            _watchdog = watchdog ?? NoMainThreadEntryWatchdog.Instance;
         }
 
         internal async Task<UnityCliLoopToolResponse> ExecuteToolAsync(
@@ -59,7 +62,30 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 // execute-dynamic-code reading the pause state), and only the switch itself sees that.
                 // The value set here flows into the tool and is restored for this method's caller.
                 MainThreadWaitObservation.SetCurrent(new ToolExecutionLeaseWaitObserver(lease));
-                await MainThreadSwitcher.SwitchToMainThread(executionToken);
+                // Why never disposed: the guard may still be between its stop check and its next poll when
+                // the switch returns, and Task.Delay on a disposed token throws; a CTS without a timer holds
+                // nothing to leak (same reasoning as the lease's explicit cancellation source).
+                CancellationTokenSource watchdogStop = new CancellationTokenSource();
+                // Not awaited: Cancel() below ends it, and awaiting it on the main thread would add a hop.
+                // GuardAsync never throws, so the discarded task cannot hide a failure.
+                _ = _watchdog.GuardAsync(lease, watchdogStop.Token);
+                try
+                {
+                    await MainThreadSwitcher.SwitchToMainThread(executionToken);
+                }
+                finally
+                {
+                    watchdogStop.Cancel();
+                }
+
+                // CAS against the watchdog: whoever moves the state first decides whether the tool runs.
+                // Why the state and not the token: a claimer that won the CAS may not have cancelled the
+                // token yet, and the main thread can resume the switch from the Editor queue in that window.
+                if (!lease.MarkToolEntered())
+                {
+                    throw CreateNotEnteredException(lease, toolName, ct);
+                }
+
                 executionToken.ThrowIfCancellationRequested();
                 UnityCliLoopEditorStateGuard.Validate(toolName, _editorRuntimeStatePort);
 
@@ -71,6 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
                 return response;
             }
+            catch (OperationCanceledException) when (lease.WasCancelledForBlockedMainThread && !ct.IsCancellationRequested)
+            {
+                throw new UnityCliLoopMainThreadBlockedException(toolName, lease.BlockedMainThreadStallSeconds);
+            }
             // Why convert: an explicit uloop cancel must reach the waiting CLI as its own error, while a
             // disconnect (the request token) still drops the connection because nobody is left to answer.
             catch (OperationCanceledException) when (lease.WasCancelledByUser && !ct.IsCancellationRequested)
@@ -81,6 +111,24 @@ namespace io.github.hatayama.UnityCliLoop.Application
             {
                 lease.Dispose();
             }
+        }
+
+        // Builds the outcome for a lease that the watchdog or uloop cancel claimed before the tool
+        // entered; both claimers may still be about to cancel the token, so the state decides.
+        private static Exception CreateNotEnteredException(ToolExecutionLease lease, string toolName, CancellationToken ct)
+        {
+            if (ct.IsCancellationRequested)
+            {
+                // Client gone: the plain cancellation drops the connection, as for any disconnect.
+                return new OperationCanceledException(ct);
+            }
+
+            if (lease.WasCancelledForBlockedMainThread)
+            {
+                return new UnityCliLoopMainThreadBlockedException(toolName, lease.BlockedMainThreadStallSeconds);
+            }
+
+            return new UnityCliLoopToolCancelledException(toolName);
         }
 
         // Why convert here: Infrastructure cannot see the Domain result type, so the outcome leaves

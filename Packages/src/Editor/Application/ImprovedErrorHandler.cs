@@ -92,6 +92,19 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 };
             }
 
+            if (exception is UnityCliLoopMainThreadBlockedException blockedException)
+            {
+                return new TranslationOutput
+                {
+                    FriendlyMessage = blockedException.Message,
+                    Explanation = blockedException.Message,
+                    Solutions = new List<string>
+                    {
+                        "Check the Unity window for a modal dialog or a long operation, then run the command once more"
+                    }
+                };
+            }
+
             if (exception is TimeoutException)
             {
                 return new TranslationOutput

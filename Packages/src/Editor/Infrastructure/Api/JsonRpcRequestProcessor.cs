@@ -201,8 +201,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static void LogRpcExceptionIfNeeded(Exception ex)
         {
-            // Why not log these: busy and uloop cancel are expected outcomes the CLI reports itself.
-            if (ex is UnityCliLoopToolBusyException || ex is UnityCliLoopToolCancelledException)
+            // Why not log these: busy, uloop cancel, and a blocked main thread are expected outcomes the
+            // CLI reports itself.
+            if (ex is UnityCliLoopToolBusyException
+                || ex is UnityCliLoopToolCancelledException
+                || ex is UnityCliLoopMainThreadBlockedException)
             {
                 return;
             }

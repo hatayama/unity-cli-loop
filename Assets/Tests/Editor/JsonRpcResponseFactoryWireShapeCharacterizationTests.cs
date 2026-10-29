@@ -148,6 +148,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(unknownPhaseData["runningToolPhase"], Is.Null);
         }
 
+        /// <summary>
+        /// Verifies a blocked-main-thread failure reaches the wire as main_thread_blocked data with the tool name and stall seconds.
+        /// </summary>
+        [Test]
+        public void CreateErrorResponse_ForMainThreadBlockedException_ProducesMainThreadBlockedData()
+        {
+            UnityCliLoopMainThreadBlockedException blockedException = new("get-hierarchy", 45);
+
+            string response = JsonRpcResponseFactory.CreateErrorResponse(1, blockedException);
+
+            JToken dataToken = JObject.Parse(response)["error"]!["data"]!;
+            Assert.That(dataToken["type"]!.Value<string>(), Is.EqualTo("main_thread_blocked"));
+            Assert.That(dataToken["runningToolName"]!.Value<string>(), Is.EqualTo("get-hierarchy"));
+            Assert.That(dataToken["stallSeconds"]!.Value<double>(), Is.EqualTo(45));
+            Assert.That(dataToken["message"]!.Value<string>(), Is.Not.Empty);
+        }
+
         [Test]
         public async Task ProcessRequest_WhenProtocolVersionIsTooOld_ProducesFrozenMismatchJson()
         {

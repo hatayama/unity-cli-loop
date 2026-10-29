@@ -313,6 +313,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         private long? _cancellationObservedTimestamp;
         // A count, not a flag: one request can have several switches queued at once (WhenAll).
         private int _pendingMainThreadWaits;
+        // Why a state and not a flag: the watchdog and the main thread race for the moment the tool
+        // enters; a CAS from Waiting decides who won, so a tool that started is never reported as blocked.
+        private const int EntryStateWaiting = 0;
+        private const int EntryStateEntered = 1;
+        private const int EntryStateBlockedMainThread = 2;
+        private const int EntryStateCancelledByUserBeforeEntry = 3;
+        private int _entryState = EntryStateWaiting;
+        private double _blockedMainThreadStallSeconds;
 
         internal ToolExecutionLease(
             ToolExecutionSession session,
@@ -341,7 +349,25 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // fires this lease. Tools run with this token instead of the raw request token.
         internal CancellationToken ExecutionToken => _executionCancellation.Token;
 
-        internal bool WasCancelledByUser => _explicitCancellation.IsCancellationRequested;
+        // A blocked-main-thread cancel uses the same token but is not a user cancel. The state is read
+        // too because a uloop cancel can have claimed the lease before its Cancel() has run.
+        internal bool WasCancelledByUser
+        {
+            get
+            {
+                int state = Volatile.Read(ref _entryState);
+                if (state == EntryStateBlockedMainThread)
+                {
+                    return false;
+                }
+
+                return state == EntryStateCancelledByUserBeforeEntry || _explicitCancellation.IsCancellationRequested;
+            }
+        }
+
+        internal bool WasCancelledForBlockedMainThread => Volatile.Read(ref _entryState) == EntryStateBlockedMainThread;
+
+        internal double BlockedMainThreadStallSeconds => Volatile.Read(ref _blockedMainThreadStallSeconds);
 
         internal string ToolName { get; }
 
@@ -368,7 +394,42 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // session lock or inside an activity hold.
         internal void CancelByUser()
         {
+            Interlocked.CompareExchange(ref _entryState, EntryStateCancelledByUserBeforeEntry, EntryStateWaiting);
             _explicitCancellation.Cancel();
+        }
+
+        // Called by the execution service right after the first main-thread switch returns. False means
+        // the lease was claimed first (blocked main thread or uloop cancel) and the tool must not run;
+        // the caller decides by WasCancelledForBlockedMainThread / WasCancelledByUser, not by the token,
+        // which the claimer may not have cancelled yet.
+        internal bool MarkToolEntered()
+        {
+            return Interlocked.CompareExchange(ref _entryState, EntryStateEntered, EntryStateWaiting) == EntryStateWaiting;
+        }
+
+        // The decision half of TryCancelForBlockedMainThread: records the stall and claims the lease.
+        // Returns false when the tool already entered or uloop cancel already claimed the lease.
+        // Split from the cancel so the moment between the claim and the cancel exists as a unit.
+        internal bool TryClaimBlockedMainThread(double stallSeconds)
+        {
+            Debug.Assert(stallSeconds >= 0, "stallSeconds must not be negative");
+
+            // Written before the CAS: the CAS is a full fence, so whoever sees the claim sees the value.
+            Volatile.Write(ref _blockedMainThreadStallSeconds, stallSeconds);
+            return Interlocked.CompareExchange(ref _entryState, EntryStateBlockedMainThread, EntryStateWaiting) == EntryStateWaiting;
+        }
+
+        // Runs other requests' continuations synchronously on the calling thread (same note as
+        // CancelByUser), so never call it under the session lock or inside an activity hold.
+        internal bool TryCancelForBlockedMainThread(double stallSeconds)
+        {
+            if (!TryClaimBlockedMainThread(stallSeconds))
+            {
+                return false;
+            }
+
+            _explicitCancellation.Cancel();
+            return true;
         }
 
         public void Dispose()

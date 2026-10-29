@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 using io.github.hatayama.UnityCliLoop.Application;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
@@ -49,7 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopToolRegistrarService toolRegistrarService = new(
                 new SkillInstallLayoutInternalToolNameProvider(),
                 toolSettingsPort,
-                new UnityCliLoopToolExecutionService(editorRuntimeStateService),
+                new UnityCliLoopToolExecutionService(
+                    editorRuntimeStateService,
+                    watchdog: new MainThreadEntryWatchdog(
+                        new EditorMainThreadLivenessPort(),
+                        ct => Task.Delay(MainThreadEntryWatchdog.PollInterval, ct))),
                 UnityCliLoopToolDiscovery.DiscoverTools);
             ApplicationRegistrar.RegisterService(toolRegistrarService);
             ToolContractsRegistrar.RegisterService(toolRegistrarService);
