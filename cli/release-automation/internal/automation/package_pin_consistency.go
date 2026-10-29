@@ -22,6 +22,7 @@ type packagePinConsistencyConfig struct {
 
 type packagePinConsistencyPin struct {
 	DispatcherReleaseTag string `json:"dispatcherReleaseTag"`
+	ProjectRunnerVersion string `json:"projectRunnerVersion"`
 }
 
 // RunPackagePinConsistencyCheck fails when a ref would release the Unity
