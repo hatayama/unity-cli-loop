@@ -217,7 +217,7 @@ Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording
 ```
 
 ### 18. status - Check Whether the Editor Can Take a Command
-Use `uloop status` before sending commands when Unity may be starting, compiling, busy, or closed. It answers without side effects and reports one state per line: `Ready`, `Compiling`, `Busy` (with the running tool name), `MainThreadBlocked` (the main thread has not run for 5 seconds or more, usually a modal dialog), `NotResponding`, or `NotRunning`.
+Use `uloop status` before sending commands when Unity may be starting, compiling, busy, or closed. It answers without side effects and reports exactly one state in its `State` field: `Busy` (a uloop command holds the command slot), `Starting`, `MainThreadBlocked` (the main thread has not run for 5 seconds or more, usually a modal dialog), `Compiling`, `ImportingAssets`, `Ready` (the only state that exits 0), `NotResponding`, `ServerUnavailable`, `NotRunning`, or `Unreachable`.
 
 A command sent while the main thread is blocked waits for it. Once the stall reaches 30 seconds before any of the command's code has run, Unity stops the wait, releases the command slot, and the command fails with `MAIN_THREAD_BLOCKED` and the stall seconds; nothing ran, so sending it again after the block clears is safe. The dedicated error code and its guidance are rendered by project runner 3.12.3 or newer, which this package pins; an older runner shows the same message under `UNITY_RPC_ERROR`. A command whose own code blocks the main thread is not stopped; the CLI prints a stall notice on stderr every 60 seconds instead and gives up after 5 minutes with `UNITY_EDITOR_UNRESPONSIVE`.
 
