@@ -216,17 +216,6 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 → replay-input (Action: stop)
 ```
 
-### 18. status - Editor がコマンドを受けられるか確認
-Unity が起動中・コンパイル中・処理中・終了している可能性があるときは、コマンドを送る前に `uloop status` を使います。副作用なしで応答し、`State` 欄に状態を 1 つだけ返します: `Busy`（uloop のコマンドが実行枠を持っている）、`Starting`、`MainThreadBlocked`（main thread が 5 秒以上動いていない。多くはモーダルダイアログ）、`Compiling`、`ImportingAssets`、`Ready`（exit code 0 になる唯一の状態）、`NotResponding`、`ServerUnavailable`、`NotRunning`、`Unreachable`。
-
-main thread がブロックされている間に送ったコマンドは、その解除を待ちます。コマンドのコードがまだ 1 行も動いていない状態で停止が 30 秒に達すると、Unity は待機をやめてコマンドの実行枠を解放し、コマンドは `MAIN_THREAD_BLOCKED` と停止秒数を返して失敗します。何も実行されていないので、ブロックが解けた後に送り直しても安全です。専用のエラーコードと案内を表示するのは project runner 3.12.3 以降で、このパッケージはそれを pin しています。古い runner では同じメッセージが `UNITY_RPC_ERROR` として表示されます。コマンド自身のコードが main thread をブロックしている場合は止めません。代わりに CLI が 60 秒ごとに stderr へ停止の通知を出し、5 分で `UNITY_EDITOR_UNRESPONSIVE` を返して諦めます。
-
-```text
-→ status
-→ State: MainThreadBlocked, SecondsSinceLastMainThreadTick: 12.3
-→ Dismiss the dialog (or run focus-window to find it), then send the command once more
-```
-
 terminal から uloop コマンドを実行するE2Eは、shell 系統ごとに1つのrunnerから実行します:
 
 ```bash
@@ -235,3 +224,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps
 ```
 
 `run-posix-e2e.sh` は、デフォルトでチェックイン済みのネイティブCLIバイナリを使い、すべての `uloop` 呼び出しに明示的な `--project-path` を渡します。CLI recovery/readiness、simulate-mouse UI、UI Toolkit のスクリーンショット注釈とクリックを1つの流れで検証します（最後のものは `--skip-uitoolkit-annotation` で省けます）。Recordingsウィンドウで作成したJSONの replay-input 検証は `verify-replay-via-cli.sh` を個別に実行します。
+
+## Editor 状態確認ツール
+
+### 18. status - Editor がコマンドを受けられるか確認
+Unity が起動中・コンパイル中・処理中・終了している可能性があるときは、コマンドを送る前に `uloop status` を使います。副作用なしで応答し、`State` 欄に状態を 1 つだけ返します: `Busy`（uloop のコマンドが実行枠を持っている）、`Starting`、`MainThreadBlocked`（main thread が 5 秒以上動いていない。多くはモーダルダイアログ）、`Compiling`、`ImportingAssets`、`Ready`（exit code 0 になる唯一の状態）、`NotResponding`、`ServerUnavailable`、`NotRunning`、`Unreachable`。
+
+main thread がブロックされている間に送ったコマンドは、その解除を待ちます。コマンドのコードがまだ 1 行も動いていない状態で停止が 30 秒に達すると、Unity は待機をやめてコマンドの実行枠を解放し、コマンドは `MAIN_THREAD_BLOCKED` と停止秒数を返して失敗します。何も実行されていないので、ブロックが解けた後に送り直しても安全です。専用のエラーコードと案内を表示するのは project runner 3.12.3 以降で、このパッケージはそれを pin しています。古い runner では同じメッセージが `UNITY_RPC_ERROR` として表示されます。コマンド自身のコードが main thread をブロックしている場合は止めません。代わりに CLI が 60 秒ごとに stderr へ停止の通知を出し、5 分で `UNITY_EDITOR_UNRESPONSIVE` を返して諦めます。ただし `execute-dynamic-code` は例外で、スニペットが main thread を塞いでいる間は打ち切りません。
+
+```text
+→ status
+→ State: MainThreadBlocked, SecondsSinceLastMainThreadTick: 12.3
+→ Dismiss the dialog (or run focus-window to find it), then send the command once more
+```

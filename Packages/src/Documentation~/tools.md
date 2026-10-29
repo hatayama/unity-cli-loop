@@ -216,17 +216,6 @@ Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording
 → replay-input (Action: stop)
 ```
 
-### 18. status - Check Whether the Editor Can Take a Command
-Use `uloop status` before sending commands when Unity may be starting, compiling, busy, or closed. It answers without side effects and reports exactly one state in its `State` field: `Busy` (a uloop command holds the command slot), `Starting`, `MainThreadBlocked` (the main thread has not run for 5 seconds or more, usually a modal dialog), `Compiling`, `ImportingAssets`, `Ready` (the only state that exits 0), `NotResponding`, `ServerUnavailable`, `NotRunning`, or `Unreachable`.
-
-A command sent while the main thread is blocked waits for it. Once the stall reaches 30 seconds before any of the command's code has run, Unity stops the wait, releases the command slot, and the command fails with `MAIN_THREAD_BLOCKED` and the stall seconds; nothing ran, so sending it again after the block clears is safe. The dedicated error code and its guidance are rendered by project runner 3.12.3 or newer, which this package pins; an older runner shows the same message under `UNITY_RPC_ERROR`. A command whose own code blocks the main thread is not stopped; the CLI prints a stall notice on stderr every 60 seconds instead and gives up after 5 minutes with `UNITY_EDITOR_UNRESPONSIVE`.
-
-```text
-→ status
-→ State: MainThreadBlocked, SecondsSinceLastMainThreadTick: 12.3
-→ Dismiss the dialog (or run focus-window to find it), then send the command once more
-```
-
 Terminal-driven E2E coverage is available through one runner per shell family:
 
 ```bash
@@ -235,3 +224,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps
 ```
 
 `run-posix-e2e.sh` uses the built native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness, simulate-mouse UI coverage, and UI Toolkit screenshot annotation and click coverage in one sequence (skip the last with `--skip-uitoolkit-annotation`). To verify `replay-input` against a JSON created in the Recordings window, run `verify-replay-via-cli.sh` separately.
+
+## Editor Readiness Tools
+
+### 18. status - Check Whether the Editor Can Take a Command
+Use `uloop status` before sending commands when Unity may be starting, compiling, busy, or closed. It answers without side effects and reports exactly one state in its `State` field: `Busy` (a uloop command holds the command slot), `Starting`, `MainThreadBlocked` (the main thread has not run for 5 seconds or more, usually a modal dialog), `Compiling`, `ImportingAssets`, `Ready` (the only state that exits 0), `NotResponding`, `ServerUnavailable`, `NotRunning`, or `Unreachable`.
+
+A command sent while the main thread is blocked waits for it. Once the stall reaches 30 seconds before any of the command's code has run, Unity stops the wait, releases the command slot, and the command fails with `MAIN_THREAD_BLOCKED` and the stall seconds; nothing ran, so sending it again after the block clears is safe. The dedicated error code and its guidance are rendered by project runner 3.12.3 or newer, which this package pins; an older runner shows the same message under `UNITY_RPC_ERROR`. A command whose own code blocks the main thread is not stopped; the CLI prints a stall notice on stderr every 60 seconds instead and gives up after 5 minutes with `UNITY_EDITOR_UNRESPONSIVE`, except for `execute-dynamic-code`, whose snippet may block the main thread for as long as it runs.
+
+```text
+→ status
+→ State: MainThreadBlocked, SecondsSinceLastMainThreadTick: 12.3
+→ Dismiss the dialog (or run focus-window to find it), then send the command once more
+```
