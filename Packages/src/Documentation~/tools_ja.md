@@ -115,7 +115,7 @@ macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示
 `CaptureMode: rendering` を指定すると、EditorWindowの見た目ではなくGame Viewのレンダリング結果を直接キャプチャします。PlayMode中のゲーム画面を、Editorのウィンドウ枠やスケーリングの影響を受けずに取得したい場合に使います。
 `AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `simulate-mouse-input` に渡す座標を決めやすくなります。
 
-`uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。
+`uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。固定したサイズは Game View のサイズ一覧に `uloop` という項目として追加され、Unity のユーザー共通の設定に保存されます。`uloop set-game-view-size --reset` でその項目を消して元の選択に戻せます。Device Simulator 表示中はこのサイズは効かないため、先に `uloop game-view-mode --to GameView` で切り替えてください。
 ```text
 → screenshot (WindowName: "Console")
 → Console画面の状態をPNGで保存

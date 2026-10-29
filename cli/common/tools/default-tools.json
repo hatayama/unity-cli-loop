@@ -752,7 +752,7 @@
     },
     {
       "name": "set-game-view-size",
-      "description": "Set or inspect the Unity Game View custom rendering resolution.",
+      "description": "Set, inspect, or reset the Unity Game View custom rendering resolution.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -763,6 +763,10 @@
           "Height": {
             "type": "integer",
             "description": "Target Game View rendering height in pixels. Provide with --width to change the resolution."
+          },
+          "Reset": {
+            "type": "boolean",
+            "description": "Removes the uloop size entries this tool added from every platform group of the Game View size list, saves the list, and restores the size that was selected before this tool selected its entry. Cannot be combined with --width / --height."
           }
         }
       }
