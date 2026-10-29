@@ -609,6 +609,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 dispatcher.RunQueued();
 
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
                 UnityCliLoopMainThreadBlockedException exception =
                     Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => task);
                 Assert.That(exception.StallSeconds, Is.EqualTo(45));
@@ -675,6 +677,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 executionService.CancelRunningTool();
 
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
                 Assert.ThrowsAsync<UnityCliLoopToolCancelledException>(() => task);
                 Assert.That(polls.Latest.IsCanceled, Is.True);
             });
@@ -709,6 +713,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     CancellationToken.None);
                 polls.CompleteLatest();
 
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(sharerTask.IsFaulted, Is.True);
                 Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => sharerTask);
                 Assert.That(holderTask.IsCompleted, Is.False);
 
@@ -740,6 +746,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 polls.CompleteLatest();
 
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
                 UnityCliLoopMainThreadBlockedException exception =
                     Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => task);
                 Assert.That(exception.ToolName, Is.EqualTo(ImmediateTool.HolderName));
