@@ -35,6 +35,21 @@ type toolCancelledErrorData struct {
 	RunningToolName string `json:"runningToolName"`
 }
 
+// Mirrors Packages/src/Editor/Infrastructure/Api/MainThreadBlockedErrorData.cs public properties.
+type mainThreadBlockedErrorData struct {
+	Type            string   `json:"type"`
+	Message         string   `json:"message"`
+	RunningToolName string   `json:"runningToolName"`
+	StallSeconds    *float64 `json:"stallSeconds"`
+}
+
+func decodeMainThreadBlockedErrorData(data json.RawMessage) mainThreadBlockedErrorData {
+	var decoded mainThreadBlockedErrorData
+	// Why ignore: keep the previous missing-key = zero-value fallback.
+	_ = json.Unmarshal(data, &decoded)
+	return decoded
+}
+
 func decodeToolCancelledErrorData(data json.RawMessage) toolCancelledErrorData {
 	var decoded toolCancelledErrorData
 	// Why ignore: keep the previous missing-key = zero-value fallback.
