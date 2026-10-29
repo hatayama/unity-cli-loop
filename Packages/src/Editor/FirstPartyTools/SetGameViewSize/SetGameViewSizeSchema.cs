@@ -10,5 +10,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int? Width { get; set; }
 
         public int? Height { get; set; }
+
+        /// <summary>
+        /// When true, removes the size entries this tool added and restores the previous selection.
+        /// Cannot be combined with Width / Height.
+        /// </summary>
+        public bool Reset { get; set; } = false;
     }
 }

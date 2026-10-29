@@ -2,7 +2,8 @@
     "name": "UnityCLILoop.FirstPartyTools.SetGameViewSize.Editor",
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
-        "GUID:fc3fd32eddbee40e39c2d76dc184957b"
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:5079a8d3a72924a81aa1cbc25f65ed1b"
     ],
     "includePlatforms": [
         "Editor"

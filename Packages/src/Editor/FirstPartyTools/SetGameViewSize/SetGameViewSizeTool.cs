@@ -17,8 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SetGameViewSizeSchema parameters,
             CancellationToken ct)
         {
-            SetGameViewSizeUseCase useCase = new();
-            return useCase.ExecuteAsync(parameters, ct);
+            ct.ThrowIfCancellationRequested();
+            SetGameViewSizeUseCase useCase = new(new EditorSetGameViewSizePort());
+            return Task.FromResult(useCase.Execute(parameters));
         }
     }
 }
