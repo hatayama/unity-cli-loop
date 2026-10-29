@@ -110,7 +110,7 @@ test_plan_decisions_reach_the_jobs() {
   assert_job_contains publish "          name: signed-unity-package"
 }
 
-# Verifies post-publish marks the release pull request tagged itself before it starts release-please: release-please skips its own label sync while the release commit is the newest main commit.
+# Verifies post-publish marks the release pull request tagged itself before it starts release-please: release-please runs only once every manifest release is published, so the run it starts must find the label already set.
 test_post_publish_marks_the_release_pull_request_tagged() {
   assert_job_contains post-publish "    needs: [plan, publish]"
   assert_job_contains post-publish '          RELEASE_TAG: ${{ needs.plan.outputs.tag }}'

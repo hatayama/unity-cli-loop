@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -259,16 +260,21 @@ func attemptMergePackageReleasePR(
 		return mergePackageReleasePRPassSettled, 1
 	}
 
-	pinnedTag, err := packageReleasePullRequestPinnedTag(ctx, config, releasePR, deps)
+	pin, err := packageReleasePullRequestPin(ctx, config, releasePR, deps)
 	if err != nil {
 		writeMergePackageReleasePRLine(stderr, err)
 		return mergePackageReleasePRPassSettled, 1
 	}
+	pinnedTag := pin.DispatcherReleaseTag
 	if pinnedTag != dispatcherTag {
-		writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
-			"PR #%d head %s still pins %s; waiting for release-please to rebase it onto the stamp.",
-			releasePR.Number, releasePR.HeadRefOID, pinnedTag))
-		return mergePackageReleasePRPassAwaitingPin, 0
+		return stalePinOutcome(ctx, stdout, stderr, config, releasePR, pinnedTag, deps)
+	}
+	// The runner is judged only on a head that records the current dispatcher:
+	// a head from before the stamp may still name an older runner, and
+	// release-please rebuilds it before this pass can merge anyway.
+	held, exitCode := projectRunnerReleaseGate(ctx, stdout, stderr, config, releasePR, pin, deps)
+	if held {
+		return mergePackageReleasePRPassSettled, exitCode
 	}
 	// The draft flag is not consulted as evidence: it exists to keep people from
 	// merging this pull request, not to prove its checks ran. What proves that
@@ -283,6 +289,40 @@ func attemptMergePackageReleasePR(
 	}
 
 	return readyAndMergePackageReleasePR(ctx, stdout, stderr, config, releasePR, pinnedTag, deps)
+}
+
+// stalePinOutcome decides a pass whose head still pins an older dispatcher.
+// Waiting assumes release-please will rebase the head onto the stamp, which it
+// does not do while a release main's manifest names is unpublished, so the
+// wait path settles then instead of timing out. The no-wait path runs inside a
+// release-please run that the gate let through, so it never reads the manifest
+// here.
+func stalePinOutcome(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config mergePackageReleasePRConfig,
+	releasePR mergePackageReleasePullRequest,
+	pinnedTag string,
+	deps mergePackageReleasePRDeps,
+) (mergePackageReleasePRPassOutcome, int) {
+	if config.waitForMergeable {
+		unpublished, err := unpublishedManifestReleases(ctx, deps.runOutput, config.repository, config.baseBranch)
+		if err != nil {
+			writeMergePackageReleasePRLine(stderr, err)
+			return mergePackageReleasePRPassSettled, 1
+		}
+		if len(unpublished) > 0 {
+			writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
+				"PR #%d head %s still pins %s, and release-please will not rebuild it until %s is published; that publish dispatches release-please, whose merge step decides again.",
+				releasePR.Number, releasePR.HeadRefOID, pinnedTag, strings.Join(unpublished, ", ")))
+			return mergePackageReleasePRPassSettled, 0
+		}
+	}
+	writeMergePackageReleasePRLine(stdout, fmt.Sprintf(
+		"PR #%d head %s still pins %s; waiting for release-please to rebase it onto the stamp.",
+		releasePR.Number, releasePR.HeadRefOID, pinnedTag))
+	return mergePackageReleasePRPassAwaitingPin, 0
 }
 
 func findPackageReleasePullRequest(
@@ -338,32 +378,36 @@ func findPackageReleasePullRequest(
 	return matchingPRs[0], true, nil
 }
 
-// packageReleasePullRequestPinnedTag reads the pin at the pull request head
-// rather than in the checkout: the merge decision is about the commit that will
-// carry the package tag, not about the workspace this command runs in.
-func packageReleasePullRequestPinnedTag(
+// packageReleasePullRequestPin reads the pin at the pull request head rather
+// than in the checkout: the merge decision is about the commit that will carry
+// the package tag, not about the workspace this command runs in.
+func packageReleasePullRequestPin(
 	ctx context.Context,
 	config mergePackageReleasePRConfig,
 	releasePR mergePackageReleasePullRequest,
 	deps mergePackageReleasePRDeps,
-) (string, error) {
+) (packagePinConsistencyPin, error) {
 	decoded, err := githubFileContentAtRef(
 		ctx, deps.runOutput, config.repository, unityPackageCliPinFile, releasePR.HeadRefOID)
 	if err != nil {
-		return "", err
+		return packagePinConsistencyPin{}, err
 	}
 
 	pin := packagePinConsistencyPin{}
 	err = json.Unmarshal(decoded, &pin)
 	if err != nil {
-		return "", fmt.Errorf("%s: failed to parse %s at %s: %w",
+		return packagePinConsistencyPin{}, fmt.Errorf("%s: failed to parse %s at %s: %w",
 			mergePackageReleasePRCommandName, unityPackageCliPinFile, releasePR.HeadRefOID, err)
 	}
 	if pin.DispatcherReleaseTag == "" {
-		return "", fmt.Errorf("%s: %s at %s has no dispatcherReleaseTag",
+		return packagePinConsistencyPin{}, fmt.Errorf("%s: %s at %s has no dispatcherReleaseTag",
 			mergePackageReleasePRCommandName, unityPackageCliPinFile, releasePR.HeadRefOID)
 	}
-	return pin.DispatcherReleaseTag, nil
+	if pin.ProjectRunnerVersion == "" {
+		return packagePinConsistencyPin{}, fmt.Errorf("%s: %s at %s has no projectRunnerVersion",
+			mergePackageReleasePRCommandName, unityPackageCliPinFile, releasePR.HeadRefOID)
+	}
+	return pin, nil
 }
 
 // packageReleasePullRequestChecksPassed requires a completed successful run of

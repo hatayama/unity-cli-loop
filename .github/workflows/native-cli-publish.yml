@@ -456,13 +456,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Dispatch release-please after native CLI publish
-        if: needs.build.outputs.should_publish == 'true' && github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ github.ref_name }}
-        run: gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"
-
       - name: Mark release PR as tagged
         if: github.event_name == 'push'
         env:
@@ -472,3 +465,10 @@ jobs:
           TARGET_BRANCH: ${{ github.ref_name }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: scripts/mark-release-pr-tagged.sh
+
+      - name: Dispatch release-please after native CLI publish
+        if: needs.build.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"

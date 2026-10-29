@@ -104,6 +104,8 @@ would never be tagged.
 - A failed check on the package release pull request stops the automation with a
   non-zero exit rather than waiting. That is deliberate: only a person can fix a
   failing check, and waiting would hide it until the timeout.
+- The project runner side of this order (the package waits for the runner its
+  pin names to be released) is in ADR 0021.
 
 ## Reversal condition
 

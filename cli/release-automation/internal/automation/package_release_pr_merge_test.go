@@ -28,6 +28,16 @@ type mergePackageReleasePRPoll struct {
 	// openDispatcherPRListJSON answers the listing that asks whether a
 	// dispatcher release is still pending.
 	openDispatcherPRListJSON string
+	// openProjectRunnerPRListJSON answers the listing that asks whether a
+	// project runner release is still pending; empty means none is open.
+	openProjectRunnerPRListJSON string
+	// projectRunnerReleaseViewJSON and projectRunnerReleaseViewErr answer the
+	// release read for the runner the pin names; empty JSON means published.
+	projectRunnerReleaseViewJSON string
+	projectRunnerReleaseViewErr  error
+	// releaseViewErrByTag fails the release read of one tag only, so a test
+	// can leave one manifest release unpublished while the others are out.
+	releaseViewErrByTag map[string]error
 	// manifestByRef answers the contents API for the release manifest, so a
 	// test can pin the dispatcher version the base branch tip releases.
 	manifestByRef map[string]string
@@ -88,6 +98,24 @@ func (stub *mergePackageReleasePRStub) runOutput(ctx context.Context, name strin
 // content and run reads.
 func (stub *mergePackageReleasePRStub) answerPullRequestCommand(commandLine string) (string, bool, error) {
 	switch {
+	case strings.Contains(commandLine, "--components--uloop-project-runner"):
+		// Like the dispatcher listing, this is a gate question inside one pass.
+		if stub.activePoll.openProjectRunnerPRListJSON == "" {
+			return "[]", true, nil
+		}
+		return stub.activePoll.openProjectRunnerPRListJSON, true, nil
+	case strings.HasPrefix(commandLine, "gh release view "):
+		tag := strings.Fields(commandLine)[3]
+		if err, found := stub.activePoll.releaseViewErrByTag[tag]; found {
+			return "", true, err
+		}
+		if stub.activePoll.projectRunnerReleaseViewErr != nil {
+			return "", true, stub.activePoll.projectRunnerReleaseViewErr
+		}
+		if stub.activePoll.projectRunnerReleaseViewJSON == "" {
+			return `{"isDraft":false}`, true, nil
+		}
+		return stub.activePoll.projectRunnerReleaseViewJSON, true, nil
 	case strings.Contains(commandLine, "--components--dispatcher"):
 		// The dispatcher listing is a gate question inside one pass, so unlike
 		// the package listing it must not advance the stubbed state.
@@ -133,7 +161,7 @@ func (stub *mergePackageReleasePRStub) answerContentCommand(commandLine string) 
 		if !known {
 			return "", fmt.Errorf("no stubbed pin for ref %q", ref)
 		}
-		pin := fmt.Sprintf(`{"dispatcherReleaseTag":%q}`, pinnedTag)
+		pin := fmt.Sprintf(`{"dispatcherReleaseTag":%q,"projectRunnerVersion":"3.4.0"}`, pinnedTag)
 		return base64.StdEncoding.EncodeToString([]byte(pin)) + "\n", nil
 	case strings.HasPrefix(commandLine, "gh run list "):
 		for workflow, runsJSON := range stub.activePoll.runs {
@@ -150,6 +178,11 @@ func (stub *mergePackageReleasePRStub) answerContentCommand(commandLine string) 
 // test can change what the base branch releases between passes.
 func (stub *mergePackageReleasePRStub) manifestAt(ref string) (string, bool) {
 	manifest, known := stub.activePoll.manifestByRef[ref]
+	if !known {
+		// Every manifest release this default names answers as published, so a
+		// stale pin keeps waiting for the rebase unless a test says otherwise.
+		return `{"Packages/src":"3.20.0","cli/dispatcher":"3.4.0","cli/project-runner":"3.4.0"}`, true
+	}
 	return manifest, known
 }
 
@@ -393,7 +426,8 @@ func TestMergePackageReleasePRWithNoWaitMergesWhenChecksAppearWithinGrace(t *tes
 	}
 	assertReleasePRCheckLogContains(t, stdout, "has not finished for this head; waiting.")
 	assertMergePackageReleasePRMergeCount(t, stub, "package123", 1)
-	assertMergePackageReleasePRListCount(t, stub, 2)
+	// Each pass lists the package release pull request and then the project runner one.
+	assertMergePackageReleasePRListCount(t, stub, 4)
 }
 
 // Verifies --no-wait with a checks grace still leaves the pull request draft, without failing the job, when the runs never appear within the grace.
@@ -411,8 +445,9 @@ func TestMergePackageReleasePRWithNoWaitLeavesDraftWhenChecksStayMissingPastGrac
 	}
 	assertReleasePRCheckLogContains(t, stdout, "is not mergeable yet; leaving it draft.")
 	assertMergePackageReleasePRNeverMerged(t, stub)
-	// The 30-second interval fits three re-reads into the 90-second grace after the first pass.
-	assertMergePackageReleasePRListCount(t, stub, 4)
+	// The 30-second interval fits three re-reads into the 90-second grace after the first pass,
+	// and each pass lists the package release pull request and then the project runner one.
+	assertMergePackageReleasePRListCount(t, stub, 8)
 }
 
 // Verifies the checks grace does not apply to a stale pin: the stamp takes far longer than the grace, so --no-wait still decides in one pass.
@@ -603,6 +638,7 @@ func TestMergePackageReleasePRReadsTheManifestOnlyAfterTheDispatcherGate(t *test
 	commandLogText := strings.Join(stub.commandLog, "\n")
 	assertReleasePRCheckLogDoesNotContain(t, commandLogText, releasePleaseManifestRelativePath)
 	assertReleasePRCheckLogDoesNotContain(t, stdout, "Resolved dispatcher release tag")
+	assertReleasePRCheckLogDoesNotContain(t, commandLogText, "--components--uloop-project-runner")
 	assertMergePackageReleasePRNeverMerged(t, stub)
 }
 
@@ -894,6 +930,11 @@ func TestMergePackageReleasePRFailsOnEachUnusableRead(t *testing.T) {
 		{"pin encoding", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: "not base64!"}, "failed to decode " + unityPackageCliPinFile + " at package123"},
 		{"pin JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: base64Of("{")}, "failed to parse " + unityPackageCliPinFile + " at package123"},
 		{"pin without tag", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: base64Of(`{}`)}, unityPackageCliPinFile + " at package123 has no dispatcherReleaseTag"},
+		{"pin without runner version", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains(pinPath), output: base64Of(`{"dispatcherReleaseTag":"dispatcher-v3.4.0"}`)}, unityPackageCliPinFile + " at package123 has no projectRunnerVersion"},
+		{"runner PR list", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("--components--uloop-project-runner"), err: errors.New("runner PR list failed")}, "runner PR list failed"},
+		{"runner PR list JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("--components--uloop-project-runner"), output: "{"}, "failed to parse uloop-project-runner release PR list"},
+		{"runner release view", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandHasPrefix("gh release view "), err: errors.New("gh release view failed: exit status 1\nHTTP 502: Bad Gateway")}, "HTTP 502: Bad Gateway"},
+		{"runner release view JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandHasPrefix("gh release view "), output: "{"}, "failed to parse release uloop-project-runner-v3.4.0"},
 		{"workflow runs", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandHasPrefix("gh run list "), err: errors.New("workflow runs failed")}, "workflow runs failed"},
 		{"workflow runs JSON", nil, mergePackageReleasePROverride{matches: mergePackageReleasePRCommandHasPrefix("gh run list "), output: "{"}, "failed to parse " + packageReleasePRWorkflows()[0] + " workflow runs"},
 	}
@@ -1006,4 +1047,161 @@ func TestRunMergePackageReleasePRReportsUnknownFlag(t *testing.T) {
 	if exitCode != 1 || !strings.Contains(stderr.String(), "flag provided but not defined") {
 		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
 	}
+}
+
+// projectRunnerReleaseMissingErr is the error runCommandOutput builds when gh reports no release for the pinned runner tag.
+func projectRunnerReleaseMissingErr() error {
+	return errors.New("gh release view uloop-project-runner-v3.4.0 failed: exit status 1\nrelease not found")
+}
+
+// Verifies the release-please path leaves the package release pull request draft while a project runner release pull request is open, so the package never ships the previous runner.
+func TestMergePackageReleasePRLeavesDraftWhileProjectRunnerReleaseIsPending(t *testing.T) {
+	poll := greenDraftPackageReleasePRPoll()
+	poll.openProjectRunnerPRListJSON = `[{"number":2003}]`
+
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{poll},
+		[]string{"--require-no-open-dispatcher-pr", "--no-wait", "--checks-grace-seconds", "120"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "PR #2002 stays draft: a project runner release pull request is open")
+	assertReleasePRCheckLogDoesNotContain(t, strings.Join(stub.commandLog, "\n"), "gh pr ready")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the post-publish path settles in one pass while a project runner release pull request is open, since only another workflow can release the runner.
+func TestMergePackageReleasePRSettlesAtOnceInWaitModeWhileProjectRunnerReleaseIsPending(t *testing.T) {
+	poll := greenDraftPackageReleasePRPoll()
+	poll.openProjectRunnerPRListJSON = `[{"number":2003}]`
+
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{poll},
+		[]string{"--dispatcher-tag", "dispatcher-v3.4.0"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "a project runner release pull request is open")
+	assertMergePackageReleasePRListCount(t, stub, 2)
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the package release pull request stays draft while the release of the runner its pin names is still a draft.
+func TestMergePackageReleasePRLeavesDraftWhilePinnedProjectRunnerIsDraft(t *testing.T) {
+	poll := greenDraftPackageReleasePRPoll()
+	poll.projectRunnerReleaseViewJSON = `{"isDraft":true}`
+
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{poll},
+		[]string{"--require-no-open-dispatcher-pr", "--no-wait", "--checks-grace-seconds", "120"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "pins project runner 3.4.0, which is not published yet")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the package release pull request stays draft while no release exists yet for the runner its pin names.
+func TestMergePackageReleasePRLeavesDraftWhilePinnedProjectRunnerIsMissing(t *testing.T) {
+	poll := greenDraftPackageReleasePRPoll()
+	poll.projectRunnerReleaseViewErr = projectRunnerReleaseMissingErr()
+
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{poll},
+		[]string{"--require-no-open-dispatcher-pr", "--no-wait", "--checks-grace-seconds", "120"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "pins project runner 3.4.0, which is not published yet")
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the post-publish path settles in one pass with exit 0 when the pinned runner is merged but awaiting approval, instead of polling until the 45-minute timeout fails it.
+func TestMergePackageReleasePRSettlesAtOnceInWaitModeWhilePinnedProjectRunnerIsUnpublished(t *testing.T) {
+	poll := greenDraftPackageReleasePRPoll()
+	poll.projectRunnerReleaseViewJSON = `{"isDraft":true}`
+
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCaseWithArgs(t, []mergePackageReleasePRPoll{poll},
+		[]string{"--dispatcher-tag", "dispatcher-v3.4.0"})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "which is not published yet")
+	assertMergePackageReleasePRListCount(t, stub, 2)
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the project runner gate runs only once the head pins the current dispatcher: a stale head is waited out first, and the rebased head is the one judged.
+func TestMergePackageReleasePRChecksTheProjectRunnerOnlyAfterThePinIsCurrent(t *testing.T) {
+	stalePoll := mergePackageReleasePRPoll{
+		prListJSON:      packageReleasePRListJSON("stale123", true),
+		pinnedTagsByRef: packageReleasePRPinAt("stale123", "dispatcher-v3.3.1"),
+		runs:            packageReleasePRRunsAt("stale123"),
+	}
+	rebasedPoll := mergePackageReleasePRPoll{
+		prListJSON:      packageReleasePRListJSON("rebased456", true),
+		pinnedTagsByRef: packageReleasePRPinAt("rebased456", "dispatcher-v3.4.0"),
+		runs:            packageReleasePRRunsAt("rebased456"),
+	}
+
+	exitCode, _, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{stalePoll, rebasedPoll})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	firstRunnerGateRead := -1
+	rebasedPinRead := -1
+	for index, commandLine := range stub.commandLog {
+		if rebasedPinRead == -1 && strings.Contains(commandLine, "?ref=rebased456") {
+			rebasedPinRead = index
+		}
+		if firstRunnerGateRead == -1 && strings.Contains(commandLine, "--components--uloop-project-runner") {
+			firstRunnerGateRead = index
+		}
+	}
+	if firstRunnerGateRead == -1 || rebasedPinRead == -1 || firstRunnerGateRead < rebasedPinRead {
+		t.Fatalf("expected the project runner gate to run only after the rebased pin\n%s", strings.Join(stub.commandLog, "\n"))
+	}
+	assertMergePackageReleasePRMergeCount(t, stub, "rebased456", 1)
+}
+
+// Verifies the post-publish path settles in one pass with exit 0 when the head still pins the previous dispatcher and a release main's manifest names is unpublished, since release-please will not rebase the head before that publish and waiting would only time out.
+func TestMergePackageReleasePRSettlesAtOnceInWaitModeWhileAStalePinCannotBeRebuilt(t *testing.T) {
+	stalePoll := mergePackageReleasePRPoll{
+		prListJSON:          packageReleasePRListJSON("stale123", true),
+		pinnedTagsByRef:     packageReleasePRPinAt("stale123", "dispatcher-v3.3.1"),
+		runs:                packageReleasePRRunsAt("stale123"),
+		manifestByRef:       map[string]string{"main": `{"Packages/src":"3.20.0","cli/dispatcher":"3.4.0","cli/project-runner":"3.4.1"}`},
+		releaseViewErrByTag: map[string]error{"uloop-project-runner-v3.4.1": errors.New("gh release view uloop-project-runner-v3.4.1 failed: exit status 1\nrelease not found")},
+	}
+
+	exitCode, stdout, stderr, stub := runMergePackageReleasePRCase(t, []mergePackageReleasePRPoll{stalePoll})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
+	}
+	assertReleasePRCheckLogContains(t, stdout, "will not rebuild it until uloop-project-runner-v3.4.1 is published")
+	assertMergePackageReleasePRListCount(t, stub, 1)
+	assertMergePackageReleasePRNeverMerged(t, stub)
+}
+
+// Verifies the post-publish path fails without merging when the manifest it reads for a stale pin cannot be read, rather than guessing whether release-please will rebuild the head.
+func TestMergePackageReleasePRFailsInWaitModeWhenTheManifestCannotBeReadForAStalePin(t *testing.T) {
+	stalePoll := mergePackageReleasePRPoll{
+		prListJSON:      packageReleasePRListJSON("stale123", true),
+		pinnedTagsByRef: packageReleasePRPinAt("stale123", "dispatcher-v3.3.1"),
+		runs:            packageReleasePRRunsAt("stale123"),
+	}
+
+	exitCode, _, stderr, stub := runMergePackageReleasePRWithOverride(
+		t, []mergePackageReleasePRPoll{stalePoll}, []string{"--dispatcher-tag", "dispatcher-v3.4.0"},
+		mergePackageReleasePROverride{matches: mergePackageReleasePRCommandContains("contents/" + releasePleaseManifestRelativePath), err: errors.New("manifest read failed")},
+		nil)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	assertReleasePRCheckLogContains(t, stderr, "manifest read failed")
+	assertMergePackageReleasePRNeverMerged(t, stub)
 }

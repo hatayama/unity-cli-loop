@@ -92,6 +92,27 @@ assert_step_contains() {
   fi
 }
 
+assert_step_lacks() {
+  path=$1
+  step=$2
+  unexpected=$3
+
+  step_line=$(line_number "$path" "$step")
+  if [ -z "$step_line" ]; then
+    echo "Expected step '$step' in $path." >&2
+    exit 1
+  fi
+  if awk -v start="$step_line" '
+    NR < start { next }
+    NR == start { in_step = 1 }
+    in_step && NR > start && /^      - name: / { exit }
+    in_step { print }
+  ' "$path" | grep -F -- "$unexpected" >/dev/null; then
+    echo "Expected step '$step' not to contain: $unexpected" >&2
+    exit 1
+  fi
+}
+
 assert_package_path_exists() {
   package_path=$1
   path=$2
@@ -175,13 +196,14 @@ assert_json_value '.packages["cli/dispatcher"]["extra-files"][0].jsonpath' '$.di
 
 assert_file_contains "$RELEASE_WORKFLOW" '  actions: write'
 assert_file_contains "$RELEASE_WORKFLOW" '  checks: read'
-assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation'
+assert_file_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release automation'
 assert_file_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks'
 assert_file_contains "$RELEASE_WORKFLOW" '        working-directory: cli/release-automation'
 assert_file_contains "$RELEASE_WORKFLOW" '        run: go run ./cmd/dispatch-release-please-pr-checks'
-assert_step_contains "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' "        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true'"
+# The release-please gate is a Go command, so Go has to be set up on every run, before the gate.
+assert_step_lacks "$RELEASE_WORKFLOW" '      - name: Setup Go for release automation' '        if:'
 assert_step_contains "$RELEASE_WORKFLOW" '      - name: Dispatch release PR checks' "        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true'"
-assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release PR automation' '      - name: Dispatch release PR checks'
+assert_file_order "$RELEASE_WORKFLOW" '      - name: Setup Go for release automation' '      - name: 🧭 Decide whether every manifest release is published'
 
 assert_manifest_semver '.["Packages/src"]'
 assert_manifest_semver '.["cli/project-runner"]'
