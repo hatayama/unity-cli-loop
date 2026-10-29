@@ -5,7 +5,7 @@ Cancel the uloop command that holds the Editor's command slot, from another term
 ## When to Use
 
 - Every command is rejected with `UNITY_SERVER_BUSY`, `uloop status` keeps reporting `Busy`, and the running command shows no sign of finishing.
-  `MAIN_THREAD_BLOCKED` means the command never ran and the slot is already free; `uloop cancel` is not needed.
+  `MAIN_THREAD_BLOCKED` means the command never ran and released its hold on the slot, so `uloop cancel` is not needed for it (an `execute-dynamic-code` run sharing the slot may still hold it).
 - A command you started does not return, for example an `execute-dynamic-code` snippet that awaits something that never completes.
 
 ## Usage
