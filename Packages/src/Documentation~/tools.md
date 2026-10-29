@@ -115,7 +115,7 @@ Supports three matching modes: `exact` (default), `prefix`, and `contains` - all
 Use `CaptureMode: rendering` to capture the Game View's rendering output directly instead of the EditorWindow's appearance. This is for grabbing the in-game picture during PlayMode without the Editor's window chrome or scaling getting in the way.
 Add `AnnotateRaycastGrid: true` to overlay a coordinate grid on the captured image, which makes it easier for an AI looking at the image to pick coordinates to pass to `simulate-mouse-input`.
 
-Use `uloop set-game-view-size --width 1920 --height 1080` to pin a custom Game View resolution. Do this when you want the coordinate space of `CaptureMode: rendering` to stay stable across runs (run it without arguments to read the current resolution).
+Use `uloop set-game-view-size --width 1920 --height 1080` to pin a custom Game View resolution. Do this when you want the coordinate space of `CaptureMode: rendering` to stay stable across runs (run it without arguments to read the current resolution). The pinned size is kept as a `uloop` entry in the Game View size dropdown and saved in Unity's user-wide preferences; run `uloop set-game-view-size --reset` to remove it and restore the previous selection. Under the Device Simulator the size does not apply; switch with `uloop game-view-mode --to GameView` first.
 ```text
 → screenshot (WindowName: "Console")
 → Save Console window state as PNG
