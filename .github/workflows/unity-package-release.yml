@@ -201,10 +201,10 @@ jobs:
           --asset "$RUNNER_TEMP/signed/$ASSET_NAME"
 
   # Marks the package release pull request tagged, which is what lets
-  # release-please open the next release pull requests. It is marked here
-  # because release-please skips its own label sync while the release commit is
-  # still the newest main commit, which it is whenever the release was due as
-  # soon as the pull request was merged.
+  # release-please open the next release pull requests. release-please runs
+  # only once every release the manifest names is published, so the label is
+  # set here first; the release-please run this job then starts finds the pull
+  # request already tagged.
   post-publish:
     needs: [plan, publish]
     runs-on: ubuntu-latest

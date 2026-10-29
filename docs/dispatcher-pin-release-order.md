@@ -35,25 +35,39 @@ release-please opens **one release pull request per component**: `unity-package`
 and is merged only by automation; the other two are the ones people merge.
 
 1. Merge the **dispatcher** release pull request and approve the `cli-release`
-   environment. Publishing the dispatcher is the only human decision.
-2. `post-publish` stamps the pin on `main`, then marks the **unity-package**
-   release pull request ready and merges it, once that pull request's head
-   records the dispatcher tag just published and has a successful run of every
-   required workflow for that exact head commit. The release PR checks run one
+   environment. Publishing the dispatcher is a human decision.
+2. `post-publish` stamps the pin on `main`, then tries to mark the
+   **unity-package** release pull request ready and merge it, once that pull
+   request's head records the dispatcher tag just published and has a
+   successful run of every required workflow for that exact head commit. It
+   leaves the pull request draft while a **project runner** release pull
+   request is open, or while the release of the runner the head pin names
+   (`uloop-project-runner-v<projectRunnerVersion>`) is missing or still a
+   draft: the runner release pull request raises that pin, so a package cut
+   before it would ship the previous runner. The release PR checks run one
    pull request at a time, so the unity-package one always goes first; behind
    another component's checks it would outlast the time `post-publish` waits.
-3. A package release that carries no dispatcher bump never reaches step 2, so
-   `release-please.yml` merges it instead: after the release PR checks, it
-   marks the package pull request ready and merges it, but only while no
-   dispatcher release pull request is open **and** the pin at the package head
-   already records the dispatcher version `main`'s manifest releases. Otherwise
-   it leaves the pull request draft and reconsiders on the next push to `main`.
-   The one wait it does allow is `--checks-grace-seconds`: GitHub's per-workflow
-   run listing can show a run as unfinished for tens of seconds after it
-   completed, so a head whose checks are not yet listed as finished is re-read
-   for up to two minutes before the pull request is left draft.
-4. The **project runner** release pull request carries no cross-component
-   ordering constraint and can be merged at any time.
+3. Merge the **project runner** release pull request and approve the
+   `cli-release` environment, after release-please has rebuilt it on top of the
+   stamp push.
+4. Once the runner is published, its `post-publish` dispatches release-please,
+   which rebuilds the unity-package release pull request with the new runner in
+   its pin. The merge step at the end of `release-please.yml` then marks it
+   ready and merges it, but only while no dispatcher release pull request is
+   open, the pin at the package head already records the dispatcher version
+   `main`'s manifest releases, no project runner release pull request is open,
+   the runner the pin names is published, and its checks are green. Otherwise
+   it leaves the pull request draft and reconsiders on the next push to `main`
+   or the next dispatch. The one wait it does allow is `--checks-grace-seconds`:
+   GitHub's per-workflow run listing can show a run as unfinished for tens of
+   seconds after it completed, so a head whose checks are not yet listed as
+   finished is re-read for up to two minutes before the pull request is left
+   draft. A package release that carries no dispatcher bump is merged by this
+   step alone.
+5. Merging the runner before the dispatcher does not get stuck either: the
+   runner publish dispatches release-please, which rebuilds the dispatcher
+   release pull request. The recommended order is still dispatcher, then
+   runner.
 
 Merging the package pull request before the dispatcher one would ship the
 *previous* dispatcher, which is the lag this order exists to remove, so it is
@@ -92,7 +106,7 @@ window red for unrelated work.
 When the automatic merge does not happen, merging the unity-package release pull
 request by hand means re-checking by hand what the automation would have
 checked. A green pin freshness gate on `main` only proves the stamp landed; it
-says nothing about the pull request. Before merging, confirm all four:
+says nothing about the pull request. Before merging, confirm all five:
 
 - the pin freshness gate on `main` is green, so the stamp reached `main`;
 - the pull request's head commit records the dispatcher tag just published in
@@ -102,12 +116,15 @@ says nothing about the pull request. Before merging, confirm all four:
   releases;
 - every required workflow has a completed successful run for that exact head
   SHA — not for an earlier head.
+- no project runner release pull request is open, and the release
+  `uloop-project-runner-v<projectRunnerVersion>` the head pin names is
+  published (not draft).
 
 Merging without those is how a stale or unvalidated package release gets
 published, which is the failure this whole order exists to prevent. Decision
 record: `docs/adr/0007-separate-release-prs-and-package-auto-merge.md`.
 
-Once all four hold, take the pull request out of draft yourself ("Ready for
+Once all five hold, take the pull request out of draft yourself ("Ready for
 review") and merge it. A **pre-release** dispatcher is never stamped, so a
 package release waiting on one stays draft indefinitely: publish a stable
 dispatcher, or merge by hand as above.
@@ -115,6 +132,14 @@ dispatcher, or merge by hand as above.
 When the stamp itself fails, the package pull request simply stays draft. Re-run
 the `post-publish` job of the `dispatcher-publish` run: it stamps the new tip and
 merges the pull request in the same job.
+
+release-please itself runs only once every release the manifest at the target
+commit names is published (`check-release-please-gate`). It finds the previous
+release by tag, so rebuilding the release pull requests on a release commit
+whose release is still pending would repeat the previous changelog entries.
+Every publish workflow dispatches release-please once its release is out, which
+is what rebuilds the remaining release pull requests after a release commit.
+Decision record: `docs/adr/0021-package-release-waits-for-the-project-runner-release.md`.
 
 ## Why the stamp is pushed without a pull request
 

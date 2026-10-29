@@ -64,6 +64,8 @@ release waits for.
   release-please, because a release created with `GITHUB_TOKEN` starts no workflow, so commits
   merged while the release was pending get their release pull requests without waiting for the
   next push.
+- Superseded in part by ADR 0021: release-please now runs on a release commit once every
+  release the manifest names is published.
 
 ## Reversal Condition
 
