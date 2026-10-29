@@ -77,6 +77,37 @@ post_publish_section() {
   ' "$WORKFLOW"
 }
 
+post_publish_step_section() {
+  step=$1
+  awk -v step="$step" '
+    $0 == step { printing = 1; print; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
+assert_post_publish_step_contains() {
+  step=$1
+  expected=$2
+  if ! post_publish_step_section "$step" | grep -F -- "$expected" >/dev/null; then
+    echo "Expected post-publish step '$step' to contain: $expected" >&2
+    exit 1
+  fi
+}
+
+assert_post_publish_step_lacks() {
+  step=$1
+  unexpected=$2
+  if [ -z "$(post_publish_step_section "$step")" ]; then
+    echo "Expected post-publish step '$step'." >&2
+    exit 1
+  fi
+  if post_publish_step_section "$step" | grep -F -- "$unexpected" >/dev/null; then
+    echo "Expected post-publish step '$step' not to contain: $unexpected" >&2
+    exit 1
+  fi
+}
+
 assert_post_publish_before() {
   earlier=$1
   later=$2
@@ -263,6 +294,10 @@ test_post_publish_automation_remains_outside_the_privileged_job() {
   assert_contains "      - name: Mark release PR as tagged"
   assert_count 2 "      contents: write"
   assert_post_publish_before "      - name: Mark release PR as tagged" "      - name: Dispatch release-please after native CLI publish"
+  # A publish started by hand must dispatch release-please too, or a package release held for this runner waits for the next push.
+  assert_post_publish_step_lacks "      - name: Dispatch release-please after native CLI publish" "github.event_name"
+  # Only a push run's commit is known to be the release commit the label belongs to.
+  assert_post_publish_step_contains "      - name: Mark release PR as tagged" "        if: github.event_name == 'push'"
 }
 
 test_build_and_publish_jobs_have_separate_trust_boundaries

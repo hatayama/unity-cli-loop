@@ -215,6 +215,11 @@ push would have started:
 - after merging the project runner release pull request:
   `gh workflow run native-cli-publish.yml --repo hatayama/unity-cli-loop --ref main`.
 
+On a release commit, a hand-started release-please run is skipped by
+`check-release-please-gate` until the release is published; the publish
+workflow's `post-publish` starts release-please again once it is, also when the
+publish itself was started by hand.
+
 A manually started publish run does not check that `main`'s head is the release
 commit. A push run skips when the head commit does not stamp the version, but a
 manual run publishes `main`'s head as the release whenever the version has no

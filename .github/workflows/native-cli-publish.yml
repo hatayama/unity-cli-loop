@@ -467,7 +467,7 @@ jobs:
         run: scripts/mark-release-pr-tagged.sh
 
       - name: Dispatch release-please after native CLI publish
-        if: needs.build.outputs.should_publish == 'true' && github.event_name == 'push'
+        if: needs.build.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ github.ref_name }}
