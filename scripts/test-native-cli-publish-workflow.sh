@@ -262,7 +262,7 @@ test_post_publish_automation_remains_outside_the_privileged_job() {
   assert_contains "      - name: Dispatch release-please after native CLI publish"
   assert_contains "      - name: Mark release PR as tagged"
   assert_count 2 "      contents: write"
-  assert_post_publish_before "      - name: Dispatch release-please after native CLI publish" "      - name: Mark release PR as tagged"
+  assert_post_publish_before "      - name: Mark release PR as tagged" "      - name: Dispatch release-please after native CLI publish"
 }
 
 test_build_and_publish_jobs_have_separate_trust_boundaries
