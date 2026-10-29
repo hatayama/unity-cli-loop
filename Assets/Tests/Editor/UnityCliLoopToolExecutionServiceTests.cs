@@ -501,6 +501,297 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ScreenshotCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies a request still waiting for a main thread that stays blocked fails with the blocked-main-thread error, frees the slot, and never runs its tool.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenMainThreadStaysBlockedBeforeToolEntry_ThrowsMainThreadBlockedAndReleasesSlot()
+        {
+            AssertBlockedBeforeToolEntryThrowsMainThreadBlocked(cancellableByUser: true);
+        }
+
+        /// <summary>
+        /// Verifies the blocked-main-thread failure also applies to requests uloop cancel may not stop, because no tool code has run yet.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenNotCancellableByUserAndMainThreadBlocked_StillThrowsMainThreadBlocked()
+        {
+            AssertBlockedBeforeToolEntryThrowsMainThreadBlocked(cancellableByUser: false);
+        }
+
+        /// <summary>
+        /// Verifies a main thread that resumes before the stall reaches the threshold runs the tool and stops the watchdog.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenMainThreadResumesBeforeThreshold_RunsTool()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            ImmediateTool tool = new ImmediateTool(ImmediateTool.HolderName);
+            registry.RegisterTool(tool);
+            ManualPolls polls = new ManualPolls();
+            UnityCliLoopToolExecutionService executionService = CreateServiceWithWatchdog(session, new ScriptedLiveness(10), polls);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> task = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None);
+                polls.CompleteLatest();
+
+                Assert.That(task.IsCompleted, Is.False);
+
+                dispatcher.RunQueued();
+
+                Assert.That(task.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+                Assert.That(tool.ExecutionCount, Is.EqualTo(1));
+                Assert.That(polls.Latest.IsCanceled, Is.True);
+            });
+        }
+
+        /// <summary>
+        /// Verifies the watchdog stops once the tool code runs, so a tool that waits for the main thread itself is never failed as blocked.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenToolCodeWaitsForMainThreadAfterEntry_WatchdogIsStopped()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            registry.RegisterTool(new MainThreadSwitchingTool());
+            ManualPolls polls = new ManualPolls();
+            UnityCliLoopToolExecutionService executionService = CreateServiceWithWatchdog(session, new ScriptedLiveness(45), polls);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> holderTask = executionService.ExecuteToolAsync(
+                    registry,
+                    MainThreadSwitchingTool.ToolNameValue,
+                    null,
+                    CancellationToken.None);
+                // Resumes the switch before the tool, so the tool code runs and queues its own switch.
+                dispatcher.RunQueued();
+
+                Assert.That(polls.Latest.IsCanceled, Is.True);
+                Assert.That(holderTask.IsCompleted, Is.False);
+
+                dispatcher.RunQueued();
+
+                Assert.That(holderTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            });
+        }
+
+        /// <summary>
+        /// Verifies a lease claimed for a blocked main thread refuses the tool even when the main thread resumes before the claimer cancels the token.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenWatchdogClaimsTheLeaseBeforeTheMainThreadResumes_ThrowsMainThreadBlockedWithoutRunningTool()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            ImmediateTool tool = new ImmediateTool(ImmediateTool.HolderName);
+            registry.RegisterTool(tool);
+            CapturingWatchdog capturing = new CapturingWatchdog(null);
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), session, capturing);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> task = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None);
+
+                Assert.That(capturing.Lease.TryClaimBlockedMainThread(45), Is.True);
+                Assert.That(capturing.Lease.ExecutionToken.IsCancellationRequested, Is.False);
+
+                dispatcher.RunQueued();
+
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
+                UnityCliLoopMainThreadBlockedException exception =
+                    Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => task);
+                Assert.That(exception.StallSeconds, Is.EqualTo(45));
+                Assert.That(tool.ExecutionCount, Is.EqualTo(0));
+                ToolExecutionSessionEnterResult nextEnter = session.TryEnter("other-tool");
+                Assert.That(nextEnter.IsEntered, Is.True);
+                nextEnter.Lease.Dispose();
+            });
+        }
+
+        /// <summary>
+        /// Verifies a main thread that resumes while the watchdog is deciding wins, so the tool runs and is not failed as blocked.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenMainThreadResumesWhileTheWatchdogIsDeciding_RunsToolAndIsNotCancelled()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            ImmediateTool tool = new ImmediateTool(ImmediateTool.HolderName);
+            registry.RegisterTool(tool);
+            ManualPolls polls = new ManualPolls();
+            ScriptedLiveness liveness = new ScriptedLiveness(45);
+            CapturingWatchdog capturing = new CapturingWatchdog(new MainThreadEntryWatchdog(liveness, polls.WaitOnePoll));
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), session, capturing);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                liveness.OnRead = dispatcher.RunQueued;
+                Task<UnityCliLoopToolResponse> task = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None);
+
+                polls.CompleteLatest();
+
+                Assert.That(task.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+                Assert.That(tool.ExecutionCount, Is.EqualTo(1));
+                Assert.That(liveness.Reads, Is.EqualTo(1));
+                Assert.That(capturing.Lease.WasCancelledForBlockedMainThread, Is.False);
+            });
+        }
+
+        /// <summary>
+        /// Verifies a uloop cancel that reaches a waiting request before the watchdog keeps its cancelled outcome and stops the watchdog.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenUserCancelsBeforeTheWatchdog_ThrowsToolCancelled()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            registry.RegisterTool(new ImmediateTool(ImmediateTool.HolderName));
+            ManualPolls polls = new ManualPolls();
+            UnityCliLoopToolExecutionService executionService = CreateServiceWithWatchdog(session, new ScriptedLiveness(45), polls);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> task = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None);
+
+                executionService.CancelRunningTool();
+
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
+                Assert.ThrowsAsync<UnityCliLoopToolCancelledException>(() => task);
+                Assert.That(polls.Latest.IsCanceled, Is.True);
+            });
+        }
+
+        /// <summary>
+        /// Verifies that when an execute-dynamic-code run blocks the main thread from inside its code, only the request sharing its slot and still waiting fails as blocked.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenASharedSlotHolderBlocksTheMainThread_FailsTheWaitingSharerAndKeepsTheHolder()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            registry.RegisterTool(new DynamicCodeMainThreadSwitchingTool());
+            ManualPolls polls = new ManualPolls();
+            UnityCliLoopToolExecutionService executionService = CreateServiceWithWatchdog(session, new ScriptedLiveness(45), polls);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> holderTask = executionService.ExecuteToolAsync(
+                    registry,
+                    UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                    null,
+                    CancellationToken.None);
+                dispatcher.RunQueued();
+                Assert.That(polls.Latest.IsCanceled, Is.True);
+
+                Task<UnityCliLoopToolResponse> sharerTask = executionService.ExecuteToolAsync(
+                    registry,
+                    UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE,
+                    null,
+                    CancellationToken.None);
+                polls.CompleteLatest();
+
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(sharerTask.IsFaulted, Is.True);
+                Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => sharerTask);
+                Assert.That(holderTask.IsCompleted, Is.False);
+
+                dispatcher.RunQueued();
+
+                Assert.That(holderTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            });
+        }
+
+        private static void AssertBlockedBeforeToolEntryThrowsMainThreadBlocked(bool cancellableByUser)
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            ImmediateTool tool = new ImmediateTool(ImmediateTool.HolderName);
+            registry.RegisterTool(tool);
+            ManualPolls polls = new ManualPolls();
+            UnityCliLoopToolExecutionService executionService = CreateServiceWithWatchdog(session, new ScriptedLiveness(45), polls);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> task = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None,
+                    cancellableByUser);
+
+                Assert.That(task.IsCompleted, Is.False);
+
+                polls.CompleteLatest();
+
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
+                UnityCliLoopMainThreadBlockedException exception =
+                    Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => task);
+                Assert.That(exception.ToolName, Is.EqualTo(ImmediateTool.HolderName));
+                Assert.That(exception.StallSeconds, Is.EqualTo(45));
+                ToolExecutionSessionEnterResult nextEnter = session.TryEnter("other-tool");
+                Assert.That(nextEnter.IsEntered, Is.True);
+                nextEnter.Lease.Dispose();
+                dispatcher.RunQueued();
+                Assert.That(tool.ExecutionCount, Is.EqualTo(0));
+            });
+        }
+
+        private static UnityCliLoopToolExecutionService CreateServiceWithWatchdog(
+            ToolExecutionSession session,
+            ScriptedLiveness liveness,
+            ManualPolls polls)
+        {
+            return new UnityCliLoopToolExecutionService(
+                new NoOpEditorRuntimeStatePort(),
+                session,
+                new MainThreadEntryWatchdog(liveness, polls.WaitOnePoll));
+        }
+
+        // Why clear the context: with no context every continuation in the service and the watchdog
+        // runs synchronously on the thread that completes the poll or runs the queue, so each step's
+        // outcome is visible right after it without waiting or leaving pool work behind.
+        private static void RunWithQueueingDispatcherAndNoContext(Action<QueueingMainThreadDispatcher> body)
+        {
+            QueueingMainThreadDispatcher dispatcher = new QueueingMainThreadDispatcher();
+            MainThreadSwitcher.RegisterService(dispatcher);
+            SynchronizationContext originalContext = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(null);
+
+            try
+            {
+                body(dispatcher);
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(originalContext);
+                RestoreEditorMainThreadDispatcher();
+            }
+        }
+
         private static void RestoreEditorMainThreadDispatcher()
         {
             EditorMainThreadDispatcher dispatcher = new EditorMainThreadDispatcher();
@@ -585,8 +876,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public ToolParameterSchema ParameterSchema => new();
 
+            public int ExecutionCount { get; private set; }
+
             public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
             {
+                ExecutionCount++;
                 return Task.FromResult<UnityCliLoopToolResponse>(new PendingTypedResponse());
             }
         }
@@ -604,6 +898,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 return new PendingTypedResponse();
+            }
+        }
+
+        // Shares the execute-dynamic-code slot and awaits the main thread inside its code, as a
+        // snippet that keeps the main thread busy would.
+        private sealed class DynamicCodeMainThreadSwitchingTool : IUnityCliLoopTool
+        {
+            public string ToolName => UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE;
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public async Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                return new PendingTypedResponse();
+            }
+        }
+
+        // Hands the test the lease the service guards, so the test can claim it at a chosen moment or
+        // inspect it after the real watchdog it wraps has decided.
+        private sealed class CapturingWatchdog : IMainThreadEntryWatchdog
+        {
+            private readonly IMainThreadEntryWatchdog _inner;
+
+            public CapturingWatchdog(IMainThreadEntryWatchdog inner)
+            {
+                _inner = inner;
+            }
+
+            public ToolExecutionLease Lease { get; private set; }
+
+            public Task GuardAsync(ToolExecutionLease lease, CancellationToken stop)
+            {
+                Lease = lease;
+                return _inner == null ? Task.CompletedTask : _inner.GuardAsync(lease, stop);
             }
         }
 

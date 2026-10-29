@@ -90,6 +90,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     cancelledEx.ToolName,
                     exceptionResponse.Explanation ?? ex.Message);
             }
+            else if (ex is UnityCliLoopMainThreadBlockedException blockedEx)
+            {
+                errorData = new MainThreadBlockedErrorData(
+                    blockedEx.ToolName,
+                    blockedEx.StallSeconds,
+                    exceptionResponse.Explanation ?? ex.Message);
+            }
             else
             {
                 errorData = new InternalErrorData(exceptionResponse.Explanation ?? ex.Message);

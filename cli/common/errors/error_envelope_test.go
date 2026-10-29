@@ -650,3 +650,77 @@ func TestDisconnectedAfterAcceptKeepsNextActionsForOtherCommands(t *testing.T) {
 		t.Fatalf("compile should keep the fixed next actions: %#v", envelope.NextActions)
 	}
 }
+
+func TestClassifyMainThreadBlockedRPCError(t *testing.T) {
+	// Verifies main_thread_blocked RPC failures become a safe-to-retry MAIN_THREAD_BLOCKED error with the stall seconds and recovery guidance.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "'get-hierarchy' was not run: the Unity Editor main thread has not run for 45s, so uloop stopped waiting and released the command slot.",
+		Data: json.RawMessage(
+			`{"type":"main_thread_blocked","runningToolName":"get-hierarchy","stallSeconds":45,"message":"'get-hierarchy' was not run."}`),
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-hierarchy"})
+	if cliErr.ErrorCode != "MAIN_THREAD_BLOCKED" {
+		t.Fatalf("error code mismatch: %#v", cliErr)
+	}
+	if cliErr.Phase != ErrorPhaseResponseWaiting {
+		t.Fatalf("phase mismatch: %#v", cliErr)
+	}
+	if !cliErr.Retryable || !cliErr.SafeToRetry {
+		t.Fatalf("retry flags mismatch: %#v", cliErr)
+	}
+	if !strings.HasPrefix(cliErr.Message, "'get-hierarchy' was not run: Unity's main thread has not run for 45s") {
+		t.Fatalf("message mismatch: %s", cliErr.Message)
+	}
+	if !containsSubstring(cliErr.NextActions, "`uloop status`") {
+		t.Fatalf("next actions do not mention uloop status: %#v", cliErr.NextActions)
+	}
+	if cliErr.Details["StallSeconds"] != 45.0 {
+		t.Fatalf("stall seconds mismatch: %#v", cliErr.Details)
+	}
+	if cliErr.Details["RunningToolName"] != "get-hierarchy" {
+		t.Fatalf("running tool name mismatch: %#v", cliErr.Details)
+	}
+}
+
+func TestClassifyMainThreadBlockedRPCError_WhenStallMissing_SaysThirtySecondsOrMore(t *testing.T) {
+	// Verifies a payload without stallSeconds still names the threshold and leaves StallSeconds out of Details.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "blocked",
+		Data:    json.RawMessage(`{"type":"main_thread_blocked","runningToolName":"get-hierarchy"}`),
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-hierarchy"})
+	if !strings.Contains(cliErr.Message, "30s or more") {
+		t.Fatalf("message mismatch: %s", cliErr.Message)
+	}
+	if _, ok := cliErr.Details["StallSeconds"]; ok {
+		t.Fatalf("StallSeconds should be absent: %#v", cliErr.Details)
+	}
+}
+
+func TestClassifyMainThreadBlockedRPCError_WhenToolNameMissing_UsesCommand(t *testing.T) {
+	// Verifies a payload without runningToolName names the command the CLI sent.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "blocked",
+		Data:    json.RawMessage(`{"type":"main_thread_blocked","stallSeconds":31}`),
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-logs"})
+	if !strings.HasPrefix(cliErr.Message, "'get-logs' was not run") {
+		t.Fatalf("message mismatch: %s", cliErr.Message)
+	}
+}
+
+// Reports whether any of the lines contains the substring.
+func containsSubstring(lines []string, substring string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, substring) {
+			return true
+		}
+	}
+	return false
+}

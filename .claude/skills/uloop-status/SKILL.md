@@ -57,3 +57,4 @@ Play Mode does not change the state: a paused Play Mode session is `Ready`, with
 - A sandboxed shell that cannot open the Unix socket gets an error, not NotRunning; run it outside the sandbox.
 - uloop cannot detect Safe Mode directly; ServerUnavailable that does not clear is the signal.
 - Before reporting MainThreadBlocked it wakes the Editor's main loop and asks again about a second later, so an Editor that is only idle in the background reads as Ready.
+- A command sent while the main thread is blocked waits for it. Once the stall reaches 30 seconds before any of the command's code has run, Unity stops the wait and the command fails with `MAIN_THREAD_BLOCKED` (nothing ran, so running it again after the block clears is safe). A command whose own code blocks the main thread is not stopped; the CLI prints a stall notice on stderr every 60 seconds instead and gives up after 5 minutes with `UNITY_EDITOR_UNRESPONSIVE`.

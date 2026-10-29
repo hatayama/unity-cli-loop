@@ -852,6 +852,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             holderLease.Dispose();
         }
 
+        [Test]
+        public void TryCancelForBlockedMainThread_WhileWaiting_CancelsExecutionTokenAndRecordsStall()
+        {
+            // Tests that a blocked-main-thread cancel before tool entry cancels the token and is not reported as a user cancel.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            bool cancelled = lease.TryCancelForBlockedMainThread(45);
+
+            Assert.That(cancelled, Is.True);
+            Assert.That(lease.ExecutionToken.IsCancellationRequested, Is.True);
+            Assert.That(lease.WasCancelledForBlockedMainThread, Is.True);
+            Assert.That(lease.WasCancelledByUser, Is.False);
+            Assert.That(lease.BlockedMainThreadStallSeconds, Is.EqualTo(45));
+
+            lease.Dispose();
+        }
+
+        [Test]
+        public void TryCancelForBlockedMainThread_AfterToolEntered_ReturnsFalseAndLeavesTokenAlive()
+        {
+            // Tests that once the tool entered, the blocked-main-thread cancel loses and leaves the running tool alone.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            bool entered = lease.MarkToolEntered();
+            bool cancelled = lease.TryCancelForBlockedMainThread(45);
+
+            Assert.That(entered, Is.True);
+            Assert.That(cancelled, Is.False);
+            Assert.That(lease.ExecutionToken.IsCancellationRequested, Is.False);
+            Assert.That(lease.WasCancelledForBlockedMainThread, Is.False);
+
+            lease.Dispose();
+        }
+
+        [Test]
+        public void TryCancelForBlockedMainThread_AfterUserCancel_ReturnsFalseAndKeepsUserReason()
+        {
+            // Tests that a uloop cancel recorded first keeps its reason when the blocked-main-thread cancel comes later.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            lease.CancelByUser();
+            bool cancelled = lease.TryCancelForBlockedMainThread(45);
+
+            Assert.That(cancelled, Is.False);
+            Assert.That(lease.WasCancelledByUser, Is.True);
+            Assert.That(lease.WasCancelledForBlockedMainThread, Is.False);
+
+            lease.Dispose();
+        }
+
+        [Test]
+        public void CancelByUser_AfterBlockedCancel_KeepsBlockedReason()
+        {
+            // Tests that a uloop cancel arriving after the blocked-main-thread cancel does not overwrite the blocked reason.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            lease.TryCancelForBlockedMainThread(45);
+            lease.CancelByUser();
+
+            Assert.That(lease.WasCancelledByUser, Is.False);
+            Assert.That(lease.WasCancelledForBlockedMainThread, Is.True);
+
+            lease.Dispose();
+        }
+
+        [Test]
+        public void CancelByUser_AfterToolEntered_ReportsUserCancel()
+        {
+            // Tests that uloop cancel on a running tool is still reported as a user cancel.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            lease.MarkToolEntered();
+            lease.CancelByUser();
+
+            Assert.That(lease.WasCancelledByUser, Is.True);
+
+            lease.Dispose();
+        }
+
+        [Test]
+        public void MarkToolEntered_AfterBlockedClaim_ReturnsFalseBeforeTheTokenIsCancelled()
+        {
+            // Tests that a claimed lease refuses tool entry even in the moment before the claimer cancels the token.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            bool claimed = lease.TryClaimBlockedMainThread(45);
+            bool entered = lease.MarkToolEntered();
+
+            Assert.That(claimed, Is.True);
+            Assert.That(entered, Is.False);
+            Assert.That(lease.ExecutionToken.IsCancellationRequested, Is.False);
+            Assert.That(lease.WasCancelledForBlockedMainThread, Is.True);
+            Assert.That(lease.BlockedMainThreadStallSeconds, Is.EqualTo(45));
+
+            lease.Dispose();
+        }
+
+        [Test]
+        public void MarkToolEntered_Twice_ReturnsFalseTheSecondTime()
+        {
+            // Tests that tool entry is claimed once and a second claim does not change the entered state.
+            ToolExecutionSession session = new ToolExecutionSession();
+            ToolExecutionLease lease = session.TryEnter("tool").Lease;
+
+            bool first = lease.MarkToolEntered();
+            bool second = lease.MarkToolEntered();
+
+            Assert.That(first, Is.True);
+            Assert.That(second, Is.False);
+            Assert.That(lease.WasCancelledByUser, Is.False);
+
+            lease.Dispose();
+        }
+
         private static long GraceTicks => ToolExecutionSession.CancelledLeaseGraceSeconds * Stopwatch.Frequency;
 
         private static UnityCliLoopToolRegistry CreateRegistry(InMemoryToolSettingsPort settingsPort, IUnityCliLoopTool[] tools)

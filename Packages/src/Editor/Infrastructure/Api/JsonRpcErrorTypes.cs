@@ -10,5 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public const string CliUpdateRequired = "cli_update_required";
         public const string ServerBusy = "server_busy";
         public const string ToolCancelled = "tool_cancelled";
+        public const string MainThreadBlocked = "main_thread_blocked";
     }
 }
