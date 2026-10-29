@@ -47,16 +47,28 @@ jobs:
           echo "branch=${TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: 🧭 Detect release commit
+      - name: Setup Go for release automation
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      # release-please rebuilds every release pull request from the manifest at
+      # HEAD and looks the previous release up by tag. While a version the
+      # manifest names has no published release yet (a merged release pull
+      # request whose publish is still pending), that rebuild would carry the
+      # previous changelog entries again (#1088), so the run waits until every
+      # named release is out. The publish workflows dispatch this workflow once
+      # their release is published, which is what lets the remaining release
+      # pull requests be rebuilt after a release commit.
+      - name: 🧭 Decide whether every manifest release is published
         id: release_commit
-        run: |
-          COMMIT_SUBJECT="$(git log -1 --format=%s)"
-          if scripts/is-release-please-release-commit.sh "${COMMIT_SUBJECT}"; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Release commit detected; release-please will wait for the next non-release commit."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: go run ./cmd/check-release-please-gate --repo "${GITHUB_REPOSITORY}" --ref "${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
       # ── Debug: Show repository structure ─────────────────────────
       - name: 🕵️ Show file tree
@@ -89,13 +101,6 @@ jobs:
           target-branch: ${{ steps.target.outputs.branch }}
           skip-github-release: true
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Go for release PR automation
-        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.release.outputs.prs_created == 'true'
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-        with:
-          go-version-file: cli/.go-version
-          cache-dependency-path: '**/go.sum'
 
       - name: Dispatch release PR checks
         id: release_pr_checks
