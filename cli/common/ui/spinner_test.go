@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/progress"
 )
@@ -245,5 +246,88 @@ func TestSpinnerRenderAfterStopWritesNothing(t *testing.T) {
 
 	if stderr.String() != afterStop {
 		t.Fatalf("render after Stop wrote output: %q", stderr.String()[len(afterStop):])
+	}
+}
+
+func TestDisabledSpinnerNoticeWritesOneLine(t *testing.T) {
+	// Verifies a notice on a disabled spinner reaches stderr as one plain line without terminal control codes.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, false, "Connecting to Unity...")
+
+	spinner.Notice("Unity main thread stuck 30s; check modal/long operation...")
+
+	want := "Unity main thread stuck 30s; check modal/long operation...\n"
+	if stderr.String() != want {
+		t.Fatalf("disabled spinner notice = %q, want %q", stderr.String(), want)
+	}
+}
+
+func TestDisabledSpinnerNoticeRateLimitsToOneLinePerMinute(t *testing.T) {
+	// Verifies notices without a spinner are written at most once per minute so a long stall does not pile up lines.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, false, "Connecting to Unity...")
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	current := start
+	spinner.now = func() time.Time { return current }
+
+	spinner.Notice("first")
+	current = start.Add(59 * time.Second)
+	spinner.Notice("second")
+	current = start.Add(60 * time.Second)
+	spinner.Notice("third")
+
+	if stderr.String() != "first\nthird\n" {
+		t.Fatalf("rate-limited notices = %q, want %q", stderr.String(), "first\nthird\n")
+	}
+}
+
+func TestDisabledSpinnerNoticeAfterStopWritesNothing(t *testing.T) {
+	// Verifies a notice that arrives after Stop on a disabled spinner is dropped.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, false, "Connecting to Unity...")
+	spinner.Stop()
+
+	spinner.Notice("late notice")
+
+	if stderr.Len() != 0 {
+		t.Fatalf("notice after Stop wrote output: %q", stderr.String())
+	}
+}
+
+func TestEnabledSpinnerNoticeUpdatesInPlace(t *testing.T) {
+	// Verifies a notice on an enabled spinner replaces the spinner message instead of writing its own line.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, true, "Connecting to Unity...")
+
+	spinner.Notice("stall notice")
+	spinner.Stop()
+
+	output := stderr.String()
+	if !strings.Contains(output, "stall notice") {
+		t.Fatalf("enabled spinner output did not include the notice: %q", output)
+	}
+	if strings.Contains(output, "stall notice\n") {
+		t.Fatalf("enabled spinner wrote the notice as its own line: %q", output)
+	}
+}
+
+func TestSpinnerProgressFuncWritesStallNoticeAsLineWithoutSpinner(t *testing.T) {
+	// Verifies that without a spinner, connection events stay silent while the stall notice is written as a line.
+	var stderr bytes.Buffer
+	spinner := newSpinner(&stderr, false, "Connecting to Unity...")
+	progressFunc := NewSpinnerProgressFunc(spinner, "Executing get-logs...")
+
+	progressFunc(progress.Event{Stage: progress.StageConnected})
+	if stderr.Len() != 0 {
+		t.Fatalf("connection event wrote output without a spinner: %q", stderr.String())
+	}
+	progressFunc(progress.Event{
+		Stage:   progress.StageMessage,
+		Message: "Unity main thread stuck 30s; check modal/long operation...",
+	})
+
+	want := "Unity main thread stuck 30s; check modal/long operation...\n"
+	if stderr.String() != want {
+		t.Fatalf("stall notice without spinner = %q, want %q", stderr.String(), want)
 	}
 }
