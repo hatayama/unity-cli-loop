@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.13.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.1...dispatcher-v3.13.2) (2026-10-29)
+
+
+### Bug Fixes
+
+* Agents now see the Unity main-thread stall notice even when stderr is not a terminal ([#3416](https://github.com/hatayama/unity-cli-loop/issues/3416)) ([eba0ea4](https://github.com/hatayama/unity-cli-loop/commit/eba0ea4804a7be92890891a22f659e4a487ed625))
+* Commands sent while a dialog blocks the Unity Editor now fail fast with MAIN_THREAD_BLOCKED instead of waiting silently ([#3417](https://github.com/hatayama/unity-cli-loop/issues/3417)) ([1dfaeae](https://github.com/hatayama/unity-cli-loop/commit/1dfaeae5ca35a765ff3ffa4e586173d2326eb794))
+* set-game-view-size no longer reports success under the Device Simulator, and --reset removes the size entry it leaves behind ([#3412](https://github.com/hatayama/unity-cli-loop/issues/3412)) ([4ecde68](https://github.com/hatayama/unity-cli-loop/commit/4ecde684f5c2b17f50f8e45b5476c48c4112e085))
+
 ## [3.13.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.0...dispatcher-v3.13.1) (2026-10-27)
 
 
