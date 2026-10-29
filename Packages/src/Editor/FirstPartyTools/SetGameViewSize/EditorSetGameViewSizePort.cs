@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(
                 kind == PlayModeViewKind.GameView || kind == PlayModeViewKind.None,
                 "custom resolution applies only to a Game View");
-            PlayModeWindow.SetCustomRenderingResolution(width, height, SetGameViewSizeUseCase.OwnedSizeBaseName);
+            GameViewSizeListBridge.ApplyCustomSize(width, height, SetGameViewSizeUseCase.OwnedSizeBaseName);
         }
 
         public string GetSelectedSizeDisplayText()

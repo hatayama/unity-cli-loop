@@ -31,6 +31,48 @@ namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
         }
 
         /// <summary>
+        /// Whether a size entry is one the tool owns: a fixed resolution whose base text equals the owned
+        /// base text exactly. A prefix match would also claim user entries such as "uloop-phone".
+        /// </summary>
+        public static bool IsOwnedSize(string candidateBaseText, bool isFixedResolution, string ownedBaseText)
+        {
+            return isFixedResolution && string.Equals(candidateBaseText, ownedBaseText, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Sets the owned entry of the current group to width x height, adding it when missing, saves the
+        /// list, and selects the entry, opening a Game View when no Play Mode view exists.
+        /// Precondition: the main view is a Game View or none exists.
+        /// </summary>
+        public static void ApplyCustomSize(uint width, uint height, string baseText)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(baseText), "baseText must not be empty");
+            PlayModeView mainView = PlayModeView.GetMainPlayModeView();
+            Debug.Assert(mainView == null || mainView is GameView, "the main Play Mode view must be a Game View or absent");
+            // Same fallback as PlayModeWindow.SetCustomRenderingResolution when no Play Mode view exists.
+            GameView gameView = mainView as GameView ?? EditorWindow.CreateWindow<GameView>();
+
+            // Mirrors GameView.SetCustomResolution, except that Unity matches the first entry whose display
+            // text starts with the base name and would overwrite a user entry such as "uloop-phone".
+            GameViewSizeGroup group = GameViewSizes.instance.currentGroup;
+            int index = FindOwnedCustomSize(group, baseText);
+            if (index >= 0)
+            {
+                GameViewSize size = group.GetGameViewSize(index);
+                size.width = (int)width;
+                size.height = (int)height;
+            }
+            else
+            {
+                group.AddCustomSize(new GameViewSize(GameViewSizeType.FixedResolution, (int)width, (int)height, baseText));
+                index = group.GetTotalCount() - 1;
+            }
+
+            GameViewSizes.instance.SaveToHDD();
+            SelectIndex(gameView, index);
+        }
+
+        /// <summary>
         /// Removes every fixed-resolution custom entry whose base text equals the argument from every
         /// platform group, saves the list when any was removed, and returns the count.
         /// </summary>
@@ -45,8 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
                 for (int index = group.GetTotalCount() - 1; index >= group.GetBuiltinCount(); index--)
                 {
                     GameViewSize size = group.GetGameViewSize(index);
-                    // Exact match: a prefix match would also remove user entries such as "uloop-phone".
-                    if (size.sizeType != GameViewSizeType.FixedResolution || size.baseText != baseText)
+                    if (!IsOwnedSize(size.baseText, size.sizeType == GameViewSizeType.FixedResolution, baseText))
                     {
                         continue;
                     }
@@ -95,6 +136,20 @@ namespace io.github.hatayama.UnityCliLoop.InternalAPIBridge
             GameView gameView = RequireGameView();
             SelectIndex(gameView, 0);
             return GameViewSizes.instance.currentGroup.GetGameViewSize(0).displayText;
+        }
+
+        private static int FindOwnedCustomSize(GameViewSizeGroup group, string baseText)
+        {
+            for (int index = group.GetBuiltinCount(); index < group.GetTotalCount(); index++)
+            {
+                GameViewSize size = group.GetGameViewSize(index);
+                if (IsOwnedSize(size.baseText, size.sizeType == GameViewSizeType.FixedResolution, baseText))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
         }
 
         private static GameView RequireGameView()

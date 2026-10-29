@@ -200,6 +200,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Execute_SetWithUserEntryNamedLikeOurs_LeavesItAloneAndRemembersIt()
+        {
+            // Verifies a user entry whose name only starts with "uloop" is neither overwritten by a change nor removed by --reset.
+            FakeSetGameViewSizePort port = new()
+            {
+                Sizes = new List<(string DisplayText, uint Width, uint Height)>
+                {
+                    ("Free Aspect", 800, 600),
+                    ("uloop-phone (390x844)", 390, 844),
+                    ("Full HD (1920x1080)", 1920, 1080)
+                },
+                SelectedIndex = 1
+            };
+
+            SetGameViewSizeResponse setResponse = Execute(port, Request(1280, 720));
+
+            Assert.That(port.Sizes[1], Is.EqualTo(("uloop-phone (390x844)", 390u, 844u)));
+            Assert.That(port.Sizes[^1].DisplayText, Is.EqualTo("uloop (1280x720)"));
+            Assert.That(setResponse.SelectedSize, Is.EqualTo("uloop (1280x720)"));
+            Assert.That(port.Remembered, Is.EqualTo("uloop-phone (390x844)"));
+
+            SetGameViewSizeResponse resetResponse = Execute(port, ResetRequest());
+
+            Assert.That(resetResponse.Removed, Is.EqualTo(1));
+            Assert.That(port.Sizes.Any(size => size.DisplayText == "uloop-phone (390x844)"), Is.True);
+            Assert.That(resetResponse.SelectedSize, Is.EqualTo("uloop-phone (390x844)"));
+        }
+
+        [Test]
         public void Execute_SetOnSimulator_FailsWithoutChanging()
         {
             // Verifies a size change under the Device Simulator fails, applies nothing, and points to game-view-mode.
@@ -476,7 +505,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 }
 
                 Kind = PlayModeViewKind.GameView;
-                int index = Sizes.FindIndex(size => size.DisplayText.StartsWith("uloop", StringComparison.Ordinal));
+                // "uloop (" is the display form of the owned entry: exact base text and a fixed resolution.
+                int index = Sizes.FindIndex(size => size.DisplayText.StartsWith("uloop (", StringComparison.Ordinal));
                 (string DisplayText, uint Width, uint Height) entry = ($"uloop ({width}x{height})", width, height);
                 if (index < 0)
                 {
