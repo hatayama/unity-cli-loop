@@ -39,25 +39,13 @@ func RunReleasePleaseGateCheckWithDeps(
 		return 1
 	}
 
-	tags, err := releasePleaseManifestReleaseTags(ctx, runOutput, config)
-	if err != nil {
-		writeMergePackageReleasePRLine(stderr, err)
-		return 1
-	}
-
 	// A release that cannot be read fails the run instead of choosing a side:
 	// running anyway repeats the previous changelog, and skipping silently would
 	// leave the release pull requests unbuilt for good.
-	unpublished := []string{}
-	for _, tag := range tags {
-		published, err := releasePublished(ctx, runOutput, config.repository, tag)
-		if err != nil {
-			writeMergePackageReleasePRLine(stderr, err)
-			return 1
-		}
-		if !published {
-			unpublished = append(unpublished, tag)
-		}
+	unpublished, err := unpublishedManifestReleases(ctx, runOutput, config.repository, config.ref)
+	if err != nil {
+		writeMergePackageReleasePRLine(stderr, err)
+		return 1
 	}
 
 	if len(unpublished) > 0 {
@@ -91,14 +79,42 @@ func parseReleasePleaseGateFlags(args []string) (releasePleaseGateConfig, error)
 	return releasePleaseGateConfig{repository: *repository, ref: *ref}, nil
 }
 
+// unpublishedManifestReleases lists the release tags the manifest at the ref
+// names that are missing or still a draft, in manifest path order. While any
+// is listed, release-please does not run on that ref.
+func unpublishedManifestReleases(
+	ctx context.Context,
+	runOutput func(context.Context, string, ...string) (string, error),
+	repository string,
+	ref string,
+) ([]string, error) {
+	tags, err := releasePleaseManifestReleaseTags(ctx, runOutput, repository, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	unpublished := []string{}
+	for _, tag := range tags {
+		published, err := releasePublished(ctx, runOutput, repository, tag)
+		if err != nil {
+			return nil, err
+		}
+		if !published {
+			unpublished = append(unpublished, tag)
+		}
+	}
+	return unpublished, nil
+}
+
 // releasePleaseManifestReleaseTags lists the release tag of every version the
 // manifest at the ref names, in manifest path order.
 func releasePleaseManifestReleaseTags(
 	ctx context.Context,
 	runOutput func(context.Context, string, ...string) (string, error),
-	config releasePleaseGateConfig,
+	repository string,
+	ref string,
 ) ([]string, error) {
-	content, err := githubFileContentAtRef(ctx, runOutput, config.repository, releasePleaseManifestRelativePath, config.ref)
+	content, err := githubFileContentAtRef(ctx, runOutput, repository, releasePleaseManifestRelativePath, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +123,7 @@ func releasePleaseManifestReleaseTags(
 	err = json.Unmarshal(content, &manifest)
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to parse %s at %s: %w",
-			releasePleaseGateCommandName, releasePleaseManifestRelativePath, config.ref, err)
+			releasePleaseGateCommandName, releasePleaseManifestRelativePath, ref, err)
 	}
 
 	paths := make([]string, 0, len(manifest))
@@ -118,7 +134,7 @@ func releasePleaseManifestReleaseTags(
 
 	tags := []string{}
 	for _, path := range paths {
-		tag, err := releasePleaseManifestReleaseTag(config.ref, path, manifest[path])
+		tag, err := releasePleaseManifestReleaseTag(ref, path, manifest[path])
 		if err != nil {
 			return nil, err
 		}

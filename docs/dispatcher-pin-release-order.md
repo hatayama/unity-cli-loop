@@ -44,7 +44,11 @@ and is merged only by automation; the other two are the ones people merge.
    request is open, or while the release of the runner the head pin names
    (`uloop-project-runner-v<projectRunnerVersion>`) is missing or still a
    draft: the runner release pull request raises that pin, so a package cut
-   before it would ship the previous runner. The release PR checks run one
+   before it would ship the previous runner. A head that still pins the
+   previous dispatcher is waited out only while release-please can rebuild it;
+   while a release `main`'s manifest names is unpublished (a merged project
+   runner release pull request still awaiting approval), the pass settles too,
+   because that publish dispatches release-please. The release PR checks run one
    pull request at a time, so the unity-package one always goes first; behind
    another component's checks it would outlast the time `post-publish` waits.
 3. Merge the **project runner** release pull request and approve the

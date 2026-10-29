@@ -17,7 +17,10 @@ release-please runs only once every release the manifest names is published.
   the current dispatcher, and it settles the pass instead of polling, on both paths
   (`dispatcher-publish` post-publish and `release-please.yml`): the runner is published by another,
   approval-gated workflow, whose post-publish dispatches release-please, and that run's merge step
-  decides again.
+  decides again. A head that still pins the previous dispatcher is waited out only while
+  release-please can rebuild it; while a release `main`'s manifest names is unpublished (a merged
+  project runner release pull request still awaiting approval), the pass settles too, because that
+  publish dispatches release-please.
 - `check-release-please-gate` replaces the "the newest commit is a release commit" skip. It reads
   the manifest at the target commit and skips release-please while any release it names is
   missing or still a draft. A release that cannot be read fails the run rather than choosing a
