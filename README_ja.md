@@ -44,6 +44,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 | やりたいこと | 公式 Unity CLI（`unity`） | `uloop` |
 |---|---|---|
 | 使える Unity のバージョン | Unity 6.0 以降（`com.unity.pipeline` パッケージが必要） | **Unity 2022.3 以降** |
+| Editor を再起動する | `unity close` のあと `unity open` | `launch -r`：**1 つのコマンドで再起動し、コマンドを受け付けられるようになるまで待つ** |
 | 開いている Editor でテストを実行する | `test run`：名前（部分一致）、アセンブリ、カテゴリで絞り込む | `run-tests`：完全一致の名前、**正規表現**、クラス、アセンブリで絞り込む。**前回失敗したテストだけを再実行**できる。実行前に未保存のシーンの変更を保存するか、止めるか、破棄するかを選べる |
 | Console を読む | `console get`：最低の重要度、新しいほうからの件数、カーソルを使った新しいログの追いかけ | `get-logs`：種類で絞り込み、**本文やスタックトレースをテキストや正規表現で検索**できる |
 | シーンを読む | `scene get_hierarchy`：シーン全体 | `get-hierarchy`：**指定した GameObject や選択中のオブジェクトを起点にし、深さを制限**できる |
@@ -51,7 +52,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 | Play Mode を操作する | `editor.playmode start` / `pause` / `stop` | `control-play-mode`：**1 フレームずつ進める**こともでき、未保存のシーンの変更の扱いも選べる |
 | Play Mode でキーを押す | `runtime simulate_key`：押す、離す、押して離す | `simulate-keyboard`：**指定した秒数だけ押し続ける**こともでき、押しっぱなしのキーをまとめて離せる |
 | Play Mode でマウスを使う | `runtime simulate_pointer`：指定した位置での移動、押す、離す、クリック | `simulate-mouse-input`：クリック、長押し、**スクロール**、移動量での移動、**クリックせずにその位置に当たる 3D オブジェクトを調べる**。`simulate-mouse-ui`：uGUI と UI Toolkit の要素のクリック、長押し、ドラッグ。**レイキャストを遮る重なりがあっても操作できる** |
-| 画面をキャプチャする | `capture`：Game ビュー、Scene ビュー、UI 要素 | `screenshot`：Game ビューや任意の Editor ウィンドウ。**クリックできる UI 要素や 3D コライダーに、クリックする座標付きのラベルを付けられる**。Prefab だけを描画することもできる |
+| 画面をキャプチャする | `capture`：Game ビューか Scene ビュー。UI Toolkit の要素 1 つだけを撮るのは Unity 6000.7 以降のみ | `screenshot`：Game ビューや**任意の Editor ウィンドウ**（Console、Inspector など）。**クリックできる UI 要素や 3D コライダーに、クリックする座標付きのラベルを付けられる**。**Prefab だけを描画する**こともできる |
 | Play Mode を抜けずにコードを変える | あらかじめ `[MethodReload]` を付けたメソッド（public で、`void` か `IEnumerator` を返すもの）。新しく足したメソッドも呼べる。IL2CPP を含む開発ビルドのプレイヤーにも届く | `hot-reload`：**属性は不要**。メソッド本体、新しいメンバー、新しいクラス。Edit Mode でも Play Mode でも使える。コンストラクタなど一部のメンバーはコンパイルが必要。Editor のみ |
 
 ## uloop だけにあるもの
@@ -59,7 +60,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 | やりたいこと | `uloop` |
 |---|---|
 | コードを書き換えずにソースの行で止めて、変数を読む | `pause-point` |
-| 動画を録画し、見る代わりにフレームシートとして読む | `record-video` |
+| Game ビューや任意の Editor ウィンドウを録画し、見る代わりにフレームシートとして読む | `record-video` |
 | Play Mode で記録した入力を再生する（記録は Editor の Recordings ウィンドウで行う） | `replay-input` |
 | Game ビューの解像度を設定する | `set-game-view-size` |
 | Game ビューを Device Simulator で表示し、デバイスを選ぶ | `game-view-mode` |
@@ -72,9 +73,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 | プロジェクトの作成 | `unity projects create` |
 | サインインとライセンスの確認 | `unity auth`、`unity license` |
 | CI でのプレイヤービルドとテスト | `unity build`、`unity test`（JUnit レポート、シャーディング、リトライ、コードカバレッジ） |
-| 専用のコマンドでシーン・Prefab・アセット・設定を編集する | `gameobject`、`prefab`、`asset`、`settings.*` など（`uloop` では `execute-dynamic-code` で行う） |
 | 起動中のプレイヤービルドを操作する | `unity command --runtime` |
-| MCP で AI エージェントとつなぐ | `unity mcp` |
 
 `unity` が付いていないコマンドは `com.unity.pipeline` パッケージの Editor 側のコマンドで、`unity command` で実行します。
 

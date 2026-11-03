@@ -44,6 +44,7 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 | What you want to do | Official Unity CLI (`unity`) | `uloop` |
 |---|---|---|
 | Use it on your Unity version | Unity 6.0+ (with the `com.unity.pipeline` package) | **Unity 2022.3+** |
+| Restart the Editor | `unity close`, then `unity open` | `launch -r`: **one command, and it waits until the Editor can take commands** |
 | Run tests in the open Editor | `test run`: filter by name (partial match), assembly, or category | `run-tests`: filter by exact name, **regex**, class, or assembly; **rerun only the tests that failed last time**; choose to save unsaved scene changes, stop, or discard them before the run |
 | Read the Console | `console get`: a minimum severity, the newest entries, and following new entries with a cursor | `get-logs`: filter by type, and **search the text or a regex, including stack traces** |
 | Read the scene | `scene get_hierarchy`: a whole scene | `get-hierarchy`: **start from a GameObject or the current selection, and limit the depth** |
@@ -51,7 +52,7 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 | Control Play Mode | `editor.playmode start` / `pause` / `stop` | `control-play-mode`: also **step one frame at a time**, and choose what happens to unsaved scene changes |
 | Press keys in Play Mode | `runtime simulate_key`: down, up, or press | `simulate-keyboard`: also **hold a key for a set time**, and release every held key at once |
 | Use the mouse in Play Mode | `runtime simulate_pointer`: move, down, up, or click at a point | `simulate-mouse-input`: click, long-press, **scroll**, move by a delta, and **check which 3D object a point hits without clicking**; `simulate-mouse-ui`: click, long-press, and drag uGUI and UI Toolkit elements, **even behind an overlay that blocks raycasts** |
-| Capture the screen | `capture`: Game view, Scene view, or a UI element | `screenshot`: Game view or any Editor window, **labeling clickable UI elements and 3D colliders with the coordinates to click**, or a prefab rendered on its own |
+| Capture the screen | `capture`: the Game view or the Scene view; a single UI Toolkit element only on Unity 6000.7+ | `screenshot`: the Game view or **any Editor window** (Console, Inspector, and so on), **labeling clickable UI elements and 3D colliders with the coordinates to click**, or **a prefab rendered on its own** |
 | Change code without leaving Play Mode | Methods marked `[MethodReload]` beforehand (public, returning `void` or `IEnumerator`), which can call newly added methods; also reaches development Players, including IL2CPP | `hot-reload`: **no attributes**; method bodies, new members, and new classes, in Edit Mode and Play Mode; some members, such as constructors, still need a compile; Editor only |
 
 ## Only in uloop
@@ -59,7 +60,7 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 | What you want to do | `uloop` |
 |---|---|
 | Stop at a source line without editing code, and read the variables | `pause-point` |
-| Record a video and read it as frame sheets instead of watching it | `record-video` |
+| Record the Game view or any Editor window as video, and read it as frame sheets instead of watching it | `record-video` |
 | Replay input recorded in Play Mode (recorded from the Editor's Recordings window) | `replay-input` |
 | Set the Game view resolution | `set-game-view-size` |
 | Show the Game view in the Device Simulator and pick the device | `game-view-mode` |
@@ -72,9 +73,7 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 | Create a project | `unity projects create` |
 | Sign in and check licenses | `unity auth`, `unity license` |
 | Build players and run tests in CI | `unity build`, `unity test` (JUnit reports, sharding, retries, code coverage) |
-| Edit scenes, prefabs, assets, and settings with dedicated commands | `gameobject`, `prefab`, `asset`, `settings.*`, and more (`uloop` does this through `execute-dynamic-code`) |
 | Drive a running Player build | `unity command --runtime` |
-| Connect an AI agent over MCP | `unity mcp` |
 
 Commands without the `unity` prefix are Editor-side commands of the `com.unity.pipeline` package, run with `unity command`.
 
