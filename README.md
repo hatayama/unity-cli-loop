@@ -37,37 +37,47 @@ Unity CLI Loop is built around four core ideas:
 
 # Unity CLI and uloop
 
-Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (`unity`) and `uloop` are not competitors: they cover different parts of the work, so you can use both. Unity CLI handles everything around the project, from installing Editors and creating projects to licenses and CI builds and tests, and on Unity 6 it can also drive a running Editor through a wide set of commands. `uloop` focuses on the loop an AI agent runs inside an open Editor while it writes code: compile, test, read the logs, apply edits to the running game, stop at a line, operate the game, and record what it shows.
+Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (`unity`) and `uloop` are not competitors: they cover different parts of the work, so you can use both. Unity CLI handles everything around the project, from installing Editors and creating projects to licenses and CI builds and tests. `uloop` is built for the loop an AI agent runs inside an open Editor while it writes code, and there it goes further: it supports Unity 2022.3 and later, gives finer options for the same tasks, and adds tools for finding out why something went wrong.
+
+## Same task, finer control
 
 | What you want to do | Unity CLI (`unity`) | `uloop` |
 |---|---|---|
-| **Set up and ship** | | |
-| Install and manage Unity Editors and modules | `unity install`, `unity editors`, `unity install-modules` | — |
-| Create a project | `unity projects create` | — |
-| Open a project in the Editor version it needs | `unity open` | `launch` |
-| Sign in and check licenses | `unity auth`, `unity license` | — |
-| Build players and run tests in CI | `unity build`, `unity test` (JUnit reports, sharding, retries) | — |
-| Connect an AI agent | MCP server (`unity mcp`) and a skill (`unity skill install`) | One skill per tool (`uloop skills install`) |
-| **Work in a running Editor** | | |
-| Supported Unity versions | Unity 6.0+ (with the `com.unity.pipeline` package) | Unity 2022.3+ |
-| Compile and read the errors | `unity recompile` | `compile` |
-| Run tests in the open Editor | `test run` | `run-tests` |
-| Read the Console | `console get` | `get-logs` |
-| Run C# in the Editor | `script eval` | `execute-dynamic-code` |
-| Read the scene | `scene get_hierarchy`, `gameobject find` | `get-hierarchy`, `find-game-objects` |
-| Edit scenes, prefabs, assets, and settings | Dedicated commands (`gameobject`, `prefab`, `asset`, `settings.*`, and more) | `execute-dynamic-code` |
-| Enter, pause, and stop Play Mode | `editor.playmode start` / `pause` / `stop` | `control-play-mode` |
-| Capture the screen | `capture` (Game view, Scene view, UI elements) | `screenshot` (Game view, any Editor window) |
-| Press keys and use the mouse in Play Mode | `runtime simulate_key`, `runtime simulate_pointer` | `simulate-keyboard`, `simulate-mouse-input`, `simulate-mouse-ui` (uGUI and UI Toolkit) |
-| Change code without leaving Play Mode | Methods marked `[MethodReload]` (public, returning `void` or `IEnumerator`), which can call newly added methods; also reaches development Players, including IL2CPP | `hot-reload`: no attributes; method bodies, new members, and new classes, in Edit Mode and Play Mode; some members, such as constructors, still need a compile; Editor only |
-| Drive a running Player build | `unity command --runtime` | — |
-| **Find out what went wrong** | | |
-| Stop at a source line and read the variables | — | `pause-point` |
-| Record a video and read it as frame sheets | — | `record-video` |
-| Record input and replay it | — | `replay-input` |
-| Show the Game view in the Device Simulator | — | `game-view-mode` |
+| Use it on your Unity version | Unity 6.0+ (with the `com.unity.pipeline` package) | **Unity 2022.3+** |
+| Run tests in the open Editor | `test run`: filter by name (partial match), assembly, or category | `run-tests`: filter by exact name, **regex**, class, or assembly; **rerun only the tests that failed last time**; choose to save unsaved scene changes, stop, or discard them before the run |
+| Read the Console | `console get`: a minimum severity and the newest entries | `get-logs`: filter by type, and **search the text or a regex, including stack traces** |
+| Read the scene | `scene get_hierarchy`: a whole scene | `get-hierarchy`: **start from a GameObject or the current selection, and limit the depth** |
+| Find GameObjects | `gameobject find`: exact name, tag, one component type, or exact path | `find-game-objects`: **partial, regex, or path match** on the name, several required components, tag, and **layer** |
+| Run C# in the Editor | `script eval`: code and a timeout | `execute-dynamic-code`: **pass values as JSON parameters** to reuse a snippet, and wait through a domain reload the snippet triggers |
+| Control Play Mode | `editor.playmode start` / `pause` / `stop` | `control-play-mode`: also **step one frame at a time**, and choose what happens to unsaved scene changes |
+| Press keys in Play Mode | `runtime simulate_key`: down, up, or press | `simulate-keyboard`: also **hold a key for a set time**, and release every held key at once |
+| Use the mouse in Play Mode | `runtime simulate_pointer`: move, down, up, or click at a point | `simulate-mouse-input`: click, **long-press, scroll**, move by a delta, and **check which 3D object a point hits without clicking**; `simulate-mouse-ui`: click, long-press, and **drag uGUI and UI Toolkit elements**, even behind an overlay that blocks raycasts |
+| Capture the screen | `capture`: Game view, Scene view, or a UI element | `screenshot`: Game view or any Editor window, **labeling clickable UI elements and 3D colliders with the coordinates to click**, or a prefab rendered on its own |
+| Change code without leaving Play Mode | Methods marked `[MethodReload]` beforehand (public, returning `void` or `IEnumerator`), which can call newly added methods; also reaches development Players, including IL2CPP | `hot-reload`: **no attributes**; method bodies, new members, and new classes, in Edit Mode and Play Mode; some members, such as constructors, still need a compile; Editor only |
 
-Commands without the `unity` prefix are Editor-side commands of the `com.unity.pipeline` package, run with `unity command`. `—` means there is no dedicated command.
+## Only in uloop
+
+| What you want to do | `uloop` |
+|---|---|
+| Stop at a source line without editing code, and read the variables | `pause-point` |
+| Record a video and read it as frame sheets instead of watching it | `record-video` |
+| Record input in Play Mode and replay it | `replay-input` |
+| Set the Game view resolution | `set-game-view-size` |
+| Show the Game view in the Device Simulator and pick the device | `game-view-mode` |
+
+## Where Unity CLI leads
+
+| What you want to do | Unity CLI (`unity`) |
+|---|---|
+| Install and manage Unity Editors and modules | `unity install`, `unity editors`, `unity install-modules` |
+| Create a project | `unity projects create` |
+| Sign in and check licenses | `unity auth`, `unity license` |
+| Build players and run tests in CI | `unity build`, `unity test` (JUnit reports, sharding, retries, code coverage) |
+| Edit scenes, prefabs, assets, and settings with dedicated commands | `gameobject`, `prefab`, `asset`, `settings.*`, and more (`uloop` does this through `execute-dynamic-code`) |
+| Drive a running Player build | `unity command --runtime` |
+| Connect an AI agent over MCP | `unity mcp` |
+
+Commands without the `unity` prefix are Editor-side commands of the `com.unity.pipeline` package, run with `unity command`.
 
 A typical setup uses both: `unity install` and `unity open` to get the right Editor, `uloop` for the agent's loop of editing, compiling, testing, and checking the game in that Editor, and `unity build` / `unity test` in CI.
 

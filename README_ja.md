@@ -37,37 +37,47 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
 # Unity CLI と uloop
 
-Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli)（`unity`）と `uloop` は競合するものではありません。受け持つ作業が違うので、両方を使えます。Unity CLI は、Editor のインストールやプロジェクトの作成からライセンス、CI でのビルドとテストまで、プロジェクトの周りの作業を受け持ちます。Unity 6 では、豊富なコマンドで起動中の Editor を操作することもできます。`uloop` は、AI エージェントがコードを書きながら開いている Editor の中で回すループに絞っています。コンパイル、テスト、ログの確認、実行中のゲームへの編集の反映、指定した行での停止、ゲームの操作、画面の録画です。
+Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli)（`unity`）と `uloop` は競合するものではありません。受け持つ作業が違うので、両方を使えます。Unity CLI は、Editor のインストールやプロジェクトの作成からライセンス、CI でのビルドとテストまで、プロジェクトの周りの作業を受け持ちます。`uloop` は、AI エージェントがコードを書きながら開いている Editor の中で回すループのために作られていて、そこでは Unity CLI より踏み込んでいます。Unity 2022.3 以降で使え、同じ作業でもより細かく指定でき、うまくいかない原因を突き止める道具もそろっています。
+
+## 同じ作業を、より細かく
 
 | やりたいこと | Unity CLI（`unity`） | `uloop` |
 |---|---|---|
-| **環境を整えて出荷する** | | |
-| Unity Editor とモジュールのインストール・管理 | `unity install`、`unity editors`、`unity install-modules` | — |
-| プロジェクトの作成 | `unity projects create` | — |
-| プロジェクトが必要とする版の Editor で開く | `unity open` | `launch` |
-| サインインとライセンスの確認 | `unity auth`、`unity license` | — |
-| CI でのプレイヤービルドとテスト | `unity build`、`unity test`（JUnit レポート、シャーディング、リトライ） | — |
-| AI エージェントとの接続 | MCP サーバー（`unity mcp`）と skill（`unity skill install`） | ツールごとの skill（`uloop skills install`） |
-| **起動中の Editor で作業する** | | |
-| 対応する Unity のバージョン | Unity 6.0 以降（`com.unity.pipeline` パッケージが必要） | Unity 2022.3 以降 |
-| コンパイルしてエラーを読む | `unity recompile` | `compile` |
-| 開いている Editor でテストを実行する | `test run` | `run-tests` |
-| Console を読む | `console get` | `get-logs` |
-| Editor で C# を実行する | `script eval` | `execute-dynamic-code` |
-| シーンを読む | `scene get_hierarchy`、`gameobject find` | `get-hierarchy`、`find-game-objects` |
-| シーン・Prefab・アセット・設定を編集する | 専用のコマンド（`gameobject`、`prefab`、`asset`、`settings.*` など） | `execute-dynamic-code` |
-| Play Mode の開始・一時停止・停止 | `editor.playmode start` / `pause` / `stop` | `control-play-mode` |
-| 画面をキャプチャする | `capture`（Game ビュー、Scene ビュー、UI 要素） | `screenshot`（Game ビュー、任意の Editor ウィンドウ） |
-| Play Mode でキーを押す・マウスを使う | `runtime simulate_key`、`runtime simulate_pointer` | `simulate-keyboard`、`simulate-mouse-input`、`simulate-mouse-ui`（uGUI と UI Toolkit） |
-| Play Mode を抜けずにコードを変える | `[MethodReload]` を付けたメソッド（public で、`void` か `IEnumerator` を返すもの）。新しく足したメソッドも呼べる。IL2CPP を含む開発ビルドのプレイヤーにも届く | `hot-reload`：属性は不要。メソッド本体、新しいメンバー、新しいクラス。Edit Mode でも Play Mode でも使える。コンストラクタなど一部のメンバーはコンパイルが必要。Editor のみ |
-| 起動中のプレイヤービルドを操作する | `unity command --runtime` | — |
-| **うまくいかない原因を突き止める** | | |
-| ソースの行で止めて変数を読む | — | `pause-point` |
-| 動画を録画し、フレームシートとして読む | — | `record-video` |
-| 入力を記録して再生する | — | `replay-input` |
-| Game ビューを Device Simulator で表示する | — | `game-view-mode` |
+| 使える Unity のバージョン | Unity 6.0 以降（`com.unity.pipeline` パッケージが必要） | **Unity 2022.3 以降** |
+| 開いている Editor でテストを実行する | `test run`：名前（部分一致）、アセンブリ、カテゴリで絞り込む | `run-tests`：完全一致の名前、**正規表現**、クラス、アセンブリで絞り込む。**前回失敗したテストだけを再実行**できる。実行前に未保存のシーンの変更を保存するか、止めるか、破棄するかを選べる |
+| Console を読む | `console get`：最低の重要度と、新しいほうからの件数 | `get-logs`：種類で絞り込み、**本文やスタックトレースをテキストや正規表現で検索**できる |
+| シーンを読む | `scene get_hierarchy`：シーン全体 | `get-hierarchy`：**指定した GameObject や選択中のオブジェクトを起点にし、深さを制限**できる |
+| GameObject を探す | `gameobject find`：完全一致の名前、タグ、コンポーネントの型 1 つ、完全一致のパス | `find-game-objects`：名前の**部分一致・正規表現・パス**での検索、複数の必須コンポーネント、タグ、**レイヤー** |
+| Editor で C# を実行する | `script eval`：コードとタイムアウト | `execute-dynamic-code`：**値を JSON のパラメーターで渡して**コードを使い回せる。コードが起こしたドメインリロードの完了まで待てる |
+| Play Mode を操作する | `editor.playmode start` / `pause` / `stop` | `control-play-mode`：**1 フレームずつ進める**こともでき、未保存のシーンの変更の扱いも選べる |
+| Play Mode でキーを押す | `runtime simulate_key`：押す、離す、押して離す | `simulate-keyboard`：**指定した秒数だけ押し続ける**こともでき、押しっぱなしのキーをまとめて離せる |
+| Play Mode でマウスを使う | `runtime simulate_pointer`：指定した位置での移動、押す、離す、クリック | `simulate-mouse-input`：クリック、**長押し、スクロール**、移動量での移動、**クリックせずにその位置に当たる 3D オブジェクトを調べる**。`simulate-mouse-ui`：uGUI と UI Toolkit の要素のクリック、長押し、**ドラッグ**。レイキャストを遮る重なりがあっても操作できる |
+| 画面をキャプチャする | `capture`：Game ビュー、Scene ビュー、UI 要素 | `screenshot`：Game ビューや任意の Editor ウィンドウ。**クリックできる UI 要素や 3D コライダーに、クリックする座標付きのラベルを付けられる**。Prefab だけを描画することもできる |
+| Play Mode を抜けずにコードを変える | あらかじめ `[MethodReload]` を付けたメソッド（public で、`void` か `IEnumerator` を返すもの）。新しく足したメソッドも呼べる。IL2CPP を含む開発ビルドのプレイヤーにも届く | `hot-reload`：**属性は不要**。メソッド本体、新しいメンバー、新しいクラス。Edit Mode でも Play Mode でも使える。コンストラクタなど一部のメンバーはコンパイルが必要。Editor のみ |
 
-`unity` が付いていないコマンドは `com.unity.pipeline` パッケージの Editor 側のコマンドで、`unity command` で実行します。`—` は専用のコマンドが無いことを表します。
+## uloop だけにあるもの
+
+| やりたいこと | `uloop` |
+|---|---|
+| コードを書き換えずにソースの行で止めて、変数を読む | `pause-point` |
+| 動画を録画し、見る代わりにフレームシートとして読む | `record-video` |
+| Play Mode での入力を記録して再生する | `replay-input` |
+| Game ビューの解像度を設定する | `set-game-view-size` |
+| Game ビューを Device Simulator で表示し、デバイスを選ぶ | `game-view-mode` |
+
+## Unity CLI が得意なもの
+
+| やりたいこと | Unity CLI（`unity`） |
+|---|---|
+| Unity Editor とモジュールのインストール・管理 | `unity install`、`unity editors`、`unity install-modules` |
+| プロジェクトの作成 | `unity projects create` |
+| サインインとライセンスの確認 | `unity auth`、`unity license` |
+| CI でのプレイヤービルドとテスト | `unity build`、`unity test`（JUnit レポート、シャーディング、リトライ、コードカバレッジ） |
+| 専用のコマンドでシーン・Prefab・アセット・設定を編集する | `gameobject`、`prefab`、`asset`、`settings.*` など（`uloop` では `execute-dynamic-code` で行う） |
+| 起動中のプレイヤービルドを操作する | `unity command --runtime` |
+| MCP で AI エージェントとつなぐ | `unity mcp` |
+
+`unity` が付いていないコマンドは `com.unity.pipeline` パッケージの Editor 側のコマンドで、`unity command` で実行します。
 
 よくある使い方は両方を組み合わせる形です。`unity install` と `unity open` で合う版の Editor を用意し、その Editor の中での編集・コンパイル・テスト・ゲームの確認というエージェントのループは `uloop` で回し、CI では `unity build` と `unity test` を使います。
 
