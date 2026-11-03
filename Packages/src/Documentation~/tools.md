@@ -207,7 +207,7 @@ Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down),
 ```
 
 ### 17. replay-input - Replay Recorded Input During PlayMode
-Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed. Create recording files first in the Unity Editor from **Window > Unity CLI Loop > Recordings** using **Start Recording** and **Stop Recording**. There is no CLI command for recording input.
+Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed. Create recording files first in the Unity Editor from **Window > Unity Loop Harness > Recordings** using **Start Recording** and **Stop Recording**. There is no CLI command for recording input.
 
 ```text
 → replay-input (Action: start)

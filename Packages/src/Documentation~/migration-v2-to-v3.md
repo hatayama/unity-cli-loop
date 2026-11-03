@@ -3,7 +3,7 @@
 English | [日本語](migration-v2-to-v3_ja.md)
 
 > [!NOTE]
-> **Most users do not need this guide.** If you have no C# custom tools and no hand-written skills or scripts that call `uloop`, upgrading is just three steps: raise the Unity package version, press **Install CLI** (or **Update CLI**) in `Window > Unity CLI Loop > Settings`, then press **Install Skills** (or **Update Skills**) in the same window. You are done — you can stop reading here. For what changed in V3, see [What's New in V3](whats-new-v3.md).
+> **Most users do not need this guide.** If you have no C# custom tools and no hand-written skills or scripts that call `uloop`, upgrading is just three steps: raise the Unity package version, press **Install CLI** (or **Update CLI**) in `Window > Unity Loop Harness > Settings`, then press **Install Skills** (or **Update Skills**) in the same window. You are done — you can stop reading here. For what changed in V3, see [What's New in V3](whats-new-v3.md).
 
 ## Who needs this guide
 
@@ -42,9 +42,9 @@ Launching from the CLI does not avoid this dialog. `uloop launch` shows the same
 
 ## Step 2: Press Migrate
 
-Once the Editor is up, the `Unity CLI Loop Migration` window **opens by itself**. This automatic open fires on the first startup after the package major version goes from V2 to V3, so it is a one-time event rather than something you can trigger again by restarting. **If the window did not open on its own**, open it manually from `Window > Unity CLI Loop > Custom Tool Migration`.
+Once the Editor is up, the `Unity Loop Harness Migration` window **opens by itself**. This automatic open fires on the first startup after the package major version goes from V2 to V3, so it is a one-time event rather than something you can trigger again by restarting. **If the window did not open on its own**, open it manually from `Window > Unity Loop Harness > Custom Tool Migration`.
 
-![The Unity CLI Loop Migration window, showing both the C# Source Structure Migration and AI Skill and Script Migration sections, with the detection status and the Migrate button](images/migration-wizard-detected.png)
+![The Unity Loop Harness Migration window, showing both the C# Source Structure Migration and AI Skill and Script Migration sections, with the detection status and the Migrate button](images/migration-wizard-detected.png)
 
 The `C# Source Structure Migration` section reports the detection from the compile error like this (`{N}` is the number of affected files; the wording drops the count when it could not be determined):
 
@@ -152,7 +152,7 @@ The six commands from `capture-window` through `get-menu-items` were already rem
 | `uloop get-menu-items` | Removed. Use `uloop execute-dynamic-code`. |
 | `uloop get-version` | Removed as a user command. Use `uloop --version` for the CLI version, or `uloop execute-dynamic-code` for the Unity Editor version. |
 | `uloop get-project-info` | Removed. Use `uloop execute-dynamic-code` to read the project metadata you need. |
-| `uloop record-input` | Removed in V3. Record input in the Unity Editor from **Window > Unity CLI Loop > Recordings**. |
+| `uloop record-input` | Removed in V3. Record input in the Unity Editor from **Window > Unity Loop Harness > Recordings**. |
 
 The migration skill reports these as candidates rather than rewriting them, because the replacement depends on what your script was doing.
 
@@ -211,7 +211,7 @@ If you prefer to migrate by hand, these are the concrete replacements the wizard
 
 **Unity entered Safe Mode.** The package code does not run there, so nothing was recorded and nothing was lost. Restart the Editor and press `Ignore` at the prompt. If you were never asked, re-enable `Preferences > Asset Pipeline > Show Enter Safe Mode Dialog` and restart again.
 
-**The wizard did not open automatically.** First confirm the Editor actually went through a fresh startup on V3 — the automatic open happens during startup, on the first launch after the major version goes from V2 to V3. If you updated from Package Manager while Unity was running, that session does not count; restart the Editor. Open it manually from `Window > Unity CLI Loop > Custom Tool Migration`; everything in Step 2 onward works the same way from the manual route.
+**The wizard did not open automatically.** First confirm the Editor actually went through a fresh startup on V3 — the automatic open happens during startup, on the first launch after the major version goes from V2 to V3. If you updated from Package Manager while Unity was running, that session does not count; restart the Editor. Open it manually from `Window > Unity Loop Harness > Custom Tool Migration`; everything in Step 2 onward works the same way from the manual route.
 
 **Compile errors remain after `Migrate` finishes.** Read the remaining errors before doing anything else: sources that mix custom logic with V2 API calls can need a manual touch-up that the rules do not cover. Use your VCS diff to see what the wizard changed, restore from your commit or backup if you want a clean slate, and work through the Manual migration reference above for whatever is left.
 
