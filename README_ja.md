@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-> 旧名は **Unity CLI Loop**、その前は **uLoopMCP** です。変わったのは名前だけで、`uloop` コマンド、パッケージ ID、インストール手順はそのままです。
+> 旧名は **Unity CLI Loop**、その前は **uLoopMCP** です。`uloop` コマンド、パッケージ ID、インストール手順はそのままです。Editor のメニューは `Window > Unity CLI Loop` から `Window > Unity Loop Harness` に移りました。
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-red.svg)](https://unity3d.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)<br>

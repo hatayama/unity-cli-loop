@@ -2,7 +2,7 @@
 
 English | [日本語](README_ja.md)
 
-> Formerly **Unity CLI Loop**, and **uLoopMCP** before that. Only the name changed: the `uloop` command, the package ID, and the install steps stay the same.
+> Formerly **Unity CLI Loop**, and **uLoopMCP** before that. The `uloop` command, the package ID, and the install steps stay the same; the Editor menu moved from `Window > Unity CLI Loop` to `Window > Unity Loop Harness`.
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-red.svg)](https://unity3d.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)<br>
