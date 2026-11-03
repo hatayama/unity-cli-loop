@@ -29,6 +29,7 @@ list_shared_common_inputs() {
     'cli/common/clicore/' \
     'cli/common/errors/' \
     'cli/common/ipcendpoint/' \
+    'cli/common/product/' \
     'cli/common/progress/' \
     'cli/common/project/' \
     'cli/common/skilldocs/' \
