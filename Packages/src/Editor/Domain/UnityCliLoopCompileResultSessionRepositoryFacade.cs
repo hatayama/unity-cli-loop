@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
@@ -26,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 if (RepositoryValue == null)
                 {
                     throw new InvalidOperationException(
-                        "Unity CLI Loop compile-result session repository is not registered.");
+                        UnityCliLoopConstants.DISPLAY_NAME + " compile-result session repository is not registered.");
                 }
 
                 return RepositoryValue;

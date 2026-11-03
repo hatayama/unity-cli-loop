@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private volatile bool _needsRepaint;
         private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
 
-        [MenuItem("Window/Unity CLI Loop/Server", priority = 2)]
+        [MenuItem("Window/" + UnityCliLoopConstants.DISPLAY_NAME + "/Server", priority = 2)]
         public static void ShowWindow()
         {
             ServerEditorWindow window = GetWindow<ServerEditorWindow>("Server");
@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (RegisteredServerApplicationService == null)
             {
                 throw new System.InvalidOperationException(
-                    "Unity CLI Loop server application service is not registered.");
+                    UnityCliLoopConstants.DISPLAY_NAME + " server application service is not registered.");
             }
 
             return RegisteredServerApplicationService;

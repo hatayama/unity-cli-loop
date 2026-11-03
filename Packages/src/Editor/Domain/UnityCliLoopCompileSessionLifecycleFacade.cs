@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
@@ -26,7 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 if (ServiceValue == null)
                 {
                     throw new InvalidOperationException(
-                        "Unity CLI Loop compile session lifecycle service is not registered.");
+                        UnityCliLoopConstants.DISPLAY_NAME + " compile session lifecycle service is not registered.");
                 }
 
                 return ServiceValue;

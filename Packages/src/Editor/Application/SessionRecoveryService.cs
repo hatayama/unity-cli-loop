@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             if (recoveredServer?.IsRunning != true)
             {
                 return ValidationResult.Failure(
-                    "Unity CLI Loop server recovery finished, but no running server instance is available.");
+                    UnityCliLoopConstants.DISPLAY_NAME + " server recovery finished, but no running server instance is available.");
             }
 
             return ValidationResult.Success();
