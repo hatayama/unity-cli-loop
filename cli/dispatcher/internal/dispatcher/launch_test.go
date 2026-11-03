@@ -395,12 +395,12 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	}
 	output := stdout.String()
 	for _, expected := range []string{
-		"Waiting for Unity CLI Loop server readiness...",
+		"Waiting for Unity Loop Harness server readiness...",
 		`"Success": true`,
 		`"Ready": true`,
 		`"ServerReady": true`,
 		`"ProjectIpcReady": true`,
-		`"Message": "Unity CLI Loop is ready."`,
+		`"Message": "Unity Loop Harness is ready."`,
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("launch output missing %q:\n%s", expected, output)

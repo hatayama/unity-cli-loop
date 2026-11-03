@@ -16,13 +16,13 @@ func TestUnityServerNotRespondingErrorDescribesCause(t *testing.T) {
 	}{
 		{
 			name:      "without cause",
-			message:   "Unity is running but the Unity CLI Loop server is not responding",
+			message:   "Unity is running but the Unity Loop Harness server is not responding",
 			causeText: "",
 		},
 		{
 			name:      "with cause",
 			cause:     errors.New("i/o timeout"),
-			message:   "Unity is running but the Unity CLI Loop server is not responding: i/o timeout",
+			message:   "Unity is running but the Unity Loop Harness server is not responding: i/o timeout",
 			causeText: "i/o timeout",
 		},
 	}
