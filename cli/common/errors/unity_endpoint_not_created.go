@@ -1,6 +1,9 @@
 package clierrors
 
-import "github.com/hatayama/unity-cli-loop/common/ipcendpoint"
+import (
+	"github.com/hatayama/unity-cli-loop/common/ipcendpoint"
+	"github.com/hatayama/unity-cli-loop/common/product"
+)
 
 type UnityEndpointNotCreatedError = ipcendpoint.UnityEndpointNotCreatedError
 
@@ -8,7 +11,7 @@ func unityEndpointNotCreatedCLIError(err UnityEndpointNotCreatedError, context E
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseConnection,
-		Message:     "The Unity CLI Loop server is not reachable for this project.",
+		Message:     "The " + product.DisplayName + " server is not reachable for this project.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: context.ProjectRoot,

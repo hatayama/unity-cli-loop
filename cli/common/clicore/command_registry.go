@@ -1,5 +1,7 @@
 package clicore
 
+import "github.com/hatayama/unity-cli-loop/common/product"
+
 const (
 	LaunchCommandName               = "launch"
 	CompileCheckCommandName         = "compile-check"
@@ -52,7 +54,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: StatusCommandName, Description: "Report whether the Unity Editor for this project can take a command now, without changing anything", Owner: RunnerOwned},
 	{Name: CancelCommandName, Description: "Cancel the tool the Unity Editor for this project is running now", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
-	{Name: PackageCommandName, Description: "Install or inspect the Unity CLI Loop package in a project", Owner: DispatcherOwned},
+	{Name: PackageCommandName, Description: "Install or inspect the " + product.DisplayName + " package in a project", Owner: DispatcherOwned},
 	{Name: InstallCommandName, Description: "Configure the global uloop dispatcher binary", Owner: DispatcherOwned},
 	{Name: UpdateCommandName, Description: "Update the global uloop dispatcher binary", Owner: DispatcherOwned},
 	{Name: UninstallCommandName, Description: "Remove the global uloop dispatcher binary", Owner: DispatcherOwned},

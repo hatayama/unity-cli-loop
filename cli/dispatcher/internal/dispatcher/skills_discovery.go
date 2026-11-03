@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hatayama/unity-cli-loop/common/product"
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
@@ -35,7 +36,7 @@ func collectSkillDefinitions(projectRoot string) ([]skillDefinition, error) {
 func collectV3MigrationSkillDefinition(projectRoot string) ([]skillDefinition, error) {
 	packageRoot := skillscan.ResolvePackageRoot(projectRoot)
 	if packageRoot == "" {
-		return nil, errors.New("the Unity CLI Loop package root was not found")
+		return nil, errors.New("the " + product.DisplayName + " package root was not found")
 	}
 
 	skillDirectory := filepath.Join(
