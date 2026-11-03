@@ -13,8 +13,7 @@ English | [日本語](README_ja.md)
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="logo-black-bg" src="Packages/src/Documentation~/images/logo.png" /><br>
-    <sub>(Logo inspired by Daft Punk's <i>Human After All</i> album art)</sub>  
+    <img height="450" alt="Unity Loop Harness logo" src="Packages/src/Documentation~/images/logo.png" />
 </p>
   
 
