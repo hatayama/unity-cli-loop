@@ -35,6 +35,45 @@ Unity CLI Loop is built around four core ideas:
 3. **PlayMode automated testing — AI clicks buttons, drags elements, presses keys, replays recorded input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`.
 4. **Achieving the above with a minimal set of tools.** See [Design Philosophy](#design-philosophy).
 
+# Unity CLI and uloop
+
+Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (`unity`) and `uloop` are not competitors: they cover different parts of the work, so you can use both. Unity CLI handles everything around the project, from installing Editors and creating projects to licenses and CI builds and tests, and on Unity 6 it can also drive a running Editor through a wide set of commands. `uloop` focuses on the loop an AI agent runs inside an open Editor while it writes code: compile, test, read the logs, apply edits to the running game, stop at a line, operate the game, and record what it shows.
+
+| What you want to do | Unity CLI (`unity`) | `uloop` |
+|---|---|---|
+| **Set up and ship** | | |
+| Install and manage Unity Editors and modules | `unity install`, `unity editors`, `unity install-modules` | — |
+| Create a project | `unity projects create` | — |
+| Open a project in the Editor version it needs | `unity open` | `launch` |
+| Sign in and check licenses | `unity auth`, `unity license` | — |
+| Build players and run tests in CI | `unity build`, `unity test` (JUnit reports, sharding, retries) | — |
+| Connect an AI agent | MCP server (`unity mcp`) and a skill (`unity skill install`) | One skill per tool (`uloop skills install`) |
+| **Work in a running Editor** | | |
+| Supported Unity versions | Unity 6.0+ (with the `com.unity.pipeline` package) | Unity 2022.3+ |
+| Compile and read the errors | `unity recompile` | `compile` |
+| Run tests in the open Editor | `test run` | `run-tests` |
+| Read the Console | `console get` | `get-logs` |
+| Run C# in the Editor | `script eval` | `execute-dynamic-code` |
+| Read the scene | `scene get_hierarchy`, `gameobject find` | `get-hierarchy`, `find-game-objects` |
+| Edit scenes, prefabs, assets, and settings | Dedicated commands (`gameobject`, `prefab`, `asset`, `settings.*`, and more) | `execute-dynamic-code` |
+| Enter, pause, and stop Play Mode | `editor.playmode start` / `pause` / `stop` | `control-play-mode` |
+| Capture the screen | `capture` (Game view, Scene view, UI elements) | `screenshot` (Game view, any Editor window) |
+| Press keys and use the mouse in Play Mode | `runtime simulate_key`, `runtime simulate_pointer` | `simulate-keyboard`, `simulate-mouse-input`, `simulate-mouse-ui` (uGUI and UI Toolkit) |
+| Change code without leaving Play Mode | Methods marked `[MethodReload]` (public, returning `void` or `IEnumerator`); also reaches development Players, including IL2CPP | `hot-reload`: no attributes; method bodies, new members, and new classes, in Edit Mode and Play Mode |
+| Drive a running Player build | `unity command --runtime` | — |
+| **Find out what went wrong** | | |
+| Stop at a source line and read the variables | — | `pause-point` |
+| Record a video and read it as frame sheets | — | `record-video` |
+| Record input and replay it | — | `replay-input` |
+| Check for compile errors without contacting the Editor | — | `compile-check` |
+| Show the Game view in the Device Simulator | — | `game-view-mode` |
+
+Commands without the `unity` prefix are Editor-side commands of the `com.unity.pipeline` package, run with `unity command`. `—` means there is no dedicated command.
+
+A typical setup uses both: `unity install` and `unity open` to get the right Editor, `uloop` for the agent's loop of editing, compiling, testing, and checking the game in that Editor, and `unity build` / `unity test` in CI.
+
+Compared against Unity CLI 1.0.0-beta.13 and `com.unity.pipeline` 0.9.1-exp.1 (November 2026). Both are pre-release and change quickly; `unity --help` and `unity command` list what your version has.
+
 # Demos
 
 Each clip is a real Claude Code session driving a small voxel game through `uloop`. Stretches where only the terminal changes are sped up; the game plays at real speed.
