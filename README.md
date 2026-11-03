@@ -45,13 +45,12 @@ Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cl
 |---|---|---|
 | Use it on your Unity version | Unity 6.0+ (with the `com.unity.pipeline` package) | **Unity 2022.3+** |
 | Run tests in the open Editor | `test run`: filter by name (partial match), assembly, or category | `run-tests`: filter by exact name, **regex**, class, or assembly; **rerun only the tests that failed last time**; choose to save unsaved scene changes, stop, or discard them before the run |
-| Read the Console | `console get`: a minimum severity and the newest entries | `get-logs`: filter by type, and **search the text or a regex, including stack traces** |
+| Read the Console | `console get`: a minimum severity, the newest entries, and following new entries with a cursor | `get-logs`: filter by type, and **search the text or a regex, including stack traces** |
 | Read the scene | `scene get_hierarchy`: a whole scene | `get-hierarchy`: **start from a GameObject or the current selection, and limit the depth** |
-| Find GameObjects | `gameobject find`: exact name, tag, one component type, or exact path | `find-game-objects`: **partial, regex, or path match** on the name, several required components, tag, and **layer** |
-| Run C# in the Editor | `script eval`: code and a timeout | `execute-dynamic-code`: **pass values as JSON parameters** to reuse a snippet, and wait through a domain reload the snippet triggers |
+| Run C# in the Editor | `script eval` for inline code, or `script run` for a project `.cs` file with JSON arguments | `execute-dynamic-code`: inline code with JSON parameters, and **waits through a domain reload the code triggers** |
 | Control Play Mode | `editor.playmode start` / `pause` / `stop` | `control-play-mode`: also **step one frame at a time**, and choose what happens to unsaved scene changes |
 | Press keys in Play Mode | `runtime simulate_key`: down, up, or press | `simulate-keyboard`: also **hold a key for a set time**, and release every held key at once |
-| Use the mouse in Play Mode | `runtime simulate_pointer`: move, down, up, or click at a point | `simulate-mouse-input`: click, **long-press, scroll**, move by a delta, and **check which 3D object a point hits without clicking**; `simulate-mouse-ui`: click, long-press, and **drag uGUI and UI Toolkit elements**, even behind an overlay that blocks raycasts |
+| Use the mouse in Play Mode | `runtime simulate_pointer`: move, down, up, or click at a point | `simulate-mouse-input`: click, long-press, **scroll**, move by a delta, and **check which 3D object a point hits without clicking**; `simulate-mouse-ui`: click, long-press, and drag uGUI and UI Toolkit elements, **even behind an overlay that blocks raycasts** |
 | Capture the screen | `capture`: Game view, Scene view, or a UI element | `screenshot`: Game view or any Editor window, **labeling clickable UI elements and 3D colliders with the coordinates to click**, or a prefab rendered on its own |
 | Change code without leaving Play Mode | Methods marked `[MethodReload]` beforehand (public, returning `void` or `IEnumerator`), which can call newly added methods; also reaches development Players, including IL2CPP | `hot-reload`: **no attributes**; method bodies, new members, and new classes, in Edit Mode and Play Mode; some members, such as constructors, still need a compile; Editor only |
 
@@ -61,7 +60,7 @@ Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cl
 |---|---|
 | Stop at a source line without editing code, and read the variables | `pause-point` |
 | Record a video and read it as frame sheets instead of watching it | `record-video` |
-| Record input in Play Mode and replay it | `replay-input` |
+| Replay input recorded in Play Mode (recorded from the Editor's Recordings window) | `replay-input` |
 | Set the Game view resolution | `set-game-view-size` |
 | Show the Game view in the Device Simulator and pick the device | `game-view-mode` |
 

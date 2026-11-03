@@ -45,13 +45,12 @@ Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli
 |---|---|---|
 | 使える Unity のバージョン | Unity 6.0 以降（`com.unity.pipeline` パッケージが必要） | **Unity 2022.3 以降** |
 | 開いている Editor でテストを実行する | `test run`：名前（部分一致）、アセンブリ、カテゴリで絞り込む | `run-tests`：完全一致の名前、**正規表現**、クラス、アセンブリで絞り込む。**前回失敗したテストだけを再実行**できる。実行前に未保存のシーンの変更を保存するか、止めるか、破棄するかを選べる |
-| Console を読む | `console get`：最低の重要度と、新しいほうからの件数 | `get-logs`：種類で絞り込み、**本文やスタックトレースをテキストや正規表現で検索**できる |
+| Console を読む | `console get`：最低の重要度、新しいほうからの件数、カーソルを使った新しいログの追いかけ | `get-logs`：種類で絞り込み、**本文やスタックトレースをテキストや正規表現で検索**できる |
 | シーンを読む | `scene get_hierarchy`：シーン全体 | `get-hierarchy`：**指定した GameObject や選択中のオブジェクトを起点にし、深さを制限**できる |
-| GameObject を探す | `gameobject find`：完全一致の名前、タグ、コンポーネントの型 1 つ、完全一致のパス | `find-game-objects`：名前の**部分一致・正規表現・パス**での検索、複数の必須コンポーネント、タグ、**レイヤー** |
-| Editor で C# を実行する | `script eval`：コードとタイムアウト | `execute-dynamic-code`：**値を JSON のパラメーターで渡して**コードを使い回せる。コードが起こしたドメインリロードの完了まで待てる |
+| Editor で C# を実行する | インラインのコードは `script eval`、プロジェクトの `.cs` ファイルを JSON の引数付きで実行するなら `script run` | `execute-dynamic-code`：インラインのコードに JSON のパラメーターを渡せる。**コードが起こしたドメインリロードの完了まで待てる** |
 | Play Mode を操作する | `editor.playmode start` / `pause` / `stop` | `control-play-mode`：**1 フレームずつ進める**こともでき、未保存のシーンの変更の扱いも選べる |
 | Play Mode でキーを押す | `runtime simulate_key`：押す、離す、押して離す | `simulate-keyboard`：**指定した秒数だけ押し続ける**こともでき、押しっぱなしのキーをまとめて離せる |
-| Play Mode でマウスを使う | `runtime simulate_pointer`：指定した位置での移動、押す、離す、クリック | `simulate-mouse-input`：クリック、**長押し、スクロール**、移動量での移動、**クリックせずにその位置に当たる 3D オブジェクトを調べる**。`simulate-mouse-ui`：uGUI と UI Toolkit の要素のクリック、長押し、**ドラッグ**。レイキャストを遮る重なりがあっても操作できる |
+| Play Mode でマウスを使う | `runtime simulate_pointer`：指定した位置での移動、押す、離す、クリック | `simulate-mouse-input`：クリック、長押し、**スクロール**、移動量での移動、**クリックせずにその位置に当たる 3D オブジェクトを調べる**。`simulate-mouse-ui`：uGUI と UI Toolkit の要素のクリック、長押し、ドラッグ。**レイキャストを遮る重なりがあっても操作できる** |
 | 画面をキャプチャする | `capture`：Game ビュー、Scene ビュー、UI 要素 | `screenshot`：Game ビューや任意の Editor ウィンドウ。**クリックできる UI 要素や 3D コライダーに、クリックする座標付きのラベルを付けられる**。Prefab だけを描画することもできる |
 | Play Mode を抜けずにコードを変える | あらかじめ `[MethodReload]` を付けたメソッド（public で、`void` か `IEnumerator` を返すもの）。新しく足したメソッドも呼べる。IL2CPP を含む開発ビルドのプレイヤーにも届く | `hot-reload`：**属性は不要**。メソッド本体、新しいメンバー、新しいクラス。Edit Mode でも Play Mode でも使える。コンストラクタなど一部のメンバーはコンパイルが必要。Editor のみ |
 
@@ -61,7 +60,7 @@ Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli
 |---|---|
 | コードを書き換えずにソースの行で止めて、変数を読む | `pause-point` |
 | 動画を録画し、見る代わりにフレームシートとして読む | `record-video` |
-| Play Mode での入力を記録して再生する | `replay-input` |
+| Play Mode で記録した入力を再生する（記録は Editor の Recordings ウィンドウで行う） | `replay-input` |
 | Game ビューの解像度を設定する | `set-game-view-size` |
 | Game ビューを Device Simulator で表示し、デバイスを選ぶ | `game-view-mode` |
 
