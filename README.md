@@ -35,13 +35,13 @@ Unity CLI Loop is built around four core ideas:
 3. **PlayMode automated testing — AI clicks buttons, drags elements, presses keys, replays recorded input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`.
 4. **Achieving the above with a minimal set of tools.** See [Design Philosophy](#design-philosophy).
 
-# Unity CLI and uloop
+# Official Unity CLI and uloop
 
-Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (`unity`) and `uloop` are not competitors: they cover different parts of the work, so you can use both. Unity CLI handles everything around the project, from installing Editors and creating projects to licenses and CI builds and tests. `uloop` is built for the loop an AI agent runs inside an open Editor while it writes code, and there it goes further: it supports Unity 2022.3 and later, gives finer options for the same tasks, and adds tools for finding out why something went wrong.
+The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (`unity`) and `uloop` are not competitors: they cover different parts of the work, so you can use both. The official Unity CLI handles everything around the project, from installing Editors and creating projects to licenses and CI builds and tests. `uloop` is built for the loop an AI agent runs inside an open Editor while it writes code, and there it goes further: it supports Unity 2022.3 and later, gives finer options for the same tasks, and adds tools for finding out why something went wrong.
 
 ## Same task, finer control
 
-| What you want to do | Unity CLI (`unity`) | `uloop` |
+| What you want to do | Official Unity CLI (`unity`) | `uloop` |
 |---|---|---|
 | Use it on your Unity version | Unity 6.0+ (with the `com.unity.pipeline` package) | **Unity 2022.3+** |
 | Run tests in the open Editor | `test run`: filter by name (partial match), assembly, or category | `run-tests`: filter by exact name, **regex**, class, or assembly; **rerun only the tests that failed last time**; choose to save unsaved scene changes, stop, or discard them before the run |
@@ -64,9 +64,9 @@ Unity's official [Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cl
 | Set the Game view resolution | `set-game-view-size` |
 | Show the Game view in the Device Simulator and pick the device | `game-view-mode` |
 
-## Where Unity CLI leads
+## Where the official Unity CLI leads
 
-| What you want to do | Unity CLI (`unity`) |
+| What you want to do | Official Unity CLI (`unity`) |
 |---|---|
 | Install and manage Unity Editors and modules | `unity install`, `unity editors`, `unity install-modules` |
 | Create a project | `unity projects create` |
@@ -80,7 +80,7 @@ Commands without the `unity` prefix are Editor-side commands of the `com.unity.p
 
 A typical setup uses both: `unity install` and `unity open` to get the right Editor, `uloop` for the agent's loop of editing, compiling, testing, and checking the game in that Editor, and `unity build` / `unity test` in CI.
 
-Compared against Unity CLI 1.0.0-beta.13 and `com.unity.pipeline` 0.9.1-exp.1 (November 2026). Both are pre-release and change quickly; `unity --help` and `unity command` list what your version has.
+Compared against the official Unity CLI 1.0.0-beta.13 and `com.unity.pipeline` 0.9.1-exp.1 (November 2026). Both are pre-release and change quickly; `unity --help` and `unity command` list what your version has.
 
 # Demos
 

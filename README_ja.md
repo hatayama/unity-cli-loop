@@ -35,13 +35,13 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、記録済み入力の再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
 
-# Unity CLI と uloop
+# 公式 Unity CLI と uloop
 
-Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli)（`unity`）と `uloop` は競合するものではありません。受け持つ作業が違うので、両方を使えます。Unity CLI は、Editor のインストールやプロジェクトの作成からライセンス、CI でのビルドとテストまで、プロジェクトの周りの作業を受け持ちます。`uloop` は、AI エージェントがコードを書きながら開いている Editor の中で回すループのために作られていて、そこでは Unity CLI より踏み込んでいます。Unity 2022.3 以降で使え、同じ作業でもより細かく指定でき、うまくいかない原因を突き止める道具もそろっています。
+[公式 Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli)（`unity`）と `uloop` は競合するものではありません。受け持つ作業が違うので、両方を使えます。公式 Unity CLI は、Editor のインストールやプロジェクトの作成からライセンス、CI でのビルドとテストまで、プロジェクトの周りの作業を受け持ちます。`uloop` は、AI エージェントがコードを書きながら開いている Editor の中で回すループのために作られていて、そこでは 公式 Unity CLI より踏み込んでいます。Unity 2022.3 以降で使え、同じ作業でもより細かく指定でき、うまくいかない原因を突き止める道具もそろっています。
 
 ## 同じ作業を、より細かく
 
-| やりたいこと | Unity CLI（`unity`） | `uloop` |
+| やりたいこと | 公式 Unity CLI（`unity`） | `uloop` |
 |---|---|---|
 | 使える Unity のバージョン | Unity 6.0 以降（`com.unity.pipeline` パッケージが必要） | **Unity 2022.3 以降** |
 | 開いている Editor でテストを実行する | `test run`：名前（部分一致）、アセンブリ、カテゴリで絞り込む | `run-tests`：完全一致の名前、**正規表現**、クラス、アセンブリで絞り込む。**前回失敗したテストだけを再実行**できる。実行前に未保存のシーンの変更を保存するか、止めるか、破棄するかを選べる |
@@ -64,9 +64,9 @@ Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli
 | Game ビューの解像度を設定する | `set-game-view-size` |
 | Game ビューを Device Simulator で表示し、デバイスを選ぶ | `game-view-mode` |
 
-## Unity CLI が得意なもの
+## 公式 Unity CLI が得意なもの
 
-| やりたいこと | Unity CLI（`unity`） |
+| やりたいこと | 公式 Unity CLI（`unity`） |
 |---|---|
 | Unity Editor とモジュールのインストール・管理 | `unity install`、`unity editors`、`unity install-modules` |
 | プロジェクトの作成 | `unity projects create` |
@@ -80,7 +80,7 @@ Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli
 
 よくある使い方は両方を組み合わせる形です。`unity install` と `unity open` で合う版の Editor を用意し、その Editor の中での編集・コンパイル・テスト・ゲームの確認というエージェントのループは `uloop` で回し、CI では `unity build` と `unity test` を使います。
 
-比較の対象は Unity CLI 1.0.0-beta.13 と `com.unity.pipeline` 0.9.1-exp.1（2026 年 11 月時点）です。どちらもプレリリースで変更が速いので、手元の版でできることは `unity --help` と `unity command` で確認してください。
+比較の対象は公式 Unity CLI 1.0.0-beta.13 と `com.unity.pipeline` 0.9.1-exp.1（2026 年 11 月時点）です。どちらもプレリリースで変更が速いので、手元の版でできることは `unity --help` と `unity command` で確認してください。
 
 # デモ
 
