@@ -59,13 +59,12 @@ Unity 公式の [Unity CLI](https://docs.unity.com/ja-jp/unity-cli/use-unity-cli
 | Play Mode の開始・一時停止・停止 | `editor.playmode start` / `pause` / `stop` | `control-play-mode` |
 | 画面をキャプチャする | `capture`（Game ビュー、Scene ビュー、UI 要素） | `screenshot`（Game ビュー、任意の Editor ウィンドウ） |
 | Play Mode でキーを押す・マウスを使う | `runtime simulate_key`、`runtime simulate_pointer` | `simulate-keyboard`、`simulate-mouse-input`、`simulate-mouse-ui`（uGUI と UI Toolkit） |
-| Play Mode を抜けずにコードを変える | `[MethodReload]` を付けたメソッド（public で、`void` か `IEnumerator` を返すもの）。IL2CPP を含む開発ビルドのプレイヤーにも届く | `hot-reload`：属性は不要。メソッド本体、新しいメンバー、新しいクラス。Edit Mode でも Play Mode でも使える |
+| Play Mode を抜けずにコードを変える | `[MethodReload]` を付けたメソッド（public で、`void` か `IEnumerator` を返すもの）。新しく足したメソッドも呼べる。IL2CPP を含む開発ビルドのプレイヤーにも届く | `hot-reload`：属性は不要。メソッド本体、新しいメンバー、新しいクラス。Edit Mode でも Play Mode でも使える。コンストラクタなど一部のメンバーはコンパイルが必要。Editor のみ |
 | 起動中のプレイヤービルドを操作する | `unity command --runtime` | — |
 | **うまくいかない原因を突き止める** | | |
 | ソースの行で止めて変数を読む | — | `pause-point` |
 | 動画を録画し、フレームシートとして読む | — | `record-video` |
 | 入力を記録して再生する | — | `replay-input` |
-| Editor に接続せずにコンパイルエラーを確かめる | — | `compile-check` |
 | Game ビューを Device Simulator で表示する | — | `game-view-mode` |
 
 `unity` が付いていないコマンドは `com.unity.pipeline` パッケージの Editor 側のコマンドで、`unity command` で実行します。`—` は専用のコマンドが無いことを表します。
