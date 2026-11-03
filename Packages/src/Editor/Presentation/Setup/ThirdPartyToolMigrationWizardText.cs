@@ -1,6 +1,7 @@
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -22,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal const string AiMigrationSkillTemporaryNoteText =
             "This skill is temporary. Remove it once your docs and scripts are migrated to V3 CLI syntax.";
         internal const string AiMigrationSkillPromptText =
-            "Use the v3-cli-invocation-migration skill in this project to update Unity CLI Loop V2 CLI usage " +
+            "Use the v3-cli-invocation-migration skill in this project to update " + UnityCliLoopConstants.DISPLAY_NAME + " V2 CLI usage " +
             "for V3.\n\n" +
             "Scope:\n" +
             "- Check SKILL.md, Markdown, POSIX shell scripts, and PowerShell scripts.\n" +

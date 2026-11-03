@@ -9,11 +9,12 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/ui"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/product"
 )
 
 const (
-	launchReadinessMessage           = "Waiting for Unity CLI Loop server readiness..."
-	launchReadyMessage               = "Unity CLI Loop is ready."
+	launchReadinessMessage           = "Waiting for " + product.DisplayName + " server readiness..."
+	launchReadyMessage               = product.DisplayName + " is ready."
 	launchAlreadyRunningReadyMessage = "Unity is already running and ready."
 	launchQuitStoppedMessage         = "Unity quit. It saved its window layout and discarded unsaved scene changes."
 	launchForceKillStoppedMessage    = "Unity was force-killed. Its window layout was not saved, and unsaved scene changes were lost."

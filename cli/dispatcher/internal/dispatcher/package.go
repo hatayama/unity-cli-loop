@@ -11,6 +11,7 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/product"
 	"github.com/hatayama/unity-cli-loop/common/project"
 )
 
@@ -434,7 +435,7 @@ func printPackageHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "  uloop package install [--version <x.y.z>]")
 	clicore.WriteLine(stdout, "  uloop package status")
 	clicore.WriteLine(stdout, "")
-	clicore.WriteLine(stdout, "Install or inspect the Unity CLI Loop package in a Unity project's Packages/manifest.json.")
+	clicore.WriteLine(stdout, "Install or inspect the "+product.DisplayName+" package in a Unity project's Packages/manifest.json.")
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Subcommands:")
 	clicore.WriteLine(stdout, "  install   Add the OpenUPM scoped registry and package dependency")

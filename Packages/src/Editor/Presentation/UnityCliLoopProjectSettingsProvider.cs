@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
@@ -10,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     internal static class UnityCliLoopProjectSettingsProvider
     {
-        private const string SETTINGS_MENU_PATH = "Project/Unity CLI Loop";
+        private const string SETTINGS_MENU_PATH = "Project/" + UnityCliLoopConstants.DISPLAY_NAME;
         private const string SUPPRESS_TOGGLE_LABEL = "Suppress Setup Wizard popup";
         private const float TOGGLE_WIDTH = 16f;
         private const float TOGGLE_LABEL_GAP = 4f;
@@ -58,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             // are still initializing), so a missing port is reported instead of asserted.
             if (RegisteredProjectSettingsPort == null)
             {
-                EditorGUILayout.HelpBox("Unity CLI Loop is still initializing.", MessageType.Info);
+                EditorGUILayout.HelpBox(UnityCliLoopConstants.DISPLAY_NAME + " is still initializing.", MessageType.Info);
                 return;
             }
 

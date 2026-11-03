@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/hatayama/unity-cli-loop/common/product"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -71,7 +72,7 @@ func unityServerNotRespondingCLIError(err UnityServerNotRespondingError, context
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseConnection,
-		Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
+		Message:     "Unity is running for this project, but the " + product.DisplayName + " server is not responding.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
@@ -95,7 +96,7 @@ func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context Err
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseConnection,
-		Message:     "The Unity CLI Loop server is not reachable for this project.",
+		Message:     "The " + product.DisplayName + " server is not reachable for this project.",
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
@@ -119,7 +120,7 @@ func refusedConnectionAttemptCLIError(err *unityipc.ConnectionAttemptError, cont
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseConnection,
-		Message:     "The operating system refused the connection to the Unity CLI Loop server for this project.",
+		Message:     "The operating system refused the connection to the " + product.DisplayName + " server for this project.",
 		Retryable:   false,
 		SafeToRetry: false,
 		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),

@@ -1,4 +1,5 @@
 using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -20,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (addConfirmationMessage)
             {
-                Debug.Log("=== Console cleared via Unity CLI Loop ===");
+                Debug.Log("=== Console cleared via " + UnityCliLoopConstants.DISPLAY_NAME + " ===");
             }
 
             string message = totalLogCount > 0
