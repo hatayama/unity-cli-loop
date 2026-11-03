@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/hatayama/unity-cli-loop/common/product"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -261,7 +262,7 @@ func unityServerNotRespondingAfterDispatchError(err UnityServerNotRespondingErro
 	return CLIError{
 		ErrorCode:   ErrorCodeUnityNotReachable,
 		Phase:       ErrorPhaseResponseWaiting,
-		Message:     "Unity is running for this project, but the Unity CLI Loop server did not acknowledge the dispatched request.",
+		Message:     "Unity is running for this project, but the " + product.DisplayName + " server did not acknowledge the dispatched request.",
 		Retryable:   true,
 		SafeToRetry: false,
 		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),

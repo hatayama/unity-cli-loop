@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -121,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (prefabStage.scene.isDirty)
             {
                 Debug.LogWarning(
-                    "Unity Loop Harness skipped Prefab Stage external-change reload because the current Prefab Stage has unsaved changes.");
+                    UnityCliLoopConstants.DISPLAY_NAME + " skipped Prefab Stage external-change reload because the current Prefab Stage has unsaved changes.");
                 return;
             }
 
@@ -129,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityEngine.Object prefabAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
             if (prefabAsset == null)
             {
-                Debug.LogWarning("Unity Loop Harness could not reopen externally changed Prefab asset on focus return. " +
+                Debug.LogWarning(UnityCliLoopConstants.DISPLAY_NAME + " could not reopen externally changed Prefab asset on focus return. " +
                                  "Prefab Stage: " + assetPath);
                 return;
             }
@@ -143,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PrefabStageUtility.OpenPrefab(assetPath, reopenContext.OpenedFromInstanceObject, reopenContext.Mode);
             if (reopenedStage == null)
             {
-                Debug.LogWarning("Unity Loop Harness could not reopen externally changed Prefab asset on focus return. " +
+                Debug.LogWarning(UnityCliLoopConstants.DISPLAY_NAME + " could not reopen externally changed Prefab asset on focus return. " +
                                  "Prefab Stage: " + assetPath);
                 return;
             }

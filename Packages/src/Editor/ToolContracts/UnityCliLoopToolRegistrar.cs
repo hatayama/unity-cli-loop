@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             {
                 if (ServiceValue == null)
                 {
-                    throw new InvalidOperationException("Unity Loop Harness tool registrar service is not registered.");
+                    throw new InvalidOperationException(UnityCliLoopConstants.DISPLAY_NAME + " tool registrar service is not registered.");
                 }
 
                 return ServiceValue;

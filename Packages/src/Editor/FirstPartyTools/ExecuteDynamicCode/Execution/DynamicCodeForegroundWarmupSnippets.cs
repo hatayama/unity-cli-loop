@@ -1,3 +1,5 @@
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -7,8 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal static readonly string[] ReturnStringShapes =
         {
-            "return \"Unity Loop Harness dynamic code prewarm\";",
-            "return\n  \"Unity Loop Harness dynamic code prewarm\";"
+            "return \"" + UnityCliLoopConstants.DISPLAY_NAME + " dynamic code prewarm\";",
+            "return\n  \"" + UnityCliLoopConstants.DISPLAY_NAME + " dynamic code prewarm\";"
         };
     }
 }

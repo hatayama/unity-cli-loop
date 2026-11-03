@@ -4,6 +4,7 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/product"
 )
 
 const pausePointSettingsToolName = "pause-point"
@@ -21,13 +22,13 @@ func nativeToolDisabledError(projectRoot string, command string) clierrors.CLIEr
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeToolDisabled,
 		Phase:       clierrors.ErrorPhaseDispatch,
-		Message:     "Tool is disabled in Unity CLI Loop settings: " + command,
+		Message:     "Tool is disabled in " + product.DisplayName + " settings: " + command,
 		Retryable:   false,
 		SafeToRetry: false,
 		ProjectRoot: projectRoot,
 		Command:     command,
 		NextActions: []string{
-			"Enable the tool in Unity CLI Loop settings before running this command.",
+			"Enable the tool in " + product.DisplayName + " settings before running this command.",
 		},
 	}
 }

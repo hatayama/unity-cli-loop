@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (!pinResult.Success)
             {
                 throw new InvalidOperationException(
-                    "Unity Loop Harness cannot resolve minimum dispatcher version from the package pin: "
+                    UnityCliLoopConstants.DISPLAY_NAME + " cannot resolve minimum dispatcher version from the package pin: "
                     + pinResult.ErrorMessage);
             }
             return pinResult.Pin.MinimumDispatcherVersion;
@@ -62,20 +62,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             if (string.IsNullOrWhiteSpace(pinPath))
             {
-                return CliPinLoadResult.FromFailure("Unity Loop Harness pin file path is empty.");
+                return CliPinLoadResult.FromFailure(UnityCliLoopConstants.DISPLAY_NAME + " pin file path is empty.");
             }
 
             if (!File.Exists(pinPath))
             {
                 return CliPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file not found at {pinPath}.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file not found at {pinPath}.");
             }
 
             string content = File.ReadAllText(pinPath);
             if (string.IsNullOrWhiteSpace(content))
             {
                 return CliPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} is empty.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} is empty.");
             }
 
             // Why: a corrupt pin must surface as a structured failure like every other unreadable-pin
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             catch (JsonReaderException ex)
             {
                 return CliPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} contains invalid JSON: {ex.Message}");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} contains invalid JSON: {ex.Message}");
             }
 
             string projectRunnerVersion = parsed[PIN_JSON_PROJECT_RUNNER_VERSION_KEY]?.ToString();
@@ -99,12 +99,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (string.IsNullOrWhiteSpace(projectRunnerVersion))
             {
                 return CliPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} is missing {PIN_JSON_PROJECT_RUNNER_VERSION_KEY}.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} is missing {PIN_JSON_PROJECT_RUNNER_VERSION_KEY}.");
             }
             if (string.IsNullOrWhiteSpace(minimumDispatcherVersion))
             {
                 return CliPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} is missing {PIN_JSON_MINIMUM_DISPATCHER_VERSION_KEY}.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} is missing {PIN_JSON_MINIMUM_DISPATCHER_VERSION_KEY}.");
             }
 
             return CliPinLoadResult.FromSuccess(
@@ -136,34 +136,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (!hasReleaseTag && !hasArchiveManifest)
             {
                 return DispatcherBootstrapPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} is missing dispatcherReleaseTag and dispatcherArchiveManifest.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} is missing dispatcherReleaseTag and dispatcherArchiveManifest.");
             }
             if (!hasReleaseTag || !hasArchiveManifest)
             {
                 return DispatcherBootstrapPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} must define both dispatcherReleaseTag and dispatcherArchiveManifest.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} must define both dispatcherReleaseTag and dispatcherArchiveManifest.");
             }
             if (string.IsNullOrWhiteSpace(pin.DispatcherReleaseTag)
                 || string.IsNullOrWhiteSpace(pin.DispatcherArchiveManifest))
             {
                 return DispatcherBootstrapPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} defines empty dispatcher bootstrap fields.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} defines empty dispatcher bootstrap fields.");
             }
             if (!IsValidDispatcherReleaseTag(pin.DispatcherReleaseTag))
             {
                 return DispatcherBootstrapPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} defines an invalid dispatcherReleaseTag.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} defines an invalid dispatcherReleaseTag.");
             }
             if (!IsValidArchiveManifest(pin.DispatcherArchiveManifest))
             {
                 return DispatcherBootstrapPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} contains an invalid dispatcherArchiveManifest entry.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} contains an invalid dispatcherArchiveManifest entry.");
             }
             if (!HasArchiveManifestEntry(pin.DispatcherArchiveManifest, CliConstants.POSIX_INSTALL_SCRIPT_NAME)
                 || !HasArchiveManifestEntry(pin.DispatcherArchiveManifest, CliConstants.WINDOWS_INSTALL_SCRIPT_NAME))
             {
                 return DispatcherBootstrapPinLoadResult.FromFailure(
-                    $"Unity Loop Harness pin file at {pinPath} is missing an installer script digest.");
+                    $"{UnityCliLoopConstants.DISPLAY_NAME} pin file at {pinPath} is missing an installer script digest.");
             }
 
             return DispatcherBootstrapPinLoadResult.FromSuccess(

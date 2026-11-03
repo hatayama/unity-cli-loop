@@ -2,6 +2,8 @@ package clierrors
 
 import (
 	"fmt"
+
+	"github.com/hatayama/unity-cli-loop/common/product"
 )
 
 // UnityServerNotRespondingError reports that a running Unity Editor accepted a
@@ -16,9 +18,9 @@ type UnityServerNotRespondingError struct {
 
 func (err UnityServerNotRespondingError) Error() string {
 	if err.Cause != nil {
-		return fmt.Sprintf("Unity is running but the Unity CLI Loop server is not responding: %s", err.Cause)
+		return fmt.Sprintf("Unity is running but the %s server is not responding: %s", product.DisplayName, err.Cause)
 	}
-	return "Unity is running but the Unity CLI Loop server is not responding"
+	return "Unity is running but the " + product.DisplayName + " server is not responding"
 }
 
 func (err UnityServerNotRespondingError) Unwrap() error {

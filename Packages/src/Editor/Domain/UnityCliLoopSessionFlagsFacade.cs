@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Domain
 {
@@ -23,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             {
                 if (RepositoryValue == null)
                 {
-                    throw new InvalidOperationException("Unity Loop Harness session flags repository is not registered.");
+                    throw new InvalidOperationException(UnityCliLoopConstants.DISPLAY_NAME + " session flags repository is not registered.");
                 }
 
                 return RepositoryValue;

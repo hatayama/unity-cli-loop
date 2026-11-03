@@ -40,10 +40,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _hasCompletedDeferredInitialRefresh;
         private double _deferredInitialRefreshDueTime;
 
-        [MenuItem("Window/Unity Loop Harness/Settings", priority = 0)]
+        [MenuItem("Window/" + UnityCliLoopConstants.DISPLAY_NAME + "/Settings", priority = 0)]
         public static void ShowWindow()
         {
-            UnityCliLoopSettingsWindow window = GetWindow<UnityCliLoopSettingsWindow>("Unity Loop Harness");
+            UnityCliLoopSettingsWindow window = GetWindow<UnityCliLoopSettingsWindow>(UnityCliLoopConstants.DISPLAY_NAME);
             window.Show();
         }
 
@@ -370,7 +370,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (RegisteredEditorSettingsPort == null)
             {
-                throw new InvalidOperationException("Unity Loop Harness editor settings port is not registered.");
+                throw new InvalidOperationException(UnityCliLoopConstants.DISPLAY_NAME + " editor settings port is not registered.");
             }
 
             return RegisteredEditorSettingsPort;
@@ -380,7 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (RegisteredSessionFlagsRepository == null)
             {
-                throw new InvalidOperationException("Unity Loop Harness editor session flags repository is not registered.");
+                throw new InvalidOperationException(UnityCliLoopConstants.DISPLAY_NAME + " editor session flags repository is not registered.");
             }
 
             return RegisteredSessionFlagsRepository;
@@ -391,7 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (RegisteredServerApplicationService == null)
             {
                 throw new InvalidOperationException(
-                    "Unity Loop Harness server application service is not registered.");
+                    UnityCliLoopConstants.DISPLAY_NAME + " server application service is not registered.");
             }
 
             return RegisteredServerApplicationService;
@@ -402,7 +402,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (RegisteredCliSetupApplicationService == null)
             {
                 throw new InvalidOperationException(
-                    "Unity Loop Harness CLI setup application service is not registered.");
+                    UnityCliLoopConstants.DISPLAY_NAME + " CLI setup application service is not registered.");
             }
 
             return RegisteredCliSetupApplicationService;
@@ -412,7 +412,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (RegisteredToolSettingsUseCase == null)
             {
-                throw new InvalidOperationException("Unity Loop Harness tool settings use case is not registered.");
+                throw new InvalidOperationException(UnityCliLoopConstants.DISPLAY_NAME + " tool settings use case is not registered.");
             }
 
             return RegisteredToolSettingsUseCase;
@@ -422,7 +422,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             if (RegisteredSkillSetupUseCase == null)
             {
-                throw new InvalidOperationException("Unity Loop Harness skill setup use case is not registered.");
+                throw new InvalidOperationException(UnityCliLoopConstants.DISPLAY_NAME + " skill setup use case is not registered.");
             }
 
             return RegisteredSkillSetupUseCase;

@@ -9,6 +9,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/product"
 	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
@@ -23,7 +24,7 @@ const (
 	DomainReloadWaitParam = "WaitForDomainReload"
 )
 
-const executeDynamicCodeReadinessProbe = `return "Unity CLI Loop dynamic code prewarm";`
+const executeDynamicCodeReadinessProbe = `return "` + product.DisplayName + ` dynamic code prewarm";`
 
 type toolReadinessDeps struct {
 	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)

@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     /// </summary>
     public class ThirdPartyToolMigrationWizardWindow : EditorWindow
     {
-        private const string WindowTitle = "Unity Loop Harness Migration";
+        private const string WindowTitle = UnityCliLoopConstants.DISPLAY_NAME + " Migration";
         private static readonly Vector2 InitialWindowSize =
             ThirdPartyToolMigrationWizardWindowResizer.InitialWindowSize;
         private static readonly Vector2 MinimumWindowSize =
@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new ArgumentNullException(nameof(thirdPartyToolMigrationUseCase));
         }
 
-        [MenuItem("Window/Unity Loop Harness/Custom Tool Migration", priority = 4)]
+        [MenuItem("Window/" + UnityCliLoopConstants.DISPLAY_NAME + "/Custom Tool Migration", priority = 4)]
         public static void ShowWindow()
         {
             ShowWindowInternal(false, new List<string>());
