@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Provides Processing Error behavior for Unity CLI Loop.
+    /// Provides Processing Error behavior for Unity Loop Harness.
     /// </summary>
     public class ProcessingError
     {

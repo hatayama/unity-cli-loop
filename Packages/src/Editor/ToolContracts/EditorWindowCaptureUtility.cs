@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             {
                 if (ServiceValue == null)
                 {
-                    throw new InvalidOperationException("Unity CLI Loop editor window capture service is not registered.");
+                    throw new InvalidOperationException("Unity Loop Harness editor window capture service is not registered.");
                 }
 
                 return ServiceValue;

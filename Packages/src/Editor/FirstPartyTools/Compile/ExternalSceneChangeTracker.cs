@@ -190,7 +190,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (dirtyPrefabSaveFailures.Length > 0 || missingPrefabSaveFailures.Length > 0)
             {
                 Debug.LogWarning(
-                    "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage could not be saved.");
+                    "Unity Loop Harness skipped Prefab Stage external-change reload because the current Prefab Stage could not be saved.");
                 VibeLogger.LogInfo(
                     "external_scene_resolve_focus_return",
                     "ResolveForFocusReturn finished early (Prefab Stage could not be saved)",
@@ -359,7 +359,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            Debug.LogWarning("Unity CLI Loop could not resolve external Scene changes on focus return. " +
+            Debug.LogWarning("Unity Loop Harness could not resolve external Scene changes on focus return. " +
                              result.Message);
         }
 
@@ -534,7 +534,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            Debug.LogWarning("Unity CLI Loop could not " + action + " before Unity refreshes assets on focus return. " +
+            Debug.LogWarning("Unity Loop Harness could not " + action + " before Unity refreshes assets on focus return. " +
                              "Affected assets: " + string.Join(", ", failedAssetPaths));
         }
     }

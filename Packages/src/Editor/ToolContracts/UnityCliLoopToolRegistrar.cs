@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     }
 
     /// <summary>
-    /// Public facade used by custom tools to register with Unity CLI Loop.
+    /// Public facade used by custom tools to register with Unity Loop Harness.
     /// </summary>
     public static class UnityCliLoopToolRegistrar
     {
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             {
                 if (ServiceValue == null)
                 {
-                    throw new InvalidOperationException("Unity CLI Loop tool registrar service is not registered.");
+                    throw new InvalidOperationException("Unity Loop Harness tool registrar service is not registered.");
                 }
 
                 return ServiceValue;

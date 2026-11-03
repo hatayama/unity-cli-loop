@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
             catch (Exception ex)
             {
-                string message = $"Unity CLI Loop server bound its project IPC endpoint, but readiness probe failed during {reason}. {ex.GetBaseException().Message}";
+                string message = $"Unity Loop Harness server bound its project IPC endpoint, but readiness probe failed during {reason}. {ex.GetBaseException().Message}";
                 throw new InvalidOperationException(message, ex);
             }
 

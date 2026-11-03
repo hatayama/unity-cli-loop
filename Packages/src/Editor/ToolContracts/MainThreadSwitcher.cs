@@ -7,7 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     // Port for dispatching continuations onto Unity's main thread.
     /// <summary>
-    /// Defines the Main Thread Dispatcher contract used by Unity CLI Loop.
+    /// Defines the Main Thread Dispatcher contract used by Unity Loop Harness.
     /// </summary>
     public interface IMainThreadDispatcher
     {
@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             {
                 if (ServiceValue == null)
                 {
-                    throw new InvalidOperationException("Unity CLI Loop main-thread dispatcher is not registered.");
+                    throw new InvalidOperationException("Unity Loop Harness main-thread dispatcher is not registered.");
                 }
 
                 return ServiceValue;

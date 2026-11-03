@@ -245,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void HandleCompileStoppedWithoutFinishEvent(int stoppedMs)
         {
             string message =
-                "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
+                "Unity stopped compiling before Unity Loop Harness received the compilationFinished callback. " +
                 "The compile result is indeterminate; use get-logs to inspect the compiler output.";
             // Why append the Console errors: the indeterminate result otherwise costs a second
             // get-logs round trip to see the asmdef or compiler error that aborted the compile.

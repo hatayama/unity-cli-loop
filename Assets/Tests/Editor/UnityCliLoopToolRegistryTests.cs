@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     }
 
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Tool Registry behavior.
+    /// Test fixture that verifies Unity Loop Harness Tool Registry behavior.
     /// </summary>
     [TestFixture]
     public sealed class UnityCliLoopToolRegistryTests

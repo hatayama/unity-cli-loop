@@ -5,7 +5,7 @@ using System.Diagnostics;
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Provides the Editor-only pause point marker API for Unity CLI Loop workflows.
+    /// Provides the Editor-only pause point marker API for Unity Loop Harness workflows.
     /// </summary>
     public static class UloopPausePoint
     {

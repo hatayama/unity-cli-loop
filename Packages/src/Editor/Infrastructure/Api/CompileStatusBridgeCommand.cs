@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private const string RequestIdParamName = "RequestId";
         private const string RecoveredCompileResultMessage =
-            "Compilation completed, but Unity reloaded scripts before Unity CLI Loop could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
+            "Compilation completed, but Unity reloaded scripts before Unity Loop Harness could record detailed errors or warnings. Use get-logs to inspect the compiler output.";
 
         public static GetCompileStatusResponse Execute(JToken paramsToken)
         {

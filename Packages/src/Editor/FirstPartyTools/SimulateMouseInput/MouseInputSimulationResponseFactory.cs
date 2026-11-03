@@ -78,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             string message = pressWasApplied
                 ? $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' press was delivered to the game before the pause: the Input System processed the press edge in a gameplay update, so game code polling that frame observed it and the world state may already have changed. Do not retry the press; re-check the affected state (and pause-point-status) before deciding the next step."
-                : $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume.";
+                : $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' was released from Unity Loop Harness bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume.";
             SimulateMouseInputResponse result = new()
             {
                 Success = true,
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SimulateMouseInputResponse result = new()
             {
                 Success = true,
-                Message = "Mouse input stopped because Unity paused during Pause Point inspection. Unity CLI Loop released its held input bookkeeping.",
+                Message = "Mouse input stopped because Unity paused during Pause Point inspection. Unity Loop Harness released its held input bookkeeping.",
                 Action = action.ToString(),
                 InterruptedByPausePoint = true
             };

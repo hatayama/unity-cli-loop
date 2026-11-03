@@ -37,14 +37,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (string.IsNullOrWhiteSpace(packageRoot))
             {
                 Debug.LogWarning(
-                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package root is empty.");
+                    $"Unity Loop Harness skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package root is empty.");
                 return false;
             }
 
             if (string.IsNullOrWhiteSpace(projectRoot))
             {
                 Debug.LogWarning(
-                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the project root is empty.");
+                    $"Unity Loop Harness skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the project root is empty.");
                 return false;
             }
 
@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Why: the pin JSON is the only runtime source for the dispatcher's project runner version,
                 // so a missing package source must be visible instead of silently skipping synchronization.
                 Debug.LogWarning(
-                    $"Unity CLI Loop skipped {pinFileName} synchronization because the package source pin was not found at {sourcePath}.");
+                    $"Unity Loop Harness skipped {pinFileName} synchronization because the package source pin was not found at {sourcePath}.");
                 return false;
             }
 

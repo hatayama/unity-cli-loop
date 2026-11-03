@@ -11,7 +11,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
-    /// AI-friendly structured logger for Unity CLI Loop.
+    /// AI-friendly structured logger for Unity Loop Harness.
     /// 
     /// Key features:
     /// - Structured JSON logging with operation, context, correlation_id
@@ -452,7 +452,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     }
 
     /// <summary>
-    /// Provides Vibe Logger behavior for Unity CLI Loop.
+    /// Provides Vibe Logger behavior for Unity Loop Harness.
     /// </summary>
     public static class VibeLogger
     {
