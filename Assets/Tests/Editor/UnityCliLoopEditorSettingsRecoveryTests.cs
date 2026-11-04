@@ -14,7 +14,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Editor Settings Recovery behavior.
+    /// Test fixture that verifies Unity Loop Harness Editor Settings Recovery behavior.
     /// </summary>
     [TestFixture]
     public class UnityCliLoopEditorSettingsRecoveryTests
@@ -341,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             InvalidOperationException exception =
                 Assert.Throws<InvalidOperationException>(() => _editorSettingsPort.GetSettings());
 
-            StringAssert.StartsWith("Failed to load Unity CLI Loop Editor settings from: ", exception.Message);
+            StringAssert.StartsWith("Failed to load Unity Loop Harness Editor settings from: ", exception.Message);
             Assert.That(exception.InnerException, Is.InstanceOf<JsonReaderException>());
             Assert.That(File.ReadAllText(SettingsFilePath), Is.EqualTo(content));
         }

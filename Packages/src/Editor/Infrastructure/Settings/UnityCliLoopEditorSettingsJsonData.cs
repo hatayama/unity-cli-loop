@@ -6,7 +6,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// JsonUtility storage DTO for Unity CLI Loop editor settings.
+    /// JsonUtility storage DTO for Unity Loop Harness editor settings.
     /// </summary>
     [Serializable]
     internal sealed class UnityCliLoopEditorSettingsJsonData

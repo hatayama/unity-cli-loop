@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             MacProcessActivityApi api = new MacProcessActivityApi();
             for (int attempt = 0; attempt < 3; attempt++)
             {
-                IntPtr token = api.Begin("Unity CLI Loop activity test");
+                IntPtr token = api.Begin("Unity Loop Harness activity test");
 
                 Assert.That(token, Is.Not.EqualTo(IntPtr.Zero));
                 Assert.DoesNotThrow(() => api.End(token));

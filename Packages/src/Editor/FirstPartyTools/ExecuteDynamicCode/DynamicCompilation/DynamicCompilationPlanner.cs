@@ -4,7 +4,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Dynamic Compilation Planner behavior for Unity CLI Loop.
+    /// Provides Dynamic Compilation Planner behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class DynamicCompilationPlanner : IDynamicCompilationPlanner
     {

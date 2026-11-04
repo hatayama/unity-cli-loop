@@ -6,7 +6,7 @@
 # Prerequisites:
 #   - Unity Editor running for the target project
 #   - PlayMode is not running because this script starts it
-#   - Record input with Window > Unity CLI Loop > Recordings when prompted
+#   - Record input with Window > Unity Loop Harness > Recordings when prompted
 
 set -e
 
@@ -168,7 +168,7 @@ activate_for_record
 echo "[4/8] Recording input with the Recordings window..."
 echo ""
 echo "========================================="
-echo "  Open Window > Unity CLI Loop > Recordings."
+echo "  Open Window > Unity Loop Harness > Recordings."
 echo "  Click Start Recording, play in the Game View, then click Stop Recording."
 echo ""
 echo "  WASD: move | Mouse: rotate"

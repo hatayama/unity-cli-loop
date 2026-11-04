@@ -371,7 +371,7 @@ func assertStaleRecoveryStateIgnored(result commandResult) error {
 	combinedOutput := result.stdout + result.stderr
 	requiredFragments := []string{
 		"UNITY_NOT_REACHABLE",
-		"Unity CLI Loop server is not reachable",
+		"Unity Loop Harness server is not reachable",
 	}
 	for _, fragment := range requiredFragments {
 		if !strings.Contains(combinedOutput, fragment) {
@@ -381,7 +381,7 @@ func assertStaleRecoveryStateIgnored(result commandResult) error {
 	}
 	forbiddenFragments := []string{
 		"uloop " + "fix",
-		"stale Unity CLI Loop recovery state",
+		"stale Unity Loop Harness recovery state",
 	}
 	for _, fragment := range forbiddenFragments {
 		if strings.Contains(combinedOutput, fragment) {

@@ -6,7 +6,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Exposes the Control Play Mode workflow as a Unity CLI Loop tool.
+    /// Exposes the Control Play Mode workflow as a Unity Loop Harness tool.
     /// </summary>
     [UnityCliLoopTool]
     public class ControlPlayModeTool : UnityCliLoopTool<ControlPlayModeSchema, ControlPlayModeResponse>

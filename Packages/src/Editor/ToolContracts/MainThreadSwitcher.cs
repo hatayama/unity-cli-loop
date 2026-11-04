@@ -7,7 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     // Port for dispatching continuations onto Unity's main thread.
     /// <summary>
-    /// Defines the Main Thread Dispatcher contract used by Unity CLI Loop.
+    /// Defines the Main Thread Dispatcher contract used by Unity Loop Harness.
     /// </summary>
     public interface IMainThreadDispatcher
     {

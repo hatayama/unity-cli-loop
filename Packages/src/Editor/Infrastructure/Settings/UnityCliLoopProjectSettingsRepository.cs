@@ -8,7 +8,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Persists project-scoped (git-shared) Unity CLI Loop settings as a JSON file under
+    /// Persists project-scoped (git-shared) Unity Loop Harness settings as a JSON file under
     /// the ProjectSettings folder, so the values are committed and apply to the whole team.
     /// </summary>
     public sealed class UnityCliLoopProjectSettingsRepository : IUnityCliLoopProjectSettingsPort
