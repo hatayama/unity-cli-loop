@@ -80,7 +80,7 @@ uloop game-view-mode --to GameView
 
 ### `uloop status` and `uloop cancel` — know whether Unity can take a command
 
-`uloop status` reports, without side effects, whether the project's Editor can take a command now, or whether it is starting, compiling, importing assets, busy with another command, or not running. When a running command does not finish, `uloop cancel` stops the tool the Editor is running, and the command that was waiting on it returns `TOOL_CANCELLED`.
+`uloop status` reports, without side effects, whether the project's Editor can take a command now, or whether it is starting, compiling, importing assets, busy with another command, or not running. When a running command does not finish, `uloop cancel` asks the tool the Editor is running to stop, and the command that was waiting on it fails with `TOOL_CANCELLED` (`execute-dynamic-code` returns its usual cancelled result instead). A few commands, such as a `compile` that waits for the Domain Reload (the default), cannot be cancelled and report `NotCancellable`.
 
 > `set-game-view-size` also arrives in V3: it reads and sets the Game View custom rendering resolution (`uloop set-game-view-size --width 1920 --height 1080`), which is useful for keeping the coordinate space of `screenshot --capture-mode rendering` stable across runs.
 >
