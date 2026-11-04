@@ -41,7 +41,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
 ## 同じ作業を、より細かく
 
-| やりたいこと | 公式 Unity CLI（`unity`） | `uloop` |
+| やりたいこと | 公式 Unity CLI（`unity`） | Unity Loop Harness（`uloop`） |
 |---|---|---|
 | 使える Unity のバージョン | Unity 6.0 以降（`com.unity.pipeline` パッケージが必要） | **Unity 2022.3 以降** |
 | Editor を再起動する | `unity close` のあと `unity open` | `launch -r`：**1 つのコマンドで再起動し、コマンドを受け付けられるようになるまで待つ** |
@@ -57,7 +57,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
 ## uloop だけにあるもの
 
-| やりたいこと | `uloop` |
+| やりたいこと | Unity Loop Harness（`uloop`） |
 |---|---|
 | コードを書き換えずにソースの行で止めて、変数を読む | `pause-point` |
 | Game ビューや任意の Editor ウィンドウを録画し、見る代わりにフレームシートとして読む | `record-video` |

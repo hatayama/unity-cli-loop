@@ -41,7 +41,7 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 
 ## Same task, finer control
 
-| What you want to do | Official Unity CLI (`unity`) | `uloop` |
+| What you want to do | Official Unity CLI (`unity`) | Unity Loop Harness (`uloop`) |
 |---|---|---|
 | Use it on your Unity version | Unity 6.0+ (with the `com.unity.pipeline` package) | **Unity 2022.3+** |
 | Restart the Editor | `unity close`, then `unity open` | `launch -r`: **one command, and it waits until the Editor can take commands** |
@@ -57,7 +57,7 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 
 ## Only in uloop
 
-| What you want to do | `uloop` |
+| What you want to do | Unity Loop Harness (`uloop`) |
 |---|---|
 | Stop at a source line without editing code, and read the variables | `pause-point` |
 | Record the Game view or any Editor window as video, and read it as frame sheets instead of watching it | `record-video` |
