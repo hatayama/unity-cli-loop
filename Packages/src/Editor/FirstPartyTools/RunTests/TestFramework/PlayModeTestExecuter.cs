@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
@@ -21,11 +22,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UnityTestFrameworkExecutionServiceRegistry.Register(new UnityTestFrameworkExecutionService());
             RunTestsPendingRunCallbackRegistrar.RegisterIfPending();
+            RestoreLogStackTracesUnlessARunContinues();
+        }
+
+        // Why skip a pending run: it continues in this domain and restores them when it finishes.
+        // Otherwise the reload ended the run that turned them off, so nothing else would restore them.
+        private static void RestoreLogStackTracesUnlessARunContinues()
+        {
+            if (UnityCliLoopRunTestsSessionRepositoryFacade.Repository.HasAnyPendingRun())
+            {
+                return;
+            }
+
+            RunTestsLogStackTraceSuppressor.CreateDefault().RestoreIfSaved();
         }
     }
 
     internal sealed class UnityTestFrameworkExecutionService : IUnityTestFrameworkExecutionService
     {
+        public bool IsRunContinuingAfterReload =>
+            UnityCliLoopRunTestsSessionRepositoryFacade.Repository.HasAnyPendingRun();
+
         public Task<SerializableTestResult> ExecutePlayModeTestAsync(
             TestExecutionFilter filter,
             CancellationToken ct,

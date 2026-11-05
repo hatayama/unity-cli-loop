@@ -35,4 +35,4 @@ Returns JSON with:
 - `Logs` (array): Each entry has:
   - `Type` (string): `"Error"`, `"Warning"`, or `"Log"`
   - `Message` (string): Log message body
-  - `StackTrace` (string): Stack trace text. Empty when `--include-stack-trace` is `false`.
+  - `StackTrace` (string): Stack trace text. Empty when `--include-stack-trace` is `false`, and for logs from a `run-tests` run without `--log-stack-traces`.

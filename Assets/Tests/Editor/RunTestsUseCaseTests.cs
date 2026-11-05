@@ -22,11 +22,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private string _recordDirectory;
         private RunTestsLastRunRecordStore _recordStore;
 
+        // Why a fake for every use case: ExecuteAsync changes Unity's process-wide stack trace settings,
+        // and these stub runs must not change them for the real run that is executing these tests.
+        private FakeRunTestsLogStackTraceSettings _logStackTraceSettings;
+        private RunTestsLogStackTraceSuppressor _logStackTraceSuppressor;
+
         [SetUp]
         public void SetUp()
         {
             _recordDirectory = Path.Combine(Path.GetTempPath(), "uloop-last-run-" + Guid.NewGuid().ToString("N"));
             _recordStore = new RunTestsLastRunRecordStore(_recordDirectory);
+            _logStackTraceSettings = new FakeRunTestsLogStackTraceSettings();
+            _logStackTraceSuppressor = new RunTestsLogStackTraceSuppressor(_logStackTraceSettings);
         }
 
         [TearDown]
@@ -50,6 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -86,6 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -113,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -140,6 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -168,6 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -197,6 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -224,6 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new();
@@ -249,6 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -298,6 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -335,6 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
             RunTestsSchema parameters = new()
@@ -365,6 +382,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
@@ -393,6 +411,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
@@ -423,6 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: ct =>
                 {
                     ct.ThrowIfCancellationRequested();
@@ -450,6 +470,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 clearActivePausePoints: () =>
                 {
                     clearCalled = true;
@@ -478,6 +499,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 clearActivePausePoints: () =>
                 {
                     clearCalled = true;
@@ -504,6 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 clearActivePausePoints: () => new[] { "Assets/Scripts/Foo.cs:42", "my-custom-marker" },
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
@@ -526,6 +549,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 clearActivePausePoints: () => null,
                 waitForTestRunnerCleanupAsync: NoCleanupWait
             );
@@ -575,6 +599,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -623,6 +648,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -645,6 +671,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -665,7 +692,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 details[index] = new SerializableTestResult.FailedTestDetail
                 {
                     FullName = "Example.Tests.FailingTest" + index,
-                    Message = "boom"
+                    Message = "boom",
+                    File = "Assets/Example.cs"
                 };
             }
 
@@ -695,6 +723,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -719,7 +748,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 details[index] = new SerializableTestResult.FailedTestDetail
                 {
                     FullName = "Example.Tests.FailingTest" + index,
-                    Message = "boom"
+                    Message = "boom",
+                    File = "Assets/Example.cs"
                 };
             }
 
@@ -749,6 +779,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -774,6 +805,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema();
 
@@ -796,6 +828,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 2);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -822,6 +855,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 0);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -847,6 +881,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () =>
                 {
@@ -880,6 +915,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     executionService,
                     validationService,
                     _recordStore,
+                    _logStackTraceSuppressor,
                     waitForTestRunnerCleanupAsync: NoCleanupWait);
                 RunTestsSchema parameters = new RunTestsSchema();
 
@@ -914,6 +950,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 2);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -944,6 +981,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 0);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -970,6 +1008,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 getActiveHotReloadChangeCount: () => 2);
             RunTestsSchema parameters = new RunTestsSchema();
@@ -992,6 +1031,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 clearActivePausePoints: () =>
                 {
                     clearCalled = true;
@@ -1046,6 +1086,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService,
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: cleanupResume.ResumeAsync,
                 appendNoTestsDiagnostics: diagnosticCapture.Append);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1083,6 +1124,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
             RunTestsSchema parameters = new RunTestsSchema
             {
@@ -1127,6 +1169,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1161,6 +1204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
                 proposeTestAsmdef: _ => proposal);
@@ -1193,6 +1237,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
                 proposeTestAsmdef: _ => null);
@@ -1226,6 +1271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 proposeTestAsmdef: _ =>
                 {
@@ -1268,6 +1314,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1302,6 +1349,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: AppendPeriodTerminatedAsmdefHint);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1334,6 +1382,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
+                _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait,
                 appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
             RunTestsSchema parameters = new RunTestsSchema
@@ -1904,6 +1953,185 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             AssertRecord(UnityCliLoopTestMode.EditMode, RecordedCompletedAt, "Ns.C.FirstFailure");
         }
 
+        /// <summary>
+        /// Verifies a default run has stack traces off while it runs and leaves the settings as it found them.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ByDefault_TurnsLogStackTracesOffOnlyDuringTheRun()
+        {
+            Dictionary<UnityEngine.LogType, UnityEngine.StackTraceLogType> original = _logStackTraceSettings.Snapshot();
+            StubTestExecutionService executionService = new();
+            UnityEngine.StackTraceLogType duringRun = UnityEngine.StackTraceLogType.Full;
+            executionService.OnExecuteStarted = () => duringRun = _logStackTraceSettings.Get(UnityEngine.LogType.Error);
+
+            await CreateRecordingUseCase(executionService).ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(duringRun, Is.EqualTo(UnityEngine.StackTraceLogType.None));
+            Assert.That(_logStackTraceSettings.Snapshot(), Is.EqualTo(original));
+            Assert.That(_logStackTraceSettings.HasSaved, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a PlayMode run gets the same default as an EditMode run.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_PlayModeByDefault_TurnsLogStackTracesOffDuringTheRun()
+        {
+            StubTestExecutionService executionService = new();
+            UnityEngine.StackTraceLogType duringRun = UnityEngine.StackTraceLogType.Full;
+            executionService.OnExecuteStarted = () => duringRun = _logStackTraceSettings.Get(UnityEngine.LogType.Error);
+            RunTestsSchema parameters = new() { TestMode = UnityCliLoopTestMode.PlayMode };
+
+            await CreateRecordingUseCase(executionService).ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(duringRun, Is.EqualTo(UnityEngine.StackTraceLogType.None));
+        }
+
+        /// <summary>
+        /// Verifies --log-stack-traces leaves the project's settings in place during the run.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WithLogStackTraces_KeepsTheProjectsSettingsDuringTheRun()
+        {
+            UnityEngine.StackTraceLogType expected = _logStackTraceSettings.Get(UnityEngine.LogType.Error);
+            StubTestExecutionService executionService = new();
+            UnityEngine.StackTraceLogType duringRun = UnityEngine.StackTraceLogType.None;
+            executionService.OnExecuteStarted = () => duringRun = _logStackTraceSettings.Get(UnityEngine.LogType.Error);
+            RunTestsSchema parameters = new() { LogStackTraces = true };
+
+            await CreateRecordingUseCase(executionService).ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(duringRun, Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// Verifies --log-stack-traces still works after an abandoned run left stack traces off.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WithLogStackTracesAfterAbandonedRun_RestoresBeforeTheRun()
+        {
+            UnityEngine.StackTraceLogType expected = _logStackTraceSettings.Get(UnityEngine.LogType.Error);
+            _logStackTraceSuppressor.Suppress();
+            StubTestExecutionService executionService = new();
+            UnityEngine.StackTraceLogType duringRun = UnityEngine.StackTraceLogType.None;
+            executionService.OnExecuteStarted = () => duringRun = _logStackTraceSettings.Get(UnityEngine.LogType.Error);
+            RunTestsSchema parameters = new() { LogStackTraces = true };
+
+            await CreateRecordingUseCase(executionService).ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(duringRun, Is.EqualTo(expected));
+            Assert.That(_logStackTraceSettings.HasSaved, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a run that times out does not leave stack traces off for the rest of the session.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTheRunTimesOut_RestoresLogStackTraces()
+        {
+            Dictionary<UnityEngine.LogType, UnityEngine.StackTraceLogType> original = _logStackTraceSettings.Snapshot();
+            StubTestExecutionService executionService = new() { ThrowsExecutionTimeout = true };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_logStackTraceSettings.Snapshot(), Is.EqualTo(original));
+        }
+
+        /// <summary>
+        /// Verifies a run that continues in the next domain keeps stack traces off for the rest of that run.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTheRunContinuesAfterReload_LeavesTheRestoreToTheNextDomain()
+        {
+            StubTestExecutionService executionService = new() { RunContinuesAfterReload = true };
+
+            await CreateRecordingUseCase(executionService).ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(_logStackTraceSettings.Get(UnityEngine.LogType.Error), Is.EqualTo(UnityEngine.StackTraceLogType.None));
+            Assert.That(_logStackTraceSettings.HasSaved, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a failure with no location tells the caller how to get one.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenAFailureHasNoLocation_MessageNamesTheRerunCommand()
+        {
+            StubTestExecutionService executionService = new() { NextResult = CreateFailedRunResult(null) };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(response.Message, Does.StartWith("failed "));
+            Assert.That(response.Message, Does.Contain("uloop run-tests --rerun-failed --log-stack-traces"));
+            Assert.That(response.Message, Does.Not.Contain("--test-mode"));
+        }
+
+        /// <summary>
+        /// Verifies the suggested command reruns the same test mode, since each mode has its own record.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenAPlayModeFailureHasNoLocation_MessageNamesThePlayModeRerunCommand()
+        {
+            StubTestExecutionService executionService = new() { NextResult = CreateFailedRunResult(null) };
+            RunTestsSchema parameters = new() { TestMode = UnityCliLoopTestMode.PlayMode };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Message, Does.Contain("uloop run-tests --test-mode PlayMode --rerun-failed --log-stack-traces"));
+        }
+
+        /// <summary>
+        /// Verifies a failure that already has a location gets no rerun advice.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTheFailureHasALocation_MessageStaysAsItWas()
+        {
+            StubTestExecutionService executionService = new() { NextResult = CreateFailedRunResult("Assets/Foo.cs") };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("failed run"));
+        }
+
+        /// <summary>
+        /// Verifies a run that already kept stack traces is not told to rerun with them.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WithLogStackTracesAndNoLocation_MessageStaysAsItWas()
+        {
+            StubTestExecutionService executionService = new() { NextResult = CreateFailedRunResult(null) };
+            RunTestsSchema parameters = new() { LogStackTraces = true };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("failed run"));
+        }
+
+        private static SerializableTestResult CreateFailedRunResult(string file)
+        {
+            return new SerializableTestResult
+            {
+                success = false,
+                status = RunTestsExecutionStatus.Failed,
+                hasFailures = true,
+                message = "failed run",
+                completedAt = RecordedCompletedAt,
+                testCount = 1,
+                failedCount = 1,
+                noTestsFoundExplanation = string.Empty,
+                failedTests = new[]
+                {
+                    new SerializableTestResult.FailedTestDetail { FullName = "A.B", Message = "m", File = file },
+                },
+            };
+        }
+
         // Builds a use case whose Editor-touching hooks are inert, so record tests change nothing outside
         // the temporary record directory.
         private RunTestsUseCase CreateRecordingUseCase(
@@ -1919,6 +2147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 executionService,
                 validationService ?? CreatePassingValidationService(),
                 _recordStore,
+                _logStackTraceSuppressor,
                 clearActivePausePoints: clearActivePausePoints ?? (() => null),
                 waitForTestRunnerCleanupAsync: waitForTestRunnerCleanupAsync ?? NoCleanupWait,
                 appendNoTestsDiagnostics: appendNoTestsDiagnostics ?? PassThroughNoTestsDiagnostics,
@@ -2067,6 +2296,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
 
             public override bool IsTestFrameworkAvailable => TestFrameworkAvailable;
+
+            public bool RunContinuesAfterReload { get; set; }
+
+            internal override bool IsRunContinuingAfterReload => RunContinuesAfterReload;
 
             public RunTestsUnfilteredTestListResult UnfilteredTestListResult { get; set; } =
                 RunTestsUnfilteredTestListResult.NotRetrieved();

@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
         private readonly Func<int> _getActiveHotReloadChangeCount;
         private readonly Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> _proposeTestAsmdef;
+        private readonly RunTestsLogStackTraceSuppressor _logStackTraceSuppressor;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
@@ -40,17 +41,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new TestFilterCreationService(),
                 new TestExecutionService(),
                 new TestExecutionStateValidationService(),
-                RunTestsLastRunRecordStore.CreateForProject())
+                RunTestsLastRunRecordStore.CreateForProject(),
+                RunTestsLogStackTraceSuppressor.CreateDefault())
         {
         }
 
         // Why internal: the record store is internal, and a public constructor cannot take it (CS0051).
         // Why the store is required: a test that forgot it would rewrite the project's own record.
+        // Why the suppressor is required: a test that forgot it would change the settings of the real
+        // run executing that test.
         internal RunTestsUseCase(
             TestFilterCreationService filterService,
             TestExecutionService executionService,
             TestExecutionStateValidationService validationService,
             RunTestsLastRunRecordStore lastRunRecordStore,
+            RunTestsLogStackTraceSuppressor logStackTraceSuppressor,
             Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
@@ -65,6 +70,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(lastRunRecordStore));
             }
 
+            if (logStackTraceSuppressor == null)
+            {
+                throw new ArgumentNullException(nameof(logStackTraceSuppressor));
+            }
+
             _filterService = filterService;
             _executionService = executionService;
             _validationService = validationService;
@@ -77,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
             _getActiveHotReloadChangeCount = getActiveHotReloadChangeCount ?? ReadActiveHotReloadChangeCount;
             _proposeTestAsmdef = proposeTestAsmdef ?? RunTestsTestAsmdefProposalBuilder.Propose;
+            _logStackTraceSuppressor = logStackTraceSuppressor;
         }
 
         /// <summary>
@@ -192,17 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SerializableTestResult result;
             try
             {
-                if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
-                {
-                    result = await _executionService.ExecutePlayModeTestAsync(
-                        target.Filter,
-                        executionCt,
-                        CreatePlayModeRunOptions(parameters)).ConfigureAwait(false);
-                }
-                else
-                {
-                    result = await _executionService.ExecuteEditModeTestAsync(target.Filter, executionCt).ConfigureAwait(false);
-                }
+                result = await ExecuteWithLogStackTracePolicyAsync(parameters, target.Filter, executionCt)
+                    .ConfigureAwait(false);
 
                 // Why before the cleanup wait: the run has finished here, so a request cancelled while
                 // waiting must still leave this run's record for the next --rerun-failed.
@@ -241,6 +243,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
+            response.Message = RunTestsLogStackTraceNoticeBuilder.AppendIfLocationMissing(
+                response.Message,
+                parameters,
+                response.FailedTests,
+                response.FailedSuites);
             if (target.RerunSource != null)
             {
                 return ApplyRerunFields(response, parameters.TestMode, target.RerunSource);
@@ -262,6 +269,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
             return response;
+        }
+
+        // Why stack traces are off by default: each one grows the Editor's native memory and Editor.log,
+        // only an Editor restart frees that memory, and a test loop can log hundreds of thousands of them.
+        private async Task<SerializableTestResult> ExecuteWithLogStackTracePolicyAsync(
+            RunTestsSchema parameters,
+            TestExecutionFilter filter,
+            CancellationToken executionCt)
+        {
+            if (parameters.LogStackTraces)
+            {
+                // Why restore: an abandoned run may have left them off, and this caller asked for them.
+                _logStackTraceSuppressor.RestoreIfSaved();
+                return await ExecuteForTestModeAsync(parameters, filter, executionCt).ConfigureAwait(false);
+            }
+
+            _logStackTraceSuppressor.Suppress();
+            try
+            {
+                return await ExecuteForTestModeAsync(parameters, filter, executionCt).ConfigureAwait(false);
+            }
+            finally
+            {
+                // Why switch: the await above can resume off-thread, and SessionState needs the main thread.
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
+                // Why skip when the run continues: it finishes in the next domain, which restores them
+                // when that run finishes, so restoring here would only bring the growth back.
+                if (!_executionService.IsRunContinuingAfterReload)
+                {
+                    _logStackTraceSuppressor.RestoreIfSaved();
+                }
+            }
+        }
+
+        private Task<SerializableTestResult> ExecuteForTestModeAsync(
+            RunTestsSchema parameters,
+            TestExecutionFilter filter,
+            CancellationToken executionCt)
+        {
+            if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
+            {
+                return _executionService.ExecutePlayModeTestAsync(
+                    filter,
+                    executionCt,
+                    CreatePlayModeRunOptions(parameters));
+            }
+
+            return _executionService.ExecuteEditModeTestAsync(filter, executionCt);
         }
 
         // Why not record a run without a result tree: it has no names to rerun, and recording it as

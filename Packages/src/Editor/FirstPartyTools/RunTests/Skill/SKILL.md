@@ -38,10 +38,13 @@ uloop run-tests [options]
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 | `--respect-enter-play-mode-settings` | flag | - | PlayMode only: keep the project's Enter Play Mode settings instead of forcing Domain Reload off. A Domain Reload during the run is survived; the result is recovered after the reload. Use for projects whose libraries require a Domain Reload on Play entry. |
 | `--rerun-failed` | flag | - | Rerun only the tests that failed or were inconclusive in the most recent completed run of the same --test-mode (whole fixtures for a failed OneTimeSetUp/OneTimeTearDown). Cannot be combined with --filter-type or --filter-value |
+| `--log-stack-traces` | flag | - | Keep stack traces on Unity logs during the run. They are off by default because each one grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory. Assertion and thrown-exception failures keep their location either way. |
 
 By default PlayMode still forces Domain Reload off. With `--respect-enter-play-mode-settings`, a Domain Reload may run and the command takes longer; pause-point and hot-reload notes are omitted from a result recovered after reload. Canceling the CLI (Ctrl-C) does not stop the Unity-side run on this path.
 
 exact matches the full test name (Namespace.Class.Method). class runs every test of one class by bare or namespace-qualified name, e.g. --filter-type class --filter-value PlayerTests; the name is matched literally and whole, so PlayerTests does not run EnemyPlayerTests. regex matches a .NET regex against full test names, e.g. --filter-type regex --filter-value '^MyGame\.Tests\.'
+
+Unity log stack traces are off during a run and go back to the project's settings when it finishes, so logs from the run have none in `get-logs --include-stack-trace`. Test results do not change, except for a test that reads a log's stack trace: pass `--log-stack-traces`, or have that test set `Application.SetStackTraceLogType` itself. A failure raised only by a logged error or exception has no `File` or `Line`; `Message` then names the rerun command that adds them.
 
 `--rerun-failed` reads the record that every completed run writes for its test mode, so it reruns the failures of the most recent completed run, filtered or not. A run that timed out or was cancelled leaves no record. With nothing recorded as failed it returns `Status: NothingToRerun` without running; to tell a flaky test from a real failure, run `--rerun-failed` again after a failure.
 

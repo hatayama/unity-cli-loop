@@ -51,6 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool RerunFailed { get; set; } = false;
 
         /// <summary>
+        /// When true, keeps stack traces on Unity logs during the run. They are off by default because each one grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory.
+        /// </summary>
+        public bool LogStackTraces { get; set; } = false;
+
+        /// <summary>
         /// Internal request identifier used for delayed result recovery across domain reload.
         /// </summary>
         [Browsable(false)]

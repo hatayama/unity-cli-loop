@@ -16,12 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private ConsoleLogRetriever retriever;
         private int originalMask;
+        private UnityEngine.StackTraceLogType originalErrorStackTraceType;
 
         [SetUp]
         public void SetUp()
         {
             retriever = new ConsoleLogRetriever();
             originalMask = retriever.GetCurrentMask();
+            // Why pin this: uloop run-tests turns log stack traces off by default, and these tests are
+            // about how the retriever splits a log entry that has one.
+            originalErrorStackTraceType = UnityEngine.Application.GetStackTraceLogType(UnityEngine.LogType.Error);
+            UnityEngine.Application.SetStackTraceLogType(UnityEngine.LogType.Error, UnityEngine.StackTraceLogType.ScriptOnly);
         }
 
         [TearDown]
@@ -29,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Always restore mask state after each test
             retriever.SetMask(originalMask);
+            UnityEngine.Application.SetStackTraceLogType(UnityEngine.LogType.Error, originalErrorStackTraceType);
         }
 
         [Test]

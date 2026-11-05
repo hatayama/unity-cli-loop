@@ -5,7 +5,7 @@ Returns JSON with:
 - `Success` (boolean): Whether every test passed or was skipped; `false` when a test or suite failed or a test was inconclusive
 - `Status` (string): Machine-readable execution status such as `Passed`, `Failed`, `Inconclusive`, `NoTestsFound`, `ExecutionFailed`, or `NothingToRerun` (`--rerun-failed` found nothing to rerun; `Success` is `true`)
 - `HasFailures` (boolean): Whether any discovered test or suite failed
-- `Message` (string): Summary message
+- `Message` (string): Summary message. When a failure has no `File` or `Line` and the run did not use `--log-stack-traces`, it also names the rerun command that adds them.
 - `NoTestsFound` (boolean): Whether Unity Test Runner discovered zero matching tests
 - `NoTestsFoundExplanation` (string): Agent-facing explanation when `NoTestsFound` is true; empty otherwise. When `--rerun-failed` finds that every recorded test was renamed or removed, it says that instead of the test-assembly advice.
 - `CompletedAt` (string): ISO timestamp when the run finished

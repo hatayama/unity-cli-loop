@@ -55,6 +55,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NoTestsFoundWithFilterMessageFormat =
             ". No tests matched FilterType '{0}' with FilterValue '{1}'. {2} test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value.";
 
+        // Format: the test mode argument of the rerun command, empty for EditMode.
+        public const string MissingFailureLocationNoticeFormat =
+            "Some failures have no File or Line, possibly because run-tests turns Unity log stack traces off by default. To locate them, run: uloop run-tests {0}--rerun-failed --log-stack-traces";
+
         // Format: active hot-reload change count at test-run start. Policy-form because
         // response construction was measured to run before any deferred domain reload.
         public const string HotReloadDiscardWarningFormat =
