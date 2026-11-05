@@ -13,13 +13,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string PlayModeArgument = "--test-mode PlayMode ";
 
-        internal static string AppendIfLocationMissing(
+        internal static string AppendIfLocationMayBeMissing(
             string message,
             RunTestsSchema parameters,
+            int failedCount,
             SerializableTestResult.FailedTestDetail[] failedTests,
             SerializableTestResult.FailedTestDetail[] failedSuites)
         {
-            if (parameters.LogStackTraces || !(HasMissingLocation(failedTests) || HasMissingLocation(failedSuites)))
+            // Why count the total: the list stops at the cap, so a dropped failure may have no location even
+            // when every listed one does.
+            bool listDropsAFailure = failedCount > RunTestsConstants.FailedTestDetailsLimit;
+            if (parameters.LogStackTraces
+                || !(listDropsAFailure || HasMissingLocation(failedTests) || HasMissingLocation(failedSuites)))
             {
                 return message;
             }

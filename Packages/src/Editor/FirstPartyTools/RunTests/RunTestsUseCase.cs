@@ -243,9 +243,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
-            response.Message = RunTestsLogStackTraceNoticeBuilder.AppendIfLocationMissing(
+            response.Message = RunTestsLogStackTraceNoticeBuilder.AppendIfLocationMayBeMissing(
                 response.Message,
                 parameters,
+                response.FailedCount,
                 response.FailedTests,
                 response.FailedSuites);
             if (target.RerunSource != null)
@@ -285,9 +286,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return await ExecuteForTestModeAsync(parameters, filter, executionCt).ConfigureAwait(false);
             }
 
-            _logStackTraceSuppressor.Suppress();
             try
             {
+                // Why inside the try: a failure partway through must not leave the settings partly off.
+                _logStackTraceSuppressor.Suppress();
                 return await ExecuteForTestModeAsync(parameters, filter, executionCt).ConfigureAwait(false);
             }
             finally

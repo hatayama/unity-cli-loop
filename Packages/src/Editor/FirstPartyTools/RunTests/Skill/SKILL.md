@@ -38,7 +38,7 @@ uloop run-tests [options]
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 | `--respect-enter-play-mode-settings` | flag | - | PlayMode only: keep the project's Enter Play Mode settings instead of forcing Domain Reload off. A Domain Reload during the run is survived; the result is recovered after the reload. Use for projects whose libraries require a Domain Reload on Play entry. |
 | `--rerun-failed` | flag | - | Rerun only the tests that failed or were inconclusive in the most recent completed run of the same --test-mode (whole fixtures for a failed OneTimeSetUp/OneTimeTearDown). Cannot be combined with --filter-type or --filter-value |
-| `--log-stack-traces` | flag | - | Keep stack traces on Unity logs during the run. They are off by default because each one grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory. Assertion and thrown-exception failures keep their location either way. |
+| `--log-stack-traces` | flag | - | Leave the project's log stack trace settings in place during the run. By default `run-tests` turns them off, because each stack trace grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory. Assertion and thrown-exception failures keep their location either way. |
 
 By default PlayMode still forces Domain Reload off. With `--respect-enter-play-mode-settings`, a Domain Reload may run and the command takes longer; pause-point and hot-reload notes are omitted from a result recovered after reload. Canceling the CLI (Ctrl-C) does not stop the Unity-side run on this path.
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -725,7 +726,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _recordStore,
                 _logStackTraceSuppressor,
                 waitForTestRunnerCleanupAsync: NoCleanupWait);
-            RunTestsSchema parameters = new RunTestsSchema();
+            // Why keep stack traces: this test is about the truncation note alone.
+            RunTestsSchema parameters = new RunTestsSchema { LogStackTraces = true };
 
             RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
@@ -2068,6 +2070,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 .ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Message, Does.Contain("uloop run-tests --test-mode PlayMode --rerun-failed --log-stack-traces"));
+        }
+
+        /// <summary>
+        /// Verifies a list cut off at the cap still gets the rerun advice, since a dropped failure may have
+        /// no location even when every listed one does.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTheFailureListIsCutOff_MessageNamesTheRerunCommand()
+        {
+            SerializableTestResult result = CreateFailedRunResult("Assets/Foo.cs");
+            result.failedCount = RunTestsConstants.FailedTestDetailsLimit + 1;
+            result.failedTests = Enumerable
+                .Repeat(result.failedTests[0], RunTestsConstants.FailedTestDetailsLimit)
+                .ToArray();
+            StubTestExecutionService executionService = new() { NextResult = result };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(response.Message, Does.Contain("uloop run-tests --rerun-failed --log-stack-traces"));
+        }
+
+        /// <summary>
+        /// Verifies a failure partway through turning stack traces off does not leave them partly off.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTurningStackTracesOffFails_RestoresThem()
+        {
+            Dictionary<UnityEngine.LogType, UnityEngine.StackTraceLogType> original = _logStackTraceSettings.Snapshot();
+            _logStackTraceSettings.FailOnSetCall = 3;
+            StubTestExecutionService executionService = new();
+            InvalidOperationException thrown = null;
+
+            // Why not Assert.ThrowsAsync: it blocks the main thread, which can freeze the Editor.
+            try
+            {
+                await CreateRecordingUseCase(executionService)
+                    .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+            }
+            catch (InvalidOperationException exception)
+            {
+                thrown = exception;
+            }
+
+            Assert.That(thrown, Is.Not.Null);
+            Assert.That(_logStackTraceSettings.Snapshot(), Is.EqualTo(original));
         }
 
         /// <summary>

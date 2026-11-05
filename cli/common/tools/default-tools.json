@@ -128,7 +128,7 @@
           },
           "LogStackTraces": {
             "type": "boolean",
-            "description": "Keep stack traces on Unity logs during the run. They are off by default because each one grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory. Assertion and thrown-exception failures keep their location either way.",
+            "description": "Leave the project's log stack trace settings in place during the run. By default run-tests turns them off, because each stack trace grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory. Assertion and thrown-exception failures keep their location either way.",
             "default": false
           }
         }
