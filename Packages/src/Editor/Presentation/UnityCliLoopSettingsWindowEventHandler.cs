@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     // Post-compile recovery can stay active while UI data is unchanged, so explicit repaint
     // requests gate expensive full-section refreshes.
     /// <summary>
-    /// Defines the policy used to decide Unity CLI Loop Settings Window Refresh behavior.
+    /// Defines the policy used to decide Unity Loop Harness Settings Window Refresh behavior.
     /// </summary>
     internal static class UnityCliLoopSettingsWindowRefreshPolicy
     {

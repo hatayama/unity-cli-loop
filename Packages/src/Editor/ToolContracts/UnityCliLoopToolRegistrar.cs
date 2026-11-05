@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     }
 
     /// <summary>
-    /// Public facade used by custom tools to register with Unity CLI Loop.
+    /// Public facade used by custom tools to register with Unity Loop Harness.
     /// </summary>
     public static class UnityCliLoopToolRegistrar
     {

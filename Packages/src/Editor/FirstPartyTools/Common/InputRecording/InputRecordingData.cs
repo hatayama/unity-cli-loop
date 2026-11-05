@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Provides Input Recording Metadata behavior for Unity CLI Loop.
+    /// Provides Input Recording Metadata behavior for Unity Loop Harness.
     /// </summary>
     [Serializable]
     internal class InputRecordingMetadata
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Provides Input Frame Events behavior for Unity CLI Loop.
+    /// Provides Input Frame Events behavior for Unity Loop Harness.
     /// </summary>
     [Serializable]
     internal class InputFrameEvents
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Provides Recorded Input Event behavior for Unity CLI Loop.
+    /// Provides Recorded Input Event behavior for Unity Loop Harness.
     /// </summary>
     [Serializable]
     internal class RecordedInputEvent

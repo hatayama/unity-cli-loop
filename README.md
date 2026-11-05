@@ -1,6 +1,8 @@
-# Unity CLI Loop
+# Unity Loop Harness
 
 English | [日本語](README_ja.md)
+
+> Formerly **Unity CLI Loop**, and **uLoopMCP** before that. The `uloop` command, the package ID, and the install steps stay the same; the Editor menu moved from `Window > Unity CLI Loop` to `Window > Unity Loop Harness`.
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-red.svg)](https://unity3d.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)<br>
@@ -11,8 +13,7 @@ English | [日本語](README_ja.md)
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="logo-black-bg" src="Packages/src/Documentation~/images/logo.png" /><br>
-    <sub>(Logo inspired by Daft Punk's <i>Human After All</i> album art)</sub>  
+    <img width="800" alt="Unity Loop Harness logo" src="Packages/src/Documentation~/images/logo.png" />
 </p>
   
 
@@ -25,10 +26,10 @@ Designed to keep AI-driven development loops running autonomously inside your ex
 > - **[Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md)** — for anyone who has written C# custom tools, or skills and scripts that call the `uloop` command. Everyone else migrates just by updating the package and the CLI
 
 # Concept
-Unity CLI Loop is a Unity integration tool designed so that **AI can drive your Unity project forward with minimal human intervention**.
+Unity Loop Harness is a Unity integration tool designed so that **AI can drive your Unity project forward with minimal human intervention**. Your LLM tool (Claude Code, Codex, Cursor, and others) runs the agent; Unity Loop Harness is the part of its harness that reaches into Unity, giving the agent hands to operate the Editor and eyes to check the result.
 Tasks that humans typically handle manually — compiling, running the Test Runner, checking logs, editing scenes, capturing windows to verify UI layouts, and even operating a freshly implemented feature to confirm it actually works — can all be carried out from LLM tools.
 
-Unity CLI Loop is built around four core ideas:
+Unity Loop Harness is built around four core ideas:
 
 1. **A self-hosted development loop where AI autonomously compiles, tests, inspects logs, and fixes issues** — it can even pause execution at any source line without editing code and read the variables at that moment to pin down a cause. Method-body fixes can be applied instantly to the running game without waiting for a recompile. Uses `compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`.
 2. **AI-driven Unity Editor operation — scene building, object manipulation, menu execution, and UI refinement from screenshots.** Uses `execute-dynamic-code`, `screenshot`.
@@ -105,7 +106,7 @@ Make sure you have:
 - An LLM tool that can load skills, such as Claude Code or Codex
 
 > [!NOTE]
-> **Upgrading from V2**: if the project has custom tools written against the V2 API, compile errors appear right after the V3 package is installed. This is expected. Do not fix them by hand: choose `Ignore` in Unity's Safe Mode prompt on startup, then press **Migrate** in the migration window that opens automatically (`Window > Unity CLI Loop > Custom Tool Migration`). See [Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md) for the full procedure.
+> **Upgrading from V2**: if the project has custom tools written against the V2 API, compile errors appear right after the V3 package is installed. This is expected. Do not fix them by hand: choose `Ignore` in Unity's Safe Mode prompt on startup, then press **Migrate** in the migration window that opens automatically (`Window > Unity Loop Harness > Custom Tool Migration`). See [Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md) for the full procedure.
 
 ## Install from the terminal
 
@@ -197,13 +198,13 @@ Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity CLI Loop.
+2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.21.3).
 
 </details>
 
 ### Step 2: Install the CLI
 
-Open `Window > Unity CLI Loop > Settings` and press **Install CLI**:
+Open `Window > Unity Loop Harness > Settings` and press **Install CLI**:
 
 <img width="350" alt="Settings window before the CLI is installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
@@ -336,7 +337,7 @@ The connection uses **no TCP ports**. It goes over a Unix domain socket on macOS
 
 # Design Philosophy
 
-Unity CLI Loop does not chase tool count. With dynamic C# code execution (`execute-dynamic-code`), almost any Unity Editor operation can be accomplished through a single tool.
+Unity Loop Harness does not chase tool count. With dynamic C# code execution (`execute-dynamic-code`), almost any Unity Editor operation can be accomplished through a single tool.
 
 Too many tools make it harder for AI to choose the right one. And even when tools are packaged as Skills, each tool's description still consumes the context window. We believe keeping tools to the essential minimum is good design.
 
@@ -373,7 +374,7 @@ For detailed descriptions and usage examples of every tool, see the **[Tool Refe
 - `simulate-keyboard` - Simulate keyboard input via Input System
 - `replay-input` - Replay input recorded in the Recordings window during PlayMode
 
-## Unity CLI Loop Extension Development
+## Unity Loop Harness Extension Development
 
 Add project-specific custom tools in a type-safe way without touching the core package. Ship a `Skill/SKILL.md` alongside your tool and AI agents discover it automatically.
 
@@ -381,7 +382,7 @@ For implementation steps and how to write Skills, see the **[Custom Tool Develop
 
 ## Other
 
-### Unity CLI Loop Files
+### Unity Loop Harness Files
 
 `UserSettings/UnityCliLoopSettings.json` stores per-user editor settings and should always remain local-only.
 
@@ -411,3 +412,6 @@ The `.uloop/` directory at the project root stores CLI cache, tool registry, and
 
 ## License
 MIT License
+
+## Trademarks
+Unity Loop Harness is not sponsored by or affiliated with Unity Technologies or its affiliates. Unity is a trademark or registered trademark of Unity Technologies or its affiliates in the U.S. and elsewhere.

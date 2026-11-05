@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Test fixture that verifies persistence behavior of the project-scoped
-    /// (git-shared) Unity CLI Loop settings repository.
+    /// (git-shared) Unity Loop Harness settings repository.
     /// </summary>
     [TestFixture]
     public class UnityCliLoopProjectSettingsRepositoryTests

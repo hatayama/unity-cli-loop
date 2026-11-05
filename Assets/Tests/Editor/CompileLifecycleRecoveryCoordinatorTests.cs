@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 abortedWithResult.Message,
                 Is.EqualTo(
-                    "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
+                    "Unity stopped compiling before Unity Loop Harness received the compilationFinished callback. " +
                     "The compile result is indeterminate; use get-logs to inspect the compiler output.\n" +
                     "Recent Console errors:\n- " + consoleError));
         }
@@ -211,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 abortedWithResult.Message,
                 Is.EqualTo(
-                    "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
+                    "Unity stopped compiling before Unity Loop Harness received the compilationFinished callback. " +
                     "The compile result is indeterminate; use get-logs to inspect the compiler output."));
         }
 

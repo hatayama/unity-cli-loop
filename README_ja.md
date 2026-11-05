@@ -1,6 +1,8 @@
-# Unity CLI Loop
+# Unity Loop Harness
 
 [English](README.md) | 日本語
+
+> 旧名は **Unity CLI Loop**、その前は **uLoopMCP** です。`uloop` コマンド、パッケージ ID、インストール手順はそのままです。Editor のメニューは `Window > Unity CLI Loop` から `Window > Unity Loop Harness` に移りました。
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-red.svg)](https://unity3d.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)<br>
@@ -11,8 +13,7 @@
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="logo-black-bg" src="Packages/src/Documentation~/images/logo.png" /><br>
-    <sub>(Logo inspired by Daft Punk's <i>Human After All</i> album art)</sub>  
+    <img width="800" alt="Unity Loop Harness logo" src="Packages/src/Documentation~/images/logo.png" />
 </p>
   
 
@@ -25,10 +26,10 @@ AI駆動の開発ループを既存のUnityプロジェクト内で自律的に�
 > - **[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md)** — C#カスタムツールや、`uloop` コマンドを呼び出すスキル／スクリプトを自作している方向け。それ以外の方は、パッケージとCLIを更新するだけで移行できます
 
 # コンセプト
-Unity CLI Loopは、「AIがUnityプロジェクトの実装をできるだけ人手を介さずに進められる」ことを目指して作られた Unity連携ツールです。
+Unity Loop Harnessは、「AIがUnityプロジェクトの実装をできるだけ人手を介さずに進められる」ことを目指して作られた Unity連携ツールです。エージェントそのものを動かすのは LLM ツール（Claude Code、Codex、Cursor など）で、Unity Loop Harness はそのハーネスのうち Unity に届く部分です。Editor を操作する手と、結果を確かめる目をエージェントに与えます。
 人間が手で行っていたコンパイル、Test Runner の実行、ログ確認、シーン編集、画面キャプチャによるUIレイアウト確認、さらには実装した機能が本当に動くかどうかを実際に操作して確かめる動作確認までを、LLM ツールからまとめて行えるようにします。
 
-Unity CLI Loopのコアとなるコンセプトは次の4つです。
+Unity Loop Harnessのコアとなるコンセプトは次の4つです。
 
 1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。メソッド本体の修正は再コンパイルを待たずに実行中のゲームへ即時反映できます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
@@ -105,7 +106,7 @@ https://github.com/user-attachments/assets/118c8b4a-8254-4798-a63c-f6a213fc1031
 - Claude Code、Codex など、スキルを読み込める LLM ツールを使っている
 
 > [!NOTE]
-> **V2 からアップグレードする場合**: V2 API で作ったカスタムツールがあるプロジェクトでは、V3 パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity 起動時の Safe Mode の問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity CLI Loop > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルの V3 移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
+> **V2 からアップグレードする場合**: V2 API で作ったカスタムツールがあるプロジェクトでは、V3 パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity 起動時の Safe Mode の問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity Loop Harness > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルの V3 移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
 
 ## ターミナルから入れる場合
 
@@ -197,13 +198,13 @@ Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity CLI Loop をインストールします。
+2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity Loop Harness（v3.21.3 までは Unity CLI Loop と表示）をインストールします。
 
 </details>
 
 ### ステップ 2：CLI をインストールする
 
-`Window > Unity CLI Loop > Settings` を開き、**Install CLI** を押します：
+`Window > Unity Loop Harness > Settings` を開き、**Install CLI** を押します：
 
 <img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
@@ -336,7 +337,7 @@ Claude Codeはシェルコマンドをサンドボックス内で実行し、サ
 
 # 設計思想
 
-Unity CLI Loop はツールの数を追い求めません。C#コードの動的実行（`execute-dynamic-code`）があれば、Unity Editor上のほとんどの操作はそれ一つで実現できます。
+Unity Loop Harness はツールの数を追い求めません。C#コードの動的実行（`execute-dynamic-code`）があれば、Unity Editor上のほとんどの操作はそれ一つで実現できます。
 
 ツールを増やしすぎると、AIがどのツールを使うべきか適切に判断できなくなります。さらに、たとえSkill化したとしても各ツールのdescriptionはコンテキストウィンドウを消費します。必要最低限に絞ることがよい設計だと考えています。
 
@@ -373,7 +374,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 - `simulate-keyboard` - Input System経由のキーボード入力シミュレーション
 - `replay-input` - Recordingsウィンドウで記録した入力のPlayMode再生
 
-## Unity CLI Loop 拡張ツールの開発
+## Unity Loop Harness 拡張ツールの開発
 
 コアパッケージに手を入れることなく、プロジェクト固有のカスタムツールを型安全に追加できます。`Skill/SKILL.md` を添えれば、AIエージェントがカスタムツールを自動認識します。
 
@@ -381,7 +382,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 
 ## その他
 
-### Unity CLI Loop 関連ファイル
+### Unity Loop Harness 関連ファイル
 
 `UserSettings/UnityCliLoopSettings.json` はユーザー個別のエディタ設定を保持するため、常にローカル専用です。
 
@@ -411,3 +412,6 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 
 ## ライセンス
 MIT License
+
+## 商標
+Unity Loop Harness は、Unity Technologies およびその関連会社が後援・提携するものではありません。Unity は、米国およびその他の国における Unity Technologies またはその関連会社の商標または登録商標です。

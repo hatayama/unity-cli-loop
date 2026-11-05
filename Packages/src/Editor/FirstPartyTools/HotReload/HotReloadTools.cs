@@ -279,7 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes attribute-free hot reload as a Unity CLI Loop first-party tool.
+    /// Exposes attribute-free hot reload as a Unity Loop Harness first-party tool.
     /// </summary>
     [UnityCliLoopTool]
     public class HotReloadTool : UnityCliLoopTool<HotReloadSchema, HotReloadResponse>

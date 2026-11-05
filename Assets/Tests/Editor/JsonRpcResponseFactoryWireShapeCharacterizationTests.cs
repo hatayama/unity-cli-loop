@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string response = await processor.ProcessRequest(BuildToolRequest(DeterministicSuccessTool.Name, 1), CancellationToken.None);
 
             Assert.That(response, Is.EqualTo(
-                "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"Tool 'deterministic-success' is disabled. To enable it, go to Window > Unity CLI Loop > Settings\",\"data\":{\"type\":\"internal_error\",\"message\":\"This tool has been disabled in project settings.\"}}}"));
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"Tool 'deterministic-success' is disabled. To enable it, go to Window > Unity Loop Harness > Settings\",\"data\":{\"type\":\"internal_error\",\"message\":\"This tool has been disabled in project settings.\"}}}"));
         }
 
         [Test]

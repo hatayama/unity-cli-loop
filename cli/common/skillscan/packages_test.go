@@ -111,7 +111,7 @@ func TestEnumeratePackageSearchResultsCapturesPackageIdentities(t *testing.T) {
 	}
 }
 
-// Tests that local manifest packages from other dependencies cannot replace the Unity CLI Loop package root.
+// Tests that local manifest packages from other dependencies cannot replace the Unity Loop Harness package root.
 func TestResolvePackageRootIgnoresOtherManifestFilePackages(t *testing.T) {
 	projectRoot := t.TempDir()
 	otherPackageRoot := filepath.Join(t.TempDir(), "AOtherPackage")
@@ -134,7 +134,7 @@ func TestResolvePackageRootIgnoresOtherManifestFilePackages(t *testing.T) {
 	}
 }
 
-// Tests that marker-only project packages are not treated as the Unity CLI Loop package unless they are Packages/src.
+// Tests that marker-only project packages are not treated as the Unity Loop Harness package unless they are Packages/src.
 func TestResolvePackageRootIgnoresMarkerOnlyUnrelatedProjectPackage(t *testing.T) {
 	projectRoot := t.TempDir()
 	unrelatedPackageRoot := filepath.Join(projectRoot, "Packages", "unrelated-package")

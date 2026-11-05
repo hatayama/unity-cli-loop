@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     }
 
     /// <summary>
-    /// Maps known Unity CLI Loop exception types to stable user-facing messages.
+    /// Maps known Unity Loop Harness exception types to stable user-facing messages.
     /// </summary>
     public class DefaultErrorTranslator : IErrorTranslator
     {

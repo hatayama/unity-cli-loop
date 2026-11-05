@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.IsValid, Is.False);
             Assert.That(
                 result.ErrorMessage,
-                Is.EqualTo("Unity CLI Loop server recovery finished, but no running server instance is available."));
+                Is.EqualTo("Unity Loop Harness server recovery finished, but no running server instance is available."));
         }
 
         [Test]
@@ -482,7 +482,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Success, Is.False);
             Assert.That(
                 result.ErrorMessage,
-                Is.EqualTo("Server restoration failed: Unity CLI Loop server recovery finished, but no running server instance is available."));
+                Is.EqualTo("Server restoration failed: Unity Loop Harness server recovery finished, but no running server instance is available."));
             Assert.That(recoveryCoordinator.StartRecoveryCallCount, Is.EqualTo(1));
         }
 
