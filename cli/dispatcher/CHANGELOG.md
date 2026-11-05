@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.3](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.2...dispatcher-v3.13.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* Repeated test runs no longer grow Unity's memory through log stack traces ([#3429](https://github.com/hatayama/unity-cli-loop/issues/3429)) ([527ade6](https://github.com/hatayama/unity-cli-loop/commit/527ade679a4cba766a7845a1c7eba2a51a65c4ca))
+
 ## [3.13.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.1...dispatcher-v3.13.2) (2026-10-29)
 
 
