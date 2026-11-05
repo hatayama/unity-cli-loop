@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Format: the test mode argument of the rerun command, empty for EditMode.
         public const string MissingFailureLocationNoticeFormat =
-            "A failure raised only by a logged error or exception has no File or Line, because run-tests turns Unity log stack traces off by default. To locate those failures, run: uloop run-tests {0}--rerun-failed --log-stack-traces";
+            "A failure raised only by a logged error or exception has no File or Line, because run-tests turns Unity log stack traces off by default. A rerun that keeps the project's stack trace settings can locate those failures: uloop run-tests {0}--rerun-failed --log-stack-traces";
 
         // Format: active hot-reload change count at test-run start. Policy-form because
         // response construction was measured to run before any deferred domain reload.
