@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.Linq;
 
@@ -32,8 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string testModeArgument = parameters.TestMode == UnityCliLoopTestMode.PlayMode
                 ? PlayModeArgument
                 : string.Empty;
+            // Why check the ending: the status message has no terminator, while the truncation note has one.
+            string separator = message.EndsWith(".", StringComparison.Ordinal) ? " " : ". ";
             return message
-                + " "
+                + separator
                 + string.Format(
                     CultureInfo.InvariantCulture,
                     RunTestsConstants.MissingFailureLocationNoticeFormat,

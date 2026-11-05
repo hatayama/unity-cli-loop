@@ -2052,7 +2052,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsResponse response = await CreateRecordingUseCase(executionService)
                 .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
 
-            Assert.That(response.Message, Does.StartWith("failed "));
+            Assert.That(response.Message, Does.StartWith("failed run. A failure"));
             Assert.That(response.Message, Does.Contain("uloop run-tests --rerun-failed --log-stack-traces"));
             Assert.That(response.Message, Does.Not.Contain("--test-mode"));
         }
@@ -2084,6 +2084,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             result.failedTests = Enumerable
                 .Repeat(result.failedTests[0], RunTestsConstants.FailedTestDetailsLimit)
                 .ToArray();
+            StubTestExecutionService executionService = new() { NextResult = result };
+
+            RunTestsResponse response = await CreateRecordingUseCase(executionService)
+                .ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
+
+            Assert.That(response.Message, Does.Contain("full results. A failure"));
+            Assert.That(response.Message, Does.Contain("uloop run-tests --rerun-failed --log-stack-traces"));
+        }
+
+        /// <summary>
+        /// Verifies a failed suite with no location gets the same advice, since no test may have failed.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenAFailedSuiteHasNoLocation_MessageNamesTheRerunCommand()
+        {
+            SerializableTestResult result = CreateFailedRunResult("Assets/Foo.cs");
+            result.failedCount = 0;
+            result.failedTests = null;
+            result.failedSuites = new[]
+            {
+                new SerializableTestResult.FailedTestDetail { FullName = "A.B", Message = "boom" },
+            };
             StubTestExecutionService executionService = new() { NextResult = result };
 
             RunTestsResponse response = await CreateRecordingUseCase(executionService)

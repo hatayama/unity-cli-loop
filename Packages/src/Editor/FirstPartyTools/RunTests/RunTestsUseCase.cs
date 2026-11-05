@@ -281,7 +281,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.LogStackTraces)
             {
-                // Why restore: an abandoned run may have left them off, and this caller asked for them.
+                // Why restore: if an earlier restore never ran they are still off, and this caller asked
+                // for the project's settings.
                 _logStackTraceSuppressor.RestoreIfSaved();
                 return await ExecuteForTestModeAsync(parameters, filter, executionCt).ConfigureAwait(false);
             }

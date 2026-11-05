@@ -36,6 +36,7 @@ Executes Unity Test Runner and retrieves test results. You can set conditions wi
 - FilterValue: Value according to filter type (class name, namespace, etc.)
 - UnsavedChanges: How to handle unsaved loaded Scene and Prefab Stage changes before tests. `save` (default) writes them, `fail` stops if any remain, `discard` reloads disk state (Untitled scenes fail).
 - RerunFailed: Rerun only the tests that failed or were inconclusive in the most recent completed run of the same TestMode. Cannot be combined with FilterType or FilterValue.
+- LogStackTraces: Leave the project's log stack trace settings in place during the run. By default run-tests turns them off, because each stack trace grows the Editor's native memory and `Editor.log`, and only an Editor restart frees that memory. By default, a failure raised only by a logged error or exception has no `File` or `Line`, and a test that reads a log's stack trace fails; rerun with this option in those cases.
 Test results can be output as xml. The output path is returned so AI can read it.
 This is also a strategy to avoid consuming context.
 ```text

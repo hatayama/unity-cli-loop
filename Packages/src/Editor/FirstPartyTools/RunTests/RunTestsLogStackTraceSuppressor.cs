@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal void Suppress()
         {
-            // Why restore first: a run abandoned by a Domain Reload left None in place, and saving that
+            // Why restore first: if an earlier restore never ran, None is still in place, and saving that
             // would make None the project's own value for the rest of the session.
             RestoreIfSaved();
 
