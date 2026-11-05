@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.4](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.3...uloop-project-runner-v3.12.4) (2026-11-05)
+
+
+### Bug Fixes
+
+* Repeated test runs no longer grow Unity's memory through log stack traces ([#3429](https://github.com/hatayama/unity-cli-loop/issues/3429)) ([527ade6](https://github.com/hatayama/unity-cli-loop/commit/527ade679a4cba766a7845a1c7eba2a51a65c4ca))
+
 ## [3.12.3](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.2...uloop-project-runner-v3.12.3) (2026-10-29)
 
 

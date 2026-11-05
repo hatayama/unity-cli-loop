@@ -36,6 +36,7 @@ Unity Test Runnerを実行し、テスト結果を取得します。FilterType�
 - FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
 - UnsavedChanges: テスト前の未保存 Scene / Prefab Stage 変更の扱い。`save`（デフォルト）は保存、`fail` は残っていれば停止、`discard` はディスク状態へ戻す（Untitled シーンは破棄できず失敗）。
 - RerunFailed: 同じ TestMode で直近に完了した実行で失敗・inconclusive だったテストだけを再実行します。FilterType / FilterValue とは併用できません。
+- LogStackTraces: 実行中もプロジェクトのログのスタックトレース設定をそのまま使います。run-tests は既定でこの設定を切ります。スタックトレースは Editor のネイティブメモリと `Editor.log` を増やし、そのメモリは Editor を再起動するまで解放されないためです。既定のままだと、ログ出力だけで失敗したテストには `File` と `Line` が付かず、ログのスタックトレースを読むテストは失敗します。その場合はこのオプションを付けて実行し直してください。
 テスト結果をxmlで出力する事が可能です。出力pathを返すので、それをAIに読み取ってもらう事ができます。
 これもコンテキストを圧迫しないための工夫です。
 ```text
