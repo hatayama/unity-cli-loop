@@ -14,12 +14,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public virtual bool IsTestFrameworkAvailable => UnityTestFrameworkExecutionServiceRegistry.IsAvailable;
 
         /// <summary>
-        /// True when a Domain Reload handed a run over to the next domain and that run has not finished.
-        /// </summary>
-        internal virtual bool IsRunContinuingAfterReload =>
-            UnityTestFrameworkExecutionServiceRegistry.Current.IsRunContinuingAfterReload;
-
-        /// <summary>
         /// Execute tests in PlayMode
         /// </summary>
         /// <param name="filter">Test execution filter</param>
@@ -66,7 +60,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     internal interface IUnityTestFrameworkExecutionService
     {
-        bool IsRunContinuingAfterReload { get; }
         Task<SerializableTestResult> ExecutePlayModeTestAsync(
             TestExecutionFilter filter,
             CancellationToken ct,
@@ -97,8 +90,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     internal sealed class TestFrameworkUnavailableExecutionService : IUnityTestFrameworkExecutionService
     {
-        public bool IsRunContinuingAfterReload => false;
-
         public Task<SerializableTestResult> ExecutePlayModeTestAsync(
             TestExecutionFilter filter,
             CancellationToken ct,

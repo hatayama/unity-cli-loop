@@ -294,12 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // Why switch: the await above can resume off-thread, and SessionState needs the main thread.
                 await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
-                // Why skip when the run continues: it finishes in the next domain, which restores them
-                // when that run finishes, so restoring here would only bring the growth back.
-                if (!_executionService.IsRunContinuingAfterReload)
-                {
-                    _logStackTraceSuppressor.RestoreIfSaved();
-                }
+                _logStackTraceSuppressor.RestoreIfSaved();
             }
         }
 

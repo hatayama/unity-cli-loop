@@ -2040,20 +2040,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a run that continues in the next domain keeps stack traces off for the rest of that run.
-        /// </summary>
-        [Test]
-        public async Task ExecuteAsync_WhenTheRunContinuesAfterReload_LeavesTheRestoreToTheNextDomain()
-        {
-            StubTestExecutionService executionService = new() { RunContinuesAfterReload = true };
-
-            await CreateRecordingUseCase(executionService).ExecuteAsync(new RunTestsSchema(), CancellationToken.None);
-
-            Assert.That(_logStackTraceSettings.Get(UnityEngine.LogType.Error), Is.EqualTo(UnityEngine.StackTraceLogType.None));
-            Assert.That(_logStackTraceSettings.HasSaved, Is.True);
-        }
-
-        /// <summary>
         /// Verifies a failure with no location tells the caller how to get one.
         /// </summary>
         [Test]
@@ -2296,10 +2282,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
 
             public override bool IsTestFrameworkAvailable => TestFrameworkAvailable;
-
-            public bool RunContinuesAfterReload { get; set; }
-
-            internal override bool IsRunContinuingAfterReload => RunContinuesAfterReload;
 
             public RunTestsUnfilteredTestListResult UnfilteredTestListResult { get; set; } =
                 RunTestsUnfilteredTestListResult.NotRetrieved();

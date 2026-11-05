@@ -80,13 +80,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a failure while changing the settings can still be undone, because the save comes first.
+        /// Verifies a failure partway through changing the settings can still be undone, because the save
+        /// comes first. Why fail on a later call: failing on the first one changes nothing, so a restore
+        /// with nothing saved would pass too.
         /// </summary>
         [Test]
-        public void Suppress_WhenChangingSettingsFails_CanStillBeRestored()
+        public void Suppress_WhenChangingSettingsFailsPartway_CanStillBeRestored()
         {
             Dictionary<LogType, StackTraceLogType> original = _settings.Snapshot();
-            _settings.FailNextSet = true;
+            _settings.FailOnSetCall = 3;
 
             Assert.Throws<InvalidOperationException>(() => _suppressor.Suppress());
             _suppressor.RestoreIfSaved();
@@ -112,7 +114,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private int[] _saved = Array.Empty<int>();
 
-        public bool FailNextSet { get; set; }
+        /// <summary>
+        /// One-based number of the Set call that throws, or 0 for none.
+        /// </summary>
+        public int FailOnSetCall { get; set; }
+
         public int SetCallCount { get; private set; }
         public bool HasSaved => _saved.Length > 0;
 
@@ -128,13 +134,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         public void Set(LogType logType, StackTraceLogType stackTraceLogType)
         {
-            if (FailNextSet)
+            SetCallCount++;
+            if (SetCallCount == FailOnSetCall)
             {
-                FailNextSet = false;
                 throw new InvalidOperationException("Set failed on purpose.");
             }
 
-            SetCallCount++;
             _current[logType] = stackTraceLogType;
         }
 

@@ -27,9 +27,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public void RunFinished(ITestResultAdaptor result)
         {
-            // Why here: the use case that turned them off lost its await to the reload, so this callback
-            // is the only code that sees this run finish.
-            RunTestsLogStackTraceSuppressor.CreateDefault().RestoreIfSaved();
             SerializableTestResult serializableResult = SerializableTestResultConverter.FromTestResult(result);
             // Why record here: this callback runs only after a domain reload during a PlayMode run that
             // respects Enter Play Mode settings, and that reload cancels the use case's await before it
