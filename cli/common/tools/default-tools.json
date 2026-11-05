@@ -125,6 +125,11 @@
             "type": "boolean",
             "description": "Rerun only the tests that failed or were inconclusive in the most recent completed run of the same --test-mode (whole fixtures for a failed OneTimeSetUp/OneTimeTearDown). Cannot be combined with --filter-type or --filter-value",
             "default": false
+          },
+          "LogStackTraces": {
+            "type": "boolean",
+            "description": "Leave the project's log stack trace settings in place during the run. By default run-tests turns them off, because each stack trace grows the Editor's native memory and Editor.log, and only an Editor restart frees that memory. Assertion and thrown-exception failures keep their location either way.",
+            "default": false
           }
         }
       }
