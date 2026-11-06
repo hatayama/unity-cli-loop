@@ -176,6 +176,7 @@ func TestExtractProjectPathSupportsEqualsAndSpaces(t *testing.T) {
 	cases := map[string]string{
 		`Unity -projectPath="/Users/<USER_NAME>/My Project" -useHub`:                                                             "/Users/<USER_NAME>/My Project",
 		`Unity -projectpath '/Users/<USER_NAME>/Other Project' -flag`:                                                            "/Users/<USER_NAME>/Other Project",
+		`Unity -projectPath /Users/<USER_NAME>/My Project -logFile /tmp/my logs/editor.log -ignorecompilererrors`:                "/Users/<USER_NAME>/My Project",
 		`Unity -projectPath /Users/<USER_NAME>/Plain -flag`:                                                                      "/Users/<USER_NAME>/Plain",
 		`Unity Hub -- --silent -- -projectPath /Users/<USER_NAME>/SampleWorkspace/SampleUnityProject -cacheServerEnableUpload`:   "/Users/<USER_NAME>/SampleWorkspace/SampleUnityProject",
 		`Unity -projectPath /Users/<USER_NAME>/SampleWorkspace/SampleUnityProject -acceptSoftwareTermsForThisRunOnly -useHub`:    "/Users/<USER_NAME>/SampleWorkspace/SampleUnityProject",
