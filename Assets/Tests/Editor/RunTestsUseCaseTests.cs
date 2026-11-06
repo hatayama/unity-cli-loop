@@ -1106,44 +1106,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies finished runs are released after the Test Framework's cleanup and back on the main thread,
-        /// because the cleanup is what destroys a runner, and asking Unity whether it is destroyed needs that thread.
+        /// Verifies a finished run is released on the main thread before the cleanup wait: asking Unity whether a
+        /// runner is destroyed needs that thread, and a request cancelled during the wait must not keep the run.
+        /// Why LogStackTraces: the default path already returns to the main thread when it restores the settings,
+        /// so only this path shows the switch is needed.
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_ReleasesFinishedRunsAfterCleanupOnTheMainThread()
+        public async Task ExecuteAsync_ReleasesFinishedRunOnTheMainThreadBeforeTheCleanupWait()
         {
-            OffThreadCleanupResume cleanupResume = new OffThreadCleanupResume();
-            bool cleanupFinished = false;
-            bool cleanupFinishedAtRelease = false;
+            OffThreadCleanupResume executionResume = new OffThreadCleanupResume();
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                BeforeEditModeResultAsync = executionResume.ResumeAsync
+            };
+            bool cleanupStarted = false;
+            bool cleanupStartedAtRelease = false;
             bool releasedOnMainThread = false;
             int releaseCount = 0;
             RunTestsUseCase useCase = new RunTestsUseCase(
                 new TestFilterCreationService(),
-                new StubTestExecutionService(),
+                executionService,
                 new StubTestExecutionStateValidationService(ValidationResult.Success()),
                 _recordStore,
                 _logStackTraceSuppressor,
-                waitForTestRunnerCleanupAsync: async ct =>
+                waitForTestRunnerCleanupAsync: ct =>
                 {
-                    await cleanupResume.ResumeAsync(ct).ConfigureAwait(false);
-                    cleanupFinished = true;
+                    cleanupStarted = true;
+                    return Task.CompletedTask;
                 },
                 releaseFinishedTestRuns: () =>
                 {
                     releaseCount++;
-                    cleanupFinishedAtRelease = cleanupFinished;
+                    cleanupStartedAtRelease = cleanupStarted;
                     releasedOnMainThread = MainThreadSwitcher.IsMainThread;
                 });
             RunTestsSchema parameters = new RunTestsSchema
             {
                 TestMode = UnityCliLoopTestMode.EditMode,
-                FilterType = TestFilterType.all
+                FilterType = TestFilterType.all,
+                LogStackTraces = true
             };
 
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
+            Assert.That(executionResume.ObservedIsMainThread, Is.False);
             Assert.That(releaseCount, Is.EqualTo(1));
-            Assert.That(cleanupFinishedAtRelease, Is.True);
+            Assert.That(cleanupStartedAtRelease, Is.False);
             Assert.That(releasedOnMainThread, Is.True);
         }
 
@@ -2419,6 +2427,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             // Lets a test reach the CancelAfter failure branch without waiting out a real timeout.
             public bool ThrowsExecutionTimeout { get; set; }
+            // Runs before an EditMode run returns its result, so a test can make the run complete off-thread.
+            public Func<CancellationToken, Task> BeforeEditModeResultAsync { get; set; }
 
             public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
@@ -2432,7 +2442,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     throw new OperationCanceledException();
                 }
 
+                if (BeforeEditModeResultAsync != null)
+                {
+                    return CompleteEditModeRunAfterResumeAsync(ct);
+                }
+
                 return Task.FromResult(NextResult);
+            }
+
+            private async Task<SerializableTestResult> CompleteEditModeRunAfterResumeAsync(CancellationToken ct)
+            {
+                await BeforeEditModeResultAsync(ct).ConfigureAwait(false);
+                return NextResult;
             }
 
             internal override Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(

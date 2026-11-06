@@ -78,8 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Unsubscribes every run that has finished. A run in progress keeps its subscriptions. Call on the main
-        /// thread, because it asks Unity which objects are destroyed.
+        /// Unsubscribes every run that has finished. A run in progress keeps its subscriptions, and so does a run
+        /// cancelled midway, whose runner the Test Framework never destroys, until the next Domain Reload. Call on
+        /// the main thread, because it asks Unity which objects are destroyed.
         /// </summary>
         public void Release()
         {
@@ -140,7 +141,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why this comparison: the managed instance of a destroyed Unity object survives, and only Unity's
-        // overloaded == reports that it is gone. A finished run's runner is destroyed; a running one is not.
+        // overloaded == reports that it is gone. A finished run's runner is destroyed; one still running or
+        // cancelled midway is not.
         private static bool IsDestroyedUnityObject(object target)
         {
             UnityEngine.Object unityObject = target as UnityEngine.Object;

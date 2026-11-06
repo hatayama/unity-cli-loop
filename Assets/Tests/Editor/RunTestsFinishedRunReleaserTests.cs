@@ -102,6 +102,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a static handler is left alone. It has no target to ask about, and reading one would throw
+        /// while a finished run is reporting its result.
+        /// </summary>
+        [Test]
+        public void Release_LeavesStaticHandlers()
+        {
+            FakeEditModeTestCallbacks.RestoringTestContext += OnRestoringTestStatic;
+
+            _releaser.Release();
+
+            Assert.That(FakeEditModeTestCallbacks.RestoringTestContext, Is.Not.Null);
+            Assert.That(_unsubscribed, Is.Empty);
+        }
+
+        /// <summary>
         /// Verifies a destroyed object with no reload handler stays subscribed, because removing one of the two
         /// subscriptions would release nothing and the object is not the runner this was written for.
         /// </summary>
@@ -175,6 +190,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(RunTestsFinishedRunReleaser.FindBeforeAssemblyReloadMethod(runnerType), Is.Not.Null);
         }
 
+        private static void OnRestoringTestStatic()
+        {
+        }
+
         private FakeEditModeRunner CreateRunner()
         {
             FakeEditModeRunner runner = ScriptableObject.CreateInstance<FakeEditModeRunner>();
@@ -232,11 +251,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     }
 
     /// <summary>
-    /// A subscriber that is not a Unity object.
+    /// A subscriber that is not a Unity object. It has the reload handler, so only that keeps it subscribed.
     /// </summary>
     internal sealed class PlainHandlerOwner
     {
         public void OnRestoringTest()
+        {
+        }
+
+        private void OnBeforeAssemblyReload()
         {
         }
     }

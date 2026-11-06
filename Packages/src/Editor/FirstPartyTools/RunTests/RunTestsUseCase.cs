@@ -219,17 +219,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Using the linked token here would mis-report a successful run as timed out when
                 // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
                 await MainThreadSwitcher.SwitchToMainThread(ct);
-                await _waitForTestRunnerCleanupAsync(ct).ConfigureAwait(false);
 
-                // Why after the cleanup wait: the Test Framework destroys a run's runner during its cleanup, and
-                // only a destroyed runner can be released. One this misses, after a cancel or a slow cleanup,
-                // goes at the end of the next run.
-                // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is off-thread. The
-                // release asks Unity which objects are destroyed, and what follows needs this thread too:
-                // no-tests diagnostics call AssetDatabase.FindAssets, and the predefined-assembly scan calls
-                // TypeCache.
-                await MainThreadSwitcher.SwitchToMainThread(ct);
+                // Why before the cleanup wait: the Test Framework destroys a finished run's runner before
+                // RunFinished, so it can be released now, and a request cancelled while waiting must not keep it.
                 _releaseFinishedTestRuns();
+                await _waitForTestRunnerCleanupAsync(ct).ConfigureAwait(false);
             }
             catch (RunTestsExecutionCanceledException canceledException)
                 when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
@@ -269,6 +263,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ApplyRerunFields(response, parameters.TestMode, target.RerunSource);
             }
 
+            // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
+            // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, and the
+            // predefined-assembly scan calls TypeCache, both Unity Editor APIs.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
                 () => _appendNoTestsDiagnostics(
