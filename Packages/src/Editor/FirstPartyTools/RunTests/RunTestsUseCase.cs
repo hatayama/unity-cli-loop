@@ -51,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the store is required: a test that forgot it would rewrite the project's own record.
         // Why the suppressor is required: a test that forgot it would change the settings of the real
         // run executing that test.
+        // Why the releaser is optional: it only touches destroyed runners, so a test that forgot it cannot
+        // change anything a running test depends on.
         internal RunTestsUseCase(
             TestFilterCreationService filterService,
             TestExecutionService executionService,
@@ -222,6 +224,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why after the cleanup wait: the Test Framework destroys a run's runner during its cleanup, and
                 // only a destroyed runner can be released. One this misses, after a cancel or a slow cleanup,
                 // goes at the end of the next run.
+                // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is off-thread. The
+                // release asks Unity which objects are destroyed, and what follows needs this thread too:
+                // no-tests diagnostics call AssetDatabase.FindAssets, and the predefined-assembly scan calls
+                // TypeCache.
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 _releaseFinishedTestRuns();
             }
@@ -263,10 +269,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ApplyRerunFields(response, parameters.TestMode, target.RerunSource);
             }
 
-            // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
-            // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, and the
-            // predefined-assembly scan calls TypeCache, both Unity Editor APIs.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
                 () => _appendNoTestsDiagnostics(
