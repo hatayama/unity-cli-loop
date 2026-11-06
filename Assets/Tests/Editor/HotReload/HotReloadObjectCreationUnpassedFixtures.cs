@@ -23,12 +23,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class HotReloadUnpassedHiddenOverload
     {
+        public int Chosen;
+
         public HotReloadUnpassedHiddenOverload(long value)
         {
+            Chosen = 1;
         }
 
         internal HotReloadUnpassedHiddenOverload(int value)
         {
+            Chosen = 2;
         }
     }
 
@@ -78,12 +82,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class HotReloadUnpassedHiddenAddOverload : IEnumerable
     {
+        public int Chosen;
+
         public void Add(long value)
         {
+            Chosen = 1;
         }
 
         internal void Add(int value)
         {
+            Chosen = 2;
         }
 
         public IEnumerator GetEnumerator()

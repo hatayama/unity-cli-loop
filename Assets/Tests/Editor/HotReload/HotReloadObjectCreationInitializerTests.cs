@@ -189,8 +189,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: edited from another assembly, a referenced project assembly's hidden overload stays
         /// hidden from the shim too, so the public overload both bindings chose is the one that runs.
         /// </summary>
-        [TestCase("private object _value = new HotReloadUnpassedHiddenOverload(1);")]
-        [TestCase("private object _value = new HotReloadUnpassedHiddenAddOverload { 1 };")]
+        [TestCase("private HotReloadUnpassedHiddenOverload _value = new HotReloadUnpassedHiddenOverload(1);")]
+        [TestCase("private HotReloadUnpassedHiddenAddOverload _value = new HotReloadUnpassedHiddenAddOverload { 1 };")]
         public async Task Run_HiddenOverloadOfReferencedAssembly_RunsThePublicOne(string fieldDeclaration)
         {
             HotReloadOrchestratorResult result = await RunSourceAtAsync(
@@ -198,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WithEditedRead(
                     File.ReadAllText(ResolveCrossAssemblyHostPath()).Replace("\r\n", "\n"),
                     fieldDeclaration,
-                    "return _value == null ? 0 : 1;"));
+                    "return _value.Chosen;"));
 
             AssertPatched(result);
             Assert.That(ReadCrossAssemblyHost(), Is.EqualTo(1), Describe(result));

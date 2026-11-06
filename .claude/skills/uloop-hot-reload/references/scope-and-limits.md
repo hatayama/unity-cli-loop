@@ -61,9 +61,10 @@ instance state skips the field's readers and writers with a per-method reason, a
 a constructor the compiled type does not hold, an object initializer
 (`new T { X = 1 }`), a non-public constructor or type, and a nested type named without its
 outer type (write `new Outer.Inner()`, or `new()` when the field's type is spelled) —
-including when such a creation is an array element or a constructor argument. For a type of
-the assembly being edited, a collection initializer also skips, and so does any constructor
-when the type has a non-public one and this reload was not given its file. A
+including when such a creation is an array element or a constructor argument. A collection
+initializer also needs a `public` `Add` on a type outside the assembly being edited, and a
+type of that assembly skips any constructor when it has a non-public one and this reload was
+not given its file. A
 type a reload introduces applies through a constructor its retained assembly holds as
 `public`, for as long as this Editor session keeps it active — including in the reload that
 also edits a body of that type. A constructor this reload adds to it, or one whose
