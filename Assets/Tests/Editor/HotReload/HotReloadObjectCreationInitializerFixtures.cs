@@ -58,6 +58,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// A public generic type whose constructor spells its parameter with the type parameter, which
+    /// a creation of a constructed form binds with the type argument instead.
+    /// </summary>
+    public sealed class HotReloadObjectCreationGenericBox<T>
+    {
+        public HotReloadObjectCreationGenericBox(T value)
+        {
+        }
+    }
+
+    /// <summary>
     /// A public collection whose Add the shim assembly cannot call, which a collection initializer
     /// binds without naming it.
     /// </summary>

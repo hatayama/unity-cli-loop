@@ -98,6 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             8)]
         [TestCase("private Nested _value = new();", "_value == null ? 0 : 9", 9)]
         [TestCase(
+            "private object _value = new HotReloadObjectCreationGenericBox<int>(1);",
+            "_value == null ? 0 : 10",
+            10)]
+        [TestCase(
             "private HotReloadInternalMemberHost _value = new HotReloadInternalMemberHost();",
             "_value == null ? 0 : 6",
             6)]

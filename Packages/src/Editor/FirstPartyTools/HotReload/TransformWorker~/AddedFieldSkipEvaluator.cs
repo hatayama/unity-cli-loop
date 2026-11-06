@@ -355,12 +355,14 @@ internal static class AddedFieldSkipEvaluator
         return HasMatchingPublicConstructor(artifactType, constructor);
     }
 
+    // Why the original definition: the candidates come from the open type, so a parameter spelled T
+    // there is the type argument on a constructor bound through a constructed form.
     private static bool HasMatchingPublicConstructor(INamedTypeSymbol artifactType, IMethodSymbol constructor)
     {
         foreach (IMethodSymbol candidate in artifactType.InstanceConstructors)
         {
             if (candidate.DeclaredAccessibility == Accessibility.Public
-                && ParameterTypesMatch(candidate, constructor))
+                && ParameterTypesMatch(candidate, constructor.OriginalDefinition))
             {
                 return true;
             }
