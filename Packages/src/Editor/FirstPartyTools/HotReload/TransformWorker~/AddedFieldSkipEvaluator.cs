@@ -168,7 +168,11 @@ internal static class AddedFieldSkipEvaluator
         WorkerTypeHome home,
         WorkerSourceUnit sourceUnit)
     {
-        IMethodSymbol constructor = FindPublicConstructor(creation, semanticModel);
+        // Why only a bound symbol counts: this compilation has no access to another assembly's
+        // non-public members, so such a constructor leaves no symbol. The candidate reported instead
+        // can be a public overload the arguments do not fit, while the shim's binding, which does
+        // see the non-public one, would pick that and fail when the field is first read.
+        IMethodSymbol constructor = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
         INamedTypeSymbol constructedType = constructor?.ContainingType;
         if (constructedType == null || constructedType.ContainingAssembly == null)
         {
@@ -177,24 +181,6 @@ internal static class AddedFieldSkipEvaluator
 
         return IsIntroducedTypeConstruction(constructor, constructedType, semanticModel, sourceUnit)
             || IsCompiledTypeConstruction(creation, constructor, constructedType, semanticModel, home);
-    }
-
-    private static IMethodSymbol FindPublicConstructor(
-        BaseObjectCreationExpressionSyntax creation,
-        SemanticModel semanticModel)
-    {
-        // Why only a bound symbol counts: an inaccessible constructor leaves none, and the candidate
-        // reported instead can be a public overload the arguments do not fit, while the shim's
-        // binding, which does see the inaccessible one, would pick that and fail at first read.
-        IMethodSymbol constructor = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
-        if (constructor == null
-            || constructor.MethodKind != MethodKind.Constructor
-            || constructor.DeclaredAccessibility != Accessibility.Public)
-        {
-            return null;
-        }
-
-        return constructor;
     }
 
     // The constructed type is exactly the (assembly, metadata name) pair the verified mapping
