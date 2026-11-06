@@ -1,6 +1,7 @@
 package dispatcher
 
 import (
+	"io"
 	"strconv"
 	"strings"
 
@@ -56,6 +57,9 @@ func applyLaunchKeyedOption(options *launchOptions, args []string, index int) (i
 		return next, true, err
 	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
 		next, err := applyLaunchPlatformOption(options, args, index)
+		return next, true, err
+	case isLaunchLogFileOption(arg):
+		next, err := applyLaunchLogFileOption(options, args, index)
 		return next, true, err
 	case arg == "--max-depth" || strings.HasPrefix(arg, "--max-depth="):
 		next, err := applyLaunchMaxDepthOption(options, args, index)
@@ -165,4 +169,26 @@ func isInvalidLaunchOptionValue(option string, value string) bool {
 		return clicore.IsNextOptionToken(value)
 	}
 	return strings.HasPrefix(value, "-")
+}
+
+func printLaunchHelp(stdout io.Writer) {
+	clicore.WriteLine(stdout, "Usage:")
+	clicore.WriteLine(stdout, "  uloop launch [options] [project-path]")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "Options:")
+	clicore.WriteLine(stdout, "  -r, --restart          Quit an existing Unity process for the project before launching")
+	clicore.WriteLine(stdout, "  -q, --quit             Quit an existing Unity process for the project without launching")
+	clicore.WriteLine(stdout, "  -d, --delete-recovery  Delete Assets/_Recovery before launch")
+	clicore.WriteLine(stdout, "      --editor-version <version>")
+	clicore.WriteLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
+	clicore.WriteLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
+	clicore.WriteLine(stdout, "      --log-file <path>  Write this Editor's log to <path> instead of the log every Editor shares")
+	clicore.WriteLine(stdout, "      --max-depth <n>    Max directory depth when auto-searching for the project (default: 3, -1 = unlimited)")
+	clicore.WriteLine(stdout, "")
+	clicore.WriteLine(stdout, "Compiler errors are ignored by default during Unity startup.")
+	clicore.WriteLine(stdout, "")
+	printGlobalOptionsHelp(stdout)
+	// launch renders its own help instead of going through printNativeSingleCommandHelp, so the
+	// closing skill line has to be printed here as well.
+	printSkillGuidanceHelp(clicore.LaunchCommandName, stdout)
 }
