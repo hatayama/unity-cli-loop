@@ -2,7 +2,7 @@
 
 ## Is my edit live? Read `Outcome` first
 
-`Success: true` does not answer this: `Skipped` rows alone leave it `true`. The answer closes with `RecommendedNextAction`, `Outcome`, and `Success`, so the end of the output shows all three. The exception is an answer the CLI added to (a fallback compile, or a wait for the Editor to settle): it writes those keys in alphabetical order.
+`Success: true` does not answer this: `Skipped` rows alone leave it `true`. An apply run's answer ends with `Outcome` and then `Success`, with `RecommendedNextAction` right before them when the run has one, so the end of the output shows whether the edit is live. The exception is an answer the CLI added to (a fallback compile, a wait for another uloop command to finish, or a wait for the Editor to settle): it writes its keys in alphabetical order, so `Outcome` is not at the end there.
 
 - `Applied` — the edits of the files you asked about are live (`Patched`, `Added`, or `AlreadyActive` rows, or introduced types), and none was `Skipped`. Nothing else to do.
 - `PartiallyApplied` — some of them are live, some were `Skipped`; read the `Methods[]` rows with `Kind: "Skipped"`.
