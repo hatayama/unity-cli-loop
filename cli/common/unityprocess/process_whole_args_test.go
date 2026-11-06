@@ -30,6 +30,10 @@ func TestMatchMacUnityProcessFindsEditorWhoseArgumentOnlyContainsTheWords(t *tes
 		{"log path containing batchmode", []string{macEditorForTest, "-projectPath", "/work/game", "-logFile", "/tmp/nightly-batchmode.log"}, "/work/game"},
 		{"log path containing an import worker name", []string{macEditorForTest, "-projectPath", "/work/game", "-logFile", "/tmp/AssetImportWorker.log"}, "/work/game"},
 		{"log path with the flag as its own word", []string{macEditorForTest, "-projectPath", "/work/game", "-logFile", "/tmp/nightly -batchmode dir/editor.log"}, "/work/game"},
+		{"relative project path starting with an import worker name", []string{macEditorForTest, "-projectPath", "AssetImportWorker-lab"}, "AssetImportWorker-lab"},
+		{"relative log path starting with an import worker name", []string{macEditorForTest, "-projectPath", "/work/game", "-logFile", "AssetImportWorker.log"}, "/work/game"},
+		{"name that is not an import worker", []string{macEditorForTest, "-projectPath", "/work/game", "-name", "Nightly"}, "/work/game"},
+		{"name flag with no value", []string{macEditorForTest, "-projectPath", "/work/game", "-name"}, "/work/game"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -55,6 +59,8 @@ func TestMatchMacUnityProcessSkipsBatchModeAndImportWorkers(t *testing.T) {
 		{"batch mode", []string{macEditorForTest, "-batchmode", "-projectPath", "/work/game"}},
 		{"batch mode in another case", []string{macEditorForTest, "-batchMode", "-projectPath", "/work/game"}},
 		{"import worker", []string{macEditorForTest, "-projectPath", "/work/game", "-name", "AssetImportWorker0"}},
+		{"import worker in another case", []string{macEditorForTest, "-projectPath", "/work/game", "-NAME", "assetimportworker0"}},
+		{"import worker as the real command writes it", []string{macEditorForTest, "-adb2", "-batchMode", "-noUpm", "-name", "AssetImportWorker0", "-projectPath", "/work/game"}},
 		{"shell running a batch mode command", []string{"/bin/zsh", "-c", macEditorForTest + " -batchmode -projectPath /work/game"}},
 		{"shell naming the project", []string{"/bin/sh", "-c", macEditorForTest + " -projectPath /work/game; true"}},
 		{"another program given the Editor's path", []string{"/usr/bin/tail", "-f", macEditorForTest}},
@@ -80,6 +86,7 @@ func TestParseWindowsUnityProcessesFindsEditorWhoseArgumentOnlyContainsTheWords(
 		{"quoted project path with the flag as its own word", windowsEditorForTest + ` -projectPath "C:\work\nightly -batchmode dir\game" -useHub`, `C:\work\nightly -batchmode dir\game`},
 		{"quoted project path containing an import worker name", windowsEditorForTest + ` -projectPath "C:\work\AssetImportWorker lab"`, `C:\work\AssetImportWorker lab`},
 		{"log path with the flag as its own word", windowsEditorForTest + ` -projectPath "C:\work\game" -logFile "C:\logs\nightly -batchmode dir\editor.log"`, `C:\work\game`},
+		{"relative log path starting with an import worker name", windowsEditorForTest + ` -projectPath "C:\work\game" -logFile AssetImportWorker.log`, `C:\work\game`},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

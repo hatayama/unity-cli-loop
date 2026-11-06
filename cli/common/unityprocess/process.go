@@ -283,13 +283,17 @@ func isLinuxUnityEditorExecutable(executableName string) bool {
 }
 
 // hasNonEditorArg reports whether argv marks a batchmode run or an asset import
-// worker. It compares whole arguments rather than substrings of the joined command
-// so a project or log path that merely contains these words is not excluded: losing
-// a running Editor makes launch delete its lockfile and Temp and open a second one.
+// worker. It compares whole arguments rather than substrings of the joined command,
+// and reads a worker's name only from -name, so a project or log path that merely
+// contains these words is not excluded: losing a running Editor makes launch delete
+// its lockfile and Temp and open a second one.
 func hasNonEditorArg(args []string) bool {
-	for _, arg := range args {
+	for index, arg := range args {
 		lowerArg := strings.ToLower(arg)
-		if lowerArg == "-batchmode" || strings.HasPrefix(lowerArg, "assetimportworker") {
+		if lowerArg == "-batchmode" {
+			return true
+		}
+		if lowerArg == "-name" && index+1 < len(args) && strings.HasPrefix(strings.ToLower(args[index+1]), "assetimportworker") {
 			return true
 		}
 	}
