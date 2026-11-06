@@ -113,6 +113,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
+        private const string BodyEditedCollectionSourceFormat =
+            "using System.Collections;\n"
+            + "\n"
+            + "namespace Example\n"
+            + "{\n"
+            + "    public class Retained : IEnumerable\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "\n"
+            + "        public void Add(int value)\n"
+            + "        {\n"
+            + "        }\n"
+            + "\n"
+            + "        public IEnumerator GetEnumerator()\n"
+            + "        {\n"
+            + "            return new int[0].GetEnumerator();\n"
+            + "        }\n"
+            + "\n"
+            + "        public int Twice()\n"
+            + "        {\n"
+            + "            return Value * {0};\n"
+            + "        }\n"
+            + "    }\n"
+            + "\n"
+            + "    public class Caller\n"
+            + "    {\n"
+            + "        public Retained Cache = new Retained { 1 };\n"
+            + "\n"
+            + "        public int Read()\n"
+            + "        {\n"
+            + "            return Retained.Value + (Cache == null ? 0 : 1);\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+        /// <summary>
+        /// What: a collection initializer on a retained type whose body this run edits is refused,
+        /// because its Add binds to the source declaration while the artifact assembly is what runs,
+        /// and nothing compares the two the way a constructor is compared.
+        /// </summary>
+        [Test]
+        public async Task Initializer_CollectionInitializerOfRetainedTypeWhoseBodyThisRunEdits_IsSkipped()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithArtifactMethodsAsync(
+                    "BodyEditedCollection",
+                    BodyEditedCollectionSourceFormat.Replace("{0}", "2"),
+                    new[] { "Twice" },
+                    new string[0]);
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, BodyEditedCollectionSourceFormat.Replace("{0}", "4"));
+
+            TransformWorkerClientResult result =
+                await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
+                    fixture.BuildTransformInput(
+                        new[] { fixture.CreateRecordedArtifact(recordedFingerprint) }),
+                    CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindHomeAssemblyName(result, "Twice"), Is.EqualTo(fixture.ArtifactAssemblyName));
+            Assert.That(FindSkipReason(result, "Read"), Does.Contain(SkipReasonFragment));
+        }
+
         // The retained type declaring a constructor the artifact assembly does not hold, which is
         // what a constructor this reload adds to the type looks like to the lambda: the assembly
         // the domain loaded is the one that is constructed, and it has no such constructor.

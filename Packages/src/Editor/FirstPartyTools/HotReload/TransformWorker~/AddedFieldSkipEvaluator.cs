@@ -127,6 +127,13 @@ internal static class AddedFieldSkipEvaluator
                 return true;
             }
 
+            // Asked before the element's own kind is decided: an element that is itself a creation
+            // still reaches the collection through this Add.
+            if (HasUnreachableCollectionAdd(node, semanticModel, home))
+            {
+                return true;
+            }
+
             // Why object creation is decided on its own: a constructor is the one instance member
             // the lambda can call, and an inaccessible constructor leaves GetSymbolInfo without a
             // symbol, so the general check would let it through.
@@ -138,11 +145,6 @@ internal static class AddedFieldSkipEvaluator
                 }
 
                 continue;
-            }
-
-            if (HasInaccessibleCollectionAdd(node, semanticModel))
-            {
-                return true;
             }
 
             if (HasDisallowedInitializerSymbol(
@@ -168,13 +170,16 @@ internal static class AddedFieldSkipEvaluator
         WorkerTypeHome home,
         WorkerSourceUnit sourceUnit)
     {
-        // Why only a bound symbol counts: this compilation has no access to another assembly's
-        // non-public members, so such a constructor leaves no symbol. The candidate reported instead
-        // can be a public overload the arguments do not fit, while the shim's binding, which does
-        // see the non-public one, would pick that and fail when the field is first read.
+        // Why a bound symbol that is public: this binding ignores accessibility and imports a
+        // referenced assembly through its public surface. A protected constructor is on that
+        // surface and binds, so it has to be refused by name. An internal or private one leaves no
+        // symbol, and the candidate reported instead can be a public overload the arguments do not
+        // fit, while the shim's binding sees the hidden one and would fail on the field's first read.
         IMethodSymbol constructor = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
         INamedTypeSymbol constructedType = constructor?.ContainingType;
-        if (constructedType == null || constructedType.ContainingAssembly == null)
+        if (constructedType == null
+            || constructedType.ContainingAssembly == null
+            || constructor.DeclaredAccessibility != Accessibility.Public)
         {
             return false;
         }
@@ -214,24 +219,70 @@ internal static class AddedFieldSkipEvaluator
         SemanticModel semanticModel,
         WorkerTypeHome home)
     {
-        if (!AccessibilityRules.IsExternallyVisibleType(constructedType)
+        if (!IsVisibleAsCompiled(constructedType, home)
             || SpellsNestedTypeByBareName(creation, semanticModel))
         {
             return false;
         }
 
-        // A type from a referenced assembly is already what runs. A type this run has source for
-        // binds to that source, while the shim calls the compiled one: a constructor or a
-        // visibility the edit changed is not there to be called.
-        if (constructedType.DeclaringSyntaxReferences.IsEmpty)
+        INamedTypeSymbol compiledType = home.FindCompiledType(constructedType.OriginalDefinition);
+
+        // A type this run has source for binds to that source, while the shim calls the compiled
+        // one: a constructor the edit added is not there to be called.
+        if (!constructedType.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return compiledType != null && HasMatchingPublicConstructor(compiledType, constructor);
+        }
+
+        // Outside the edited assembly the shim sees the overloads this binding saw. Inside it, the
+        // shim compile sees every member public while this binding saw the public surface, so a
+        // hidden overload could win there and fail on the field's first read.
+        return compiledType == null || !HasHiddenConstructor(compiledType);
+    }
+
+    private static bool HasHiddenConstructor(INamedTypeSymbol compiledType)
+    {
+        foreach (IMethodSymbol constructor in compiledType.InstanceConstructors)
+        {
+            if (constructor.DeclaredAccessibility != Accessibility.Public)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Why the compiled declaration decides where there is one: the shim runs against it, so a
+    // visibility the edit widened exists only in the source this binding read. A type argument and
+    // an outer type are named by the shim as much as the type is.
+    private static bool IsVisibleAsCompiled(ITypeSymbol type, WorkerTypeHome home)
+    {
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            return IsVisibleAsCompiled(arrayType.ElementType, home);
+        }
+
+        if (type is not INamedTypeSymbol namedType)
         {
             return true;
         }
 
-        INamedTypeSymbol compiledType = home.FindCompiledType(constructedType.OriginalDefinition);
-        return compiledType != null
-            && AccessibilityRules.IsExternallyVisibleType(compiledType)
-            && HasMatchingPublicConstructor(compiledType, constructor);
+        foreach (ITypeSymbol typeArgument in namedType.TypeArguments)
+        {
+            if (!IsVisibleAsCompiled(typeArgument, home))
+            {
+                return false;
+            }
+        }
+
+        if (namedType.ContainingType != null && !IsVisibleAsCompiled(namedType.ContainingType, home))
+        {
+            return false;
+        }
+
+        INamedTypeSymbol declaration = namedType.OriginalDefinition;
+        return AccessibilityRules.IsExternallyVisibleType(home.FindCompiledType(declaration) ?? declaration);
     }
 
     // Why a bare nested name is refused: the initializer is emitted as the source spells it, on a
@@ -260,9 +311,10 @@ internal static class AddedFieldSkipEvaluator
     }
 
     // Why the element is asked separately: a collection initializer binds its Add to each element
-    // and names it nowhere the general walk can see, and the shim compiles against references
-    // where an internal Add would still bind, so it would fail only when the field is first read.
-    private static bool HasInaccessibleCollectionAdd(SyntaxNode node, SemanticModel semanticModel)
+    // and names it nowhere the general walk can see. Why the edited assembly is ruled out: there the
+    // shim compile sees every Add public, so the source's visibility or a hidden overload this
+    // binding cannot see decides what runs, and it would fail only when the field is first read.
+    private static bool HasUnreachableCollectionAdd(SyntaxNode node, SemanticModel semanticModel, WorkerTypeHome home)
     {
         if (node is not ExpressionSyntax element
             || !(node.Parent?.IsKind(SyntaxKind.CollectionInitializerExpression) ?? false))
@@ -271,7 +323,10 @@ internal static class AddedFieldSkipEvaluator
         }
 
         ISymbol add = semanticModel.GetCollectionInitializerSymbolInfo(element).Symbol;
-        return add == null || AccessibilityRules.IsInaccessibleFromExternalAssembly(add);
+        return add == null
+            || AccessibilityRules.IsInaccessibleFromExternalAssembly(add)
+            || !add.ContainingType.DeclaringSyntaxReferences.IsEmpty
+            || home.FindCompiledType(add.ContainingType.OriginalDefinition) != null;
     }
 
     // Why the source declaration counts as well: a type whose bodies this same reload edits keeps

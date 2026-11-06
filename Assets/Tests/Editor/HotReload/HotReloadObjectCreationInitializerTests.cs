@@ -21,6 +21,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureFileName = "HotReloadObjectCreationInitializerFixtures.cs";
         private const string EditedFileName = "ObjectCreationInitializer.cs";
         private const string RefusalFragment = "has an initializer that is not a literal";
+        private const string CrossAssemblyHostFileName = "HotReloadObjectCreationCrossAssemblyHost.cs";
+        private const string CrossAssemblyHostTypeName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadObjectCreationCrossAssemblyHost, "
+            + "UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly";
 
         private const string OriginalRead =
             "[MethodImpl(MethodImplOptions.NoInlining)]\n"
@@ -93,6 +97,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "_value == null ? 0 : 8",
             8)]
         [TestCase("private Nested _value = new();", "_value == null ? 0 : 9", 9)]
+        [TestCase(
+            "private HotReloadInternalMemberHost _value = new HotReloadInternalMemberHost();",
+            "_value == null ? 0 : 6",
+            6)]
         public async Task Run_AcceptedCreation_EvaluatesToTheStatedValue(
             string fieldDeclaration,
             string readExpression,
@@ -128,10 +136,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("private object _value = new HotReloadObjectCreationInternalType();")]
         [TestCase("private object _value = new System.Collections.Generic.List<HotReloadObjectCreationInternalType>();")]
+        [TestCase("private object _value = new HotReloadObjectCreationGenericOuter<HotReloadObjectCreationInternalType>.Inner();")]
         [TestCase("private object _value = new HotReloadObjectCreationRestrictedType(1);")]
         [TestCase("private object _value = new HotReloadInternalHostVisibleNeighbor(1);")]
         [TestCase("private object _value = new HotReloadObjectCreationRestrictedType { Number = 1 };")]
         [TestCase("private object _value = new HotReloadObjectCreationInternalAdd { 1 };")]
+        [TestCase("private object _value = new HotReloadObjectCreationInternalAdd { new System.Text.StringBuilder() };")]
+        [TestCase("private object _value = new HotReloadUnpassedProtectedConstructor(1);")]
+        [TestCase("private object _value = new System.Exception(null, default(System.Runtime.Serialization.StreamingContext));")]
+        [TestCase("private object _value = new HotReloadUnpassedHiddenOverload(1);")]
+        [TestCase("private object _value = new HotReloadUnpassedInternalAdd { 1 };")]
+        [TestCase("private object _value = new HotReloadUnpassedHiddenAddOverload { 1 };")]
         [TestCase("private Nested _value = new Nested();")]
         [TestCase("private object _value = new System.Collections.Generic.List<Nested>();")]
         [TestCase("private string _seed = \"seed\"; private object _value = new System.Text.StringBuilder(_seed);")]
@@ -146,11 +161,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a type the same reload introduces is constructed from the artifact it gets, so the
-        /// compiled-type rule does not take that route away from it.
+        /// What: edited from another assembly, a referenced project assembly's protected member is
+        /// on the surface the worker binds and in the copy the shim compiles against, yet the shim
+        /// cannot call it, so the reader skips rather than failing when the field is first read.
         /// </summary>
-        [Test]
-        public async Task Run_TypeTheSameReloadIntroduces_EvaluatesToTheStatedValue()
+        [TestCase("private object _value = new HotReloadUnpassedProtectedConstructor(1);")]
+        [TestCase("private object _value = new HotReloadUnpassedOuter.ProtectedNested();")]
+        [TestCase("private object _value = new HotReloadUnpassedProtectedAdd { 1 };")]
+        public async Task Run_ProtectedMemberOfReferencedAssembly_SkipsTheReader(string fieldDeclaration)
+        {
+            HotReloadOrchestratorResult result = await RunSourceAtAsync(
+                ResolveCrossAssemblyHostPath(),
+                WithEditedRead(
+                    File.ReadAllText(ResolveCrossAssemblyHostPath()).Replace("\r\n", "\n"),
+                    fieldDeclaration,
+                    "return _value == null ? 0 : 1;"));
+
+            Assert.That(FindSkippedReason(result), Does.Contain(RefusalFragment), Describe(result));
+            Assert.That(ReadCrossAssemblyHost(), Is.EqualTo(-1), Describe(result));
+        }
+
+        /// <summary>
+        /// What: edited from another assembly, a referenced project assembly's hidden overload stays
+        /// hidden from the shim too, so the public overload both bindings chose is the one that runs.
+        /// </summary>
+        [TestCase("private object _value = new HotReloadUnpassedHiddenOverload(1);")]
+        [TestCase("private object _value = new HotReloadUnpassedHiddenAddOverload { 1 };")]
+        public async Task Run_HiddenOverloadOfReferencedAssembly_RunsThePublicOne(string fieldDeclaration)
+        {
+            HotReloadOrchestratorResult result = await RunSourceAtAsync(
+                ResolveCrossAssemblyHostPath(),
+                WithEditedRead(
+                    File.ReadAllText(ResolveCrossAssemblyHostPath()).Replace("\r\n", "\n"),
+                    fieldDeclaration,
+                    "return _value == null ? 0 : 1;"));
+
+            AssertPatched(result);
+            Assert.That(ReadCrossAssemblyHost(), Is.EqualTo(1), Describe(result));
+        }
+
+        /// <summary>
+        /// What: a type the same reload introduces is constructed from the artifact it gets, so the
+        /// compiled-type rule does not take that route away from it, whether the type is created
+        /// directly, filled through its Add, or named only as a type argument.
+        /// </summary>
+        [TestCase(
+            "public sealed class HotReloadObjectCreationBrandNewType\n    {\n    }\n\n",
+            "new HotReloadObjectCreationBrandNewType()")]
+        [TestCase(
+            "public sealed class HotReloadObjectCreationBrandNewCollection : IEnumerable\n    {\n"
+            + "        public void Add(int value)\n        {\n        }\n\n"
+            + "        public IEnumerator GetEnumerator()\n        {\n"
+            + "            return new int[0].GetEnumerator();\n        }\n    }\n\n",
+            "new HotReloadObjectCreationBrandNewCollection { 1 }")]
+        [TestCase(
+            "public sealed class HotReloadObjectCreationBrandNewArgument\n    {\n    }\n\n",
+            "new System.Collections.Generic.List<HotReloadObjectCreationBrandNewArgument>()")]
+        [TestCase(
+            "internal sealed class HotReloadObjectCreationBrandNewInternalArgument\n    {\n    }\n\n",
+            "new System.Collections.Generic.List<HotReloadObjectCreationBrandNewInternalArgument>()")]
+        public async Task Run_TypeTheSameReloadIntroduces_EvaluatesToTheStatedValue(
+            string declaration,
+            string creation)
         {
             const string neighbor = "public sealed class HotReloadObjectCreationRestrictedType\n";
             string fixture = ReadFixture();
@@ -158,11 +230,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult result = await RunSourceAsync(
                 WithEditedRead(
                         fixture,
-                        "private object _value = new HotReloadObjectCreationBrandNewType();",
+                        "private object _value = " + creation + ";",
                         "return _value == null ? 0 : 1;")
-                    .Replace(
-                        neighbor,
-                        "public sealed class HotReloadObjectCreationBrandNewType\n    {\n    }\n\n    " + neighbor));
+                    .Replace(neighbor, declaration + "    " + neighbor));
 
             AssertPatched(result);
             Assert.That(new HotReloadObjectCreationHost().Read(), Is.EqualTo(1), Describe(result));
@@ -170,8 +240,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a creation only the edit itself makes possible is refused, because the shim runs
-        /// against what was compiled: the constructor it adds and the visibility it widens are not
-        /// there yet.
+        /// against what was compiled: the constructor it adds and the visibility it widens, on the
+        /// type, on a type argument, or on a collection's Add, are not there yet.
         /// </summary>
         [TestCase(
             "public HotReloadObjectCreationRestrictedType()\n",
@@ -182,6 +252,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "internal sealed class HotReloadObjectCreationInternalType\n",
             "public sealed class HotReloadObjectCreationInternalType\n",
             "new HotReloadObjectCreationInternalType()")]
+        [TestCase(
+            "internal sealed class HotReloadObjectCreationInternalType\n",
+            "public sealed class HotReloadObjectCreationInternalType\n",
+            "new System.Collections.Generic.List<HotReloadObjectCreationInternalType>()")]
+        [TestCase(
+            "internal void Add(int value)\n",
+            "public void Add(int value)\n",
+            "new HotReloadObjectCreationInternalAdd { 1 }")]
         public async Task Run_CreationOnlyThisEditMakesPossible_SkipsTheReaderAndKeepsItsBody(
             string original,
             string replacement,
@@ -205,12 +283,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return RunSourceAsync(WithEditedRead(ReadFixture(), fieldDeclaration, readBody));
         }
 
-        private static async Task<HotReloadOrchestratorResult> RunSourceAsync(string edited)
+        private static Task<HotReloadOrchestratorResult> RunSourceAsync(string edited)
+        {
+            return RunSourceAtAsync(ResolveFixturePath(), edited);
+        }
+
+        private static async Task<HotReloadOrchestratorResult> RunSourceAtAsync(string originalPath, string edited)
         {
             return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
-                new[] { ResolveFixturePath() },
+                new[] { originalPath },
                 HotReloadTestSourceWriter.WriteEditedSource(EditedFileName, edited),
                 CancellationToken.None);
+        }
+
+        // Why reflection: this test assembly is what the host's assembly references, so it cannot
+        // name the host the other way round.
+        private static int ReadCrossAssemblyHost()
+        {
+            System.Type hostType = System.Type.GetType(CrossAssemblyHostTypeName);
+            Assert.That(hostType, Is.Not.Null, "Cross-assembly host missing: " + CrossAssemblyHostTypeName);
+            object host = System.Activator.CreateInstance(hostType);
+            return (int)hostType.GetMethod("Read").Invoke(host, null);
         }
 
         private static string WithEditedRead(string fixture, string fieldDeclaration, string readBody)
@@ -240,6 +333,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 FixtureFileName);
             Assert.That(File.Exists(path), Is.True, "Fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveCrossAssemblyHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReloadCallSiteCrossAssembly",
+                CrossAssemblyHostFileName);
+            Assert.That(File.Exists(path), Is.True, "Cross-assembly host source missing: " + path);
             return Path.GetFullPath(path);
         }
 

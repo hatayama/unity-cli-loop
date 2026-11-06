@@ -48,12 +48,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// A public nested type that a type argument on its outer type can make unnameable.
+    /// </summary>
+    public sealed class HotReloadObjectCreationGenericOuter<T>
+    {
+        public sealed class Inner
+        {
+        }
+    }
+
+    /// <summary>
     /// A public collection whose Add the shim assembly cannot call, which a collection initializer
     /// binds without naming it.
     /// </summary>
     public sealed class HotReloadObjectCreationInternalAdd : IEnumerable
     {
         internal void Add(int value)
+        {
+        }
+
+        internal void Add(System.Text.StringBuilder value)
         {
         }
 

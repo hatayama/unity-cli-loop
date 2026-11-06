@@ -153,7 +153,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Plain(
                     "Added field '{0}' has an initializer that is not a literal, an externally visible static member, "
                     + "or a public constructor of an externally visible compiled type (instance, host-type, or same-file "
-                    + "added members, object initializers, and a nested type named without its outer type "
+                    + "added members, object initializers, a nested type named without its outer type, and "
+                    + "in the edited assembly a type with a non-public constructor or a collection initializer "
                     + "cannot run in the shim lambda). Drop the initializer and assign the field inside the patched method "
                     + "instead - an added field without an initializer applies without compiling and starts "
                     + "at default(T); for a reference type, guard the assignment with "
