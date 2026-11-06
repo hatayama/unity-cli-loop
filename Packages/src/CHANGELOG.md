@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.5](https://github.com/hatayama/unity-cli-loop/compare/v3.21.4...v3.21.5) (2026-11-06)
+
+
+### Bug Fixes
+
+* Hot reload answers now end with whether the edit went live, so reading only the last lines no longer looks like success ([#3435](https://github.com/hatayama/unity-cli-loop/issues/3435)) ([fdeb533](https://github.com/hatayama/unity-cli-loop/commit/fdeb533392e524fcc4baba5be8ef10348f64ba55))
+
 ## [3.21.4](https://github.com/hatayama/unity-cli-loop/compare/v3.21.3...v3.21.4) (2026-11-06)
 
 
