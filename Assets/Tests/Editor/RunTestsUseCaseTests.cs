@@ -1106,6 +1106,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies finished runs are released after the Test Framework's cleanup and back on the main thread,
+        /// because the cleanup is what destroys a runner, and asking Unity whether it is destroyed needs that thread.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReleasesFinishedRunsAfterCleanupOnTheMainThread()
+        {
+            OffThreadCleanupResume cleanupResume = new OffThreadCleanupResume();
+            bool cleanupFinished = false;
+            bool cleanupFinishedAtRelease = false;
+            bool releasedOnMainThread = false;
+            int releaseCount = 0;
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                new StubTestExecutionService(),
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                _recordStore,
+                _logStackTraceSuppressor,
+                waitForTestRunnerCleanupAsync: async ct =>
+                {
+                    await cleanupResume.ResumeAsync(ct).ConfigureAwait(false);
+                    cleanupFinished = true;
+                },
+                releaseFinishedTestRuns: () =>
+                {
+                    releaseCount++;
+                    cleanupFinishedAtRelease = cleanupFinished;
+                    releasedOnMainThread = MainThreadSwitcher.IsMainThread;
+                });
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(releaseCount, Is.EqualTo(1));
+            Assert.That(cleanupFinishedAtRelease, Is.True);
+            Assert.That(releasedOnMainThread, Is.True);
+        }
+
+        /// <summary>
         /// What: a filtered NoTestsFound run echoes the filter and stubbed unfiltered names on the response.
         /// </summary>
         [Test]

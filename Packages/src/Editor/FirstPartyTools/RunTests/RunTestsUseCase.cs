@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<int> _getActiveHotReloadChangeCount;
         private readonly Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> _proposeTestAsmdef;
         private readonly RunTestsLogStackTraceSuppressor _logStackTraceSuppressor;
+        private readonly Action _releaseFinishedTestRuns;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
@@ -60,7 +61,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
             Func<int> getActiveHotReloadChangeCount = null,
-            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null)
+            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null,
+            Action releaseFinishedTestRuns = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -88,6 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _getActiveHotReloadChangeCount = getActiveHotReloadChangeCount ?? ReadActiveHotReloadChangeCount;
             _proposeTestAsmdef = proposeTestAsmdef ?? RunTestsTestAsmdefProposalBuilder.Propose;
             _logStackTraceSuppressor = logStackTraceSuppressor;
+            _releaseFinishedTestRuns = releaseFinishedTestRuns ?? RunTestsFinishedRunReleaser.CreateDefault().Release;
         }
 
         /// <summary>
@@ -215,6 +218,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
                 await MainThreadSwitcher.SwitchToMainThread(ct);
                 await _waitForTestRunnerCleanupAsync(ct).ConfigureAwait(false);
+
+                // Why after the cleanup wait: the Test Framework destroys a run's runner during its cleanup, and
+                // only a destroyed runner can be released. One this misses, after a cancel or a slow cleanup,
+                // goes at the end of the next run.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                _releaseFinishedTestRuns();
             }
             catch (RunTestsExecutionCanceledException canceledException)
                 when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
