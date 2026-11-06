@@ -2,6 +2,8 @@
 
 ## Is my edit live? Read `Outcome` first
 
+`Success: true` does not answer this: `Skipped` rows alone leave it `true`. An apply run's answer ends with `Outcome` and then `Success`, with `RecommendedNextAction` right before them when the run has one, so the end of the output shows whether the edit is live. The exception is an answer the CLI added to (a fallback compile, a wait for another uloop command to finish, or a wait for the Editor to settle): it writes its keys in alphabetical order, so `Outcome` is not at the end there.
+
 - `Applied` — the edits of the files you asked about are live (`Patched`, `Added`, or `AlreadyActive` rows, or introduced types), and none was `Skipped`. Nothing else to do.
 - `PartiallyApplied` — some of them are live, some were `Skipped`; read the `Methods[]` rows with `Kind: "Skipped"`.
 - `NothingApplied` — none of them is live, and some were `Skipped`. `Warnings` (or `Methods[].Reason`) says why.
@@ -11,7 +13,7 @@ A `Skipped` row for a compiled member without a body that could not be compared 
 - `Failed` — at least one `Failed` row, so `Success` is `false` — unless a fallback compile then succeeded, which turns the whole answer into `ReplacedByCompile`.
 - `ReplacedByCompile` — a fallback compile ran in this same command and succeeded (`Compile` holds its response): every edit is compiled in, and `Success` is the compile's. The compile reloaded the domain, so none of this run's patches survive; the totals and `Methods[]` describe the reload that ran before the compile — read `--status` for the state after it.
 
-`Outcome` is written on apply runs only and judges the files you asked about; rows of a sibling file the run re-applied on its own (`ReappliedFromSibling: true`) do not change it, while `CompileFallback` may still be `Requested` for a retried sibling row. The totals beside it (`PatchedTotal`, `SkippedTotal`, `AddedTotal`, `FailedTotal`, `AlreadyActiveTotal`, `StaleTotal`) count every `Methods[]` row by `Kind`, siblings included. When some `Skipped` rows are sibling rows, `Message` says how many (`Skipped: 3 (2 in sibling files …)`).
+`Outcome` is written on apply runs only and judges the files you asked about; rows of a sibling file the run re-applied on its own (`ReappliedFromSibling: true`) do not change it, while `CompileFallback` may still be `Requested` for a retried sibling row. The totals (`PatchedTotal`, `SkippedTotal`, `AddedTotal`, `FailedTotal`, `AlreadyActiveTotal`, `StaleTotal`) count every `Methods[]` row by `Kind`, siblings included. When some `Skipped` rows are sibling rows, `Message` says how many (`Skipped: 3 (2 in sibling files …)`).
 
 ## Fields
 
