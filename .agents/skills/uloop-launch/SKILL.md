@@ -25,6 +25,7 @@ uloop launch [project-path] [options]
 | `-q, --quit` | flag | Quit an existing Unity process for the project without launching |
 | `--editor-version <version>` | string | Use this Unity Editor version instead of ProjectVersion.txt |
 | `-p, --platform <P>` | string | Build target (e.g., StandaloneOSX, Android, iOS) |
+| `--log-file <path>` | string | Write this Editor's log to `<path>` instead of the log every Editor shares. A relative path starts from the current directory |
 | `--max-depth <N>` | number | Search depth when project-path is omitted (default: 3, -1 for unlimited) |
 
 ## Output
@@ -61,4 +62,6 @@ running, or still does not respond after retries.
 - If process scan is blocked (e.g. sandboxed `ps`), plain launch falls back to IPC probing; `--restart` and `--quit` still fail because they need the process id
 - New Unity processes ignore project compiler errors during Editor startup by default when run by dispatcher 3.0.1-beta.8 or newer; run `uloop update` first if an older dispatcher is installed
 - `--editor-version` only affects new Unity processes; use it with `--restart` to replace an already-running Editor
+- Without `--log-file`, every Editor on the machine uses the same log: each start renames it to `Editor-prev.log` and deletes the older one, so starting one Editor makes another running Editor's log unreachable by path. When several Editors run at once, pass `--log-file` on every launch
+- `--log-file` only affects new Unity processes; use it with `--restart` to replace an already-running Editor. A start overwrites that file and keeps no previous copy, so read it first after a crash. The step other commands print after an abnormal exit, which names this Editor's log, only looks at the shared log and does not know this path
 - The command waits until Unity finishes startup and the CLI can connect before returning

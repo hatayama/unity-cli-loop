@@ -57,6 +57,9 @@ func applyLaunchKeyedOption(options *launchOptions, args []string, index int) (i
 	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
 		next, err := applyLaunchPlatformOption(options, args, index)
 		return next, true, err
+	case isLaunchLogFileOption(arg):
+		next, err := applyLaunchLogFileOption(options, args, index)
+		return next, true, err
 	case arg == "--max-depth" || strings.HasPrefix(arg, "--max-depth="):
 		next, err := applyLaunchMaxDepthOption(options, args, index)
 		return next, true, err

@@ -47,6 +47,7 @@ type launchOptions struct {
 	deleteRecovery bool
 	editorVersion  string
 	platform       string
+	logFile        string
 	maxDepth       int
 }
 
@@ -116,6 +117,13 @@ func runLaunchWithDeps(ctx context.Context, options launchOptions, startPath str
 	runningProcess, handled, code := findLaunchRunningProcess(ctx, options, projectRoot, stdout, stderr, deps)
 	if handled {
 		return code
+	}
+
+	if launchStartsEditor(options, runningProcess) {
+		if err := prepareLaunchLogFile(options.logFile); err != nil {
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+			return 1
+		}
 	}
 
 	var previousStop launchStopMethod
@@ -191,6 +199,10 @@ func handleExistingLaunchProcess(
 	if !options.restart && !options.quit {
 		if options.editorVersion != "" {
 			clierrors.WriteClassifiedError(stderr, launchEditorVersionRequiresRestartError(options.editorVersion), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+			return "", true, 1
+		}
+		if options.logFile != "" {
+			clierrors.WriteClassifiedError(stderr, launchLogFileRequiresRestartError(options.logFile), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 			return "", true, 1
 		}
 		if isV2 {
@@ -276,6 +288,9 @@ func startUnityAndWaitForReadiness(
 	clicore.WriteLine(stdout, "Opening Unity...")
 	clicore.WriteFormat(stdout, "Project Path: %s\n", projectRoot)
 	clicore.WriteFormat(stdout, "Detected Unity version: %s\n", unityVersion)
+	if options.logFile != "" {
+		clicore.WriteFormat(stdout, "Editor Log: %s\n", options.logFile)
+	}
 	clicore.WriteLine(stdout, "Unity Hub launch options: none")
 
 	launchStartedAt := deps.now()
@@ -314,6 +329,9 @@ func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 	launchArgs := []string{"-projectPath", projectRoot}
 	if options.platform != "" {
 		launchArgs = append(launchArgs, "-buildTarget", options.platform)
+	}
+	if options.logFile != "" {
+		launchArgs = append(launchArgs, "-logFile", options.logFile)
 	}
 	launchArgs = append(launchArgs, "-ignorecompilererrors")
 	return launchArgs
@@ -468,6 +486,7 @@ func printLaunchHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "      --editor-version <version>")
 	clicore.WriteLine(stdout, "                          Use this Unity Editor version instead of ProjectVersion.txt")
 	clicore.WriteLine(stdout, "  -p, --platform <name>  Pass Unity -buildTarget when launching")
+	clicore.WriteLine(stdout, "      --log-file <path>  Write this Editor's log to <path> instead of the log every Editor shares")
 	clicore.WriteLine(stdout, "      --max-depth <n>    Max directory depth when auto-searching for the project (default: 3, -1 = unlimited)")
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Compiler errors are ignored by default during Unity startup.")
