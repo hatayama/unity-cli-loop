@@ -1,7 +1,9 @@
 package dispatcher
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,10 @@ const (
 	// unityStdoutLogFile is the value Unity's -logFile reads as "write to stdout".
 	unityStdoutLogFile = "-"
 )
+
+// launchLogFileWordsProcessScanSkips are what the process scan reads, anywhere in a command line, as a batch
+// mode Editor or an Asset Import Worker. Keep in step with isUnityEditorCommand in common/unityprocess.
+var launchLogFileWordsProcessScanSkips = []string{"-batchmode", "assetimportworker"}
 
 func isLaunchLogFileOption(arg string) bool {
 	return arg == launchLogFileOption || strings.HasPrefix(arg, launchLogFileOption+"=")
@@ -37,8 +43,30 @@ func applyLaunchLogFileOption(options *launchOptions, args []string, index int) 
 	if err != nil {
 		return index, clierrors.InvalidValueArgumentError(launchLogFileOption, value, launchLogFileExpectedType)
 	}
+	if err := checkProcessScanFindsLaunchLogFile(absolutePath); err != nil {
+		return index, err
+	}
 	options.logFile = absolutePath
 	return nextLaunchOptionIndex(index, consumed), nil
+}
+
+// checkProcessScanFindsLaunchLogFile refuses a path that would hide the Editor from the process scan.
+// Why refuse: uloop would report the Editor it just started as gone, and a later launch would treat that
+// Editor's lockfile as stale and start a second one.
+func checkProcessScanFindsLaunchLogFile(absolutePath string) error {
+	lowerPath := strings.ToLower(absolutePath)
+	for _, word := range launchLogFileWordsProcessScanSkips {
+		if strings.Contains(lowerPath, word) {
+			return &clierrors.ArgumentError{
+				Message:     fmt.Sprintf("%s cannot contain %q, because uloop would no longer find that Editor: %s", launchLogFileOption, word, absolutePath),
+				Option:      launchLogFileOption,
+				Received:    absolutePath,
+				Command:     clicore.LaunchCommandName,
+				NextActions: []string{fmt.Sprintf("Pass a full path to `%s` without %q.", launchLogFileOption, word)},
+			}
+		}
+	}
+	return nil
 }
 
 // launchStartsEditor reports whether this launch ends up starting an Editor rather than reusing or only
@@ -47,7 +75,7 @@ func launchStartsEditor(options launchOptions, runningProcess *clicore.UnityProc
 	return !options.quit && (runningProcess == nil || options.restart)
 }
 
-// prepareLaunchLogFile makes sure the Editor can open logFile and creates its missing directories.
+// prepareLaunchLogFile makes sure the Editor can write logFile, creating it and its missing directories.
 // Why before the running Editor is stopped: stopping it cannot be undone, and a log path found to be unusable
 // afterwards would leave the project with no Editor at all.
 func prepareLaunchLogFile(logFile string) error {
@@ -55,11 +83,33 @@ func prepareLaunchLogFile(logFile string) error {
 		return nil
 	}
 	info, err := os.Stat(logFile)
-	if err == nil && info.IsDir() {
-		return unusableLaunchLogFileError(logFile, "the path is a directory")
+	if err == nil {
+		return checkExistingLaunchLogFile(logFile, info)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return unusableLaunchLogFileError(logFile, err.Error())
 	}
 	if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
 		return unusableLaunchLogFileError(logFile, err.Error())
+	}
+	file, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE, 0o644)
+	if err != nil {
+		return unusableLaunchLogFileError(logFile, err.Error())
+	}
+	if err := file.Close(); err != nil {
+		return unusableLaunchLogFileError(logFile, err.Error())
+	}
+	return nil
+}
+
+// Why read the mode instead of opening the file: on Windows the Editor being replaced can still hold it, so an
+// open could refuse a path Unity can write once that Editor has exited.
+func checkExistingLaunchLogFile(logFile string, info fs.FileInfo) error {
+	if info.IsDir() {
+		return unusableLaunchLogFileError(logFile, "the path is a directory")
+	}
+	if info.Mode().Perm()&0o200 == 0 {
+		return unusableLaunchLogFileError(logFile, "the file is read-only")
 	}
 	return nil
 }
@@ -70,7 +120,7 @@ func unusableLaunchLogFileError(logFile string, reason string) error {
 		Option:      launchLogFileOption,
 		Received:    logFile,
 		Command:     clicore.LaunchCommandName,
-		NextActions: []string{fmt.Sprintf("Pass a file path to `%s` whose directory can be created.", launchLogFileOption)},
+		NextActions: []string{fmt.Sprintf("Pass a file path to `%s` that can be written.", launchLogFileOption)},
 	}
 }
 
@@ -81,7 +131,21 @@ func launchLogFileRequiresRestartError(logFile string) error {
 		Received: logFile,
 		Command:  clicore.LaunchCommandName,
 		NextActions: []string{
-			fmt.Sprintf("Run `uloop launch --restart %s %s` to relaunch Unity with the requested log.", launchLogFileOption, logFile),
+			fmt.Sprintf("Run `uloop launch --restart %s \"%s\"` to relaunch Unity with the requested log.", launchLogFileOption, logFile),
+		},
+	}
+}
+
+// launchLogFileNeedsProcessScanError is for an Editor found only through the project IPC. It does not suggest a
+// plain restart, because --restart needs the same process scan that just failed.
+func launchLogFileNeedsProcessScanError(logFile string, scanError error) error {
+	return &clierrors.ArgumentError{
+		Message:  fmt.Sprintf("%s needs a new Editor, but launch can neither stop nor start one when the process scan fails: %v", launchLogFileOption, scanError),
+		Option:   launchLogFileOption,
+		Received: logFile,
+		Command:  clicore.LaunchCommandName,
+		NextActions: []string{
+			fmt.Sprintf("Run `uloop launch --restart %s \"%s\"` where the process list can be read, for example outside the sandbox.", launchLogFileOption, logFile),
 		},
 	}
 }

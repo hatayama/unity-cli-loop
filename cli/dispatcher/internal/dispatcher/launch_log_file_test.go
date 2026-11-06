@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -111,25 +112,45 @@ func TestRunLaunchRequiresRestartForLogFileWithExistingUnityProcess(t *testing.T
 	if readinessChecked {
 		t.Fatal("launch should not report an existing process as ready when its log cannot be the requested one")
 	}
-	if !strings.Contains(stderr.String(), "`uloop launch --restart --log-file /tmp/editor.log`") {
-		t.Fatalf("stderr should guide a restart with the requested log:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "`uloop launch --restart --log-file \\\"/tmp/editor.log\\\"`") {
+		t.Fatalf("stderr should guide a restart with the requested log, quoted for paths with spaces:\n%s", stderr.String())
 	}
 }
 
 // Verifies a log path Unity could not write to is refused before the running Editor is stopped, since the
 // stop cannot be undone.
 func TestRunLaunchWithUnusableLogFileLeavesTheRunningEditorAlone(t *testing.T) {
-	directory := t.TempDir()
-	regularFile := filepath.Join(directory, "regular-file")
-	if err := os.WriteFile(regularFile, []byte("x"), 0o644); err != nil {
-		t.Fatalf("writing %s failed: %v", regularFile, err)
-	}
 	cases := []struct {
 		name    string
-		logFile string
+		logFile func(t *testing.T) string
 	}{
-		{name: "parent is a file", logFile: filepath.Join(regularFile, "editor.log")},
-		{name: "path is a directory", logFile: directory},
+		{name: "parent is a file", logFile: func(t *testing.T) string {
+			regularFile := filepath.Join(t.TempDir(), "regular-file")
+			writeLaunchLogFileForTest(t, regularFile, "x")
+			return filepath.Join(regularFile, "editor.log")
+		}},
+		{name: "path is a directory", logFile: func(t *testing.T) string {
+			return t.TempDir()
+		}},
+		{name: "file is read-only", logFile: func(t *testing.T) string {
+			skipLaunchLogFilePermissionTestAsRoot(t)
+			logFile := filepath.Join(t.TempDir(), "editor.log")
+			writeLaunchLogFileForTest(t, logFile, "x")
+			chmodLaunchLogFileForTest(t, logFile, 0o444)
+			return logFile
+		}},
+		{name: "directory cannot be written", logFile: func(t *testing.T) string {
+			skipLaunchLogFileDirectoryPermissionTest(t)
+			directory := t.TempDir()
+			chmodLaunchLogFileForTest(t, directory, 0o555)
+			return filepath.Join(directory, "editor.log")
+		}},
+		{name: "directory cannot be searched", logFile: func(t *testing.T) string {
+			skipLaunchLogFileDirectoryPermissionTest(t)
+			directory := t.TempDir()
+			chmodLaunchLogFileForTest(t, directory, 0o000)
+			return filepath.Join(directory, "editor.log")
+		}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -152,7 +173,7 @@ func TestRunLaunchWithUnusableLogFileLeavesTheRunningEditorAlone(t *testing.T) {
 
 			code := runLaunchWithDeps(
 				context.Background(),
-				launchOptions{projectPath: projectRoot, restart: true, logFile: testCase.logFile},
+				launchOptions{projectPath: projectRoot, restart: true, logFile: testCase.logFile(t)},
 				projectRoot,
 				&stdout,
 				&stderr,
@@ -303,7 +324,115 @@ func TestRunLaunchRefusesLogFileWhenOnlyTheIpcProbeFindsUnity(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code mismatch: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "`uloop launch --restart --log-file /tmp/editor.log`") {
-		t.Fatalf("stderr should guide a restart with the requested log:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "operation not permitted") {
+		t.Fatalf("stderr should name why the scan failed:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "where the process list can be read") {
+		t.Fatalf("stderr should say a restart needs the process list, since it fails here too:\n%s", stderr.String())
+	}
+}
+
+// Verifies a log path the process scan would read as a batch mode Editor or an Asset Import Worker is refused,
+// because uloop would then lose the Editor it started. The whole absolute path counts, so a relative path
+// picks the words up from the caller's directory too.
+func TestParseLaunchOptionsRejectsLogFileTheProcessScanWouldSkip(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{name: "batch mode flag", value: "/tmp/nightly-batchmode.log"},
+		{name: "batch mode flag in another case", value: "/tmp/nightly-BatchMode.log"},
+		{name: "import worker", value: "/tmp/AssetImportWorker.log"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := parseLaunchOptions([]string{"--log-file", testCase.value}, ""); err == nil {
+				t.Fatalf("expected %q to be refused", testCase.value)
+			}
+		})
+	}
+
+	t.Run("relative path under such a directory", func(t *testing.T) {
+		directory := filepath.Join(t.TempDir(), "nightly-batchmode")
+		if err := os.Mkdir(directory, 0o755); err != nil {
+			t.Fatalf("creating %s failed: %v", directory, err)
+		}
+		t.Chdir(directory)
+
+		if _, err := parseLaunchOptions([]string{"--log-file", "editor.log"}, ""); err == nil {
+			t.Fatal("expected a relative path under that directory to be refused")
+		}
+	})
+}
+
+// Verifies preparing an existing log leaves it as it is, because the next start is what replaces it.
+func TestPrepareLaunchLogFileKeepsAnExistingFile(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "editor.log")
+	writeLaunchLogFileForTest(t, logFile, "earlier run")
+
+	if err := prepareLaunchLogFile(logFile); err != nil {
+		t.Fatalf("prepareLaunchLogFile failed: %v", err)
+	}
+
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("reading %s failed: %v", logFile, err)
+	}
+	if string(content) != "earlier run" {
+		t.Fatalf("existing log changed: %q", content)
+	}
+}
+
+// Verifies a new log is created, which is what proves Unity can write there before an Editor is stopped.
+func TestPrepareLaunchLogFileCreatesAMissingFile(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "new directory", "editor.log")
+
+	if err := prepareLaunchLogFile(logFile); err != nil {
+		t.Fatalf("prepareLaunchLogFile failed: %v", err)
+	}
+
+	if _, err := os.Stat(logFile); err != nil {
+		t.Fatalf("the log should exist: %v", err)
+	}
+}
+
+func writeLaunchLogFileForTest(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing %s failed: %v", path, err)
+	}
+}
+
+// chmodLaunchLogFileForTest restores the mode afterwards, because t.TempDir cannot clean up otherwise.
+func chmodLaunchLogFileForTest(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s failed: %v", path, err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatalf("chmod %s failed: %v", path, err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(path, info.Mode().Perm()); err != nil {
+			t.Errorf("restoring the mode of %s failed: %v", path, err)
+		}
+	})
+}
+
+// skipLaunchLogFilePermissionTestAsRoot skips because root ignores the permission bits under test.
+func skipLaunchLogFilePermissionTestAsRoot(t *testing.T) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file permissions")
+	}
+}
+
+// skipLaunchLogFileDirectoryPermissionTest also skips on Windows, where a directory's mode does not limit access.
+func skipLaunchLogFileDirectoryPermissionTest(t *testing.T) {
+	t.Helper()
+	skipLaunchLogFilePermissionTestAsRoot(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("a directory's mode does not limit access on Windows")
 	}
 }

@@ -181,7 +181,7 @@ func findLaunchRunningProcess(
 	// Restart and quit still fail because they need a process id to kill.
 	if !options.restart && !options.quit && deps.probeProjectIpcFallback(ctx, projectRoot) == nil {
 		if options.logFile != "" {
-			clierrors.WriteClassifiedError(stderr, launchLogFileRequiresRestartError(options.logFile), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+			clierrors.WriteClassifiedError(stderr, launchLogFileNeedsProcessScanError(options.logFile, err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 			return nil, true, 1
 		}
 		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
