@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.3...dispatcher-v3.14.0) (2026-11-06)
+
+
+### Features
+
+* uloop launch can give each Editor its own log file ([#3438](https://github.com/hatayama/unity-cli-loop/issues/3438)) ([5273f3f](https://github.com/hatayama/unity-cli-loop/commit/5273f3f2a6d6b8d9a1e98325cea81c6c37b8bbfc))
+
+
+### Bug Fixes
+
+* A project path containing "-batchmode" no longer makes uloop lose the running Editor and open a second one ([#3442](https://github.com/hatayama/unity-cli-loop/issues/3442)) ([27177f2](https://github.com/hatayama/unity-cli-loop/commit/27177f2301c62eee9ede3c950625005999bc8e6e))
+
 ## [3.13.3](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.2...dispatcher-v3.13.3) (2026-11-05)
 
 
