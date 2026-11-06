@@ -19,10 +19,6 @@ const (
 	unityStdoutLogFile = "-"
 )
 
-// launchLogFileWordsProcessScanSkips are what the process scan reads, anywhere in a command line, as a batch
-// mode Editor or an Asset Import Worker. Keep in step with isUnityEditorCommand in common/unityprocess.
-var launchLogFileWordsProcessScanSkips = []string{"-batchmode", "assetimportworker"}
-
 func isLaunchLogFileOption(arg string) bool {
 	return arg == launchLogFileOption || strings.HasPrefix(arg, launchLogFileOption+"=")
 }
@@ -43,30 +39,8 @@ func applyLaunchLogFileOption(options *launchOptions, args []string, index int) 
 	if err != nil {
 		return index, clierrors.InvalidValueArgumentError(launchLogFileOption, value, launchLogFileExpectedType)
 	}
-	if err := checkProcessScanFindsLaunchLogFile(absolutePath); err != nil {
-		return index, err
-	}
 	options.logFile = absolutePath
 	return nextLaunchOptionIndex(index, consumed), nil
-}
-
-// checkProcessScanFindsLaunchLogFile refuses a path that would hide the Editor from the process scan.
-// Why refuse: uloop would report the Editor it just started as gone, and a later launch would treat that
-// Editor's lockfile as stale and start a second one.
-func checkProcessScanFindsLaunchLogFile(absolutePath string) error {
-	lowerPath := strings.ToLower(absolutePath)
-	for _, word := range launchLogFileWordsProcessScanSkips {
-		if strings.Contains(lowerPath, word) {
-			return &clierrors.ArgumentError{
-				Message:     fmt.Sprintf("%s cannot contain %q, because uloop would no longer find that Editor: %s", launchLogFileOption, word, absolutePath),
-				Option:      launchLogFileOption,
-				Received:    absolutePath,
-				Command:     clicore.LaunchCommandName,
-				NextActions: []string{fmt.Sprintf("Pass a full path to `%s` without %q.", launchLogFileOption, word)},
-			}
-		}
-	}
-	return nil
 }
 
 // launchStartsEditor reports whether this launch ends up starting an Editor rather than reusing or only

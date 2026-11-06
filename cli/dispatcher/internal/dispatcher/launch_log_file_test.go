@@ -332,37 +332,20 @@ func TestRunLaunchRefusesLogFileWhenOnlyTheIpcProbeFindsUnity(t *testing.T) {
 	}
 }
 
-// Verifies a log path the process scan would read as a batch mode Editor or an Asset Import Worker is refused,
-// because uloop would then lose the Editor it started. The whole absolute path counts, so a relative path
-// picks the words up from the caller's directory too.
-func TestParseLaunchOptionsRejectsLogFileTheProcessScanWouldSkip(t *testing.T) {
-	cases := []struct {
-		name  string
-		value string
-	}{
-		{name: "batch mode flag", value: "/tmp/nightly-batchmode.log"},
-		{name: "batch mode flag in another case", value: "/tmp/nightly-BatchMode.log"},
-		{name: "import worker", value: "/tmp/AssetImportWorker.log"},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			if _, err := parseLaunchOptions([]string{"--log-file", testCase.value}, ""); err == nil {
-				t.Fatalf("expected %q to be refused", testCase.value)
+// Verifies a log path may contain the words that mark a batch mode run or an import worker. The process scan
+// compares whole arguments, so such a path cannot hide the Editor.
+func TestParseLaunchOptionsAcceptsLogFileContainingProcessScanWords(t *testing.T) {
+	for _, value := range []string{"/tmp/nightly-batchmode.log", "/tmp/nightly -batchmode dir/editor.log", "/tmp/AssetImportWorker.log"} {
+		t.Run(value, func(t *testing.T) {
+			options, err := parseLaunchOptions([]string{"--log-file", value}, "")
+			if err != nil {
+				t.Fatalf("expected %q to be accepted: %v", value, err)
+			}
+			if !filepath.IsAbs(options.logFile) {
+				t.Fatalf("log file = %q, want an absolute path", options.logFile)
 			}
 		})
 	}
-
-	t.Run("relative path under such a directory", func(t *testing.T) {
-		directory := filepath.Join(t.TempDir(), "nightly-batchmode")
-		if err := os.Mkdir(directory, 0o755); err != nil {
-			t.Fatalf("creating %s failed: %v", directory, err)
-		}
-		t.Chdir(directory)
-
-		if _, err := parseLaunchOptions([]string{"--log-file", "editor.log"}, ""); err == nil {
-			t.Fatal("expected a relative path under that directory to be refused")
-		}
-	})
 }
 
 // Verifies preparing an existing log leaves it as it is, because the next start is what replaces it.
