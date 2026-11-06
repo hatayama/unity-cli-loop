@@ -392,10 +392,9 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        // The added-method rewrite calls the shim with the argument list as written, so ref/out
-        // arguments reach it; only a compiled method has to go through a delegate without them.
-        if (HasByRefParameter(methodSymbol)
-            && addedMemberAccess != null
+        // The added-method rewrite calls the shim with the argument list as written, so no delegate
+        // has to carry the arguments and the compiled type has no such method to bind one to.
+        if (addedMemberAccess != null
             && addedMemberAccess.IsAddedMethod(methodSymbol))
         {
             return false;
@@ -450,18 +449,5 @@ internal static class AccessorAccessRegistrar
         }
 
         return null;
-    }
-
-    private static bool HasByRefParameter(IMethodSymbol methodSymbol)
-    {
-        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
-        {
-            if (parameter.RefKind != RefKind.None)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

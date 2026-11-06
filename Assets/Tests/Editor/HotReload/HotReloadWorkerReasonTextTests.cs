@@ -400,9 +400,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldInitializerNotLiteralOrExternalStatic,
                 new[] { "_cache" },
-                "Added field '_cache' has an initializer that is not a literal or an externally visible static member "
-                + "(object creation other than an introduced type, and instance, host-type, or same-file "
-                + "added members cannot run in the shim lambda). Drop the initializer and assign the field inside the patched method "
+                "Added field '_cache' has an initializer that is not a literal, an externally visible static member, "
+                + "or a public constructor of an externally visible compiled type (instance, host-type, or same-file "
+                + "added members, object initializers, a nested type named without its outer type, a collection "
+                + "initializer on a type of the edited assembly, and a type of the edited assembly with a non-public "
+                + "constructor when this reload was not given its file cannot run in the shim lambda). Drop the initializer and assign the field inside the patched method "
                 + "instead - an added field without an initializer applies without compiling and starts "
                 + "at default(T); for a reference type, guard the assignment with "
                 + "'if (_field == null) { _field = ...; }' ('??=' is not rewritable). "

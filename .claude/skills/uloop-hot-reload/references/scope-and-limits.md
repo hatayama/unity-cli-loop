@@ -53,15 +53,22 @@ An added field's values live in a side table that follows each instance's lifeti
 on the field's first access from edited code — once per instance, or once per domain
 for statics. Initializer expressions are limited to what a static lambda on a separate
 shim type can evaluate: literals, externally visible static calls (`= 5`,
-`= Math.Abs(x)`), and array creation whose elements are themselves such expressions
-(`= new int[] { 1, 2, 3 }`). Object creation (`= new List<int>()`) and anything touching
-the host type or instance state skips the field's readers and writers with a per-method
-reason — including an array element that is itself a refused object creation. The one
-object creation that applies is a type an
-earlier reload introduced and this Editor session still keeps active, through a
-constructor the retained assembly holds as `public` — including in the reload that also
-edits a body of that type. A constructor this reload adds to it, or one whose parameters
-the retained assembly does not hold, keeps the readers and writers `Skipped`.
+`= Math.Abs(x)`), array creation whose elements are themselves such expressions
+(`= new int[] { 1, 2, 3 }`), and a `public` constructor of an externally visible compiled
+type (`= new List<int>()`, `= new(1f, 2f)`, `= new List<int> { 1, 2 }`), which also runs on
+first access rather than when the instance is created. Anything touching the host type or
+instance state skips the field's readers and writers with a per-method reason, and so does
+a constructor the compiled type does not hold, an object initializer
+(`new T { X = 1 }`), a non-public constructor or type, and a nested type named without its
+outer type (write `new Outer.Inner()`, or `new()` when the field's type is spelled) —
+including when such a creation is an array element or a constructor argument. A collection
+initializer also needs a `public` `Add` on a type outside the assembly being edited, and a
+type of that assembly skips any constructor when it has a non-public one and this reload was
+not given its file. A
+type a reload introduces applies through a constructor its retained assembly holds as
+`public`, for as long as this Editor session keeps it active — including in the reload that
+also edits a body of that type. A constructor this reload adds to it, or one whose
+parameters the retained assembly does not hold, keeps the readers and writers `Skipped`.
 Because the initializer runs on first access, one this reload adds to — or changes on — a
 field an earlier reload already added never reaches a value the side table already holds:
 it runs only where the field has not been read yet. That reload names those fields in
@@ -150,9 +157,8 @@ pause points, and the value never appears in `CapturedVariables`.
 These property shapes stay `Skipped` with a per-member reason: a setter without a
 getter, `virtual`/`override`/`abstract`/interface, an explicit interface
 implementation, an `init` accessor, a host that is a `struct` or a generic type, a value type
-the shim assembly cannot see or cannot resolve, an auto-property initializer that
-creates an object or touches the host's own members, and a name the compiled assembly
-already declares as a field or an event. Edited callers are skipped too when they use a
+the shim assembly cannot see or cannot resolve, an auto-property initializer the added-field
+rules above refuse, and a name the compiled assembly already declares as a field or an event. Edited callers are skipped too when they use a
 shape the accessor shim cannot carry: compound assignment or increment, an assignment
 whose value is consumed, a deconstruction target, an object initializer, a property
 pattern that matches the property, `nameof`, `ref`/`out`/`in`, and conditional access
@@ -434,7 +440,8 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
-| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, deconstructions that set a property through a private/internal setter, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can ref-returning properties. These limits apply to compiled members; a `ref`/`out` method added in the same reload is reached directly. A compiled private/internal static property can be read, assigned, and compound-assigned |
+| Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, deconstructions that set a property through a private/internal setter, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can ref-returning properties. These limits apply to compiled members; a method added in the same reload is reached directly, whatever its arguments. A compiled private/internal static property can be read, assigned, and compound-assigned |
+| An async/iterator/closure body of a type not visible outside its assembly reaches a compiled member | An accessor delegate has to name its host, which a shim cannot do for an `internal` class or a class nested in one, so this refuses even a `public` member of that class. A body reaching only methods added in the same reload applies. In a lambda or local function, copy the compiled member into a local outside it; otherwise run `uloop compile` |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | An added member's body cannot be fully bound in the hot-reload compilation | Hot reload cannot verify a member it cannot bind. A common cause: another file of the same reload, passed or pulled back in because it holds active patches, declares a compiled type from source, while a compiled API the body calls still names the compiled copy (for example, a lambda handed to a compiled `Register(Action<T>)`). The reason then names both types and the file declaring the compiled API. When the called member belongs to a type an earlier reload introduced and its signature was bound to the compiled copy, the reason names the introduced type and that compiled type instead. Either way the `Skipped` row names the step for that run (pass the file declaring the compiled API, leave the file declaring the type out, undo its edit and leave it out, or `uloop compile`), chosen from whether each file was passed, carried in, or already holds patches; a row about an added property's body points to the row of its accessor instead. A file passed this way is brought back by every later reload of the assembly while it stays unchanged, including the reload that re-applies after `--revert-all` or Play entry, until the next successful compile. When the skip deactivated added members an earlier reload applied, the next reload of the assembly retries their unchanged file once, so passing only the declaring file applies them again |

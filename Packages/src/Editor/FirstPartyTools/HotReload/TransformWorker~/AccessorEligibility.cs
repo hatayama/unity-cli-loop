@@ -38,13 +38,41 @@ internal static class AccessorEligibility
         out WorkerReason rejectReason)
     {
         plan = null;
-        rejectReason = null;
+        bool built = TryBuildEntries(
+            semanticModel,
+            methodSymbol,
+            bodyNode,
+            addedMemberAccess,
+            accessRoots,
+            out AccessorPlan entries,
+            out rejectReason);
 
-        if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
+        // Why only an empty plan may skip the visible host: a body reaching only added members needs
+        // no binder or delegate, so nothing has to name the host. An entry naming the host cannot be
+        // written by the shim, and one naming another type has never been exercised on such a host.
+        // Every other refusal keeps naming the host, because fixing that one alone rarely applies.
+        if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol)
+            && (!built || entries.Entries.Count > 0))
         {
             rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorContainingTypeNotVisible);
             return false;
         }
+
+        plan = entries;
+        return built;
+    }
+
+    private static bool TryBuildEntries(
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess,
+        IReadOnlyList<SyntaxNode> accessRoots,
+        out AccessorPlan plan,
+        out WorkerReason rejectReason)
+    {
+        plan = null;
+        rejectReason = null;
 
         if (!AreMethodSignatureTypesVisible(methodSymbol, out rejectReason))
         {
