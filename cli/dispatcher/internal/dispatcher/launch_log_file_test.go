@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -273,5 +274,36 @@ func TestRunLaunchReportsTheRequestedLogFile(t *testing.T) {
 				t.Fatalf("the log's directory should exist: %v", err)
 			}
 		})
+	}
+}
+
+// Verifies --log-file is refused when only the project IPC shows Unity is running, because that path also
+// reuses the running Editor, whose log cannot be the requested one.
+func TestRunLaunchRefusesLogFileWhenOnlyTheIpcProbeFindsUnity(t *testing.T) {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
+	}
+	deps.probeProjectIpcFallback = func(context.Context, string) error {
+		return nil
+	}
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, logFile: "/tmp/editor.log"},
+		projectRoot,
+		&stdout,
+		&stderr,
+		deps,
+	)
+
+	if code != 1 {
+		t.Fatalf("exit code mismatch: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "`uloop launch --restart --log-file /tmp/editor.log`") {
+		t.Fatalf("stderr should guide a restart with the requested log:\n%s", stderr.String())
 	}
 }
