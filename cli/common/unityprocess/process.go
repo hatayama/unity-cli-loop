@@ -193,15 +193,14 @@ func windowsUnityProcessListScript() string {
 	return strings.Join(scriptLines, "\n")
 }
 
-// matchMacUnityProcess checks a single process's (pid, space-joined argv) pair against
-// the same Unity-editor-command and project-path rules used for the ps-based command
-// text this replaced, so callers built from either a text source or a raw argv slice
-// share one matching implementation.
-func matchMacUnityProcess(pid int, command string) (UnityProcess, bool) {
-	if !isUnityEditorCommand(command, macUnityExecutablePattern) {
+// matchMacUnityProcess checks a single process's argv against the Unity Editor and project path rules.
+// It reads the arguments rather than their joined text, which loses where a path ends: a path containing
+// " -batchmode" would read as that flag.
+func matchMacUnityProcess(pid int, args []string) (UnityProcess, bool) {
+	if hasNonEditorArg(args) || !macUnityExecutablePattern.MatchString(strings.Join(args, " ")) {
 		return UnityProcess{}, false
 	}
-	return UnityProcess{Pid: pid, projectPath: extractProjectPath(command)}, true
+	return UnityProcess{Pid: pid, projectPath: projectPathFromArgs(args)}, true
 }
 
 // parseMacProcArgs2 decodes the kern.procargs2 sysctl buffer layout: a leading int32
@@ -265,10 +264,10 @@ func matchLinuxUnityProcess(pid int, args []string) (UnityProcess, bool) {
 	if !isLinuxUnityEditorExecutable(path.Base(args[0])) {
 		return UnityProcess{}, false
 	}
-	if hasNonEditorLinuxArg(args) {
+	if hasNonEditorArg(args) {
 		return UnityProcess{}, false
 	}
-	return UnityProcess{Pid: pid, projectPath: linuxProjectPathFromArgs(args)}, true
+	return UnityProcess{Pid: pid, projectPath: projectPathFromArgs(args)}, true
 }
 
 // isLinuxUnityEditorExecutable reports whether argv[0]'s basename is a Unity Editor
@@ -282,10 +281,11 @@ func isLinuxUnityEditorExecutable(executableName string) bool {
 	return strings.HasPrefix(executableName, "unityhub-unity-editor-")
 }
 
-// hasNonEditorLinuxArg reports whether argv marks a batchmode run or an asset
-// import worker. It compares whole arguments rather than substrings of the joined
-// command so a project path that merely contains these words is not excluded.
-func hasNonEditorLinuxArg(args []string) bool {
+// hasNonEditorArg reports whether argv marks a batchmode run or an asset import
+// worker. It compares whole arguments rather than substrings of the joined command
+// so a project or log path that merely contains these words is not excluded: losing
+// a running Editor makes launch delete its lockfile and Temp and open a second one.
+func hasNonEditorArg(args []string) bool {
 	for _, arg := range args {
 		lowerArg := strings.ToLower(arg)
 		if lowerArg == "-batchmode" || strings.HasPrefix(lowerArg, "assetimportworker") {
@@ -295,9 +295,9 @@ func hasNonEditorLinuxArg(args []string) bool {
 	return false
 }
 
-// linuxProjectPathFromArgs returns the value of Unity's -projectPath or -createProject flag, accepting
+// projectPathFromArgs returns the value of Unity's -projectPath or -createProject flag, accepting
 // both the "-projectPath <path>" and "-projectPath=<path>" forms case-insensitively.
-func linuxProjectPathFromArgs(args []string) string {
+func projectPathFromArgs(args []string) string {
 	for index, arg := range args {
 		lowerArg := strings.ToLower(arg)
 		for _, flag := range []string{"-projectpath", "-createproject"} {
@@ -339,20 +339,12 @@ func parseWindowsUnityProcesses(output string) []UnityProcess {
 		}
 
 		command := strings.TrimSpace(string(decodedCommand))
-		if !isUnityEditorCommand(command, windowsUnityExecutablePattern) {
+		if hasNonEditorArg(splitWindowsCommandLine(command)) || !windowsUnityExecutablePattern.MatchString(command) {
 			continue
 		}
 		processes = append(processes, UnityProcess{Pid: pid, projectPath: extractProjectPath(command)})
 	}
 	return processes
-}
-
-func isUnityEditorCommand(command string, executablePattern *regexp.Regexp) bool {
-	lowerCommand := strings.ToLower(command)
-	if strings.Contains(lowerCommand, "-batchmode") || strings.Contains(lowerCommand, "assetimportworker") {
-		return false
-	}
-	return executablePattern.MatchString(command)
 }
 
 func extractProjectPath(command string) string {

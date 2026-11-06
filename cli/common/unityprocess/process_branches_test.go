@@ -18,7 +18,7 @@ import (
 func TestMatchMacUnityProcessKeepsAnEditorWithoutProjectPathUnidentified(t *testing.T) {
 	process, matched := matchMacUnityProcess(
 		123,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -useHub -hubIPC`)
+		[]string{macEditorForTest, "-useHub", "-hubIPC"})
 
 	if !matched || process.Pid != 123 || process.projectPath != "" {
 		t.Fatalf("expected an Editor with no project path, got matched = %v, %#v", matched, process)

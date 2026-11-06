@@ -10,11 +10,11 @@ import (
 )
 
 // Verifies macOS Unity process matching extracts project paths and skips batchmode workers,
-// using the same (pid, command) shape produced by joining a process's sysctl-read argv.
+// using the argv shape a process's sysctl read produces.
 func TestMatchMacUnityProcessExtractsProjectPath(t *testing.T) {
 	editorProcess, matched := matchMacUnityProcess(
 		123,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath "/Users/<USER_NAME>/My Project" -useHub -hubIPC`)
+		[]string{macEditorForTest, "-projectPath", "/Users/<USER_NAME>/My Project", "-useHub", "-hubIPC"})
 	if !matched {
 		t.Fatal("expected the Unity editor process to match")
 	}
@@ -24,14 +24,14 @@ func TestMatchMacUnityProcessExtractsProjectPath(t *testing.T) {
 
 	_, batchmodeMatched := matchMacUnityProcess(
 		456,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -batchmode -projectPath "/Users/<USER_NAME>/Batch"`)
+		[]string{macEditorForTest, "-batchmode", "-projectPath", "/Users/<USER_NAME>/Batch"})
 	if batchmodeMatched {
 		t.Fatal("expected a -batchmode process to be skipped")
 	}
 
 	unquotedProcess, unquotedMatched := matchMacUnityProcess(
 		789,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath /Users/<USER_NAME>/Other -logFile -`)
+		[]string{macEditorForTest, "-projectPath", "/Users/<USER_NAME>/Other", "-logFile", "-"})
 	if !unquotedMatched {
 		t.Fatal("expected an unquoted project path process to match")
 	}
