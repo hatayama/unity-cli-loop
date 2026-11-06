@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.22.0](https://github.com/hatayama/unity-cli-loop/compare/v3.21.5...v3.22.0) (2026-11-06)
+
+
+### Features
+
+* Hot reload now applies lambdas in internal classes that call new methods, and added fields initialized with new ([#3437](https://github.com/hatayama/unity-cli-loop/issues/3437)) ([a241b66](https://github.com/hatayama/unity-cli-loop/commit/a241b664ecd0a74856a74e140bb8b0e87bd5be95))
+
 ## [3.21.5](https://github.com/hatayama/unity-cli-loop/compare/v3.21.4...v3.21.5) (2026-11-06)
 
 
