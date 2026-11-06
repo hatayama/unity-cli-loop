@@ -117,6 +117,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a runner whose reload handler gains an overload is still released. A lookup by name alone
+        /// throws on that, and the throw would cost a finished run its result.
+        /// </summary>
+        [Test]
+        public void Release_RemovesFinishedRunWhoseReloadHandlerHasAnOverload()
+        {
+            FakeOverloadedEditModeRunner runner = ScriptableObject.CreateInstance<FakeOverloadedEditModeRunner>();
+            FakeEditModeTestCallbacks.RestoringTestContext += runner.OnRestoringTest;
+            UnityEngine.Object.DestroyImmediate(runner);
+
+            _releaser.Release();
+
+            Assert.That(FakeEditModeTestCallbacks.RestoringTestContext, Is.Null);
+            Assert.That(_unsubscribed, Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
         /// Verifies a destroyed object with no reload handler stays subscribed, because removing one of the two
         /// subscriptions would release nothing and the object is not the runner this was written for.
         /// </summary>
@@ -236,6 +253,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         private void OnBeforeAssemblyReload()
+        {
+        }
+    }
+
+    /// <summary>
+    /// Stand-in for a Test Framework version whose runner adds an overload of the reload handler.
+    /// </summary>
+    internal sealed class FakeOverloadedEditModeRunner : ScriptableObject
+    {
+        public void OnRestoringTest()
+        {
+        }
+
+        private void OnBeforeAssemblyReload()
+        {
+        }
+
+        private void OnBeforeAssemblyReload(bool force)
         {
         }
     }

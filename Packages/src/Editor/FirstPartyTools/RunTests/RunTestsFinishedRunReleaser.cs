@@ -70,11 +70,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 && typeof(Delegate).IsAssignableFrom(property.PropertyType);
         }
 
+        // Why with the parameter list: a lookup by name alone throws once a Test Framework version adds an overload,
+        // which would cost a finished run its result. The callback only binds to this signature anyway.
         internal static MethodInfo FindBeforeAssemblyReloadMethod(Type runnerType)
         {
             return runnerType.GetMethod(
                 BeforeAssemblyReloadMethodName,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: Type.EmptyTypes,
+                modifiers: null);
         }
 
         /// <summary>
