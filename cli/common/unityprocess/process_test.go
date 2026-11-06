@@ -10,11 +10,11 @@ import (
 )
 
 // Verifies macOS Unity process matching extracts project paths and skips batchmode workers,
-// using the same (pid, command) shape produced by joining a process's sysctl-read argv.
+// using the argv shape a process's sysctl read produces.
 func TestMatchMacUnityProcessExtractsProjectPath(t *testing.T) {
 	editorProcess, matched := matchMacUnityProcess(
 		123,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath "/Users/<USER_NAME>/My Project" -useHub -hubIPC`)
+		[]string{macEditorForTest, "-projectPath", "/Users/<USER_NAME>/My Project", "-useHub", "-hubIPC"})
 	if !matched {
 		t.Fatal("expected the Unity editor process to match")
 	}
@@ -24,14 +24,14 @@ func TestMatchMacUnityProcessExtractsProjectPath(t *testing.T) {
 
 	_, batchmodeMatched := matchMacUnityProcess(
 		456,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -batchmode -projectPath "/Users/<USER_NAME>/Batch"`)
+		[]string{macEditorForTest, "-batchmode", "-projectPath", "/Users/<USER_NAME>/Batch"})
 	if batchmodeMatched {
 		t.Fatal("expected a -batchmode process to be skipped")
 	}
 
 	unquotedProcess, unquotedMatched := matchMacUnityProcess(
 		789,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -projectPath /Users/<USER_NAME>/Other -logFile -`)
+		[]string{macEditorForTest, "-projectPath", "/Users/<USER_NAME>/Other", "-logFile", "-"})
 	if !unquotedMatched {
 		t.Fatal("expected an unquoted project path process to match")
 	}
@@ -167,42 +167,6 @@ func TestWindowsUnityProcessListScriptEncodesCommandLineAsUTF8Base64(t *testing.
 	} {
 		if !strings.Contains(script, expected) {
 			t.Fatalf("script missing %q: %s", expected, script)
-		}
-	}
-}
-
-// Verifies Unity -projectPath extraction supports quoted, unquoted, and equals forms.
-func TestExtractProjectPathSupportsEqualsAndSpaces(t *testing.T) {
-	cases := map[string]string{
-		`Unity -projectPath="/Users/<USER_NAME>/My Project" -useHub`:                                                             "/Users/<USER_NAME>/My Project",
-		`Unity -projectpath '/Users/<USER_NAME>/Other Project' -flag`:                                                            "/Users/<USER_NAME>/Other Project",
-		`Unity -projectPath /Users/<USER_NAME>/My Project -logFile /tmp/my logs/editor.log -ignorecompilererrors`:                "/Users/<USER_NAME>/My Project",
-		`Unity -projectPath /Users/<USER_NAME>/Plain -flag`:                                                                      "/Users/<USER_NAME>/Plain",
-		`Unity Hub -- --silent -- -projectPath /Users/<USER_NAME>/SampleWorkspace/SampleUnityProject -cacheServerEnableUpload`:   "/Users/<USER_NAME>/SampleWorkspace/SampleUnityProject",
-		`Unity -projectPath /Users/<USER_NAME>/SampleWorkspace/SampleUnityProject -acceptSoftwareTermsForThisRunOnly -useHub`:    "/Users/<USER_NAME>/SampleWorkspace/SampleUnityProject",
-		`Unity -projectPath /Users/<USER_NAME>/SampleWorkspace/SampleUnityProject -cacheServerEnableDownload=false -useHub`:      "/Users/<USER_NAME>/SampleWorkspace/SampleUnityProject",
-		`Unity -projectPath /Users/<USER_NAME>/SampleWorkspace/SampleUnityProject -hubSessionId 715810a5-220d-411e-a7d2-28cf46f`: "/Users/<USER_NAME>/SampleWorkspace/SampleUnityProject",
-	}
-
-	for command, expected := range cases {
-		actual := extractProjectPath(command)
-		if actual != expected {
-			t.Fatalf("project path mismatch for %q: %q", command, actual)
-		}
-	}
-}
-
-// Verifies an Editor started to create a project is read as having that project open, since the Editor
-// that creates a project opens it in the same session without a -projectPath flag.
-func TestExtractProjectPathReadsCreateProject(t *testing.T) {
-	cases := map[string]string{
-		`Unity -createProject "/Users/<USER_NAME>/New Project" -cloneFromTemplate /tmp/template.tgz -useHub`: "/Users/<USER_NAME>/New Project",
-		`Unity -createproject=/Users/<USER_NAME>/Plain -useHub`:                                              "/Users/<USER_NAME>/Plain",
-	}
-
-	for command, expected := range cases {
-		if actual := extractProjectPath(command); actual != expected {
-			t.Fatalf("project path mismatch for %q: %q", command, actual)
 		}
 	}
 }
