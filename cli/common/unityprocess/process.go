@@ -195,9 +195,10 @@ func windowsUnityProcessListScript() string {
 
 // matchMacUnityProcess checks a single process's argv against the Unity Editor and project path rules.
 // It reads the arguments rather than their joined text, which loses where a path ends: a path containing
-// " -batchmode" would read as that flag.
+// " -batchmode" would read as that flag. Only argv[0] counts as the executable, because a shell whose -c string
+// names the Editor is not one, and listing it as an Editor of unknown project hides whether the real one is gone.
 func matchMacUnityProcess(pid int, args []string) (UnityProcess, bool) {
-	if hasNonEditorArg(args) || !macUnityExecutablePattern.MatchString(strings.Join(args, " ")) {
+	if len(args) == 0 || !macUnityExecutablePattern.MatchString(args[0]) || hasNonEditorArg(args) {
 		return UnityProcess{}, false
 	}
 	return UnityProcess{Pid: pid, projectPath: projectPathFromArgs(args)}, true

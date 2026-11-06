@@ -45,7 +45,8 @@ func TestMatchMacUnityProcessFindsEditorWhoseArgumentOnlyContainsTheWords(t *tes
 	}
 }
 
-// Verifies a macOS batch mode run and an import worker are still left out, so uloop never treats one as the Editor.
+// Verifies a macOS batch mode run, an import worker, and a process that only names the Editor's path are left out.
+// A shell listed as an Editor of unknown project would make status and launch's exit watch unable to tell it is gone.
 func TestMatchMacUnityProcessSkipsBatchModeAndImportWorkers(t *testing.T) {
 	cases := []struct {
 		name string
@@ -54,6 +55,10 @@ func TestMatchMacUnityProcessSkipsBatchModeAndImportWorkers(t *testing.T) {
 		{"batch mode", []string{macEditorForTest, "-batchmode", "-projectPath", "/work/game"}},
 		{"batch mode in another case", []string{macEditorForTest, "-batchMode", "-projectPath", "/work/game"}},
 		{"import worker", []string{macEditorForTest, "-projectPath", "/work/game", "-name", "AssetImportWorker0"}},
+		{"shell running a batch mode command", []string{"/bin/zsh", "-c", macEditorForTest + " -batchmode -projectPath /work/game"}},
+		{"shell naming the project", []string{"/bin/sh", "-c", macEditorForTest + " -projectPath /work/game; true"}},
+		{"another program given the Editor's path", []string{"/usr/bin/tail", "-f", macEditorForTest}},
+		{"no arguments", nil},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
