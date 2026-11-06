@@ -161,23 +161,6 @@ func TestParseWindowsUnityProcessesSkipsMalformedLines(t *testing.T) {
 	}
 }
 
-// Verifies project path extraction yields no path for commands whose flag is missing, empty, or has an unclosed quote.
-func TestExtractProjectPathReturnsEmptyForUnusableFlag(t *testing.T) {
-	cases := map[string]string{
-		"no project path flag":    `Unity -useHub -hubIPC`,
-		"flag with blank value":   "Unity -projectPath=   ",
-		"double quote never ends": `Unity -projectPath "/Users/<USER_NAME>/Unclosed -useHub`,
-		"single quote never ends": `Unity -projectPath '/Users/<USER_NAME>/Unclosed -useHub`,
-	}
-	for name, command := range cases {
-		t.Run(name, func(t *testing.T) {
-			if actual := extractProjectPath(command); actual != "" {
-				t.Fatalf("expected no project path for %q, got %q", command, actual)
-			}
-		})
-	}
-}
-
 // Verifies Windows project matching folds case so a differently cased path names the same project.
 func TestNormalizeComparablePathFoldsCaseOnWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {

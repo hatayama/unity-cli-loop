@@ -23,10 +23,6 @@ const windowsPowerShellCommand = "powershell"
 var (
 	macUnityExecutablePattern     = regexp.MustCompile(`(?i)Unity\.app/Contents/MacOS/Unity`)
 	windowsUnityExecutablePattern = regexp.MustCompile(`(?i)Unity\.exe`)
-	// Why -createProject too: the Editor that creates a project opens it in the same session, and that
-	// session's command line may name the project only through -createProject.
-	projectPathFlagPattern = regexp.MustCompile(`(?i)-(?:projectpath|createproject)(?:=|\s+)(.+)$`)
-	nextUnityFlagPattern   = regexp.MustCompile(`\s-[A-Za-z][A-Za-z0-9-]*(?:=|\s|$)`)
 )
 
 type UnityProcess struct {
@@ -302,6 +298,8 @@ func hasNonEditorArg(args []string) bool {
 
 // projectPathFromArgs returns the value of Unity's -projectPath or -createProject flag, accepting
 // both the "-projectPath <path>" and "-projectPath=<path>" forms case-insensitively.
+// Why -createProject too: the Editor that creates a project opens it in the same session, and that
+// session's command line may name the project only through -createProject.
 func projectPathFromArgs(args []string) string {
 	for index, arg := range args {
 		lowerArg := strings.ToLower(arg)
@@ -344,43 +342,13 @@ func parseWindowsUnityProcesses(output string) []UnityProcess {
 		}
 
 		command := strings.TrimSpace(string(decodedCommand))
-		if hasNonEditorArg(splitWindowsCommandLine(command)) || !windowsUnityExecutablePattern.MatchString(command) {
+		args := splitWindowsCommandLine(command)
+		if hasNonEditorArg(args) || !windowsUnityExecutablePattern.MatchString(command) {
 			continue
 		}
-		processes = append(processes, UnityProcess{Pid: pid, projectPath: extractProjectPath(command)})
+		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPathFromArgs(args)})
 	}
 	return processes
-}
-
-func extractProjectPath(command string) string {
-	matches := projectPathFlagPattern.FindStringSubmatch(command)
-	if len(matches) != 2 {
-		return ""
-	}
-
-	value := strings.TrimSpace(matches[1])
-	if value == "" {
-		return ""
-	}
-
-	if strings.HasPrefix(value, `"`) || strings.HasPrefix(value, `'`) {
-		return extractQuotedProjectPath(value)
-	}
-
-	nextFlagIndex := nextUnityFlagPattern.FindStringIndex(value)
-	if nextFlagIndex != nil {
-		value = strings.TrimSpace(value[:nextFlagIndex[0]])
-	}
-	return strings.Trim(value, `"'`)
-}
-
-func extractQuotedProjectPath(value string) string {
-	quote := value[0]
-	endIndex := strings.IndexByte(value[1:], quote)
-	if endIndex < 0 {
-		return ""
-	}
-	return value[1 : endIndex+1]
 }
 
 func normalizeComparablePath(path string) (string, error) {

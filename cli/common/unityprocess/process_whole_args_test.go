@@ -102,6 +102,41 @@ func TestParseWindowsUnityProcessesFindsEditorWhoseArgumentOnlyContainsTheWords(
 	}
 }
 
+// Verifies a Windows project path is read from the arguments the Editor receives. A path elsewhere on the command
+// line that names the flag must not be taken for it, or uloop would look for the Editor under the wrong project.
+func TestParseWindowsUnityProcessesReadsProjectPathFromArguments(t *testing.T) {
+	cases := []struct {
+		name  string
+		flags string
+		want  string
+	}{
+		{"quoted", `-projectPath "C:\My Project" -useHub`, `C:\My Project`},
+		{"lower case flag", `-projectpath "C:\My Project"`, `C:\My Project`},
+		{"unquoted", `-projectPath C:\Plain -useHub`, `C:\Plain`},
+		{"equals form", `-projectPath="C:\My Project" -useHub`, `C:\My Project`},
+		{"unquoted equals form", `-projectPath=C:\Plain -useHub`, `C:\Plain`},
+		{"quoted path ending in a backslash", `-projectPath "C:\My Project\\" -useHub`, `C:\My Project\`},
+		{"create project", `-createProject "C:\New Project" -cloneFromTemplate C:\template.tgz`, `C:\New Project`},
+		{"log path naming the flag first", `-logFile "C:\logs\x -projectPath fake.log" -projectPath "C:\work\game"`, `C:\work\game`},
+		{"no flag", `-useHub -hubIPC`, ""},
+		{"flag with nothing after it", `-projectPath`, ""},
+		{"equals form with no value", `-projectPath= -useHub`, ""},
+		{"empty quoted value", `-projectPath "" -useHub`, ""},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			processes := parseWindowsCommandLineForTest(windowsEditorForTest + " " + testCase.flags)
+
+			if len(processes) != 1 {
+				t.Fatalf("expected the Editor to be found, got %#v", processes)
+			}
+			if processes[0].projectPath != testCase.want {
+				t.Fatalf("project path = %q, want %q", processes[0].projectPath, testCase.want)
+			}
+		})
+	}
+}
+
 // Verifies a Windows batch mode run and an import worker are still left out, including a flag after a quoted path
 // ending in a backslash, where a wrong quote reading would swallow the flag.
 func TestParseWindowsUnityProcessesSkipsBatchModeAndImportWorkers(t *testing.T) {
@@ -141,6 +176,7 @@ func TestSplitWindowsCommandLine(t *testing.T) {
 		{"trailing backslash", `a b\`, []string{"a", `b\`}},
 		{"escaped backslash closes the quote", `"a b\\" c`, []string{`a b\`, "c"}},
 		{"escaped quote stays in the argument", `a\"b c`, []string{`a"b`, "c"}},
+		{"empty quoted argument", `a "" b`, []string{"a", "", "b"}},
 		{"empty command line", ``, nil},
 	}
 	for _, testCase := range cases {

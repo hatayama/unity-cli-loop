@@ -6,15 +6,18 @@ import "strings"
 // separates them outside double quotes, and backslashes only escape when they come before a double quote.
 // Why not parse quotes alone: Go and Unity Hub quote a path ending in a backslash as "C:\dir\\", so reading
 // that backslash literally leaves the quote open and swallows every flag after the path.
-// An empty quoted argument is dropped, which no caller needs to tell apart.
 func splitWindowsCommandLine(commandLine string) []string {
 	var args []string
 	var current strings.Builder
 	insideQuotes := false
+	// Why tracked apart from the text: an empty quoted argument still counts, or the argument after it would read
+	// as the value of the flag before it.
+	hasArgument := false
 	backslashes := 0
 	for _, character := range commandLine {
 		if character == '\\' {
 			backslashes++
+			hasArgument = true
 			continue
 		}
 		if character == '"' {
@@ -25,6 +28,7 @@ func splitWindowsCommandLine(commandLine string) []string {
 				insideQuotes = !insideQuotes
 			}
 			backslashes = 0
+			hasArgument = true
 			continue
 		}
 
@@ -32,16 +36,18 @@ func splitWindowsCommandLine(commandLine string) []string {
 		backslashes = 0
 		if insideQuotes || (character != ' ' && character != '\t') {
 			current.WriteRune(character)
+			hasArgument = true
 			continue
 		}
-		if current.Len() > 0 {
+		if hasArgument {
 			args = append(args, current.String())
 			current.Reset()
+			hasArgument = false
 		}
 	}
 
 	current.WriteString(strings.Repeat(`\`, backslashes))
-	if current.Len() > 0 {
+	if hasArgument {
 		args = append(args, current.String())
 	}
 	return args
