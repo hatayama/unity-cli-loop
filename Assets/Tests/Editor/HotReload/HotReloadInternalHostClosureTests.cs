@@ -264,6 +264,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.Count(4), Is.EqualTo(-1), Describe(result));
         }
 
+        /// <summary>
+        /// What: an internal static class gaining an array of target-typed creations and an added
+        /// method, read through a lambda, is patched as a whole. Each part is refused on its own
+        /// grounds without the others' fixes, so this holds the shape that combines them.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedArrayOfImplicitCreationsReadThroughLambda_RunsTheNewBody()
+        {
+            HotReloadOrchestratorResult result = await RunEditedAsync(
+                "InternalHostArrayOfImplicitCreations.cs",
+                OriginalStaticCount,
+                "private static readonly UnityEngine.Vector2[] SamplePoints = { new(0.5f, 0.5f), new(0.1f, 0.1f) };\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        internal static int Count(int threshold)\n"
+                + "        {\n"
+                + "            return SamplePoints.Count(point => IsReached(point, threshold));\n"
+                + "        }\n\n"
+                + "        private static bool IsReached(UnityEngine.Vector2 point, int threshold)\n"
+                + "        {\n"
+                + "            return point.x * threshold > 1f;\n"
+                + "        }\n");
+
+            AssertPatched(result, "Count");
+            Assert.That(HotReloadInternalStaticHost.Count(4), Is.EqualTo(1), Describe(result));
+        }
+
         private static async Task<HotReloadOrchestratorResult> RunEditedAsync(
             string editedFileName,
             string original,

@@ -127,17 +127,22 @@ internal static class AddedFieldSkipEvaluator
                 return true;
             }
 
-            // Why object creation is decided on its own: the constructor of an introduced type
-            // is the one instance member the lambda can call, and an inaccessible constructor
-            // leaves GetSymbolInfo without a symbol, so the general check would let it through.
-            if (node is ObjectCreationExpressionSyntax creation)
+            // Why object creation is decided on its own: a constructor is the one instance member
+            // the lambda can call, and an inaccessible constructor leaves GetSymbolInfo without a
+            // symbol, so the general check would let it through.
+            if (node is BaseObjectCreationExpressionSyntax creation)
             {
-                if (!IsIntroducedTypeConstruction(creation, semanticModel, sourceUnit))
+                if (!IsEmittableConstruction(creation, semanticModel, home, sourceUnit))
                 {
                     return true;
                 }
 
                 continue;
+            }
+
+            if (HasInaccessibleCollectionAdd(node, semanticModel))
+            {
+                return true;
             }
 
             if (HasDisallowedInitializerSymbol(
@@ -154,46 +159,54 @@ internal static class AddedFieldSkipEvaluator
         return false;
     }
 
-    // The three conditions a construction has to meet: it names a constructor, the constructor is
-    // public, and the constructed type is exactly the (assembly, metadata name) pair the verified
-    // mapping holds. The shim compilation references that artifact assembly, so such a type is
-    // reachable from the lambda; anything else is not.
+    // Why two routes: the shim assembly references both the artifact a verified mapping names and
+    // the assembly compiled before this edit, and those are the only places a constructor it can
+    // call lives. A construction that reaches neither has nothing to run.
+    private static bool IsEmittableConstruction(
+        BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel,
+        WorkerTypeHome home,
+        WorkerSourceUnit sourceUnit)
+    {
+        IMethodSymbol constructor = FindPublicConstructor(creation, semanticModel);
+        INamedTypeSymbol constructedType = constructor?.ContainingType;
+        if (constructedType == null || constructedType.ContainingAssembly == null)
+        {
+            return false;
+        }
+
+        return IsIntroducedTypeConstruction(constructor, constructedType, semanticModel, sourceUnit)
+            || IsCompiledTypeConstruction(creation, constructor, constructedType, semanticModel, home);
+    }
+
+    private static IMethodSymbol FindPublicConstructor(
+        BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel)
+    {
+        // Why only a bound symbol counts: an inaccessible constructor leaves none, and the candidate
+        // reported instead can be a public overload the arguments do not fit, while the shim's
+        // binding, which does see the inaccessible one, would pick that and fail at first read.
+        IMethodSymbol constructor = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
+        if (constructor == null
+            || constructor.MethodKind != MethodKind.Constructor
+            || constructor.DeclaredAccessibility != Accessibility.Public)
+        {
+            return null;
+        }
+
+        return constructor;
+    }
+
+    // The constructed type is exactly the (assembly, metadata name) pair the verified mapping
+    // holds, or a declaration this same reload keeps editing on top of it.
     private static bool IsIntroducedTypeConstruction(
-        ObjectCreationExpressionSyntax creation,
+        IMethodSymbol constructor,
+        INamedTypeSymbol constructedType,
         SemanticModel semanticModel,
         WorkerSourceUnit sourceUnit)
     {
         IntroducedTypeArtifactMap artifactMap = sourceUnit?.ArtifactMap;
         if (artifactMap == null)
-        {
-            return false;
-        }
-
-        SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(creation);
-        IMethodSymbol constructor = symbolInfo.Symbol as IMethodSymbol;
-        if (constructor == null)
-        {
-            // A constructor the shim assembly cannot reach is reported as a candidate rather
-            // than as the symbol, and it still has to be refused rather than ignored.
-            foreach (ISymbol candidate in symbolInfo.CandidateSymbols)
-            {
-                constructor = candidate as IMethodSymbol;
-                if (constructor != null)
-                {
-                    break;
-                }
-            }
-        }
-
-        if (constructor == null
-            || constructor.MethodKind != MethodKind.Constructor
-            || constructor.DeclaredAccessibility != Accessibility.Public)
-        {
-            return false;
-        }
-
-        INamedTypeSymbol constructedType = constructor.ContainingType;
-        if (constructedType == null || constructedType.ContainingAssembly == null)
         {
             return false;
         }
@@ -206,6 +219,73 @@ internal static class AddedFieldSkipEvaluator
         }
 
         return ConstructsRetainedSourceDeclaration(constructor, constructedType, semanticModel, sourceUnit);
+    }
+
+    private static bool IsCompiledTypeConstruction(
+        BaseObjectCreationExpressionSyntax creation,
+        IMethodSymbol constructor,
+        INamedTypeSymbol constructedType,
+        SemanticModel semanticModel,
+        WorkerTypeHome home)
+    {
+        if (!AccessibilityRules.IsExternallyVisibleType(constructedType)
+            || SpellsNestedTypeByBareName(creation, semanticModel))
+        {
+            return false;
+        }
+
+        // A type from a referenced assembly is already what runs. A type this run has source for
+        // binds to that source, while the shim calls the compiled one: a constructor or a
+        // visibility the edit changed is not there to be called.
+        if (constructedType.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return true;
+        }
+
+        INamedTypeSymbol compiledType = home.FindCompiledType(constructedType.OriginalDefinition);
+        return compiledType != null
+            && AccessibilityRules.IsExternallyVisibleType(compiledType)
+            && HasMatchingPublicConstructor(compiledType, constructor);
+    }
+
+    // Why a bare nested name is refused: the initializer is emitted as the source spells it, on a
+    // shim type that is not nested where the name resolves. 'new()' spells no name and takes the
+    // store's fully qualified type argument, and 'Outer.Inner' resolves from the namespace.
+    private static bool SpellsNestedTypeByBareName(
+        BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel)
+    {
+        if (creation is not ObjectCreationExpressionSyntax explicitCreation)
+        {
+            return false;
+        }
+
+        foreach (SimpleNameSyntax name in explicitCreation.Type.DescendantNodesAndSelf().OfType<SimpleNameSyntax>())
+        {
+            bool isRightOfQualifier = name.Parent is QualifiedNameSyntax qualified && qualified.Right == name;
+            if (!isRightOfQualifier
+                && semanticModel.GetSymbolInfo(name).Symbol is INamedTypeSymbol { ContainingType: not null })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Why the element is asked separately: a collection initializer binds its Add to each element
+    // and names it nowhere the general walk can see, and the shim compiles against references
+    // where an internal Add would still bind, so it would fail only when the field is first read.
+    private static bool HasInaccessibleCollectionAdd(SyntaxNode node, SemanticModel semanticModel)
+    {
+        if (node is not ExpressionSyntax element
+            || !(node.Parent?.IsKind(SyntaxKind.CollectionInitializerExpression) ?? false))
+        {
+            return false;
+        }
+
+        ISymbol add = semanticModel.GetCollectionInitializerSymbolInfo(element).Symbol;
+        return add == null || AccessibilityRules.IsInaccessibleFromExternalAssembly(add);
     }
 
     // Why the source declaration counts as well: a type whose bodies this same reload edits keeps

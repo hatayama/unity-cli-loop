@@ -10,12 +10,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// Verifies which initializer of a field added next to a retained declaration can run in the
-    /// shim lambda: only a public constructor of a type the verified artifact mapping holds, and
-    /// nothing else that needs an instance.
+    /// shim lambda: a public constructor of a type the verified artifact mapping holds or of a
+    /// compiled, externally visible type, and nothing else that needs an instance.
     /// </summary>
     public sealed class HotReloadRetainedArtifactInitializerTests
     {
-        private const string SkipReasonFragment = "has an initializer that is not a literal or an externally visible static member";
+        private const string SkipReasonFragment = "has an initializer that is not a literal";
 
         private const string SourceFormat =
             "namespace Example\n"
@@ -235,9 +235,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: constructing a type nested in the compiled host stays refused while the run also
-        /// serves a retained type, so the allowance follows the records and not a name that only
-        /// looks like one of them.
+        /// What: constructing a type nested in the compiled host by its bare name stays refused
+        /// while the run also serves a retained type, because that name does not resolve on the
+        /// shim and being one the records do not hold does not change that.
         /// </summary>
         [Test]
         public async Task Initializer_ConstructorOfTypeNestedInTheHost_IsRefused()
@@ -336,11 +336,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: constructing a public type the mapping does not hold stays refused, so the
-        /// allowance is decided by the mapping and not by the constructor alone.
+        /// What: constructing a public type of a referenced assembly is emitted without any record
+        /// of it, because the shim assembly references that assembly directly.
         /// </summary>
         [Test]
-        public async Task Initializer_ConstructorOfUnmappedType_IsRefused()
+        public async Task Initializer_PublicConstructorOfReferencedAssemblyType_IsEmitted()
         {
             TransformWorkerClientResult result = await RunAsync(
                 "UnmappedConstructor",
@@ -348,7 +348,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "new System.Text.StringBuilder()",
                 "Cache == null ? 0 : 1");
 
-            AssertReadIsRefused(result);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipReason(result, "Read"), Is.Null);
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
         private static void AssertReadIsRefused(TransformWorkerClientResult result)

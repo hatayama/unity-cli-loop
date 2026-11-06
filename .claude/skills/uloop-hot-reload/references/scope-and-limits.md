@@ -53,15 +53,19 @@ An added field's values live in a side table that follows each instance's lifeti
 on the field's first access from edited code — once per instance, or once per domain
 for statics. Initializer expressions are limited to what a static lambda on a separate
 shim type can evaluate: literals, externally visible static calls (`= 5`,
-`= Math.Abs(x)`), and array creation whose elements are themselves such expressions
-(`= new int[] { 1, 2, 3 }`). Object creation (`= new List<int>()`) and anything touching
-the host type or instance state skips the field's readers and writers with a per-method
-reason — including an array element that is itself a refused object creation. The one
-object creation that applies is a type an
-earlier reload introduced and this Editor session still keeps active, through a
-constructor the retained assembly holds as `public` — including in the reload that also
-edits a body of that type. A constructor this reload adds to it, or one whose parameters
-the retained assembly does not hold, keeps the readers and writers `Skipped`.
+`= Math.Abs(x)`), array creation whose elements are themselves such expressions
+(`= new int[] { 1, 2, 3 }`), and a `public` constructor of an externally visible compiled
+type (`= new List<int>()`, `= new(1f, 2f)`, `= new List<int> { 1, 2 }`), which also runs on
+first access rather than when the instance is created. Anything touching the host type or
+instance state skips the field's readers and writers with a per-method reason, and so does
+a constructor the compiled type does not hold, an object initializer
+(`new T { X = 1 }`), an internal or private constructor or type, and a nested type named
+without its outer type (write `new Outer.Inner()`, or `new()` when the field's type is
+spelled) — including when such a creation is an array element or a constructor argument. A
+type a reload introduces applies through a constructor its retained assembly holds as
+`public`, for as long as this Editor session keeps it active — including in the reload that
+also edits a body of that type. A constructor this reload adds to it, or one whose
+parameters the retained assembly does not hold, keeps the readers and writers `Skipped`.
 Because the initializer runs on first access, one this reload adds to — or changes on — a
 field an earlier reload already added never reaches a value the side table already holds:
 it runs only where the field has not been read yet. That reload names those fields in

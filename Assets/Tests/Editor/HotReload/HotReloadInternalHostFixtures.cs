@@ -39,11 +39,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// A type the shim assembly can name, holding a member it cannot, for the test that reaches an
-    /// accessor whose own signature is visible from a host that is not.
+    /// A type the shim assembly can name, holding members it cannot: the field for the test that
+    /// reaches an accessor whose own signature is visible from a host that is not, and the
+    /// constructor for the tests creating it from a file that does not declare it.
     /// </summary>
     public sealed class HotReloadInternalHostVisibleNeighbor
     {
         internal int Hidden = 3;
+
+        public HotReloadInternalHostVisibleNeighbor()
+        {
+        }
+
+        internal HotReloadInternalHostVisibleNeighbor(int hidden)
+        {
+            Hidden = hidden;
+        }
     }
 }
