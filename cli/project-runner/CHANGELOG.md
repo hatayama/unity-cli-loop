@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.5](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.4...uloop-project-runner-v3.12.5) (2026-11-07)
+
+
+### Bug Fixes
+
+* A project path containing "-batchmode" no longer makes uloop lose the running Editor and open a second one ([#3442](https://github.com/hatayama/unity-cli-loop/issues/3442)) ([27177f2](https://github.com/hatayama/unity-cli-loop/commit/27177f2301c62eee9ede3c950625005999bc8e6e))
+
 ## [3.12.4](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.3...uloop-project-runner-v3.12.4) (2026-11-05)
 
 
