@@ -30,9 +30,11 @@ func TestReplaceCatalogDescriptionsRejectsUnusableCatalogs(t *testing.T) {
 		content string
 		wantErr string
 	}{
-		{"truncated object", `{"tools":[{"description":"d"`, "EOF"},
-		{"truncated value", `{"tools":[{"description":`, "EOF"},
-		{"invalid token", `{"tools":[{"description":"d",]}`, "invalid character"},
+		// Malformed input only has to fail: the decoder's wording belongs to the standard library,
+		// and Go 1.27 changed it without changing what is rejected.
+		{"truncated object", `{"tools":[{"description":"d"`, ""},
+		{"truncated value", `{"tools":[{"description":`, ""},
+		{"invalid token", `{"tools":[{"description":"d",]}`, ""},
 		{"tool without name", `{"tools":[{"description":"d"}]}`, "tool at index 0 has no name field"},
 	}
 	for _, testCase := range cases {
