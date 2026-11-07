@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.0...dispatcher-v3.14.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* CLI binaries ship with Go 1.27.3 and sigstore-go 1.4.0, and now require macOS 13 or later ([#3447](https://github.com/hatayama/unity-cli-loop/issues/3447)) ([6ee816a](https://github.com/hatayama/unity-cli-loop/commit/6ee816a5c88c535a17a03871fccd27a8be1a8036))
+
 ## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.3...dispatcher-v3.14.0) (2026-11-06)
 
 
