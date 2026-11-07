@@ -121,7 +121,7 @@ func TestReleasePRChecksSkipWhenNoReleasePRExists(t *testing.T) {
 // Verifies that the matching release PR is drafted, dispatched to every check workflow, watched, and marked ready.
 func TestReleasePRChecksDispatchAndMarkReady(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:              `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
+		prListJSON:              `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
 		runListJSON:             `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		compileCheckRunListJSON: `[{"databaseId":5353,"headSha":"abc123","createdAt":"2026-05-30T01:00:02Z","status":"queued","conclusion":"","url":"https://example.test/run/5353"}]`,
 		runWatchStatus:          "0",
@@ -163,8 +163,8 @@ func TestReleasePRChecksUseInjectedCommandRunner(t *testing.T) {
 		runOutput: func(ctx context.Context, name string, args ...string) (string, error) {
 			commandLine := strings.Join(append([]string{name}, args...), " ")
 			commandLog = append(commandLog, commandLine)
-			if commandLine == "gh pr list --repo owner/repository --state open --base v3-beta --label autorelease: pending --json number,headRefName,headRefOid,title,url" {
-				return `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`, nil
+			if commandLine == "gh pr list --repo owner/repository --state open --base v3-beta --limit 1000 --json number,headRefName,headRefOid,title,url,labels" {
+				return `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`, nil
 			}
 			if commandLine == "gh pr view 1043 --repo owner/repository --json body" {
 				return `{"body":""}`, nil
@@ -199,7 +199,7 @@ func TestReleasePRChecksUseInjectedCommandRunner(t *testing.T) {
 // Verifies that the RELEASE_PR_CHECK_WORKFLOWS environment override replaces the default workflow list.
 func TestReleasePRChecksDispatchOnlyOverriddenWorkflows(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSON:     `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		runWatchStatus: "0",
 		workflows:      "override-checks.yml",
@@ -231,7 +231,7 @@ func TestReleasePRChecksFailWhenWorkflowListIsBlank(t *testing.T) {
 // Verifies that a release PR whose dispatched checks ran on different heads is left in draft and the run exits 0, because the newer release-please run owns the re-check.
 func TestReleasePRChecksSkipWhenRunsCheckDifferentHeads(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:              `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSON:              `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:             `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		compileCheckRunListJSON: `[{"databaseId":5353,"headSha":"def456","createdAt":"2026-05-30T01:00:02Z","status":"queued","conclusion":"","url":"https://example.test/run/5353"}]`,
 		runWatchStatus:          "0",
@@ -251,7 +251,7 @@ func TestReleasePRChecksSkipWhenRunsCheckDifferentHeads(t *testing.T) {
 // Verifies that matching release PRs are updated when the body has a plain Unity package summary.
 func TestReleasePRChecksClarifyUnityPackageSummaryBeforeDispatch(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.46","url":"https://example.test/pr/1043"}]`,
+		prListJSON:     `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.46","url":"https://example.test/pr/1043"}]`,
 		prViewJSON:     `{"body":"<details><summary>3.0.0-beta.46</summary>\n</details>\n<details><summary>uloop-project-runner: 3.0.0-beta.44</summary>\n</details>\n"}`,
 		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		runWatchStatus: "0",
@@ -270,7 +270,7 @@ func TestReleasePRChecksClarifyUnityPackageSummaryBeforeDispatch(t *testing.T) {
 func TestReleasePRChecksRetryPendingReleasePRLookup(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
 		prListJSON:           `[]`,
-		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSONAfterWatch: `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:          `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		runWatchStatus:       "0",
 		lookupAttempts:       "2",
@@ -309,7 +309,7 @@ func TestReleasePRChecksCancelPendingReleasePRLookup(t *testing.T) {
 // Verifies that same-second workflow runs are accepted when GitHub rounds createdAt timestamps.
 func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
+		prListJSON:     `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore(v3-beta): release 3.0.0-beta.5","url":"https://example.test/pr/1043"}]`,
 		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:00Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		runWatchStatus: "0",
 		now:            time.Date(2026, 5, 30, 1, 0, 0, 500000000, time.UTC),
@@ -325,8 +325,8 @@ func TestReleasePRChecksAcceptSameSecondRunAfterDispatch(t *testing.T) {
 // Verifies that a stale PR head SHA before dispatch does not hide successful checks for the updated branch head.
 func TestReleasePRChecksUseDispatchedRunHeadWhenPRListReturnsStaleHead(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:           `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"release123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
-		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"dist456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSON:           `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"release123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSONAfterWatch: `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"dist456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:          `[{"databaseId":4242,"headSha":"dist456","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
 		runWatchStatus:       "0",
 	})
@@ -356,7 +356,7 @@ func TestReleasePRChecksIgnoreManualReleasePR(t *testing.T) {
 // Verifies that missing dispatched runs fail while leaving the PR drafted.
 func TestReleasePRChecksFailWhenDispatchedRunIsMissing(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSON:     `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:    "[]",
 		runWatchStatus: "0",
 	})
@@ -375,7 +375,7 @@ func TestReleasePRChecksFailWhenDispatchedRunIsMissing(t *testing.T) {
 // Verifies that failed watched runs fail while leaving the PR drafted.
 func TestReleasePRChecksFailWhenWatchedRunFails(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:     `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSON:     `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:    `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"completed","conclusion":"failure","url":"https://example.test/run/4242"}]`,
 		runWatchStatus: "1",
 	})
@@ -391,8 +391,8 @@ func TestReleasePRChecksFailWhenWatchedRunFails(t *testing.T) {
 // Verifies that a release PR whose head moved after the checks passed is left in draft and the run exits 0 instead of failing.
 func TestReleasePRChecksSkipWhenHeadChangesBeforeReady(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
-		prListJSON:           `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
-		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"def456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSON:           `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
+		prListJSONAfterWatch: `[{"number":1043,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--v3-beta","headRefOid":"def456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:          `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"completed","conclusion":"success","url":"https://example.test/run/4242"}]`,
 		runWatchStatus:       "0",
 	})
@@ -873,8 +873,8 @@ func multiReleasePRCheckHeadSHA(commandLine string) string {
 // Verifies that the dispatcher release PR is marked ready after its checks pass while the Unity package one stays draft, so only automation can merge the package release.
 func TestReleasePRChecksLeaveUnityPackagePullRequestDraft(t *testing.T) {
 	prListJSON := `[` +
-		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
-		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
 		`]`
 
 	exitCode, stdout, stderr, stub := runMultiReleasePRCheck(t, prListJSON, nil)
@@ -893,8 +893,8 @@ func TestReleasePRChecksLeaveUnityPackagePullRequestDraft(t *testing.T) {
 // Verifies that the Unity package release PR's checks are dispatched before another component's even when the listing puts the package PR last, so post-publish's bounded wait for that PR never sits behind another component's checks.
 func TestReleasePRChecksDispatchUnityPackagePullRequestFirst(t *testing.T) {
 	prListJSON := `[` +
-		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
-		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
 		`]`
 
 	exitCode, _, stderr, stub := runMultiReleasePRCheck(t, prListJSON, nil)
@@ -919,8 +919,8 @@ func TestReleasePRChecksDispatchUnityPackagePullRequestFirst(t *testing.T) {
 // Verifies that failing Unity package checks, which now run first, still let the next component's release PR be marked ready, and the command reports only the package PR as failed.
 func TestReleasePRChecksContinueAfterUnityPackageChecksFail(t *testing.T) {
 	prListJSON := `[` +
-		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
-		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
 		`]`
 
 	exitCode, _, stderr, stub := runMultiReleasePRCheck(t, prListJSON, map[string]bool{"21": true})
@@ -936,8 +936,8 @@ func TestReleasePRChecksContinueAfterUnityPackageChecksFail(t *testing.T) {
 // Verifies that one component's failing checks still let the other component's release PR be finalized, and the command reports the failure.
 func TestReleasePRChecksContinueAfterOneComponentFails(t *testing.T) {
 	prListJSON := `[` +
-		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
-		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
 		`]`
 
 	exitCode, stdout, stderr, stub := runMultiReleasePRCheck(t, prListJSON, map[string]bool{"11": true})
@@ -954,8 +954,8 @@ func TestReleasePRChecksContinueAfterOneComponentFails(t *testing.T) {
 // Verifies that the command ends by naming every release PR whose checks failed, so the last line of the job log says which PRs failed instead of a bare exit status.
 func TestReleasePRChecksNameEveryFailedPullRequestLast(t *testing.T) {
 	prListJSON := `[` +
-		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
-		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
+		`{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
+		`{"number":2002,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
 		`]`
 
 	exitCode, _, stderr, _ := runMultiReleasePRCheck(t, prListJSON, map[string]bool{"11": true, "21": true})
@@ -973,7 +973,7 @@ func TestReleasePRChecksNameEveryFailedPullRequestLast(t *testing.T) {
 
 // Verifies that a non-package component's release PR body is left alone, so its bare version summary is not relabeled as the Unity package.
 func TestReleasePRChecksLeaveNonPackageComponentBodyUnchanged(t *testing.T) {
-	prListJSON := `[{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`
+	prListJSON := `[{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`
 
 	exitCode, stdout, stderr, stub := runMultiReleasePRCheck(t, prListJSON, nil)
 
@@ -987,8 +987,8 @@ func TestReleasePRChecksLeaveNonPackageComponentBodyUnchanged(t *testing.T) {
 }
 
 const (
-	releasePRCheckCombinedPRList   = `[{"number":2000,"headRefName":"release-please--branches--main","headRefOid":"dispatcher123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2000"}]`
-	releasePRCheckDispatcherPRList = `[{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`
+	releasePRCheckCombinedPRList   = `[{"number":2000,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main","headRefOid":"dispatcher123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2000"}]`
+	releasePRCheckDispatcherPRList = `[{"number":2001,"labels":[{"name":"autorelease: pending"}],"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"}]`
 )
 
 // releasePRCheckFailureStub answers like runMultiReleasePRCheck's stub, but fails the first command
