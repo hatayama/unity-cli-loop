@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.23.0](https://github.com/hatayama/unity-cli-loop/compare/v3.22.0...v3.23.0) (2026-11-07)
+
+
+### Features
+
+* uloop launch can give each Editor its own log file ([#3438](https://github.com/hatayama/unity-cli-loop/issues/3438)) ([5273f3f](https://github.com/hatayama/unity-cli-loop/commit/5273f3f2a6d6b8d9a1e98325cea81c6c37b8bbfc))
+
+
+### Bug Fixes
+
+* A project path containing "-batchmode" no longer makes uloop lose the running Editor and open a second one ([#3442](https://github.com/hatayama/unity-cli-loop/issues/3442)) ([27177f2](https://github.com/hatayama/unity-cli-loop/commit/27177f2301c62eee9ede3c950625005999bc8e6e))
+* Repeated test runs no longer grow Unity's managed heap through finished runs ([#3439](https://github.com/hatayama/unity-cli-loop/issues/3439)) ([f07f2b9](https://github.com/hatayama/unity-cli-loop/commit/f07f2b9d7c23d4991731700e505497d475c505e7))
+
 ## [3.22.0](https://github.com/hatayama/unity-cli-loop/compare/v3.21.5...v3.22.0) (2026-11-06)
 
 
