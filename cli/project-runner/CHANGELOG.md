@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.6](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.5...uloop-project-runner-v3.12.6) (2026-11-07)
+
+
+### Bug Fixes
+
+* CLI binaries ship with Go 1.27.3 and sigstore-go 1.4.0, and now require macOS 13 or later ([#3447](https://github.com/hatayama/unity-cli-loop/issues/3447)) ([6ee816a](https://github.com/hatayama/unity-cli-loop/commit/6ee816a5c88c535a17a03871fccd27a8be1a8036))
+
 ## [3.12.5](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.4...uloop-project-runner-v3.12.5) (2026-11-07)
 
 
