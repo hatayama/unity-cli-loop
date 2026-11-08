@@ -22,7 +22,6 @@ const compileNotStartedErrorCode = "COMPILE_NOT_STARTED"
 type compileStartPendingFocus struct {
 	controller *connectionRetryFocusController
 	report     compileWaitInterimReporter
-	attempted  bool
 }
 
 // compileStartPendingFocusOutcome is what the wait recorded about its focus attempt, for the
@@ -44,20 +43,21 @@ func newCompileStartPendingFocus(options compileCompletionOptions, deps compileW
 // time reaches the threshold. A failed poll carries no answer from Unity and is ignored, so a
 // silent Editor (#3228) never triggers the focus.
 func (focus *compileStartPendingFocus) observe(ctx context.Context, status compileStatusResponse, err error) {
-	if err != nil || focus.attempted {
+	if err != nil || focus.controller.attempted {
 		return
 	}
 	if status.CompileStartPendingSeconds < compileStartPendingFocusThreshold.Seconds() {
 		return
 	}
-	focus.attempted = true
 
 	focus.controller.tryFocus(
 		ctx,
 		focusReasonCompileStartPending,
 		fmt.Errorf("unity accepted the compile request but has not started compiling for %.0fs", status.CompileStartPendingSeconds),
 	)
-	// No running Editor was found: there is nothing to focus and nothing to tell the user.
+	// No running Editor was found this time: nothing to focus and nothing to tell the user. The
+	// controller records no attempt, so the next answered poll looks for the Editor again rather
+	// than giving up on one missed process lookup.
 	if !focus.controller.attempted {
 		return
 	}

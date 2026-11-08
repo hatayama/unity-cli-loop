@@ -155,6 +155,38 @@ func TestWaitForCompileCompletionSkipsFocusWhenNoEditorIsRunning(t *testing.T) {
 	}
 }
 
+// Verifies one missed Editor process lookup at the threshold does not end the focus rescue: the next
+// answered poll looks for the Editor again and focuses it once it is found.
+func TestWaitForCompileCompletionRetriesFocusAfterAMissedEditorLookup(t *testing.T) {
+	recorder := &compileStartPendingFocusRecorder{}
+	var lines []string
+	deps := compileStartPendingFocusDeps(recorder, pendingStartThenResult([]float64{12, 14, 16}, `{"Success":true}`), &lines)
+	lookups := 0
+	foundUnityProcess := deps.findRunningUnityProcess
+	deps.findRunningUnityProcess = func(ctx context.Context, projectRoot string) (*unityprocess.UnityProcess, error) {
+		lookups++
+		if lookups == 1 {
+			return noUnityProcessLookup(ctx, projectRoot)
+		}
+		return foundUnityProcess(ctx, projectRoot)
+	}
+
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileStartPendingOptions(t, "compile_pending_lookup_retry"), deps)
+
+	if err != nil || !completed {
+		t.Fatalf("wait failed: completed=%v err=%v", completed, err)
+	}
+	if len(recorder.focusCalls) != 1 {
+		t.Fatalf("focus calls = %v, want exactly one once the Editor was found", recorder.focusCalls)
+	}
+	if lookups != 2 {
+		t.Fatalf("process lookups = %d, want 2 (one miss, one hit, none after the focus)", lookups)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("stderr lines = %#v, want one focus line", lines)
+	}
+}
+
 // Verifies a COMPILE_NOT_STARTED result gains the CLI-side diagnostics (focus attempt and outcome,
 // OS mouse button state) in Details while keeping the Unity-side fields.
 func TestWaitForCompileCompletionAddsCliDiagnosticsToNotStartedResult(t *testing.T) {
