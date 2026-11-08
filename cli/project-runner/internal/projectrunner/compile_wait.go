@@ -58,14 +58,17 @@ type compileCompletionOptions struct {
 }
 
 type compileStatusResponse struct {
-	Success                  bool            `json:"Success"`
-	Ready                    bool            `json:"Ready"`
-	HasResult                bool            `json:"HasResult"`
-	IsCompiling              bool            `json:"IsCompiling"`
-	IsUpdating               bool            `json:"IsUpdating"`
-	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
-	Result                   json.RawMessage `json:"Result"`
-	Message                  string          `json:"Message"`
+	Success                  bool `json:"Success"`
+	Ready                    bool `json:"Ready"`
+	HasResult                bool `json:"HasResult"`
+	IsCompiling              bool `json:"IsCompiling"`
+	IsUpdating               bool `json:"IsUpdating"`
+	IsDomainReloadInProgress bool `json:"IsDomainReloadInProgress"`
+	// CompileStartPendingSeconds is how long Unity has reported isCompiling without raising
+	// compilationStarted, counted in Editor main-thread ticks. Zero from a package that predates it.
+	CompileStartPendingSeconds float64         `json:"CompileStartPendingSeconds"`
+	Result                     json.RawMessage `json:"Result"`
+	Message                    string          `json:"Message"`
 }
 
 func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {

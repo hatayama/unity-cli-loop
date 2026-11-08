@@ -281,6 +281,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void CreateResponse_WhenCompileNeverStarted_CarriesErrorCodeNextActionsAndDetails()
+        {
+            // Verifies the COMPILE_NOT_STARTED result reaches the response with its code, recovery steps,
+            // and captured Editor state instead of collapsing into the generic indeterminate shape.
+            CompileResult result = CompileResultFactory.CreateNotStartedResult(CreateNotStartedDiagnostics());
+
+            CompileResponse response =
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCode, Is.EqualTo(CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText));
+            Assert.That(response.Message, Is.EqualTo(result.Message));
+            Assert.That(response.NextActions, Is.EqualTo(result.NextActions));
+            Assert.That(response.Details, Is.Not.Null);
+            Assert.That(response.Details["PendingSeconds"], Is.EqualTo(60d));
+            Assert.That(response.Errors, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
+        }
+
+        [Test]
+        public void CreateResponse_WhenForcedCompileNeverStarted_KeepsNotStartedShapeInsteadOfUnknownResult()
+        {
+            // Verifies a forced recompile that never started is not reported as COMPILE_RESULT_UNKNOWN,
+            // which would hide the cause and send the caller to get-logs.
+            CompileResult result = CompileResultFactory.CreateNotStartedResult(CreateNotStartedDiagnostics());
+
+            CompileResponse response =
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true, playModeStopWarning: null);
+
+            Assert.That(response.ErrorCode, Is.EqualTo(CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText));
+            Assert.That(response.Message, Is.EqualTo(result.Message));
+            Assert.That(response.Details, Is.Not.Null);
+        }
+
+        private static CompileStartPendingDiagnostics CreateNotStartedDiagnostics()
+        {
+            return new CompileStartPendingDiagnostics(
+                pendingMs: 60000,
+                canReloadAssemblies: false,
+                isEditorWindowActive: false,
+                hotControl: 0,
+                isEditorCompiling: true,
+                isEditorUpdating: false,
+                isEditorPlaying: false,
+                isEditorPaused: false);
+        }
+
+        [Test]
         public void CreateResponse_WhenUnityTestFrameworkSymbolIsMissing_AddsTestAsmdefHint()
         {
             // Verifies compile failures from unmarked test asmdefs include the TestAssemblies fix.

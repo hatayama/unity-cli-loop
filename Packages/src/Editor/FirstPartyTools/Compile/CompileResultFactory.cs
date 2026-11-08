@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using UnityEditor.Compilation;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -95,6 +98,63 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 isIndeterminate: true,
                 message: message
             );
+        }
+
+        /// <summary>
+        /// Creates the result used when Unity accepted the compile request but never raised compilationStarted
+        /// within the pending-start timeout. The request is still queued inside the Editor, so the result is
+        /// indeterminate and carries the Editor state that explains why the compile is being withheld.
+        /// </summary>
+        internal static CompileResult CreateNotStartedResult(CompileStartPendingDiagnostics diagnostics)
+        {
+            UnityEngine.Debug.Assert(diagnostics != null, "diagnostics must not be null");
+
+            return new CompileResult(
+                success: false,
+                errorCount: 0,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: Array.Empty<CompilerMessage>(),
+                errors: Array.Empty<CompilerMessage>(),
+                warnings: Array.Empty<CompilerMessage>(),
+                isIndeterminate: true,
+                message: BuildNotStartedMessage(diagnostics),
+                preserveDetailsWhenForceRecompile: true,
+                errorCode: CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText,
+                nextActions: CreateNotStartedNextActions(),
+                details: diagnostics.ToDetails()
+            );
+        }
+
+        // Why split on the window-active flag: with the Editor in the background the fix is to focus it,
+        // while an active window that still withholds the compile points at a mouse button Unity believes
+        // is held, which focusing alone does not always clear.
+        private static string BuildNotStartedMessage(CompileStartPendingDiagnostics diagnostics)
+        {
+            string pendingSeconds = diagnostics.PendingSeconds.ToString("0", CultureInfo.InvariantCulture);
+            if (diagnostics.IsEditorWindowActive)
+            {
+                return
+                    $"Unity accepted the compile request but did not start compiling within {pendingSeconds} seconds " +
+                    "although the Editor window is active. Unity defers compilation while it believes a mouse button is held. " +
+                    "Release any mouse button and click inside the Unity window, then run `uloop compile` again.";
+            }
+
+            return
+                $"Unity accepted the compile request but did not start compiling within {pendingSeconds} seconds " +
+                "while the Editor window was in the background. " +
+                "Click inside the Unity window, then run `uloop compile` again.";
+        }
+
+        private static string[] CreateNotStartedNextActions()
+        {
+            return new[]
+            {
+                "Click inside the Unity Editor window, then run `uloop compile` again.",
+                "If it stalls again, pause input-sharing tools such as Mouse Without Borders or remote-desktop software " +
+                "that can swallow a mouse-up event, and check that no mouse button is physically held.",
+                "If clicking inside the Editor does not let the compile start, restart the Editor with `uloop launch -r`."
+            };
         }
 
         // Unity can deliver the same diagnostic more than once for one compile, so without this

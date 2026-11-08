@@ -8,20 +8,29 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Watches one Unity compile request so the controller can recover when Unity misses lifecycle callbacks.
+    /// Watches one Unity compile request so the controller can recover when Unity misses lifecycle callbacks
+    /// or accepts the request without ever starting to compile.
     /// </summary>
     internal sealed class CompileLifecycleWatchdog
     {
         private readonly Func<bool> _isEditorCompiling;
         private readonly Func<bool> _isRequestCompleted;
         private readonly Func<Task> _waitForPollAsync;
+        private readonly Func<bool> _hasCompilationStarted;
         private readonly Action<int> _onCompileStartedObserved;
         private readonly Action<int> _onStartTimeout;
+        private readonly Action<int> _onCompileStartPending;
+        private readonly Action<int> _onCompileStartPendingTimeout;
         private readonly Action<int> _onMissedCompletionCallback;
         private readonly Action<string> _onCancelled;
         private readonly Func<int> _getAssemblyFinishedCount;
         private readonly Func<double> _getMonotonicSeconds;
         private readonly Action<int> _onAssemblyProgressStalled;
+        private bool _watchStarted;
+        private bool _observedStart;
+        private int _waitedForStartMs;
+        private int _stoppedAfterStartMs;
+        private int _startPendingMs;
         private int _assemblyProgressStallBaselineCount;
         private double _assemblyProgressStallAnchorSeconds;
         private bool _assemblyProgressStallMeasurementStarted;
@@ -31,8 +40,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<bool> isEditorCompiling,
             Func<bool> isRequestCompleted,
             Func<Task> waitForPollAsync,
+            Func<bool> hasCompilationStarted,
             Action<int> onCompileStartedObserved,
             Action<int> onStartTimeout,
+            Action<int> onCompileStartPending,
+            Action<int> onCompileStartPendingTimeout,
             Action<int> onMissedCompletionCallback,
             Action<string> onCancelled,
             Func<int> getAssemblyFinishedCount,
@@ -42,8 +54,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(isEditorCompiling != null, "isEditorCompiling must not be null");
             Debug.Assert(isRequestCompleted != null, "isRequestCompleted must not be null");
             Debug.Assert(waitForPollAsync != null, "waitForPollAsync must not be null");
+            Debug.Assert(hasCompilationStarted != null, "hasCompilationStarted must not be null");
             Debug.Assert(onCompileStartedObserved != null, "onCompileStartedObserved must not be null");
             Debug.Assert(onStartTimeout != null, "onStartTimeout must not be null");
+            Debug.Assert(onCompileStartPending != null, "onCompileStartPending must not be null");
+            Debug.Assert(onCompileStartPendingTimeout != null, "onCompileStartPendingTimeout must not be null");
             Debug.Assert(onMissedCompletionCallback != null, "onMissedCompletionCallback must not be null");
             Debug.Assert(onCancelled != null, "onCancelled must not be null");
             Debug.Assert(getAssemblyFinishedCount != null, "getAssemblyFinishedCount must not be null");
@@ -53,8 +68,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isEditorCompiling = isEditorCompiling ?? throw new ArgumentNullException(nameof(isEditorCompiling));
             _isRequestCompleted = isRequestCompleted ?? throw new ArgumentNullException(nameof(isRequestCompleted));
             _waitForPollAsync = waitForPollAsync ?? throw new ArgumentNullException(nameof(waitForPollAsync));
+            _hasCompilationStarted = hasCompilationStarted ??
+                throw new ArgumentNullException(nameof(hasCompilationStarted));
             _onCompileStartedObserved = onCompileStartedObserved ?? throw new ArgumentNullException(nameof(onCompileStartedObserved));
             _onStartTimeout = onStartTimeout ?? throw new ArgumentNullException(nameof(onStartTimeout));
+            _onCompileStartPending = onCompileStartPending ??
+                throw new ArgumentNullException(nameof(onCompileStartPending));
+            _onCompileStartPendingTimeout = onCompileStartPendingTimeout ??
+                throw new ArgumentNullException(nameof(onCompileStartPendingTimeout));
             _onMissedCompletionCallback = onMissedCompletionCallback ?? throw new ArgumentNullException(nameof(onMissedCompletionCallback));
             _onCancelled = onCancelled ?? throw new ArgumentNullException(nameof(onCancelled));
             _getAssemblyFinishedCount = getAssemblyFinishedCount ??
@@ -69,15 +90,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal async Task WatchAsync(CancellationToken ct)
         {
-            bool observedStart = false;
-            int waitedForStartMs = 0;
-            int stoppedAfterStartMs = 0;
+            Debug.Assert(!_watchStarted, "WatchAsync must be called once per watchdog");
+            _watchStarted = true;
 
             while (!_isRequestCompleted())
             {
                 if (ct.IsCancellationRequested)
                 {
-                    string reason = observedStart
+                    string reason = _observedStart
                         ? "Compilation request was cancelled before Unity reported completion."
                         : "Compilation request was cancelled before it started.";
                     _onCancelled(reason);
@@ -85,52 +105,107 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 bool isEditorCompiling = _isEditorCompiling();
-                if (!observedStart)
+                if (!TrackLifecycleTransition(isEditorCompiling))
                 {
-                    if (isEditorCompiling)
-                    {
-                        observedStart = true;
-                        stoppedAfterStartMs = 0;
-                        _onCompileStartedObserved(waitedForStartMs);
-                    }
-                    else if (waitedForStartMs >= UnityCliLoopConstants.COMPILE_START_TIMEOUT_MS)
-                    {
-                        if (!_isRequestCompleted())
-                        {
-                            _onStartTimeout(waitedForStartMs);
-                        }
-                        return;
-                    }
-                }
-                else if (isEditorCompiling)
-                {
-                    stoppedAfterStartMs = 0;
-                }
-                else
-                {
-                    stoppedAfterStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
-                    if (stoppedAfterStartMs >= UnityCliLoopConstants.COMPILE_FINISH_MISSED_CALLBACK_GRACE_MS)
-                    {
-                        if (!_isRequestCompleted())
-                        {
-                            _onMissedCompletionCallback(stoppedAfterStartMs);
-                        }
-                        return;
-                    }
+                    return;
                 }
 
-                NotifyAssemblyProgressStallIfNeeded(observedStart, isEditorCompiling);
+                NotifyAssemblyProgressStallIfNeeded(_observedStart, isEditorCompiling);
 
                 // The delay is not cancelled directly because the watchdog must convert cancellation into cleanup.
                 await _waitForPollAsync().ConfigureAwait(false);
                 // Why CancellationToken.None: a cancelled ct would throw OCE here and skip the
                 // loop-head _onCancelled conversion; cleanup must still run on the main thread.
                 await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
-                if (!observedStart)
+                if (!AdvanceAfterPoll(isEditorCompiling))
                 {
-                    waitedForStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
+                    return;
                 }
             }
+        }
+
+        /// <summary>
+        /// Applies the isCompiling reading taken at the head of a poll. Returns false when the watch must stop
+        /// because the start timeout or the missed-finish grace period has elapsed.
+        /// </summary>
+        private bool TrackLifecycleTransition(bool isEditorCompiling)
+        {
+            if (!_observedStart)
+            {
+                if (isEditorCompiling)
+                {
+                    _observedStart = true;
+                    _stoppedAfterStartMs = 0;
+                    _onCompileStartedObserved(_waitedForStartMs);
+                    return true;
+                }
+
+                if (_waitedForStartMs < UnityCliLoopConstants.COMPILE_START_TIMEOUT_MS)
+                {
+                    return true;
+                }
+
+                if (!_isRequestCompleted())
+                {
+                    _onStartTimeout(_waitedForStartMs);
+                }
+
+                return false;
+            }
+
+            if (isEditorCompiling)
+            {
+                _stoppedAfterStartMs = 0;
+                return true;
+            }
+
+            _stoppedAfterStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
+            if (_stoppedAfterStartMs < UnityCliLoopConstants.COMPILE_FINISH_MISSED_CALLBACK_GRACE_MS)
+            {
+                return true;
+            }
+
+            if (!_isRequestCompleted())
+            {
+                _onMissedCompletionCallback(_stoppedAfterStartMs);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Advances the elapsed counters after one poll interval on the main thread. Returns false when
+        /// Unity has reported isCompiling without raising compilationStarted for the whole pending timeout.
+        /// Why count polls instead of wall-clock time: each poll completes only when the Editor main thread
+        /// ticks, so a frozen Editor never looks like a compile that refused to start.
+        /// </summary>
+        private bool AdvanceAfterPoll(bool isEditorCompiling)
+        {
+            if (!_observedStart)
+            {
+                _waitedForStartMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
+                return true;
+            }
+
+            if (!isEditorCompiling || _hasCompilationStarted())
+            {
+                return true;
+            }
+
+            _startPendingMs += UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
+            _onCompileStartPending(_startPendingMs);
+            if (_startPendingMs < UnityCliLoopConstants.COMPILE_START_PENDING_TIMEOUT_MS)
+            {
+                return true;
+            }
+
+            if (_isRequestCompleted())
+            {
+                return true;
+            }
+
+            _onCompileStartPendingTimeout(_startPendingMs);
+            return false;
         }
 
         /// <summary>

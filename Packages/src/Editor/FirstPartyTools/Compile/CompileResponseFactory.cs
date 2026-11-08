@@ -83,6 +83,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors: null,
                     warnings: null,
                     message: result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output.");
+                indeterminateResponse.ErrorCode = result.ErrorCode;
+                indeterminateResponse.NextActions = result.NextActions;
+                indeterminateResponse.Details = result.Details;
                 indeterminateResponse.Warning = playModeStopWarning;
                 return indeterminateResponse;
             }

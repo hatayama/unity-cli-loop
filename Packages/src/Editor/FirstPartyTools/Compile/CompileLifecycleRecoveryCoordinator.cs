@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly Func<bool> _isEditorCompiling;
         private readonly Func<bool> _isRequestCompleted;
+        private readonly Func<bool> _hasCompilationStarted;
         private readonly Func<TaskCompletionSource<CompileResult>> _getCurrentCompileTask;
         private readonly Func<UnityCliLoopConsoleLogEntry[], AssemblyDefinitionConsoleErrorResult> _findAssemblyDefinitionErrors;
         private readonly Func<UnityCliLoopConsoleLogEntry[]> _getConsoleErrorEntries;
@@ -30,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<CompilerMessage[]> _getCompileMessages;
         private readonly Func<int> _getAssemblyFinishedCount;
         private readonly Func<double> _getMonotonicSeconds;
+        private readonly Action<int> _onCompileStartPending;
         private readonly Func<Dictionary<string, object>, Dictionary<string, object>> _buildStateContext;
         private readonly Action<CompileResult> _abortWithResult;
         private readonly Action<string> _abort;
@@ -37,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal CompileLifecycleRecoveryCoordinator(
             Func<bool> isEditorCompiling,
             Func<bool> isRequestCompleted,
+            Func<bool> hasCompilationStarted,
             Func<TaskCompletionSource<CompileResult>> getCurrentCompileTask,
             Func<UnityCliLoopConsoleLogEntry[], AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors,
             Func<UnityCliLoopConsoleLogEntry[]> getConsoleErrorEntries,
@@ -46,12 +49,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<CompilerMessage[]> getCompileMessages,
             Func<int> getAssemblyFinishedCount,
             Func<double> getMonotonicSeconds,
+            Action<int> onCompileStartPending,
             Func<Dictionary<string, object>, Dictionary<string, object>> buildStateContext,
             Action<CompileResult> abortWithResult,
             Action<string> abort)
         {
             Debug.Assert(isEditorCompiling != null, "isEditorCompiling must not be null");
             Debug.Assert(isRequestCompleted != null, "isRequestCompleted must not be null");
+            Debug.Assert(hasCompilationStarted != null, "hasCompilationStarted must not be null");
             Debug.Assert(getCurrentCompileTask != null, "getCurrentCompileTask must not be null");
             Debug.Assert(findAssemblyDefinitionErrors != null, "findAssemblyDefinitionErrors must not be null");
             Debug.Assert(getConsoleErrorEntries != null, "getConsoleErrorEntries must not be null");
@@ -63,12 +68,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(getCompileMessages != null, "getCompileMessages must not be null");
             Debug.Assert(getAssemblyFinishedCount != null, "getAssemblyFinishedCount must not be null");
             Debug.Assert(getMonotonicSeconds != null, "getMonotonicSeconds must not be null");
+            Debug.Assert(onCompileStartPending != null, "onCompileStartPending must not be null");
             Debug.Assert(buildStateContext != null, "buildStateContext must not be null");
             Debug.Assert(abortWithResult != null, "abortWithResult must not be null");
             Debug.Assert(abort != null, "abort must not be null");
 
             _isEditorCompiling = isEditorCompiling ?? throw new ArgumentNullException(nameof(isEditorCompiling));
             _isRequestCompleted = isRequestCompleted ?? throw new ArgumentNullException(nameof(isRequestCompleted));
+            _hasCompilationStarted = hasCompilationStarted ??
+                throw new ArgumentNullException(nameof(hasCompilationStarted));
             _getCurrentCompileTask = getCurrentCompileTask ?? throw new ArgumentNullException(nameof(getCurrentCompileTask));
             _findAssemblyDefinitionErrors = findAssemblyDefinitionErrors ??
                 throw new ArgumentNullException(nameof(findAssemblyDefinitionErrors));
@@ -83,6 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _getAssemblyFinishedCount = getAssemblyFinishedCount ??
                 throw new ArgumentNullException(nameof(getAssemblyFinishedCount));
             _getMonotonicSeconds = getMonotonicSeconds ?? throw new ArgumentNullException(nameof(getMonotonicSeconds));
+            _onCompileStartPending = onCompileStartPending ??
+                throw new ArgumentNullException(nameof(onCompileStartPending));
             _buildStateContext = buildStateContext ?? throw new ArgumentNullException(nameof(buildStateContext));
             _abortWithResult = abortWithResult ?? throw new ArgumentNullException(nameof(abortWithResult));
             _abort = abort ?? throw new ArgumentNullException(nameof(abort));
@@ -109,14 +119,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _isEditorCompiling,
                 _isRequestCompleted,
                 WaitForCompileWatchdogPollAsync,
+                _hasCompilationStarted,
                 _ => { },
                 HandleCompileStartTimeout,
+                _onCompileStartPending,
+                HandleCompileStartPendingTimeout,
                 HandleCompileStoppedWithoutFinishEvent,
                 _abort,
                 _getAssemblyFinishedCount,
                 _getMonotonicSeconds,
                 HandleAssemblyProgressStalled);
             return watchdog.WatchAsync(ct);
+        }
+
+        /// <summary>
+        /// Recovers from Unity accepting the compile request (isCompiling stayed true) without ever raising
+        /// compilationStarted. The compile is still queued inside the Editor, so the result is indeterminate
+        /// and carries the Editor state that explains why Unity is withholding it.
+        /// </summary>
+        internal void HandleCompileStartPendingTimeout(int pendingMs)
+        {
+            CompileStartPendingDiagnostics diagnostics = CompileStartPendingDiagnostics.Capture(pendingMs);
+            CompileResult result = CompileResultFactory.CreateNotStartedResult(diagnostics);
+            VibeLogger.LogWarning(
+                "compile_start_pending_timeout",
+                result.Message,
+                _buildStateContext(diagnostics.ToLogContext()));
+            _abortWithResult(result);
         }
 
         /// <summary>

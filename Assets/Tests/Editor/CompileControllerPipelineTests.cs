@@ -7,6 +7,7 @@ using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -18,18 +19,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class CompileControllerPipelineTests
     {
         private UnityCliLoopEditorSessionStateSnapshot _originalSnapshot;
+        private Func<double> _originalPendingReader;
 
         [SetUp]
         public void SetUp()
         {
             _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            _originalPendingReader = CompileStartPendingCoordination.ReadPendingSeconds;
+            CompileStartPendingCoordination.ReadPendingSeconds = null;
         }
 
         [TearDown]
         public void TearDown()
         {
             CompileApiUpdaterConsentState.EndCliCompile();
+            CompileStartPendingCoordination.ReadPendingSeconds = _originalPendingReader;
             _originalSnapshot.Restore();
+        }
+
+        /// <summary>
+        /// What: while a compile request is in flight the controller publishes the pending-start reader for
+        /// get-compile-status, and withdraws it once Unity reports compilationFinished.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhileRequestIsInFlight_PublishesPendingStartReaderUntilCompletion()
+        {
+            FakeCompilePipelinePort pipeline = new();
+            using CompileController controller = CreateController(pipeline);
+
+            Task<CompileResult> pendingCompile = controller.TryCompileAsync(
+                forceRecompile: false,
+                playModeStopWarning: null,
+                CancellationToken.None);
+
+            Assert.That(CompileStartPendingCoordination.ReadPendingSeconds, Is.Not.Null);
+            Assert.That(CompileStartPendingCoordination.ReadPendingSeconds(), Is.EqualTo(0d));
+            pipeline.CompilationStarted(null);
+            pipeline.CompilationFinished(null);
+            await UncanceledAwaits.AwaitValueAsync(pendingCompile);
+
+            Assert.That(CompileStartPendingCoordination.ReadPendingSeconds, Is.Null);
+        }
+
+        /// <summary>
+        /// What: Cleanup during a pending compile withdraws the published pending-start reader.
+        /// </summary>
+        [Test]
+        public async Task Cleanup_WhenCompileIsPending_WithdrawsPendingStartReader()
+        {
+            FakeCompilePipelinePort pipeline = new();
+            using CompileController controller = CreateController(pipeline);
+            Task<CompileResult> pendingCompile = controller.TryCompileAsync(
+                forceRecompile: false,
+                playModeStopWarning: null,
+                CancellationToken.None);
+
+            controller.Cleanup();
+
+            Assert.That(CompileStartPendingCoordination.ReadPendingSeconds, Is.Null);
+            try
+            {
+                await pendingCompile;
+                Assert.Fail("The pending compile should be canceled by Cleanup.");
+            }
+            catch (TaskCanceledException)
+            {
+            }
         }
 
         /// <summary>
@@ -284,6 +339,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         private sealed class FakeCompilePipelinePort : ICompilePipelinePort
         {
+            private Action<object> _compilationStarted;
             private Action<object> _compilationFinished;
             private Action<string, CompilerMessage[]> _assemblyFinished;
 
@@ -315,21 +371,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             public void SubscribeCompilationEvents(
+                Action<object> compilationStarted,
                 Action<object> compilationFinished,
                 Action<string, CompilerMessage[]> assemblyFinished)
             {
                 SubscribeCount++;
+                _compilationStarted = compilationStarted;
                 _compilationFinished = compilationFinished;
                 _assemblyFinished = assemblyFinished;
             }
 
             public void UnsubscribeCompilationEvents(
+                Action<object> compilationStarted,
                 Action<object> compilationFinished,
                 Action<string, CompilerMessage[]> assemblyFinished)
             {
                 // Why compare delegates: production unsubscribes with -=, which silently removes nothing
                 // when it is handed a different delegate than the one it subscribed.
-                if (compilationFinished == _compilationFinished && assemblyFinished == _assemblyFinished)
+                if (compilationStarted == _compilationStarted &&
+                    compilationFinished == _compilationFinished &&
+                    assemblyFinished == _assemblyFinished)
                 {
                     UnsubscribeCount++;
                     return;
@@ -351,8 +412,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     return;
                 }
 
+                _compilationStarted(null);
                 _assemblyFinished("Library/ScriptAssemblies/Sample.dll", ReportedMessages);
                 _compilationFinished(null);
+            }
+
+            public void CompilationStarted(object context)
+            {
+                _compilationStarted(context);
             }
 
             public void StartWatchdog(
