@@ -323,3 +323,20 @@ func compileResultDetails(t *testing.T, result json.RawMessage) map[string]any {
 	}
 	return details
 }
+
+// Verifies the not-started diagnostics are written with the same encoder as the other result
+// rewrites, so a Message that contains < > or & reaches the reader unescaped on this path too.
+func TestAddCliDiagnosticsToNotStartedResultKeepsAngleBracketsUnescaped(t *testing.T) {
+	outcome := compileStartPendingFocusOutcome{attempted: true, succeeded: false}
+	input := json.RawMessage(`{"ErrorCode":"COMPILE_NOT_STARTED","Message":"List<int> & more","Details":null}`)
+
+	result := addCliDiagnosticsToNotStartedResult(input, outcome, func() ([]string, bool) { return nil, false })
+
+	if !strings.Contains(string(result), `"List<int> & more"`) {
+		t.Fatalf("Message must keep its characters unescaped: %s", result)
+	}
+	details := compileResultDetails(t, result)
+	if details["CliFocusAttempted"] != true || details["CliFocusSucceeded"] != false {
+		t.Fatalf("focus diagnostics mismatch: %#v", details)
+	}
+}

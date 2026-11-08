@@ -128,8 +128,8 @@ func addCliDiagnosticsToNotStartedResult(
 		return result
 	}
 	fields["Details"] = encodedDetails
-	encoded, err := json.Marshal(fields)
-	if err != nil {
+	encoded, ok := encodeCompileResultFields(fields)
+	if !ok {
 		return result
 	}
 	return encoded
