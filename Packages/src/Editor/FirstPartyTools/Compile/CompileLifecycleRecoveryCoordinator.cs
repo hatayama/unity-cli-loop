@@ -74,8 +74,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _abort = Required(abort, nameof(abort));
         }
 
-        // Why one guard for every injected delegate: each inline `?? throw` is a branch of the
-        // constructor, and sixteen of them put it over the repository's cyclomatic complexity limit.
+        /// <summary>
+        /// Returns the injected dependency after asserting and enforcing that it is not null.
+        /// Why one guard for every injected delegate: each inline `?? throw` is a branch of the
+        /// constructor, and sixteen of them put it over the repository's cyclomatic complexity limit.
+        /// </summary>
         private static T Required<T>(T dependency, string parameterName) where T : class
         {
             Debug.Assert(dependency != null, $"{parameterName} must not be null");
