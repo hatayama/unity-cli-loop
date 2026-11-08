@@ -127,8 +127,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why split on the window-active flag: with the Editor in the background the fix is to focus it,
-        // while an active window that still withholds the compile points at a mouse button Unity believes
-        // is held, which focusing alone does not always clear.
+        // while an active window that still withholds the compile most often points at a mouse button Unity
+        // believes is held, which focusing alone does not always clear. "Most often" because a reload lock
+        // held by another tool leaves the same CanReloadAssemblies reading, so the message must not claim more.
         private static string BuildNotStartedMessage(CompileStartPendingDiagnostics diagnostics)
         {
             string pendingSeconds = diagnostics.PendingSeconds.ToString("0", CultureInfo.InvariantCulture);
@@ -136,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return
                     $"Unity accepted the compile request but did not start compiling within {pendingSeconds} seconds " +
-                    "although the Editor window is active. Unity defers compilation while it believes a mouse button is held. " +
+                    "although the Editor window is active. This most often means Unity believes a mouse button is still held. " +
                     "Release any mouse button and click inside the Unity window, then run `uloop compile` again.";
             }
 
