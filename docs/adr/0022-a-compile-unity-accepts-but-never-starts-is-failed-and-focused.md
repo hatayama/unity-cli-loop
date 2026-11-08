@@ -15,14 +15,17 @@ start", and both sides act on it from Unity's own evidence:
   prints one stderr line saying why, and restores the previously frontmost window when the wait
   ends. The CLI focuses only on an answered status poll; a silent Editor (#3228) never triggers it,
   and a package that predates the field sends nothing, which the CLI reads as zero.
-- Once the pending time reaches 60 seconds, Unity aborts the request with `COMPILE_NOT_STARTED`.
-  The result's `Details` carry what Unity knows (`CanReloadAssemblies`, `EditorWindowActive`,
+- Once the pending time reaches 60 seconds, Unity fails the CLI request with `COMPILE_NOT_STARTED`.
+  Nothing is cancelled inside Unity: the compile stays queued there and runs once the Editor lets
+  it, and only the CLI's wait ends. The result's `Details` carry what Unity knows (`CanReloadAssemblies`, `EditorWindowActive`,
   `HotControl`, the Editor flags) and what the CLI knows (`CliFocusAttempted`,
   `CliFocusSucceeded`, `HeldMouseButtons` from the OS on Windows). `NextActions` say to click inside
   the Unity window and rerun. Because the compile stays queued inside Unity, `get-compile-status`
   reports a stored `COMPILE_NOT_STARTED` result as ready even while `isCompiling` is still true.
-- Both thresholds apply on every platform. The 10-second focus is not restricted to Windows,
-  because the condition it reacts to is Unity's, not the OS's.
+- Both thresholds apply on every platform, because the condition they react to is Unity's, not
+  the OS's. The 60-second failure therefore happens everywhere. The 10-second focus is attempted
+  everywhere too, but it can only succeed where `unityprocess` can focus a window (Windows and
+  macOS); elsewhere the attempt fails, is logged, and the wait goes on to the 60-second failure.
 
 ## Context
 
