@@ -138,20 +138,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return
                     $"Unity accepted the compile request but did not start compiling within {pendingSeconds} seconds " +
                     "although the Editor window is active. This most often means Unity believes a mouse button is still held. " +
-                    "Release any mouse button and click inside the Unity window, then run `uloop compile` again.";
+                    "Release any mouse button and click inside the Unity window, then rerun the command " +
+                    "(`uloop compile`, or `uloop run-tests` when its compile stalled).";
             }
 
             return
                 $"Unity accepted the compile request but did not start compiling within {pendingSeconds} seconds " +
                 "while the Editor window was in the background. " +
-                "Click inside the Unity window, then run `uloop compile` again.";
+                "Click inside the Unity window, then rerun the command " +
+                "(`uloop compile`, or `uloop run-tests` when its compile stalled).";
         }
 
+        // Why name both commands: run-tests compiles implicitly and stops on this error, so sending
+        // its user to `uloop compile` alone would leave the tests unrun.
         private static string[] CreateNotStartedNextActions()
         {
             return new[]
             {
-                "Click inside the Unity Editor window, then run `uloop compile` again.",
+                "Click inside the Unity Editor window, then rerun the command " +
+                "(`uloop compile`, or `uloop run-tests` when its compile stalled).",
                 "If it stalls again, pause input-sharing tools such as Mouse Without Borders or remote-desktop software " +
                 "that can swallow a mouse-up event, and check that no mouse button is physically held.",
                 "If clicking inside the Editor does not let the compile start, restart the Editor with `uloop launch -r`."
