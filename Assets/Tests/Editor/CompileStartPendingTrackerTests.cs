@@ -74,21 +74,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies Begin on a reused tracker forgets the previous request's start and pending time.
+        /// Verifies Begin on a reused tracker forgets pending time the previous request still carried.
         /// </summary>
         [Test]
-        public void Begin_AfterPreviousRequest_ResetsState()
+        public void Begin_WhilePreviousRequestStillHasPendingTime_ResetsPendingSeconds()
         {
             CompileStartPendingTracker tracker = new CompileStartPendingTracker();
             tracker.Begin();
             tracker.ReportPending(3000);
+
+            tracker.Begin();
+
+            Assert.That(CompileStartPendingCoordination.ReadPendingSeconds(), Is.EqualTo(0d));
+        }
+
+        /// <summary>
+        /// Verifies Begin on a reused tracker forgets that the previous request had started compiling.
+        /// </summary>
+        [Test]
+        public void Begin_AfterPreviousRequestStarted_ResetsStartedState()
+        {
+            CompileStartPendingTracker tracker = new CompileStartPendingTracker();
+            tracker.Begin();
             tracker.MarkStarted();
-            tracker.End();
 
             tracker.Begin();
 
             Assert.That(tracker.HasCompilationStarted, Is.False);
-            Assert.That(CompileStartPendingCoordination.ReadPendingSeconds(), Is.EqualTo(0d));
         }
 
         /// <summary>
