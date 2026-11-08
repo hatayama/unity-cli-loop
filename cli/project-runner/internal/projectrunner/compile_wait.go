@@ -199,6 +199,8 @@ func waitForCompileCompletionWithDeps(
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
 	missing := compileRequestMissingTracker{serverRestartSeen: options.serverRestartSeen}
 	exitWatch := newCompileUnityExitWatch(options.connection, deps)
+	startPendingFocus := newCompileStartPendingFocus(options, deps)
+	defer startPendingFocus.finish()
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -217,7 +219,8 @@ func waitForCompileCompletionWithDeps(
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
 			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 			logCompileStatusPollComplete(options, startedAt, attempts, status)
-			return status.Result, true, nil, nil
+			result := addCliDiagnosticsToNotStartedResult(status.Result, startPendingFocus.outcome(), deps.readHeldMouseButtons)
+			return result, true, nil, nil
 		}
 		if err == nil {
 			lastStatus = status
@@ -233,6 +236,7 @@ func waitForCompileCompletionWithDeps(
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
+		startPendingFocus.observe(ctx, status, err)
 
 		select {
 		case <-ctx.Done():

@@ -48,6 +48,7 @@ const (
 	focusReasonMainThreadStall               connectionRetryFocusReason = "main_thread_stall"
 	focusReasonHeartbeatSilenceTimeout       connectionRetryFocusReason = "heartbeat_silence_timeout"
 	focusReasonFinalResponseTimeout          connectionRetryFocusReason = "final_response_timeout"
+	focusReasonCompileStartPending           connectionRetryFocusReason = "compile_start_pending"
 )
 
 // Why: domain reload on large projects can keep the IPC endpoint down well past the
@@ -73,6 +74,9 @@ type connectionRetryFocusController struct {
 	focusCorrelationID string
 	focusedPid         int
 	focusReason        connectionRetryFocusReason
+	// focusSucceeded is kept apart from restoreFocus because a focus can succeed without a
+	// restorer when the previously frontmost process could not be read.
+	focusSucceeded bool
 }
 
 func newConnectionRetryFocusController(connection unityipc.Connection, method string, deps connectionRetryDeps) *connectionRetryFocusController {
@@ -160,6 +164,7 @@ func (controller *connectionRetryFocusController) tryFocusProcess(
 	defer cancel()
 	restorer, focusErr := controller.deps.focusUnityProcess(focusContext, pid)
 	if focusErr == nil {
+		controller.focusSucceeded = true
 		controller.restoreFocus = restorer
 		controller.focusCorrelationID = correlationID
 		controller.focusedPid = pid
