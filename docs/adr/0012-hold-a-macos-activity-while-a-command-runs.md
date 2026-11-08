@@ -68,7 +68,7 @@ retains it before its own autorelease pool drains and releases it after `endActi
 - Windows and Linux have not been investigated; they hold nothing.
 - A Begin and End pair costs about 4 µs inside the Editor (median of 100 pairs; the slowest took
   0.11 ms).
-- `uloop compile` no longer brings the Editor to the front when compilation has not started within ten seconds. That rescue (#2341) existed for this suppression; with the activity held, a compile that has not started is a compile the Editor has not reached yet, and bringing it to the front only moves the user's windows.
+- `uloop compile` no longer brings the Editor to the front when compilation has not started within ten seconds of the request. That rescue (#2341) existed for this suppression; with the activity held, a compile that has not started is a compile the Editor has not reached yet, and bringing it to the front only moves the user's windows. Superseded for one condition by `0022-a-compile-unity-accepts-but-never-starts-is-failed-and-focused.md`: when Unity itself reports the request accepted and not started for ten seconds of ticking main thread, the Editor has reached it and is withholding it, and the CLI focuses the Editor again.
 - A request that Unity keeps answering `server_busy` no longer brings the Editor to the front after five seconds either. That rescue (B-7a) also existed for this suppression; with the activity held by the running command, a busy Editor is a working Editor. The bounded resend itself stays: busy means the request never ran.
 
 ## Reversal condition

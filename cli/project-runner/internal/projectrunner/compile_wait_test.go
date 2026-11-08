@@ -21,6 +21,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 func TestEnsureCompileRequestIDPreservesSafeValue(t *testing.T) {
@@ -1057,6 +1058,12 @@ func compileWaitTestDeps(
 		attachWaitPollInterval: 5 * time.Millisecond,
 		// The scripted status answers stand in for a running Editor, whose server a reload takes down.
 		findRunningUnityProcess: runningUnityProcessLookup,
+		// Why stubbed: the lookup above answers with this test process, and a real focus attempt on it
+		// would raise a window on the developer's desktop.
+		focusUnityProcess: func(context.Context, int) (unityprocess.RestoreFocusFunc, error) {
+			return nil, nil
+		},
+		readHeldMouseButtons: func() ([]string, bool) { return nil, false },
 	}
 }
 
