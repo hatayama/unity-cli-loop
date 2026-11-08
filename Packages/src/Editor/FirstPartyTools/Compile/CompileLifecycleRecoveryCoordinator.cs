@@ -54,48 +54,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action<CompileResult> abortWithResult,
             Action<string> abort)
         {
-            Debug.Assert(isEditorCompiling != null, "isEditorCompiling must not be null");
-            Debug.Assert(isRequestCompleted != null, "isRequestCompleted must not be null");
-            Debug.Assert(hasCompilationStarted != null, "hasCompilationStarted must not be null");
-            Debug.Assert(getCurrentCompileTask != null, "getCurrentCompileTask must not be null");
-            Debug.Assert(findAssemblyDefinitionErrors != null, "findAssemblyDefinitionErrors must not be null");
-            Debug.Assert(getConsoleErrorEntries != null, "getConsoleErrorEntries must not be null");
-            Debug.Assert(
-                getConsoleErrorCountAtCompileStart != null,
-                "getConsoleErrorCountAtCompileStart must not be null");
-            Debug.Assert(validateNoDuplicateAsmdefNames != null, "validateNoDuplicateAsmdefNames must not be null");
-            Debug.Assert(getIsForceCompile != null, "getIsForceCompile must not be null");
-            Debug.Assert(getCompileMessages != null, "getCompileMessages must not be null");
-            Debug.Assert(getAssemblyFinishedCount != null, "getAssemblyFinishedCount must not be null");
-            Debug.Assert(getMonotonicSeconds != null, "getMonotonicSeconds must not be null");
-            Debug.Assert(onCompileStartPending != null, "onCompileStartPending must not be null");
-            Debug.Assert(buildStateContext != null, "buildStateContext must not be null");
-            Debug.Assert(abortWithResult != null, "abortWithResult must not be null");
-            Debug.Assert(abort != null, "abort must not be null");
+            _isEditorCompiling = Required(isEditorCompiling, nameof(isEditorCompiling));
+            _isRequestCompleted = Required(isRequestCompleted, nameof(isRequestCompleted));
+            _hasCompilationStarted = Required(hasCompilationStarted, nameof(hasCompilationStarted));
+            _getCurrentCompileTask = Required(getCurrentCompileTask, nameof(getCurrentCompileTask));
+            _findAssemblyDefinitionErrors = Required(findAssemblyDefinitionErrors, nameof(findAssemblyDefinitionErrors));
+            _getConsoleErrorEntries = Required(getConsoleErrorEntries, nameof(getConsoleErrorEntries));
+            _getConsoleErrorCountAtCompileStart =
+                Required(getConsoleErrorCountAtCompileStart, nameof(getConsoleErrorCountAtCompileStart));
+            _validateNoDuplicateAsmdefNames =
+                Required(validateNoDuplicateAsmdefNames, nameof(validateNoDuplicateAsmdefNames));
+            _getIsForceCompile = Required(getIsForceCompile, nameof(getIsForceCompile));
+            _getCompileMessages = Required(getCompileMessages, nameof(getCompileMessages));
+            _getAssemblyFinishedCount = Required(getAssemblyFinishedCount, nameof(getAssemblyFinishedCount));
+            _getMonotonicSeconds = Required(getMonotonicSeconds, nameof(getMonotonicSeconds));
+            _onCompileStartPending = Required(onCompileStartPending, nameof(onCompileStartPending));
+            _buildStateContext = Required(buildStateContext, nameof(buildStateContext));
+            _abortWithResult = Required(abortWithResult, nameof(abortWithResult));
+            _abort = Required(abort, nameof(abort));
+        }
 
-            _isEditorCompiling = isEditorCompiling ?? throw new ArgumentNullException(nameof(isEditorCompiling));
-            _isRequestCompleted = isRequestCompleted ?? throw new ArgumentNullException(nameof(isRequestCompleted));
-            _hasCompilationStarted = hasCompilationStarted ??
-                throw new ArgumentNullException(nameof(hasCompilationStarted));
-            _getCurrentCompileTask = getCurrentCompileTask ?? throw new ArgumentNullException(nameof(getCurrentCompileTask));
-            _findAssemblyDefinitionErrors = findAssemblyDefinitionErrors ??
-                throw new ArgumentNullException(nameof(findAssemblyDefinitionErrors));
-            _getConsoleErrorEntries = getConsoleErrorEntries ??
-                throw new ArgumentNullException(nameof(getConsoleErrorEntries));
-            _getConsoleErrorCountAtCompileStart = getConsoleErrorCountAtCompileStart ??
-                throw new ArgumentNullException(nameof(getConsoleErrorCountAtCompileStart));
-            _validateNoDuplicateAsmdefNames = validateNoDuplicateAsmdefNames ??
-                throw new ArgumentNullException(nameof(validateNoDuplicateAsmdefNames));
-            _getIsForceCompile = getIsForceCompile ?? throw new ArgumentNullException(nameof(getIsForceCompile));
-            _getCompileMessages = getCompileMessages ?? throw new ArgumentNullException(nameof(getCompileMessages));
-            _getAssemblyFinishedCount = getAssemblyFinishedCount ??
-                throw new ArgumentNullException(nameof(getAssemblyFinishedCount));
-            _getMonotonicSeconds = getMonotonicSeconds ?? throw new ArgumentNullException(nameof(getMonotonicSeconds));
-            _onCompileStartPending = onCompileStartPending ??
-                throw new ArgumentNullException(nameof(onCompileStartPending));
-            _buildStateContext = buildStateContext ?? throw new ArgumentNullException(nameof(buildStateContext));
-            _abortWithResult = abortWithResult ?? throw new ArgumentNullException(nameof(abortWithResult));
-            _abort = abort ?? throw new ArgumentNullException(nameof(abort));
+        // Why one guard for every injected delegate: each inline `?? throw` is a branch of the
+        // constructor, and sixteen of them put it over the repository's cyclomatic complexity limit.
+        private static T Required<T>(T dependency, string parameterName) where T : class
+        {
+            Debug.Assert(dependency != null, $"{parameterName} must not be null");
+            return dependency ?? throw new ArgumentNullException(parameterName);
         }
 
         /// <summary>
