@@ -72,7 +72,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // The hot reload snapshot capture must finish before compile returns, or an edit made
             // right after the CLI returns could be captured as the source the compiler read.
-            bool ready = !isCompiling && !isUpdating && !isDomainReloadInProgress && !isSnapshotCaptureHolding;
+            bool isEditorSettled = !isUpdating && !isDomainReloadInProgress && !isSnapshotCaptureHolding;
+            bool ready = !isCompiling && isEditorSettled;
             compileSessionLifecycleService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
             UnityCliLoopStoredCompileResult storedResult = string.IsNullOrWhiteSpace(requestId)
                 ? UnityCliLoopStoredCompileResult.None()
@@ -88,9 +89,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
             // A COMPILE_NOT_STARTED abort leaves the compile queued inside Unity, so isCompiling stays
             // true indefinitely; the CLI must still receive that result instead of waiting it out.
+            // Only that gate is lifted: an asset refresh, domain reload, or snapshot capture in
+            // progress still holds the result back, as it does for every other stored result.
             if (IsCompileNotStartedResult(result))
             {
-                ready = true;
+                ready = isEditorSettled;
             }
 
             return new GetCompileStatusResponse

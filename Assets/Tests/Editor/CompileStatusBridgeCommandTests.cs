@@ -270,6 +270,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void BuildResponse_WhenStoredResultIsCompileNotStarted_StaysNotReadyWhileEditorIsUpdating()
+        {
+            // Verifies the not-started result lifts only the isCompiling gate: an asset refresh in
+            // progress still holds it back, as it does for every other stored result.
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":false,\"ErrorCode\":\"" +
+                    CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText + "\"}",
+                completedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: true,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 60d,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
+
+            Assert.That(response.Ready, Is.False);
+            Assert.That(response.HasResult, Is.True);
+        }
+
+        [Test]
         public void BuildResponse_WhenStoredResultHasAnotherErrorCode_StaysNotReadyWhileCompiling()
         {
             // Verifies only the not-started code bypasses the readiness gate; other stored results still
