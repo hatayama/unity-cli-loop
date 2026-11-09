@@ -3,7 +3,18 @@ package attestation
 // Release identity constants are exported so every component that authorizes a
 // dispatcher release applies the exact policy enforced by the runtime verifier.
 const (
-	ReleaseRepository                = "hatayama/unity-cli-loop"
+	// ReleaseRepository names the repository for tag-commit API lookups only. The
+	// dispatcher builds release listing and download URLs from its own constant in
+	// internal/dispatcher, so a rename must update both. Release certificates are
+	// matched by ReleaseRepositoryID instead, so renaming the repository does not
+	// stop installed dispatchers from verifying releases.
+	ReleaseRepository = "hatayama/unity-cli-loop"
+	// ReleaseRepositoryID and ReleaseRepositoryOwnerID are GitHub's numeric IDs for
+	// this repository and its owner, as Fulcio records them in every release
+	// certificate. A rename keeps them; a repository deleted and recreated under the
+	// same name gets a new ID and fails verification.
+	ReleaseRepositoryID              = "1002447118"
+	ReleaseRepositoryOwnerID         = "842587"
 	DispatcherPublishWorkflowPath    = ".github/workflows/dispatcher-publish.yml"
 	ProjectRunnerPublishWorkflowPath = ".github/workflows/native-cli-publish.yml"
 	MainBranchRef                    = "refs/heads/main"
@@ -14,9 +25,10 @@ const (
 // release-publishing workflow.
 func IdentityForWorkflow(workflowPath string) Identity {
 	return Identity{
-		Repository:   ReleaseRepository,
-		WorkflowPath: workflowPath,
-		Refs:         []string{V3BetaBranchRef, MainBranchRef},
+		RepositoryID:      ReleaseRepositoryID,
+		RepositoryOwnerID: ReleaseRepositoryOwnerID,
+		WorkflowPath:      workflowPath,
+		Refs:              []string{V3BetaBranchRef, MainBranchRef},
 	}
 }
 
