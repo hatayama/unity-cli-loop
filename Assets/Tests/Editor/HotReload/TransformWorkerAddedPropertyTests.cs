@@ -577,16 +577,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// An object-creation initializer on an added auto-property is skipped for the same
-        /// reason as an added field, because the shim lambda cannot run the constructor.
+        /// An added auto-property initialized through a constructor the shim cannot call is skipped
+        /// for the same reason as an added field, because the shim lambda cannot run it.
         /// </summary>
         [Test]
-        public async Task Skip_AddedAutoPropertyObjectCreationInitializer_SkipsWithInitializerReason()
+        public async Task Skip_AddedAutoPropertyInaccessibleConstructorInitializer_SkipsWithInitializerReason()
         {
             TransformWorkerClientResult result = await RunEditedHostAsync(
-                "AddedAutoPropertyObjectCreationInitializer.cs",
-                "public System.Collections.Generic.List<int> Items { get; }"
-                + " = new System.Collections.Generic.List<int>();");
+                "AddedAutoPropertyInaccessibleConstructorInitializer.cs",
+                "public HotReloadInternalHostVisibleNeighbor Items { get; }"
+                + " = new HotReloadInternalHostVisibleNeighbor(1);");
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "get_Items"), Is.Null);

@@ -56,11 +56,16 @@ type releasePRCheckDeps struct {
 }
 
 type releasePullRequest struct {
-	Number      int    `json:"number"`
-	HeadRefName string `json:"headRefName"`
-	HeadRefOID  string `json:"headRefOid"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
+	Number      int                       `json:"number"`
+	HeadRefName string                    `json:"headRefName"`
+	HeadRefOID  string                    `json:"headRefOid"`
+	Title       string                    `json:"title"`
+	URL         string                    `json:"url"`
+	Labels      []releasePullRequestLabel `json:"labels"`
+}
+
+type releasePullRequestLabel struct {
+	Name string `json:"name"`
 }
 
 type releasePullRequestBody struct {

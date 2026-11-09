@@ -848,21 +848,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an object-creation initializer on an added field skips, and the reason names
-        /// the lazy-assignment workaround rather than only telling the caller to compile.
+        /// What: an initializer creating an object through a constructor the shim cannot call
+        /// skips, and the reason names the lazy-assignment workaround rather than only telling the
+        /// caller to compile.
         /// </summary>
         [Test]
-        public async Task Skip_ObjectCreationInitializer_ReasonNamesLazyAssignmentWorkaround()
+        public async Task Skip_InaccessibleConstructorInitializer_ReasonNamesLazyAssignmentWorkaround()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
                 onDisk,
-                "public System.Collections.Generic.Dictionary<string, int> AddedEagerMap"
-                + " = new System.Collections.Generic.Dictionary<string, int>();");
+                "public HotReloadInternalHostVisibleNeighbor AddedEager"
+                + " = new HotReloadInternalHostVisibleNeighbor(1);");
             edited = edited.Replace(
                 ExistingCallerOriginal,
                 "        public int ExistingCaller(int value)\n        {\n"
-                + "            return AddedEagerMap.Count + value;\n        }",
+                + "            return (AddedEager == null ? 0 : 1) + value;\n        }",
                 StringComparison.Ordinal);
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
@@ -912,12 +913,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an array-creation initializer whose element is itself an object creation skips.
+        /// What: an array-creation initializer whose element is a refused object creation skips.
         /// The gate scans the whole initializer, so the refusal of 'new T(...)' is not escaped by
         /// wrapping it in an array the static lambda could otherwise build.
         /// </summary>
         [Test]
-        public async Task Skip_ObjectCreationInsideArrayInitializer_ReasonNamesLazyAssignmentWorkaround()
+        public async Task Skip_InaccessibleConstructorInsideArrayInitializer_ReasonNamesLazyAssignmentWorkaround()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
@@ -925,7 +926,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 // Why object[]: the element type is plainly resolvable and externally visible, so
                 // the only thing left for the gate to refuse is the element's own object creation.
                 "public static object[] AddedRows"
-                + " = new object[] { new System.Collections.Generic.List<int>() };");
+                + " = new object[] { new HotReloadInternalHostVisibleNeighbor(1) };");
             edited = edited.Replace(
                 ExistingCallerOriginal,
                 "        public int ExistingCaller(int value)\n        {\n"

@@ -469,6 +469,10 @@ Wire details:
   appearing in an accessor signature (instance type, field type, parameter and return types)
   is accessible to a foreign assembly. Inaccessible member *names* are fine; inaccessible
   *types as types* (locals, casts, `new`, signatures) are not rewritable and keep the skip.
+  A body whose plan comes out empty needs no accessor, so its host does not have to be
+  visible: calls to methods the same reload adds go to the shim directly and never enter the
+  plan, which lets a closure or async body of an `internal` class apply when that is all it
+  reaches.
 - Still skipped in v2: bodies using internal types as types (above), private accesses with no
   accessor-delegate shape (conditional access, indexers, static field writes, and the other
   condition-b cases in the skill), and event add/remove on inaccessible events.

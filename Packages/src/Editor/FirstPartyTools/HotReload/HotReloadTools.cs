@@ -134,8 +134,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string[] NextActions { get; set; } = Array.Empty<string>();
 
-        public string RecommendedNextAction { get; set; } = string.Empty;
-
         /// <summary>
         /// Remaining patched-method, added-member, and introduced-type identities discarded by
         /// the last Play-entry domain reload that have not been recovered by apply
@@ -168,13 +166,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// the hold.
         /// </summary>
         public string AutoRefreshHoldMessage { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Applied, PartiallyApplied, NothingApplied, NothingToApply, or Failed on apply runs
-        /// (ReplacedByCompile once the CLI's fallback compile succeeded): whether the edits of the
-        /// requested files are live now. Omitted on --status, --revert-all and validation failures.
-        /// </summary>
-        public string Outcome { get; set; } = string.Empty;
 
         /// <summary>
         /// Methods rows with Kind Skipped, sibling rows included like the other totals.
@@ -236,6 +227,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// --revert-all, and requests refused before the run leave it out.
         /// </summary>
         public HotReloadTimingResponse Timing { get; set; }
+
+        // Why these two are declared last: the serializer writes the properties in declared order
+        // and the inherited Success after them. Success stays true when edits were only skipped, so
+        // a reader who keeps just the end of the output (| tail) needs these beside it to see that
+        // the edit did not go live and what to do next.
+        public string RecommendedNextAction { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Applied, PartiallyApplied, NothingApplied, NothingToApply, or Failed on apply runs
+        /// (ReplacedByCompile once the CLI's fallback compile succeeded): whether the edits of the
+        /// requested files are live now. Omitted on --status, --revert-all and validation failures.
+        /// </summary>
+        public string Outcome { get; set; } = string.Empty;
 
         public bool ShouldSerializeErrorCode()
         {

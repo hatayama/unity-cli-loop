@@ -1,6 +1,6 @@
 {
   "name": "io.github.hatayama.uloopmcp",
-  "version": "3.21.3",
+  "version": "3.23.1",
   "displayName": "Unity Loop Harness",
   "description": "Agent harness for Unity: lets AI agents compile, test, and operate your Unity project through the uloop CLI.",
   "unity": "2022.3",

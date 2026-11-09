@@ -33,6 +33,11 @@ type compileWaitDeps struct {
 	// findRunningUnityProcess is the Editor process lookup a status wait uses to notice that Unity
 	// exited.
 	findRunningUnityProcess func(context.Context, string) (*unityprocess.UnityProcess, error)
+	// focusUnityProcess brings the Editor to the front when Unity has accepted a compile request
+	// but not started it for compileStartPendingFocusThreshold.
+	focusUnityProcess func(context.Context, int) (unityprocess.RestoreFocusFunc, error)
+	// readHeldMouseButtons reads the OS mouse-button state recorded in a COMPILE_NOT_STARTED result.
+	readHeldMouseButtons func() ([]string, bool)
 }
 
 // newCompileUnityExitWatch creates the exit watch for one compile status wait, on the wait's clock.
@@ -66,5 +71,7 @@ func defaultCompileWaitDeps() compileWaitDeps {
 		attachProbeInterval:     compileAttachProbeInterval,
 		attachWaitPollInterval:  compileWaitPollInterval,
 		findRunningUnityProcess: unityProcessLookup,
+		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
+		readHeldMouseButtons:    unityprocess.HeldMouseButtons,
 	}
 }

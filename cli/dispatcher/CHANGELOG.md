@@ -1,5 +1,45 @@
 # Changelog
 
+## [3.15.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.2...dispatcher-v3.15.0) (2026-11-09)
+
+
+### Features
+
+* uloop keeps trusting its own releases after the GitHub repository is renamed ([#3457](https://github.com/hatayama/unity-cli-loop/issues/3457)) ([c92f3a2](https://github.com/hatayama/unity-cli-loop/commit/c92f3a2d94a6e5ce794cfe79e4fe3d5c786aa220))
+
+## [3.14.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.1...dispatcher-v3.14.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* uloop compile recovers when Unity accepts a compile but never starts it in the background ([#3453](https://github.com/hatayama/unity-cli-loop/issues/3453)) ([cafc564](https://github.com/hatayama/unity-cli-loop/commit/cafc5640c5604efc7963b0b2e303d72469ff3eba))
+
+## [3.14.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.0...dispatcher-v3.14.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* CLI binaries ship with Go 1.27.3 and sigstore-go 1.4.0, and now require macOS 13 or later ([#3447](https://github.com/hatayama/unity-cli-loop/issues/3447)) ([6ee816a](https://github.com/hatayama/unity-cli-loop/commit/6ee816a5c88c535a17a03871fccd27a8be1a8036))
+
+## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.3...dispatcher-v3.14.0) (2026-11-06)
+
+
+### Features
+
+* uloop launch can give each Editor its own log file ([#3438](https://github.com/hatayama/unity-cli-loop/issues/3438)) ([5273f3f](https://github.com/hatayama/unity-cli-loop/commit/5273f3f2a6d6b8d9a1e98325cea81c6c37b8bbfc))
+
+
+### Bug Fixes
+
+* A project path containing "-batchmode" no longer makes uloop lose the running Editor and open a second one ([#3442](https://github.com/hatayama/unity-cli-loop/issues/3442)) ([27177f2](https://github.com/hatayama/unity-cli-loop/commit/27177f2301c62eee9ede3c950625005999bc8e6e))
+
+## [3.13.3](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.2...dispatcher-v3.13.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* Repeated test runs no longer grow Unity's memory through log stack traces ([#3429](https://github.com/hatayama/unity-cli-loop/issues/3429)) ([527ade6](https://github.com/hatayama/unity-cli-loop/commit/527ade679a4cba766a7845a1c7eba2a51a65c4ca))
+
 ## [3.13.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.1...dispatcher-v3.13.2) (2026-10-29)
 
 

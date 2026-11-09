@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -66,6 +68,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Optional recovery steps when compile cannot proceed automatically.
         /// </summary>
         public string[] NextActions { get; set; }
+
+        /// <summary>
+        /// Diagnostic state captured when a lifecycle failure such as COMPILE_NOT_STARTED was detected.
+        /// Null for ordinary compiler outcomes.
+        /// </summary>
+        public Dictionary<string, object> Details { get; set; }
 
         /// <summary>
         /// Unity project root path (from UnityEngine.Application.dataPath).

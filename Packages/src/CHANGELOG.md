@@ -1,5 +1,46 @@
 # Changelog
 
+## [3.23.1](https://github.com/hatayama/unity-cli-loop/compare/v3.23.0...v3.23.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* uloop compile recovers when Unity accepts a compile but never starts it in the background ([#3453](https://github.com/hatayama/unity-cli-loop/issues/3453)) ([cafc564](https://github.com/hatayama/unity-cli-loop/commit/cafc5640c5604efc7963b0b2e303d72469ff3eba))
+
+## [3.23.0](https://github.com/hatayama/unity-cli-loop/compare/v3.22.0...v3.23.0) (2026-11-07)
+
+
+### Features
+
+* uloop launch can give each Editor its own log file ([#3438](https://github.com/hatayama/unity-cli-loop/issues/3438)) ([5273f3f](https://github.com/hatayama/unity-cli-loop/commit/5273f3f2a6d6b8d9a1e98325cea81c6c37b8bbfc))
+
+
+### Bug Fixes
+
+* A project path containing "-batchmode" no longer makes uloop lose the running Editor and open a second one ([#3442](https://github.com/hatayama/unity-cli-loop/issues/3442)) ([27177f2](https://github.com/hatayama/unity-cli-loop/commit/27177f2301c62eee9ede3c950625005999bc8e6e))
+* Repeated test runs no longer grow Unity's managed heap through finished runs ([#3439](https://github.com/hatayama/unity-cli-loop/issues/3439)) ([f07f2b9](https://github.com/hatayama/unity-cli-loop/commit/f07f2b9d7c23d4991731700e505497d475c505e7))
+
+## [3.22.0](https://github.com/hatayama/unity-cli-loop/compare/v3.21.5...v3.22.0) (2026-11-06)
+
+
+### Features
+
+* Hot reload now applies lambdas in internal classes that call new methods, and added fields initialized with new ([#3437](https://github.com/hatayama/unity-cli-loop/issues/3437)) ([a241b66](https://github.com/hatayama/unity-cli-loop/commit/a241b664ecd0a74856a74e140bb8b0e87bd5be95))
+
+## [3.21.5](https://github.com/hatayama/unity-cli-loop/compare/v3.21.4...v3.21.5) (2026-11-06)
+
+
+### Bug Fixes
+
+* Hot reload answers now end with whether the edit went live, so reading only the last lines no longer looks like success ([#3435](https://github.com/hatayama/unity-cli-loop/issues/3435)) ([fdeb533](https://github.com/hatayama/unity-cli-loop/commit/fdeb533392e524fcc4baba5be8ef10348f64ba55))
+
+## [3.21.4](https://github.com/hatayama/unity-cli-loop/compare/v3.21.3...v3.21.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* Repeated test runs no longer grow Unity's memory through log stack traces ([#3429](https://github.com/hatayama/unity-cli-loop/issues/3429)) ([527ade6](https://github.com/hatayama/unity-cli-loop/commit/527ade679a4cba766a7845a1c7eba2a51a65c4ca))
+
 ## [3.21.3](https://github.com/hatayama/unity-cli-loop/compare/v3.21.2...v3.21.3) (2026-10-29)
 
 

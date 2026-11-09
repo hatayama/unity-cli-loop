@@ -257,6 +257,8 @@ func waitForAttachedCompileCompletion(
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
 	exitWatch := newCompileUnityExitWatch(options.connection, deps)
+	startPendingFocus := newCompileStartPendingFocus(options, deps)
+	defer startPendingFocus.finish()
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -278,7 +280,8 @@ func waitForAttachedCompileCompletion(
 			if status.HasResult && len(status.Result) > 0 && (status.Ready || !options.untilEditorReady) {
 				logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 				logCompileStatusPollComplete(options, startedAt, attempts, status)
-				return status.Result, attachWaitCompleted, nil, nil
+				result := addCliDiagnosticsToNotStartedResult(status.Result, startPendingFocus.outcome(), deps.readHeldMouseButtons)
+				return result, attachWaitCompleted, nil, nil
 			}
 			if status.Ready && !status.HasResult {
 				missingResultStreak++
@@ -296,6 +299,7 @@ func waitForAttachedCompileCompletion(
 			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
+		startPendingFocus.observe(ctx, status, err)
 
 		select {
 		case <-ctx.Done():

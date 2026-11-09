@@ -13,7 +13,7 @@ English | [日本語](README_ja.md)
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="Unity Loop Harness logo" src="Packages/src/Documentation~/images/logo.png" />
+    <img width="800" alt="Unity Loop Harness logo" src="Packages/src/Documentation~/images/logo.png" />
 </p>
   
 
@@ -243,7 +243,7 @@ Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.21.3).
+2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.23.1).
 
 </details>
 
