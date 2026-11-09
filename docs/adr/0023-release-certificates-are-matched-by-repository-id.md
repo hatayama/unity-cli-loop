@@ -12,8 +12,10 @@ repository's numeric GitHub repository ID (Fulcio OID `1.3.6.1.4.1.57264.1.15`) 
 anchored pattern whose owner and repository name segments accept any name; the source
 repository URI (`…1.12`) is not compared.
 
-`ReleaseRepository` (the `owner/name` string) stays, but only to build GitHub API and download
-URLs. It plays no part in deciding whether a release is trusted.
+`ReleaseRepository` (the `owner/name` string) stays, but only for tag-commit API lookups; the
+dispatcher builds its release listing and download URLs from its own `dispatcherReleaseRepository`
+constant, so a rename updates both. Neither name plays any part in deciding whether a release is
+trusted.
 
 ## Context
 

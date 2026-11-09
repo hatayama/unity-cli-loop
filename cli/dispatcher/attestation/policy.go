@@ -3,9 +3,11 @@ package attestation
 // Release identity constants are exported so every component that authorizes a
 // dispatcher release applies the exact policy enforced by the runtime verifier.
 const (
-	// ReleaseRepository names the repository in GitHub API and download URLs only.
-	// Release certificates are matched by ReleaseRepositoryID instead, so renaming
-	// the repository does not stop installed dispatchers from verifying releases.
+	// ReleaseRepository names the repository for tag-commit API lookups only. The
+	// dispatcher builds release listing and download URLs from its own constant in
+	// internal/dispatcher, so a rename must update both. Release certificates are
+	// matched by ReleaseRepositoryID instead, so renaming the repository does not
+	// stop installed dispatchers from verifying releases.
 	ReleaseRepository = "hatayama/unity-cli-loop"
 	// ReleaseRepositoryID and ReleaseRepositoryOwnerID are GitHub's numeric IDs for
 	// this repository and its owner, as Fulcio records them in every release
