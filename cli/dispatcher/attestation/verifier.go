@@ -3,6 +3,7 @@ package attestation
 import (
 	"encoding/hex"
 	"fmt"
+	"regexp"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
 	"github.com/sigstore/sigstore-go/pkg/fulcio/certificate"
@@ -11,30 +12,35 @@ import (
 )
 
 // Identity describes the GitHub Actions workflow identity that a signed release
-// asset must present. Refs is the set of git refs the workflow may have run
-// from — we accept a small closed allowlist (e.g. v3-beta and main branches)
-// rather than a regex so a leaked OIDC token for an unrelated ref cannot forge
-// releases.
+// asset must present. The repository is identified by GitHub's numeric
+// repository and owner IDs rather than its name, so a renamed repository keeps
+// verifying. Refs is the set of git refs the workflow may have run from — we
+// accept a small closed allowlist (e.g. v3-beta and main branches) rather than
+// a pattern so a leaked OIDC token for an unrelated ref cannot forge releases.
 type Identity struct {
-	Repository   string
-	WorkflowPath string
-	Refs         []string
+	RepositoryID      string
+	RepositoryOwnerID string
+	WorkflowPath      string
+	Refs              []string
 }
 
-// SubjectAlternativeNames constructs the exact-match SAN strings that a Fulcio
-// certificate must expose to pass this identity — one per allowed ref.
-func (id Identity) SubjectAlternativeNames() []string {
-	sans := make([]string, 0, len(id.Refs))
+// isComplete reports whether every field is set. An empty ID must never reach
+// the matcher: sigstore-go skips extension fields left empty, so the identity
+// would accept certificates from any repository.
+func (id Identity) isComplete() bool {
+	return id.RepositoryID != "" && id.RepositoryOwnerID != "" && id.WorkflowPath != "" && len(id.Refs) > 0
+}
+
+// subjectAlternativeNamePatterns returns one anchored SAN pattern per allowed
+// ref. The owner and repository name segments accept any name: the numeric IDs
+// already bind the certificate to the repository the workflow ran in, and only
+// that repository's own workflow files decide which workflow runs there.
+func (id Identity) subjectAlternativeNamePatterns() []string {
+	patterns := make([]string, 0, len(id.Refs))
 	for _, ref := range id.Refs {
-		sans = append(sans, fmt.Sprintf("https://github.com/%s/%s@%s", id.Repository, id.WorkflowPath, ref))
+		patterns = append(patterns, "^https://github\\.com/[^/]+/[^/]+/"+regexp.QuoteMeta(id.WorkflowPath)+"@"+regexp.QuoteMeta(ref)+"$")
 	}
-	return sans
-}
-
-// SourceRepositoryURI is the value the Fulcio cert must expose under OID
-// 1.3.6.1.4.1.57264.1.12 — the top-level repository the workflow ran in.
-func (id Identity) SourceRepositoryURI() string {
-	return "https://github.com/" + id.Repository
+	return patterns
 }
 
 // VerifyOptions is the input to Verify.
@@ -57,8 +63,8 @@ type VerifyOptions struct {
 	// prevents a stolen OIDC token from being reused on a different commit.
 	ExpectedCommitSHA string
 
-	// Identity is the SAN allowlist + repository URI the certificate must
-	// match. The verifier accepts any listed ref, so releases from either
+	// Identity is the repository, workflow, and ref allowlist the certificate
+	// must match. The verifier accepts any listed ref, so releases from either
 	// v3-beta or main pass.
 	Identity Identity
 }
@@ -187,8 +193,8 @@ func (o SubjectsOptions) validate() error {
 	if !isHexCommitSHA(o.ExpectedCommitSHA) {
 		return fmt.Errorf("%w: ExpectedCommitSHA must be 40-char hex", ErrVerificationFailed)
 	}
-	if o.Identity.Repository == "" || o.Identity.WorkflowPath == "" || len(o.Identity.Refs) == 0 {
-		return fmt.Errorf("%w: Identity.Repository, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
+	if !o.Identity.isComplete() {
+		return fmt.Errorf("%w: Identity.RepositoryID, RepositoryOwnerID, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
 	}
 	return nil
 }
@@ -227,8 +233,8 @@ func (o VerifyOptions) validate() error {
 	if !isHexCommitSHA(o.ExpectedCommitSHA) {
 		return fmt.Errorf("%w: ExpectedCommitSHA must be 40-char hex", ErrVerificationFailed)
 	}
-	if o.Identity.Repository == "" || o.Identity.WorkflowPath == "" || len(o.Identity.Refs) == 0 {
-		return fmt.Errorf("%w: Identity.Repository, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
+	if !o.Identity.isComplete() {
+		return fmt.Errorf("%w: Identity.RepositoryID, RepositoryOwnerID, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
 	}
 	return nil
 }
@@ -246,18 +252,18 @@ func isHexCommitSHA(s string) bool {
 	return true
 }
 
+// buildCertificateIdentities turns an identity into sigstore-go matchers, one per
+// allowed ref. Callers validate the identity first: see Identity.isComplete for
+// why an incomplete one must never get here.
 func buildCertificateIdentities(id Identity, expectedCommitSHA string) (verify.CertificateIdentities, error) {
-	sans := id.SubjectAlternativeNames()
-	if len(sans) == 0 {
-		return nil, fmt.Errorf("identity has no refs")
-	}
-	identities := make(verify.CertificateIdentities, 0, len(sans))
 	issuerMatcher, err := verify.NewIssuerMatcher("https://token.actions.githubusercontent.com", "")
 	if err != nil {
 		return nil, err
 	}
-	for _, san := range sans {
-		sanMatcher, err := verify.NewSANMatcher(san, "")
+	patterns := id.subjectAlternativeNamePatterns()
+	identities := make(verify.CertificateIdentities, 0, len(patterns))
+	for _, pattern := range patterns {
+		sanMatcher, err := verify.NewSANMatcher("", pattern)
 		if err != nil {
 			return nil, fmt.Errorf("build SAN matcher: %w", err)
 		}
@@ -265,13 +271,11 @@ func buildCertificateIdentities(id Identity, expectedCommitSHA string) (verify.C
 			SubjectAlternativeName: sanMatcher,
 			Issuer:                 issuerMatcher,
 			Extensions: certificate.Extensions{
-				SourceRepositoryURI:    id.SourceRepositoryURI(),
-				SourceRepositoryDigest: expectedCommitSHA,
+				SourceRepositoryIdentifier:      id.RepositoryID,
+				SourceRepositoryOwnerIdentifier: id.RepositoryOwnerID,
+				SourceRepositoryDigest:          expectedCommitSHA,
 			},
 		})
-	}
-	if len(identities) == 0 {
-		return nil, fmt.Errorf("identity produced no matchers")
 	}
 	return identities, nil
 }
