@@ -26,6 +26,7 @@ func releaseCertificateSummary(repositoryName string) certificate.Summary {
 			SourceRepositoryIdentifier:      certifiedRepositoryID,
 			SourceRepositoryOwnerIdentifier: certifiedRepositoryOwnerID,
 			SourceRepositoryDigest:          testReleaseCommitSHA,
+			SourceRepositoryRef:             "refs/heads/main",
 		},
 	}
 }
@@ -68,6 +69,13 @@ func TestDispatcherPublishIdentityRejectsCertificatesFromElsewhere(t *testing.T)
 		}},
 		{name: "another workflow", mutate: func(summary *certificate.Summary) {
 			summary.SubjectAlternativeName = "https://github.com/hatayama/unity-cli-loop/.github/workflows/native-cli-publish.yml@refs/heads/main"
+		}},
+		{name: "an unlisted source ref", mutate: func(summary *certificate.Summary) {
+			summary.SourceRepositoryRef = "refs/heads/feature"
+		}},
+		{name: "another repository's reusable workflow called from an unlisted ref", mutate: func(summary *certificate.Summary) {
+			summary.SubjectAlternativeName = "https://github.com/attacker/tools/.github/workflows/dispatcher-publish.yml@refs/heads/main"
+			summary.SourceRepositoryRef = "refs/heads/feature"
 		}},
 		{name: "an unlisted ref", mutate: func(summary *certificate.Summary) {
 			summary.SubjectAlternativeName = "https://github.com/hatayama/unity-cli-loop/.github/workflows/dispatcher-publish.yml@refs/heads/feature"

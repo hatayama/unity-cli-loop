@@ -17,6 +17,8 @@ import (
 // verifying. Refs is the set of git refs the workflow may have run from — we
 // accept a small closed allowlist (e.g. v3-beta and main branches) rather than
 // a pattern so a leaked OIDC token for an unrelated ref cannot forge releases.
+// Both the ref the run started from and the ref of the signing workflow must be
+// the same allowed ref.
 type Identity struct {
 	RepositoryID      string
 	RepositoryOwnerID string
@@ -31,16 +33,13 @@ func (id Identity) isComplete() bool {
 	return id.RepositoryID != "" && id.RepositoryOwnerID != "" && id.WorkflowPath != "" && len(id.Refs) > 0
 }
 
-// subjectAlternativeNamePatterns returns one anchored SAN pattern per allowed
+// subjectAlternativeNamePattern returns the anchored SAN pattern for one allowed
 // ref. The owner and repository name segments accept any name: the numeric IDs
-// already bind the certificate to the repository the workflow ran in, and only
-// that repository's own workflow files decide which workflow runs there.
-func (id Identity) subjectAlternativeNamePatterns() []string {
-	patterns := make([]string, 0, len(id.Refs))
-	for _, ref := range id.Refs {
-		patterns = append(patterns, "^https://github\\.com/[^/]+/[^/]+/"+regexp.QuoteMeta(id.WorkflowPath)+"@"+regexp.QuoteMeta(ref)+"$")
-	}
-	return patterns
+// bind the run to this repository and the matcher pins the ref it started from,
+// so only a workflow that this repository's allowed branches choose to run can
+// sign, as when the SAN carried this repository's name.
+func (id Identity) subjectAlternativeNamePattern(ref string) string {
+	return "^https://github\\.com/[^/]+/[^/]+/" + regexp.QuoteMeta(id.WorkflowPath) + "@" + regexp.QuoteMeta(ref) + "$"
 }
 
 // VerifyOptions is the input to Verify.
@@ -253,17 +252,16 @@ func isHexCommitSHA(s string) bool {
 }
 
 // buildCertificateIdentities turns an identity into sigstore-go matchers, one per
-// allowed ref. Callers validate the identity first: see Identity.isComplete for
+// allowed ref, each requiring that ref as both the SAN ref and the source ref. Callers validate the identity first: see Identity.isComplete for
 // why an incomplete one must never get here.
 func buildCertificateIdentities(id Identity, expectedCommitSHA string) (verify.CertificateIdentities, error) {
 	issuerMatcher, err := verify.NewIssuerMatcher("https://token.actions.githubusercontent.com", "")
 	if err != nil {
 		return nil, err
 	}
-	patterns := id.subjectAlternativeNamePatterns()
-	identities := make(verify.CertificateIdentities, 0, len(patterns))
-	for _, pattern := range patterns {
-		sanMatcher, err := verify.NewSANMatcher("", pattern)
+	identities := make(verify.CertificateIdentities, 0, len(id.Refs))
+	for _, ref := range id.Refs {
+		sanMatcher, err := verify.NewSANMatcher("", id.subjectAlternativeNamePattern(ref))
 		if err != nil {
 			return nil, fmt.Errorf("build SAN matcher: %w", err)
 		}
@@ -274,6 +272,7 @@ func buildCertificateIdentities(id Identity, expectedCommitSHA string) (verify.C
 				SourceRepositoryIdentifier:      id.RepositoryID,
 				SourceRepositoryOwnerIdentifier: id.RepositoryOwnerID,
 				SourceRepositoryDigest:          expectedCommitSHA,
+				SourceRepositoryRef:             ref,
 			},
 		})
 	}
