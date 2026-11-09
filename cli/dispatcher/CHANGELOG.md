@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.2...dispatcher-v3.15.0) (2026-11-09)
+
+
+### Features
+
+* uloop keeps trusting its own releases after the GitHub repository is renamed ([#3457](https://github.com/hatayama/unity-cli-loop/issues/3457)) ([c92f3a2](https://github.com/hatayama/unity-cli-loop/commit/c92f3a2d94a6e5ce794cfe79e4fe3d5c786aa220))
+
 ## [3.14.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.1...dispatcher-v3.14.2) (2026-11-08)
 
 
