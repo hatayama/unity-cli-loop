@@ -1,9 +1,6 @@
 package projectrunner
 
-import (
-	"bytes"
-	"encoding/json"
-)
+import "encoding/json"
 
 // earlierCompileResultWarning tells the reader that a reattached result was compiled from the
 // scripts as they were when the timed-out compile started.
@@ -33,13 +30,9 @@ func addEarlierCompileResultWarning(result json.RawMessage) json.RawMessage {
 	}
 	fields["Warning"] = encodedText
 
-	var buffer bytes.Buffer
-	encoder := json.NewEncoder(&buffer)
-	// Why not json.Marshal: it escapes < > & inside the raw values too, and compiler messages such
-	// as "List<int>" would then reach the reader as \u003c escapes on this path only.
-	encoder.SetEscapeHTML(false)
-	if encoder.Encode(fields) != nil {
+	encoded, ok := encodeCompileResultFields(fields)
+	if !ok {
 		return result
 	}
-	return json.RawMessage(bytes.TrimRight(buffer.Bytes(), "\n"))
+	return encoded
 }

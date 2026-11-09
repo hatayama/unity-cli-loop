@@ -6,8 +6,8 @@ func TestDispatcherPublishIdentityUsesApprovedReleasePolicy(t *testing.T) {
 	// Verifies every stamp consumer receives the exact dispatcher release identity enforced at runtime.
 	identity := DispatcherPublishIdentity()
 
-	if identity.Repository != ReleaseRepository {
-		t.Fatalf("repository mismatch: %s", identity.Repository)
+	if identity.RepositoryID != ReleaseRepositoryID || identity.RepositoryOwnerID != ReleaseRepositoryOwnerID {
+		t.Fatalf("repository mismatch: %s / %s", identity.RepositoryID, identity.RepositoryOwnerID)
 	}
 	if identity.WorkflowPath != DispatcherPublishWorkflowPath {
 		t.Fatalf("workflow mismatch: %s", identity.WorkflowPath)

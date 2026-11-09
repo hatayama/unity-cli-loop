@@ -278,6 +278,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(context["editor_updating"].Type, Is.EqualTo(JTokenType.Boolean));
         }
 
+        /// <summary>
+        /// Verifies the pending-start timeout aborts with a COMPILE_NOT_STARTED result that carries recovery steps
+        /// and the captured Editor state, and never takes the plain-message abort path.
+        /// </summary>
+        [Test]
+        public void HandleCompileStartPendingTimeout_AbortsWithNotStartedResult()
+        {
+            CompileResult abortedWithResult = null;
+            string abortedWithMessage = null;
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
+                abortWithResult: result => abortedWithResult = result,
+                abort: message => abortedWithMessage = message);
+
+            coordinator.HandleCompileStartPendingTimeout(60000);
+
+            Assert.That(abortedWithMessage, Is.Null);
+            Assert.That(abortedWithResult, Is.Not.Null);
+            Assert.That(abortedWithResult.Success, Is.False);
+            Assert.That(abortedWithResult.IsIndeterminate, Is.True);
+            Assert.That(abortedWithResult.ErrorCode, Is.EqualTo(CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText));
+            Assert.That(abortedWithResult.NextActions, Is.Not.Empty);
+            Assert.That(abortedWithResult.Details["PendingSeconds"], Is.EqualTo(60d));
+            Assert.That(abortedWithResult.Details.ContainsKey("CanReloadAssemblies"), Is.True);
+            Assert.That(abortedWithResult.Details.ContainsKey("EditorWindowActive"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies the pending-start timeout emits compile_start_pending_timeout with the pending time and
+        /// the input-state flags that discriminate the known cause.
+        /// </summary>
+        [Test]
+        public void HandleCompileStartPendingTimeout_LogsPendingTimeoutContext()
+        {
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator();
+
+            VibeLogger.ClearMemoryLogs();
+            coordinator.HandleCompileStartPendingTimeout(60000);
+
+            JArray entries = JArray.Parse(VibeLogger.GetLogsForAi());
+            JObject pendingLog = null;
+            foreach (JToken token in entries)
+            {
+                JObject entry = (JObject)token;
+                if ((string)entry["operation"] == "compile_start_pending_timeout")
+                {
+                    pendingLog = entry;
+                    break;
+                }
+            }
+
+            Assert.That(pendingLog, Is.Not.Null);
+            JObject context = (JObject)pendingLog["context"];
+            Assert.That(context, Is.Not.Null);
+            Assert.That((int)context["pending_ms"], Is.EqualTo(60000));
+            Assert.That(context.ContainsKey("can_reload_assemblies"), Is.True);
+            Assert.That(context["editor_window_active"].Type, Is.EqualTo(JTokenType.Boolean));
+            Assert.That(context["hot_control"].Type, Is.EqualTo(JTokenType.Integer));
+        }
+
         private static CompileLifecycleRecoveryCoordinator CreateCoordinator(
             Func<UnityCliLoopConsoleLogEntry[], AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors = null,
             Func<UnityCliLoopConsoleLogEntry[]> getConsoleErrorEntries = null,
@@ -292,6 +351,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new CompileLifecycleRecoveryCoordinator(
                 isEditorCompiling: () => false,
                 isRequestCompleted: () => false,
+                hasCompilationStarted: () => false,
                 getCurrentCompileTask: () => null,
                 findAssemblyDefinitionErrors: findAssemblyDefinitionErrors ??
                     (_ => new AssemblyDefinitionConsoleErrorResult(new AssemblyDefinitionConsoleError[0])),
@@ -302,6 +362,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 getCompileMessages: getCompileMessages ?? (() => new CompilerMessage[0]),
                 getAssemblyFinishedCount: getAssemblyFinishedCount ?? (() => 0),
                 getMonotonicSeconds: () => 0d,
+                onCompileStartPending: _ => { },
                 buildStateContext: context => context,
                 abortWithResult: abortWithResult ?? (_ => { }),
                 abort: abort ?? (_ => { }));

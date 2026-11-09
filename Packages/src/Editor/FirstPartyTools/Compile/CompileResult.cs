@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor.Compilation;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -12,32 +13,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Whether the compilation was successful. Null indicates indeterminate status.
         /// </summary>
         public bool? Success { get; }
-        
+
         /// <summary>
         /// The number of errors.
         /// </summary>
         public int ErrorCount { get; }
-        
+
         /// <summary>
         /// The number of warnings.
         /// </summary>
         public int WarningCount { get; }
-        
+
         /// <summary>
         /// The time of compilation completion.
         /// </summary>
         public DateTime CompletedAt { get; }
-        
+
         /// <summary>
         /// All compiler messages.
         /// </summary>
         public CompilerMessage[] Messages { get; }
-        
+
         /// <summary>
         /// Error messages only.
         /// </summary>
         public CompilerMessage[] Errors { get; }
-        
+
         /// <summary>
         /// Warning messages only.
         /// </summary>
@@ -64,6 +65,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool ApiUpdaterConsentDeclined { get; }
 
         /// <summary>
+        /// Machine-readable code for a lifecycle failure that produced this result; null for compiler outcomes.
+        /// </summary>
+        internal string ErrorCode { get; }
+
+        /// <summary>
+        /// Recovery steps that accompany ErrorCode; null when there is none to suggest.
+        /// </summary>
+        internal string[] NextActions { get; }
+
+        /// <summary>
+        /// Diagnostic state captured when the lifecycle failure was detected; null for compiler outcomes.
+        /// </summary>
+        internal Dictionary<string, object> Details { get; }
+
+        /// <summary>
         /// Initializes the compilation result.
         /// </summary>
         /// <param name="success">The compilation success flag. Null indicates indeterminate status.</param>
@@ -85,7 +101,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool isIndeterminate = false,
             string message = null,
             bool preserveDetailsWhenForceRecompile = false,
-            bool apiUpdaterConsentDeclined = false
+            bool apiUpdaterConsentDeclined = false,
+            string errorCode = null,
+            string[] nextActions = null,
+            Dictionary<string, object> details = null
         )
         {
             Success = success;
@@ -99,6 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Message = message;
             PreserveDetailsWhenForceRecompile = preserveDetailsWhenForceRecompile;
             ApiUpdaterConsentDeclined = apiUpdaterConsentDeclined;
+            ErrorCode = errorCode;
+            NextActions = nextActions;
+            Details = details;
         }
 
         /// <summary>
@@ -117,7 +139,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 IsIndeterminate,
                 Message,
                 PreserveDetailsWhenForceRecompile,
-                apiUpdaterConsentDeclined: true);
+                apiUpdaterConsentDeclined: true,
+                errorCode: ErrorCode,
+                nextActions: NextActions,
+                details: Details);
         }
     }
 }

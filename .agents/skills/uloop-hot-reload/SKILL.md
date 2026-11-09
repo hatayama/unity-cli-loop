@@ -10,7 +10,7 @@ Replaces method bodies in the running Editor (EditMode or PlayMode) directly fro
 project source files — no domain reload, no attributes, no source markers. Private/internal
 member access, static methods, return values, async methods, and iterators all work within
 the limits below, including private access inside async, iterator, lambda, local-function,
-and LINQ-query bodies. Methods that cannot be patched are reported as `Skipped` or `Failed`;
+and LINQ-query bodies of public types. Methods that cannot be patched are reported as `Skipped` or `Failed`;
 one unpatchable method never aborts the rest of the run.
 `Outcome` says whether the edit is live (`ReplacedByCompile`: a fallback compile succeeded, so
 it is compiled in and no patch is active).

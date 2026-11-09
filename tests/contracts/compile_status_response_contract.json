@@ -5,6 +5,7 @@
   "IsCompiling": true,
   "IsUpdating": true,
   "IsDomainReloadInProgress": true,
+  "CompileStartPendingSeconds": 0,
   "Result": {
     "Success": true,
     "ErrorCount": 0,
@@ -14,6 +15,7 @@
     "Message": "Compile result is available.",
     "ErrorCode": null,
     "NextActions": null,
+    "Details": null,
     "ProjectRoot": null,
     "Warning": null
   },

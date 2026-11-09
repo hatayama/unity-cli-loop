@@ -5,7 +5,6 @@ package unityprocess
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -39,7 +38,7 @@ func listUnityProcessesMac(ctx context.Context) ([]UnityProcess, error) {
 			continue
 		}
 
-		process, matched := matchMacUnityProcess(pid, strings.Join(args, " "))
+		process, matched := matchMacUnityProcess(pid, args)
 		if matched {
 			processes = append(processes, process)
 		}

@@ -113,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     return false;
                 },
                 isRequestCompleted: () => _isRequestCompleted,
+                hasCompilationStarted: () => false,
                 getCurrentCompileTask: () => _currentCompileTask,
                 findAssemblyDefinitionErrors: _ => throw new NotSupportedException(),
                 getConsoleErrorEntries: () => throw new NotSupportedException(),
@@ -122,6 +123,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 getCompileMessages: () => throw new NotSupportedException(),
                 getAssemblyFinishedCount: () => 0,
                 getMonotonicSeconds: () => 0d,
+                onCompileStartPending: _ => throw new NotSupportedException(),
                 buildStateContext: context => context,
                 abortWithResult: _ => throw new NotSupportedException(),
                 abort: _abortReasons.Add);

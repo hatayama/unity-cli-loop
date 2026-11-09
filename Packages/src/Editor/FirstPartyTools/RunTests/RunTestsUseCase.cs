@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<int> _getActiveHotReloadChangeCount;
         private readonly Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> _proposeTestAsmdef;
         private readonly RunTestsLogStackTraceSuppressor _logStackTraceSuppressor;
+        private readonly Action _releaseFinishedTestRuns;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
@@ -50,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why the store is required: a test that forgot it would rewrite the project's own record.
         // Why the suppressor is required: a test that forgot it would change the settings of the real
         // run executing that test.
+        // Why the releaser is optional: it only touches destroyed runners, so a test that forgot it cannot
+        // change anything a running test depends on.
         internal RunTestsUseCase(
             TestFilterCreationService filterService,
             TestExecutionService executionService,
@@ -60,7 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
             Func<int> getActiveHotReloadChangeCount = null,
-            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null)
+            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null,
+            Action releaseFinishedTestRuns = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -88,6 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _getActiveHotReloadChangeCount = getActiveHotReloadChangeCount ?? ReadActiveHotReloadChangeCount;
             _proposeTestAsmdef = proposeTestAsmdef ?? RunTestsTestAsmdefProposalBuilder.Propose;
             _logStackTraceSuppressor = logStackTraceSuppressor;
+            _releaseFinishedTestRuns = releaseFinishedTestRuns ?? RunTestsFinishedRunReleaser.CreateDefault().Release;
         }
 
         /// <summary>
@@ -214,6 +219,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Using the linked token here would mis-report a successful run as timed out when
                 // the fixed cleanup delay straddles the deadline after RunFinished already arrived.
                 await MainThreadSwitcher.SwitchToMainThread(ct);
+
+                // Why before the cleanup wait: the Test Framework destroys a finished run's runner before
+                // RunFinished, so it can be released now, and a request cancelled while waiting must not keep it.
+                _releaseFinishedTestRuns();
                 await _waitForTestRunnerCleanupAsync(ct).ConfigureAwait(false);
             }
             catch (RunTestsExecutionCanceledException canceledException)
