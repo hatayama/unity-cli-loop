@@ -45,14 +45,14 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 |---|---|---|
 | Use it on your Unity version | Unity 6.0+ (with the `com.unity.pipeline` package) | **Unity 2022.3+** |
 | Restart the Editor | `unity close`, then `unity open` | `launch -r`: **one command, and it waits until the Editor can take commands** |
-| Run tests in the open Editor | `test run`: filter by name (partial match), assembly, or category | `run-tests`: filter by exact name, **regex**, class, or assembly; **rerun only the tests that failed last time**; choose to save unsaved scene changes, stop, or discard them before the run |
+| Run tests in the open Editor | `test run`: filter by name (partial match), assembly, or category | `run-tests`: filter by exact name, **regex**, class, or assembly; **rerun only the tests that failed or were inconclusive last time**; choose to save unsaved scene changes, stop, or discard them before the run |
 | Read the Console | `console get`: a minimum severity, the newest entries, and following new entries with a cursor | `get-logs`: filter by type, and **search the text or a regex, including stack traces** |
 | Read the scene | `scene get_hierarchy`: a whole scene | `get-hierarchy`: **start from a GameObject or the current selection, and limit the depth** |
-| Run C# in the Editor | `script eval` for inline code, or `script run` for a project `.cs` file with JSON arguments | `execute-dynamic-code`: inline code with JSON parameters, and **waits through a domain reload the code triggers** |
+| Run C# in the Editor | `script eval`: whole scripts with `using` lines, top-level methods and types, and `await`; `--file` runs a `.cs` file and `--dry-run` only compiles; `script run` runs a project `.cs` file with JSON arguments | `execute-dynamic-code`: statements only, with no class or method wrappers, plus JSON parameters and `await`, and **waits through a domain reload the code triggers** |
 | Control Play Mode | `editor.playmode start` / `pause` / `stop` | `control-play-mode`: also **step one frame at a time**, and choose what happens to unsaved scene changes |
 | Press keys in Play Mode | `runtime simulate_key`: down, up, or press | `simulate-keyboard`: also **hold a key for a set time**, and release every held key at once |
-| Use the mouse in Play Mode | `runtime simulate_pointer`: move, down, up, or click at a point | `simulate-mouse-input`: click, long-press, **scroll**, move by a delta, and **check which 3D object a point hits without clicking**; `simulate-mouse-ui`: click, long-press, and drag uGUI and UI Toolkit elements, **even behind an overlay that blocks raycasts** |
-| Capture the screen | `capture`: the Game view or the Scene view; a single UI Toolkit element only on Unity 6000.7+ | `screenshot`: the Game view or **any Editor window** (Console, Inspector, and so on), **labeling clickable UI elements and 3D colliders with the coordinates to click**, or **a prefab rendered on its own** |
+| Use the mouse in Play Mode | `runtime simulate_pointer`: move, down, up, or click at a point | `simulate-mouse-input`: click, long-press, **scroll**, move by a delta, and **check which 3D object a point hits without clicking**; `simulate-mouse-ui`: click, long-press, and drag uGUI and UI Toolkit elements, and **uGUI elements even behind an overlay that blocks raycasts** |
+| Capture the screen | `capture`: the Game view, the Scene view, or any open Editor window; camera captures include Screen Space - Overlay UI on URP and HDRP; a single UI Toolkit element only on Unity 6000.7+ | `screenshot`: the Game view or any Editor window (Console, Inspector, and so on), **labeling clickable UI elements and 3D colliders with the coordinates to click**, or **a prefab rendered on its own** |
 | Change code without leaving Play Mode | Methods marked `[MethodReload]` beforehand (public, returning `void` or `IEnumerator`), which can call newly added methods; also reaches development Players, including IL2CPP | `hot-reload`: **no attributes**; method bodies, new members, and new classes, in Edit Mode and Play Mode; some members, such as constructors, still need a compile; Editor only |
 
 ## Only in uloop
@@ -73,13 +73,16 @@ The [official Unity CLI](https://docs.unity.com/en-us/unity-cli/use-unity-cli) (
 | Create a project | `unity projects create` |
 | Sign in and check licenses | `unity auth`, `unity license` |
 | Build players and run tests in CI | `unity build`, `unity test` (JUnit reports, sharding, retries, code coverage) |
+| Build through the Editor that already has the project open | `unity build --target` |
+| See and answer a modal dialog that blocks the Editor | `unity command editor dialog`, `unity command editor dialog answer <id> <button>` |
+| Record Profiler captures and memory snapshots | `diagnostics profiler_record`, `diagnostics memory_snapshot` |
 | Drive a running Player build | `unity command --runtime` |
 
 Commands without the `unity` prefix are Editor-side commands of the `com.unity.pipeline` package, run with `unity command`.
 
 A typical setup uses both: `unity install` and `unity open` to get the right Editor, `uloop` for the agent's loop of editing, compiling, testing, and checking the game in that Editor, and `unity build` / `unity test` in CI.
 
-Compared against the official Unity CLI 1.0.0-beta.13 and `com.unity.pipeline` 0.9.1-exp.1 (November 2026). Both are pre-release and change quickly; `unity --help` and `unity command` list what your version has.
+Compared against the official Unity CLI 1.0.0-beta.17 and `com.unity.pipeline` 0.10.0-exp.1 (November 2026). Both are pre-release and change quickly; `unity --help` and `unity command` list what your version has.
 
 # Demos
 
