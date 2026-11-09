@@ -252,8 +252,9 @@ func isHexCommitSHA(s string) bool {
 }
 
 // buildCertificateIdentities turns an identity into sigstore-go matchers, one per
-// allowed ref, each requiring that ref as both the SAN ref and the source ref. Callers validate the identity first: see Identity.isComplete for
-// why an incomplete one must never get here.
+// allowed ref, each requiring that ref as both the SAN ref and the source ref.
+// Callers validate the identity first: see Identity.isComplete for why an
+// incomplete one must never get here.
 func buildCertificateIdentities(id Identity, expectedCommitSHA string) (verify.CertificateIdentities, error) {
 	issuerMatcher, err := verify.NewIssuerMatcher("https://token.actions.githubusercontent.com", "")
 	if err != nil {

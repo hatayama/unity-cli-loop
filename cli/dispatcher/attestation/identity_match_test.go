@@ -54,7 +54,8 @@ func TestDispatcherPublishIdentityAcceptsTheRepositoryUnderAnyName(t *testing.T)
 }
 
 // Verifies the dispatcher release identity rejects a certificate that differs from a matching one
-// in a single identity field, so each pinned field is enforced on its own.
+// in a single identity field, so each pinned field is enforced on its own, and rejects another
+// repository's reusable workflow called from an unlisted branch of this repository.
 func TestDispatcherPublishIdentityRejectsCertificatesFromElsewhere(t *testing.T) {
 	identities := dispatcherReleaseIdentities(t)
 	cases := []struct {
