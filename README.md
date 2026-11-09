@@ -198,7 +198,7 @@ Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.21.3).
+2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.23.1).
 
 </details>
 
