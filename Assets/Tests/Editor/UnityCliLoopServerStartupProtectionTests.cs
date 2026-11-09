@@ -9,7 +9,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Server Startup Protection behavior.
+    /// Test fixture that verifies Unity Loop Harness Server Startup Protection behavior.
     /// </summary>
     public class UnityCliLoopServerStartupProtectionTests
     {

@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.Infrastructure;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Test fixture that verifies Unity CLI Loop Editor SessionState behavior.
+    /// Test fixture that verifies Unity Loop Harness Editor SessionState behavior.
     /// </summary>
     public sealed class UnityCliLoopEditorSessionStateRepositoryTests
     {

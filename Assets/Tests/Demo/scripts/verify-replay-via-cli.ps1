@@ -7,7 +7,7 @@ Usage:
 Prerequisites:
   - Unity Editor running with InputReplayVerificationScene loaded
   - PlayMode is not running because this script starts it
-  - Record input with Window > Unity CLI Loop > Recordings when prompted
+  - Record input with Window > Unity Loop Harness > Recordings when prompted
 #>
 
 [CmdletBinding()]
@@ -452,7 +452,7 @@ Invoke-ActivateForRecord
 Write-Host "[3/8] Recording input with the Recordings window..."
 Write-Host ""
 Write-Host "========================================="
-Write-Host "  Open Window > Unity CLI Loop > Recordings."
+Write-Host "  Open Window > Unity Loop Harness > Recordings."
 Write-Host "  Click Start Recording, play in the Game View, then click Stop Recording."
 Write-Host ""
 Write-Host "  WASD: move | Mouse: rotate"

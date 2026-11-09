@@ -6,7 +6,7 @@ using io.github.hatayama.UnityCliLoop.Runtime;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Mouse UI Simulation Command behavior for Unity CLI Loop.
+    /// Provides Mouse UI Simulation Command behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class MouseUiSimulationCommand
     {

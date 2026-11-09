@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Reads the Unity CLI Loop JSON-RPC envelope without changing the wire keys.
+    /// Reads the Unity Loop Harness JSON-RPC envelope without changing the wire keys.
     /// </summary>
     internal static class UloopEnvelope
     {

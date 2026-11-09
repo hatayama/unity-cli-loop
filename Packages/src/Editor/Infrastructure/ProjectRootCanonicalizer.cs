@@ -7,7 +7,7 @@ using Microsoft.Win32.SafeHandles;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Provides Project Root Canonicalizer behavior for Unity CLI Loop.
+    /// Provides Project Root Canonicalizer behavior for Unity Loop Harness.
     /// </summary>
     internal static class ProjectRootCanonicalizer
     {

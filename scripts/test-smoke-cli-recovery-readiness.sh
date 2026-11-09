@@ -50,7 +50,7 @@ func main() {
 		fmt.Printf("Unity is already running for %s (PID: 1234)\n", projectPath)
 	case "get-logs":
 		if os.Getenv("ULOOP_FAKE_CONNECTION_FAILURE") == "1" {
-			fmt.Fprintln(os.Stderr, "{\n  \"Success\": false,\n  \"Error\": {\n    \"ErrorCode\": \"UNITY_NOT_REACHABLE\",\n    \"Message\": \"The Unity CLI Loop server is not reachable for this project.\",\n    \"NextActions\": [\n      \"If Unity is closed, run `uloop launch`.\"\n    ]\n  }\n}")
+			fmt.Fprintln(os.Stderr, "{\n  \"Success\": false,\n  \"Error\": {\n    \"ErrorCode\": \"UNITY_NOT_REACHABLE\",\n    \"Message\": \"The Unity Loop Harness server is not reachable for this project.\",\n    \"NextActions\": [\n      \"If Unity is closed, run `uloop launch`.\"\n    ]\n  }\n}")
 			os.Exit(1)
 		}
 		fmt.Println(`{"DisplayedCount":0,"Logs":[],"MaxCount":1,"TotalCount":0}`)

@@ -4,7 +4,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 {
     // Compares npm-style CLI versions for platform compatibility checks.
     /// <summary>
-    /// Provides CLI Version Comparer behavior for Unity CLI Loop.
+    /// Provides CLI Version Comparer behavior for Unity Loop Harness.
     /// </summary>
     public static class CliVersionComparer
     {

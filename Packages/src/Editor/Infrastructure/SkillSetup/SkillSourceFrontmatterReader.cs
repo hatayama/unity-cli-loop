@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Reads Unity CLI Loop skill metadata from SKILL.md frontmatter.
+    /// Reads Unity Loop Harness skill metadata from SKILL.md frontmatter.
     /// </summary>
     internal static class SkillSourceFrontmatterReader
     {

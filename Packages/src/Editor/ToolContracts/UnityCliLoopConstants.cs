@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string PACKAGE_NAME = "io.github.hatayama.uloopmcp";
 
         // Product name shown in menus, window titles, and messages; keep it equal to displayName in package.json.
-        public const string DISPLAY_NAME = "Unity CLI Loop";
+        public const string DISPLAY_NAME = "Unity Loop Harness";
         
         // Editor settings
         public const string SETTINGS_FILE_NAME = "UnityCliLoopSettings.json";
