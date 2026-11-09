@@ -431,7 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string repositoryUrl = SetupWizardWindow.GetGitHubRepositoryUrl();
 
-            Assert.That(repositoryUrl, Is.EqualTo("https://github.com/hatayama/unity-cli-loop"));
+            Assert.That(repositoryUrl, Is.EqualTo("https://github.com/hatayama/unity-loop-harness"));
         }
 
         [Test]

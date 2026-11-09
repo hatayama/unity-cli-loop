@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(command.FileName, Is.EqualTo("/bin/zsh"));
             Assert.That(command.Arguments, Does.Contain("-l -i -c"));
-            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.sh"));
+            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-loop-harness/releases/download/{TestBetaReleaseTag}/install.sh"));
             Assert.That(command.Arguments, Does.Not.Contain(".sha256"));
             Assert.That(command.Arguments, Does.Contain($"{CliConstants.POSIX_SHELL_EXECUTABLE_PATH} -c"));
             Assert.That(command.Arguments, Does.Contain("ULOOP_VERSION"));
@@ -99,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/bin/zsh");
 
             Assert.That(command.FileName, Is.EqualTo("powershell"));
-            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.ps1"));
+            Assert.That(command.Arguments, Does.Contain($"https://github.com/hatayama/unity-loop-harness/releases/download/{TestBetaReleaseTag}/install.ps1"));
             Assert.That(command.Arguments, Does.Not.Contain(".sha256"));
             Assert.That(command.Arguments, Does.Contain($"$env:ULOOP_VERSION = '{TestBetaReleaseTag}'"));
             Assert.That(command.Arguments, Does.Contain("$env:ULOOP_ARCHIVE_MANIFEST"));
@@ -218,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(command.Arguments, Does.Contain("dispatcher-v3.0.0"));
             Assert.That(
                 command.Arguments,
-                Does.Contain("https://github.com/hatayama/unity-cli-loop/releases/download/dispatcher-v3.0.0/install.sh"));
+                Does.Contain("https://github.com/hatayama/unity-loop-harness/releases/download/dispatcher-v3.0.0/install.sh"));
         }
 
         [Test]
@@ -323,7 +323,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TestBetaReleaseTag,
                 CliConstants.POSIX_INSTALL_SCRIPT_NAME);
 
-            Assert.That(url, Is.EqualTo($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestBetaReleaseTag}/install.sh"));
+            Assert.That(url, Is.EqualTo($"https://github.com/hatayama/unity-loop-harness/releases/download/{TestBetaReleaseTag}/install.sh"));
         }
 
         [Test]
@@ -334,7 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TestStableReleaseTag,
                 CliConstants.WINDOWS_INSTALL_SCRIPT_NAME);
 
-            Assert.That(url, Is.EqualTo($"https://github.com/hatayama/unity-cli-loop/releases/download/{TestStableReleaseTag}/install.ps1"));
+            Assert.That(url, Is.EqualTo($"https://github.com/hatayama/unity-loop-harness/releases/download/{TestStableReleaseTag}/install.ps1"));
         }
 
         [Test]

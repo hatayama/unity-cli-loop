@@ -54,7 +54,7 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
   configured to expire after one year; when the `Open winget-pkgs pull
   request` step fails with an authentication error, issue a new classic PAT
   with `public_repo` and replace the secret with
-  `gh secret set WINGET_PKGS_TOKEN --repo hatayama/unity-cli-loop`.
+  `gh secret set WINGET_PKGS_TOKEN --repo hatayama/unity-loop-harness`.
 - When the `Open winget-pkgs pull request` step fails with HTTP 422
   `refusing to allow a Personal Access Token to create or update workflow ...
   without workflow scope`, the fork `hatayama/winget-pkgs` lags an upstream

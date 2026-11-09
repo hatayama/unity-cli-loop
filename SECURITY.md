@@ -4,7 +4,7 @@
 
 Please do not create a public GitHub issue for security vulnerabilities.
 
-Use GitHub's [Private Vulnerability Reporting](https://github.com/hatayama/unity-cli-loop/security/advisories/new) feature instead.
+Use GitHub's [Private Vulnerability Reporting](https://github.com/hatayama/unity-loop-harness/security/advisories/new) feature instead.
 
 When reporting a vulnerability, please include:
 

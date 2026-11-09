@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
-    [string]$Repository = "hatayama/unity-cli-loop",
+    [string]$Repository = "hatayama/unity-loop-harness",
     [string]$RawBaseUrl = "https://raw.githubusercontent.com"
 )
 

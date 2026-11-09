@@ -10,6 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
     {
         // Tool Settings
         public const string TOOL_SETTINGS_MENU_PATH = "Window > " + UnityCliLoopConstants.DISPLAY_NAME + " > Settings";
-        public const string PROJECT_REPOSITORY_URL = "https://github.com/hatayama/unity-cli-loop";
+        public const string PROJECT_REPOSITORY_URL = "https://github.com/hatayama/unity-loop-harness";
     }
 }

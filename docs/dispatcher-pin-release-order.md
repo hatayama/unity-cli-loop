@@ -202,18 +202,18 @@ nor followed by release-please.
 To tell, look a few minutes after the merge:
 
 ```sh
-gh run list --repo hatayama/unity-cli-loop --commit <merge commit sha> --event push
+gh run list --repo hatayama/unity-loop-harness --commit <merge commit sha> --event push
 ```
 
 An empty list means the push never reached Actions. Start, from `main`, what the
 push would have started:
 
-- always: `gh workflow run release-please.yml --repo hatayama/unity-cli-loop --ref main`;
+- always: `gh workflow run release-please.yml --repo hatayama/unity-loop-harness --ref main`;
 - after merging the dispatcher release pull request:
-  `gh workflow run dispatcher-publish.yml --repo hatayama/unity-cli-loop --ref main`,
+  `gh workflow run dispatcher-publish.yml --repo hatayama/unity-loop-harness --ref main`,
   then approve `cli-release` as usual;
 - after merging the project runner release pull request:
-  `gh workflow run native-cli-publish.yml --repo hatayama/unity-cli-loop --ref main`.
+  `gh workflow run native-cli-publish.yml --repo hatayama/unity-loop-harness --ref main`.
 
 On a release commit, a hand-started release-please run is skipped by
 `check-release-please-gate` until the release is published; the publish

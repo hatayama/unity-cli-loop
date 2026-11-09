@@ -117,13 +117,13 @@ https://github.com/user-attachments/assets/118c8b4a-8254-4798-a63c-f6a213fc1031
 Linux では focus-window は未対応です。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-loop-harness/main/scripts/install.sh | sh
 ```
 
 **Windows PowerShell:**
 
 ```powershell
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/hatayama/unity-loop-harness/main/scripts/install.ps1 | iex
 ```
 
 **Homebrew（macOS）:**
@@ -186,7 +186,7 @@ uloop skills install --output-dir path/to/skills
 `Window > Package Manager` の「+」から **Add package from git URL** を選び、次の URL を入力します：
 
 ```text
-https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
+https://github.com/hatayama/unity-loop-harness.git?path=/Packages/src
 ```
 
 <details>

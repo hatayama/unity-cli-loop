@@ -117,13 +117,13 @@ Make sure you have:
 On Linux, focus-window is not supported.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-loop-harness/main/scripts/install.sh | sh
 ```
 
 **Windows PowerShell:**
 
 ```powershell
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/hatayama/unity-loop-harness/main/scripts/install.ps1 | iex
 ```
 
 **Homebrew (macOS):**
@@ -186,7 +186,7 @@ uloop skills install --output-dir path/to/skills
 In `Window > Package Manager`, press "+", choose **Add package from git URL**, and enter:
 
 ```text
-https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
+https://github.com/hatayama/unity-loop-harness.git?path=/Packages/src
 ```
 
 <details>

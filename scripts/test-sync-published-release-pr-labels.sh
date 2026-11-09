@@ -111,7 +111,7 @@ run_case() {
       GH_RELEASES_JSON="$releases_json" \
       GH_RELEASE_VIEW_ERROR="$release_view_error" \
       TARGET_BRANCH=v3-beta \
-      GITHUB_REPOSITORY=hatayama/unity-cli-loop \
+      GITHUB_REPOSITORY=hatayama/unity-loop-harness \
       "$SCRIPT" > output.txt 2> stderr.txt
     status=$?
     set -e
@@ -127,7 +127,7 @@ test_marks_stale_pending_release_pr() {
     '{"v3.0.0-beta.3":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/marks-stale/status.txt" "0"
-  assert_contains "$TMP_DIR/marks-stale/gh.log" "pr edit 1082 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/marks-stale/gh.log" "pr edit 1082 --repo hatayama/unity-loop-harness --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/marks-stale/output.txt" "Marked release PR #1082 as tagged for v3.0.0-beta.3."
 }
 
@@ -138,7 +138,7 @@ test_marks_branch_title_release_pr_from_body() {
     '{"v3.0.0-beta.7":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/branch-title/status.txt" "0"
-  assert_contains "$TMP_DIR/branch-title/gh.log" "pr edit 1105 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/branch-title/gh.log" "pr edit 1105 --repo hatayama/unity-loop-harness --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/branch-title/output.txt" "Marked release PR #1105 as tagged for v3.0.0-beta.7."
 }
 
@@ -149,7 +149,7 @@ test_marks_component_summary_release_pr_from_body() {
     '{"v3.0.0-beta.47":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/component-summary/status.txt" "0"
-  assert_contains "$TMP_DIR/component-summary/gh.log" "pr edit 1448 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/component-summary/gh.log" "pr edit 1448 --repo hatayama/unity-loop-harness --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/component-summary/output.txt" "Marked release PR #1448 as tagged for v3.0.0-beta.47."
 }
 
@@ -160,7 +160,7 @@ test_marks_project_runner_component_summary_release_pr_from_body() {
     '{"uloop-project-runner-v3.0.0-beta.45":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/project-runner-component-summary/status.txt" "0"
-  assert_contains "$TMP_DIR/project-runner-component-summary/gh.log" "pr edit 1450 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/project-runner-component-summary/gh.log" "pr edit 1450 --repo hatayama/unity-loop-harness --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/project-runner-component-summary/output.txt" "Marked release PR #1450 as tagged for uloop-project-runner-v3.0.0-beta.45."
 }
 
@@ -171,7 +171,7 @@ test_marks_dispatcher_component_summary_release_pr_from_body() {
     '{"dispatcher-v3.0.1-beta.12":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/dispatcher-component-summary/status.txt" "0"
-  assert_contains "$TMP_DIR/dispatcher-component-summary/gh.log" "release view dispatcher-v3.0.1-beta.12 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$TMP_DIR/dispatcher-component-summary/gh.log" "release view dispatcher-v3.0.1-beta.12 --repo hatayama/unity-loop-harness --json isDraft,targetCommitish"
   assert_contains "$TMP_DIR/dispatcher-component-summary/output.txt" "Marked release PR #1470 as tagged for dispatcher-v3.0.1-beta.12."
 }
 
@@ -182,7 +182,7 @@ test_marks_uloop_dispatcher_component_summary_release_pr_from_body() {
     '{"dispatcher-v3.0.1-beta.13":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/uloop-dispatcher-component-summary/status.txt" "0"
-  assert_contains "$TMP_DIR/uloop-dispatcher-component-summary/gh.log" "release view dispatcher-v3.0.1-beta.13 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$TMP_DIR/uloop-dispatcher-component-summary/gh.log" "release view dispatcher-v3.0.1-beta.13 --repo hatayama/unity-loop-harness --json isDraft,targetCommitish"
   assert_contains "$TMP_DIR/uloop-dispatcher-component-summary/output.txt" "Marked release PR #1696 as tagged for dispatcher-v3.0.1-beta.13."
 }
 
@@ -193,8 +193,8 @@ test_marks_component_branch_release_pr_from_head_ref() {
     '{"dispatcher-v3.5.0":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/component-branch/status.txt" "0"
-  assert_contains "$TMP_DIR/component-branch/gh.log" "release view dispatcher-v3.5.0 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
-  assert_not_contains "$TMP_DIR/component-branch/gh.log" "release view v3.5.0 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$TMP_DIR/component-branch/gh.log" "release view dispatcher-v3.5.0 --repo hatayama/unity-loop-harness --json isDraft,targetCommitish"
+  assert_not_contains "$TMP_DIR/component-branch/gh.log" "release view v3.5.0 --repo hatayama/unity-loop-harness --json isDraft,targetCommitish"
   assert_contains "$TMP_DIR/component-branch/output.txt" "Marked release PR #1700 as tagged for dispatcher-v3.5.0."
 }
 
@@ -205,8 +205,8 @@ test_marks_project_runner_component_summary_release_pr_before_numeric_title() {
     '{"uloop-project-runner-v3.0.0-beta.45":{"isDraft":false,"targetCommitish":"abc123"}}'
 
   assert_file_equals "$TMP_DIR/project-runner-component-before-title/status.txt" "0"
-  assert_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view uloop-project-runner-v3.0.0-beta.45 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
-  assert_not_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view v3.0.0-beta.45 --repo hatayama/unity-cli-loop --json isDraft,targetCommitish"
+  assert_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view uloop-project-runner-v3.0.0-beta.45 --repo hatayama/unity-loop-harness --json isDraft,targetCommitish"
+  assert_not_contains "$TMP_DIR/project-runner-component-before-title/gh.log" "release view v3.0.0-beta.45 --repo hatayama/unity-loop-harness --json isDraft,targetCommitish"
   assert_contains "$TMP_DIR/project-runner-component-before-title/output.txt" "Marked release PR #1452 as tagged for uloop-project-runner-v3.0.0-beta.45."
 }
 

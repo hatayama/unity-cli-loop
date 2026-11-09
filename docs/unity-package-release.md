@@ -71,7 +71,7 @@ cannot write to the repository.
 | `UPM_SERVICE_ACCOUNT_KEY_ID`, `UPM_SERVICE_ACCOUNT_KEY_SECRET` environment secrets | Key pair of a Unity Cloud service account with the organization role **Package Manager Package Signer**. The role must be an organization role; a project role does not allow signing, and `upm pack` then fails with "User does not have permission to sign package". Read only by the `Sign the package` step. |
 | `UPM_ORG_ID` environment secret | ID of the Unity organization that signs the package (Unity Cloud Dashboard → Administration → Settings). The Package Manager window shows the organization's name as "Signed for <name>". |
 | `UPM_CLI_VERSION`, `UPM_CLI_LINUX_X64_SHA256` in `unity-package-release.yml` | The pinned UPM CLI and the checksum recorded for its `upm-linux-x64.zip`. |
-| `openupm/openupm` `data/packages/io.github.hatayama.uloopmcp.yml` | OpenUPM metadata. Needs `trackingMode: githubRelease` and `githubReleaseAssetName: 'io.github.hatayama.uloopmcp-'`; the asset name keeps OpenUPM away from the CLI archives on the dispatcher and project runner releases. |
+| `openupm/openupm` `data/packages/io.github.hatayama.uloopmcp.yml` | OpenUPM metadata. Needs `trackingMode: githubRelease` and `githubReleaseAssetName: 'io.github.hatayama.uloopmcp-'`; the asset name keeps OpenUPM away from the CLI archives on the dispatcher and project runner releases. `repoUrl` is where OpenUPM reads releases from, so renaming this repository needs a pull request there too. |
 
 ## Updating the UPM CLI pin
 

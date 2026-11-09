@@ -5,7 +5,7 @@ set -eu
 : "${TARGET_SHA:?TARGET_SHA is required}"
 : "${TARGET_BRANCH:?TARGET_BRANCH is required}"
 
-REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-cli-loop}
+REPO_FULL_NAME=${GITHUB_REPOSITORY:-hatayama/unity-loop-harness}
 PENDING_LABEL="autorelease: pending"
 TAGGED_LABEL="autorelease: tagged"
 

@@ -99,7 +99,7 @@ run_case() {
       RELEASE_TAG=v3.0.0-beta.3 \
       TARGET_SHA=abc123 \
       TARGET_BRANCH=v3-beta \
-      GITHUB_REPOSITORY=hatayama/unity-cli-loop \
+      GITHUB_REPOSITORY=hatayama/unity-loop-harness \
       "$SCRIPT" > output.txt 2> stderr.txt
     status=$?
     set -e
@@ -115,7 +115,7 @@ test_marks_matching_release_pr() {
     '[{"number":1082,"title":"chore(v3-beta): release 3.0.0-beta.3","mergeCommit":{"oid":"abc123"}}]'
 
   assert_file_equals "$TMP_DIR/marks-pr/status.txt" "0"
-  assert_contains "$TMP_DIR/marks-pr/gh.log" "pr edit 1082 --repo hatayama/unity-cli-loop --remove-label autorelease: pending --add-label autorelease: tagged"
+  assert_contains "$TMP_DIR/marks-pr/gh.log" "pr edit 1082 --repo hatayama/unity-loop-harness --remove-label autorelease: pending --add-label autorelease: tagged"
   assert_contains "$TMP_DIR/marks-pr/output.txt" "Marked release PR #1082 as tagged for v3.0.0-beta.3."
 }
 

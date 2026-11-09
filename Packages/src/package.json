@@ -4,12 +4,12 @@
   "displayName": "Unity Loop Harness",
   "description": "Agent harness for Unity: lets AI agents compile, test, and operate your Unity project through the uloop CLI.",
   "unity": "2022.3",
-  "documentationUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/README.md",
-  "licensesUrl": "https://github.com/hatayama/unity-cli-loop/blob/main/LICENSE.md",
+  "documentationUrl": "https://github.com/hatayama/unity-loop-harness/blob/main/README.md",
+  "licensesUrl": "https://github.com/hatayama/unity-loop-harness/blob/main/LICENSE.md",
   "author": {
     "name": "hatayama",
     "email": "booqle@gmail.com",
-    "url": "https://github.com/hatayama/unity-cli-loop"
+    "url": "https://github.com/hatayama/unity-loop-harness"
   },
   "dependencies": {
     "com.unity.ugui": "1.0.0",
@@ -29,6 +29,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hatayama/unity-cli-loop.git"
+    "url": "git+https://github.com/hatayama/unity-loop-harness.git"
   }
 } 

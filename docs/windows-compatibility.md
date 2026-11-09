@@ -17,7 +17,7 @@ bugs that macOS hides.
 
 ### Symptom
 
-Defender's ML detections (names ending in `!ml`, e.g. `Trojan:Win32/Bearfoos.A!ml`) can quarantine `uloop.exe` while a command is running. From the agent's side this looks like `UNITY_NOT_REACHABLE` or an abrupt process exit, not like an antivirus event. Check `Get-MpThreatDetection` in PowerShell, or Windows Security → Protection history, before debugging IPC. Whether a given release is flagged depends on the security-intelligence version, not only on the binary. See [issue #2503](https://github.com/hatayama/unity-cli-loop/issues/2503).
+Defender's ML detections (names ending in `!ml`, e.g. `Trojan:Win32/Bearfoos.A!ml`) can quarantine `uloop.exe` while a command is running. From the agent's side this looks like `UNITY_NOT_REACHABLE` or an abrupt process exit, not like an antivirus event. Check `Get-MpThreatDetection` in PowerShell, or Windows Security → Protection history, before debugging IPC. Whether a given release is flagged depends on the security-intelligence version, not only on the binary. See [issue #2503](https://github.com/hatayama/unity-loop-harness/issues/2503).
 
 ```powershell
 Get-MpThreatDetection
@@ -28,13 +28,13 @@ Get-MpThreatDetection
 Hash the installed dispatcher and compare it to the `uloop.exe` inside the matching GitHub Release zip. Hash the zip itself against the accompanying `.sha256` file. Then verify the zip attestation.
 
 ```powershell
-gh release download dispatcher-v<version> --repo hatayama/unity-cli-loop -p "uloop-dispatcher-windows-amd64.zip*"
+gh release download dispatcher-v<version> --repo hatayama/unity-loop-harness -p "uloop-dispatcher-windows-amd64.zip*"
 Get-Content -Encoding UTF8 .\uloop-dispatcher-windows-amd64.zip.sha256
 certutil -hashfile .\uloop-dispatcher-windows-amd64.zip SHA256
 Expand-Archive -Path .\uloop-dispatcher-windows-amd64.zip -DestinationPath .\uloop-verify -Force
 certutil -hashfile .\uloop-verify\uloop.exe SHA256
 certutil -hashfile "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" SHA256
-gh attestation verify uloop-dispatcher-windows-amd64.zip --repo hatayama/unity-cli-loop
+gh attestation verify uloop-dispatcher-windows-amd64.zip --repo hatayama/unity-loop-harness
 ```
 
 The zip hash must match the `.sha256` file, and the installed `uloop.exe` hash must match the `uloop.exe` inside the zip. If either hash differs, do not allow the binary. Open an issue instead.
