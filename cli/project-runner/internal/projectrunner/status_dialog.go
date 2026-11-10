@@ -23,7 +23,8 @@ type statusDialog struct {
 	Buttons []string `json:"Buttons"`
 }
 
-var errDialogInspectionUnsupported = errors.New("looking for dialogs in Unity's windows is supported only on macOS")
+var errDialogInspectionUnsupported = errors.New(
+	"looking for dialogs in Unity's windows is supported only on macOS and Windows")
 
 const dialogInspectionTimeout = 5 * time.Second
 
@@ -41,7 +42,10 @@ type dialogInspector struct {
 	goos          string
 	timeout       time.Duration
 	lookupProcess func(ctx context.Context, projectRoot string) (*unityprocess.UnityProcess, error)
-	runCommand    func(ctx context.Context, name string, args ...string) ([]byte, error)
+	// Starts osascript on macOS.
+	runCommand func(ctx context.Context, name string, args ...string) ([]byte, error)
+	// Lists the Unity process's windows on Windows.
+	listWindows func(ctx context.Context, pid int) ([]win32Window, error)
 }
 
 func defaultDialogInspector() dialogInspector {
@@ -50,6 +54,7 @@ func defaultDialogInspector() dialogInspector {
 		timeout:       dialogInspectionTimeout,
 		lookupProcess: unityProcessLookup,
 		runCommand:    runCommandCapturingStderr,
+		listWindows:   listUnityProcessWindows,
 	}
 }
 
@@ -57,7 +62,7 @@ func defaultDialogInspector() dialogInspector {
 // where it cannot look.
 func (inspector dialogInspector) inspect(ctx context.Context, projectRoot string) ([]statusDialog, error) {
 	// Why before the lookup: other operating systems must not start a process scan for nothing.
-	if inspector.goos != "darwin" {
+	if inspector.goos != "darwin" && inspector.goos != "windows" {
 		return nil, errDialogInspectionUnsupported
 	}
 	process, err := inspector.lookupProcess(ctx, projectRoot)
@@ -67,22 +72,42 @@ func (inspector dialogInspector) inspect(ctx context.Context, projectRoot string
 	if process == nil {
 		return nil, errors.New("no Unity process runs for this project")
 	}
+	if inspector.goos == "windows" {
+		return inspector.inspectWin32Windows(ctx, process.Pid)
+	}
+	return inspector.inspectAccessibility(ctx, process.Pid)
+}
 
+// inspectAccessibility asks System Events for the modal dialogs of the Unity process on macOS.
+func (inspector dialogInspector) inspectAccessibility(ctx context.Context, pid int) ([]statusDialog, error) {
 	inspectCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
 	output, err := inspector.runCommand(
-		inspectCtx, "osascript", "-l", "JavaScript", "-e", accessibilityDialogScript, strconv.Itoa(process.Pid))
+		inspectCtx, "osascript", "-l", "JavaScript", "-e", accessibilityDialogScript, strconv.Itoa(pid))
 	// Why before err: a stopped command fails with "signal: killed", which hides why it stopped.
-	if ctx.Err() != nil {
-		return nil, fmt.Errorf("looking for dialogs was cancelled: %w", ctx.Err())
-	}
-	if inspectCtx.Err() != nil {
-		return nil, fmt.Errorf("osascript did not answer within %s", inspector.timeout)
+	if stopErr := inspector.stoppedLookError(ctx, inspectCtx, "osascript did not answer"); stopErr != nil {
+		return nil, stopErr
 	}
 	if err != nil {
 		return nil, fmt.Errorf("osascript could not read Unity's windows: %w", err)
 	}
 	return dialogsFromAccessibilityOutput(output)
+}
+
+// stoppedLookError says why a look stopped before it finished: the caller cancelled it, or it ran
+// out of time, which is worded with unanswered. It returns nil for a look that was not stopped.
+func (inspector dialogInspector) stoppedLookError(
+	ctx context.Context,
+	inspectCtx context.Context,
+	unanswered string,
+) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("looking for dialogs was cancelled: %w", ctx.Err())
+	}
+	if inspectCtx.Err() != nil {
+		return fmt.Errorf("%s within %s", unanswered, inspector.timeout)
+	}
+	return nil
 }
 
 // runCommandCapturingStderr runs a command and puts its stderr into the error, because osascript
@@ -160,12 +185,21 @@ func stringsExcept(values []string, excluded string) []string {
 	return result
 }
 
+const dialogCheckFailedNextAction = "uloop could not look in Unity's windows for a modal dialog, so one may be " +
+	"open without being reported. If this state does not clear, ask the user to look at Unity"
+
+// checkFailedNextAction is the hint status adds when the look fails.
+// Why only macOS explains a permission: reading another process's windows needs Accessibility
+// access there and nothing on Windows, where a failed look has no setting behind it.
 // Why it does not tell the reader to grant access outright: the look fails on every stalled
 // status in a sandbox or without the permission, usually while no dialog is open.
-const dialogCheckNextAction = "uloop could not look in Unity's windows for a modal dialog, so one may be open " +
-	"without being reported. If this state does not clear, ask the user to look at Unity; on macOS, " +
-	"Accessibility access for the app that runs uloop (System Settings > Privacy & Security > " +
-	"Accessibility) lets uloop report the dialog itself."
+func (inspector dialogInspector) checkFailedNextAction() string {
+	if inspector.goos != "darwin" {
+		return dialogCheckFailedNextAction + "."
+	}
+	return dialogCheckFailedNextAction + "; on macOS, Accessibility access for the app that runs uloop " +
+		"(System Settings > Privacy & Security > Accessibility) lets uloop report the dialog itself."
+}
 
 // needsDialogInspection reports whether the answer leaves room for a dialog uloop must look for
 // itself. Only a stalled main thread can hide one; Busy counts because a running command such as
@@ -211,7 +245,7 @@ func inspectForDialogs(
 	}
 	if err != nil {
 		report.DialogCheckError = err.Error()
-		report.NextActions = append(report.NextActions, dialogCheckNextAction)
+		report.NextActions = append(report.NextActions, deps.dialogCheckNextAction)
 		return report
 	}
 	if len(dialogs) == 0 {
