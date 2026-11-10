@@ -48,7 +48,7 @@ Returns JSON with:
 - `UnityProcessRunning`: whether Unity is running for this project; `ServerUnavailable` and `NotRunning` only, and `BlockedByDialog` found while the server did not answer
 - `ConnectionError`: the connection error as reported; `NotResponding`, `ServerUnavailable`, `NotRunning`, and `Unreachable` only, and `BlockedByDialog` found while the server did not answer
 - `Dialogs`: each open dialog's `Title`, `Message`, and `Buttons` (button labels; empty when uloop cannot read them); `BlockedByDialog` only
-- `DialogCheckError`: why uloop could not look in Unity's windows for a dialog; macOS only, with `Busy`, `MainThreadBlocked`, or `ServerUnavailable`
+- `DialogCheckError`: why uloop could not look in Unity's windows for a dialog; macOS and Windows only, with `Busy`, `MainThreadBlocked`, or `ServerUnavailable`
 
 Play Mode does not change the state: a paused Play Mode session is `Ready`, with `IsPlaying` and `IsPaused` set.
 
@@ -58,9 +58,9 @@ Play Mode does not change the state: a paused Play Mode session is `Ready`, with
 - When `Busy` does not clear and the running command shows no sign of finishing, stop it with `uloop cancel`; its outcomes, what it cannot cancel, and what to do after it are in [references/cancel.md](references/cancel.md).
 - It never focuses the window, launches Unity, or takes the command slot, so it is safe to poll.
 - A sandboxed shell that cannot open the Unix socket gets an error, not NotRunning; run it outside the sandbox.
-- uloop cannot detect Safe Mode itself; ServerUnavailable that does not clear is the signal. On macOS, the prompt that offers Safe Mode shows as BlockedByDialog.
+- uloop cannot detect Safe Mode itself; ServerUnavailable that does not clear is the signal. On macOS and Windows, the prompt that offers Safe Mode shows as BlockedByDialog.
 - Before reporting MainThreadBlocked it wakes the Editor's main loop and asks again about a second later, so an Editor that is only idle in the background reads as Ready.
 - A command sent while the main thread is blocked waits for it. Once the stall reaches 30 seconds before any of the command's code has run, Unity stops the wait and the command fails with `MAIN_THREAD_BLOCKED` (nothing ran, so running it again after the block clears is safe). A command whose own code blocks the main thread is not stopped; the CLI prints a stall notice on stderr every 60 seconds instead and gives up after 5 minutes with `UNITY_EDITOR_UNRESPONSIVE`. `execute-dynamic-code` is the exception: its own snippet may block the main thread for as long as it runs.
 - Do not press a dialog button for the user: show them `Title`, `Message`, and `Buttons` and ask.
-- Unity 6000.7 or later reports message boxes and modal Editor windows itself, on every OS. On macOS, uloop also looks in Unity's windows when the main thread has not run for 5 seconds or more (including while a command runs) or when Unity runs without its server, so it finds dialogs in older Editors and startup prompts. Where neither applies (Windows or Linux with an Editor older than 6000.7, or on those systems before the package has loaded), such a dialog shows as `Busy`, `MainThreadBlocked`, or `ServerUnavailable`.
-- That look needs Accessibility access for the app that runs uloop, and the first one can make macOS ask whether the app may control System Events. When it fails, the state is unchanged and `DialogCheckError` says why; a dialog may still be open.
+- Unity 6000.7 or later reports message boxes and modal Editor windows itself, on every OS. On macOS and Windows, uloop also looks in Unity's windows when the main thread has not run for 5 seconds or more (including while a command runs) or when Unity runs without its server, so it finds dialogs in older Editors and startup prompts. On Linux it does not look: with an Editor older than 6000.7, or before the package has loaded, such a dialog shows as `Busy`, `MainThreadBlocked`, or `ServerUnavailable`.
+- On macOS that look needs Accessibility access for the app that runs uloop, and the first one can make macOS ask whether the app may control System Events; on Windows it needs no permission. When it fails, the state is unchanged and `DialogCheckError` says why; a dialog may still be open.
