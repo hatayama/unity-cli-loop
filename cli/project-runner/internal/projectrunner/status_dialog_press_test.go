@@ -108,9 +108,8 @@ func TestDialogPressIsMacOSOnly(t *testing.T) {
 			if inspector.canPress() {
 				t.Fatal("canPress must be false")
 			}
-			if _, err := inspector.press(context.Background(), "/project", "Later"); err == nil {
-				t.Fatal("expected an error")
-			}
+			_, err := inspector.press(context.Background(), "/project", "Later")
+			assertPressNotStarted(t, err, true)
 		})
 	}
 	if !dialogInspectorForTest(t, "darwin", failingProcessLookup(t), failingCommand(t)).canPress() {
@@ -132,9 +131,8 @@ func TestDialogPressFailsWithoutAUnityProcess(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			inspector := dialogInspectorForTest(t, "darwin", lookup, failingCommand(t))
 
-			if _, err := inspector.press(context.Background(), "/project", "Later"); err == nil {
-				t.Fatal("expected an error")
-			}
+			_, err := inspector.press(context.Background(), "/project", "Later")
+			assertPressNotStarted(t, err, true)
 		})
 	}
 }
@@ -152,6 +150,7 @@ func TestDialogPressReportsWhyTheScriptStopped(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "not allowed assistive access") {
 			t.Fatalf("error = %v, want the osascript error text", err)
 		}
+		assertPressNotStarted(t, err, false)
 	})
 	t.Run("times out", func(t *testing.T) {
 		command := func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
@@ -166,6 +165,7 @@ func TestDialogPressReportsWhyTheScriptStopped(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "did not answer within 50ms") {
 			t.Fatalf("error = %v, want a timeout error", err)
 		}
+		assertPressNotStarted(t, err, false)
 	})
 	t.Run("cancelled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -180,5 +180,30 @@ func TestDialogPressReportsWhyTheScriptStopped(t *testing.T) {
 		if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "did not answer") {
 			t.Fatalf("error = %v, want a cancellation", err)
 		}
+		assertPressNotStarted(t, err, false)
 	})
+}
+
+// assertPressNotStarted checks whether err says the press failed before osascript started.
+func assertPressNotStarted(t *testing.T, err error, want bool) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	var notStarted dialogPressNotStartedError
+	if got := errors.As(err, &notStarted); got != want {
+		t.Fatalf("not started = %v, want %v: %v", got, want, err)
+	}
+}
+
+// Verifies the hint added to a failed press names the macOS Accessibility setting without
+// describing a failed look, and is empty where no permission is involved.
+func TestDialogInspectorAnswerFailedHintNamesTheAccessibilitySetting(t *testing.T) {
+	macOS := dialogInspector{goos: "darwin"}.answerFailedHint()
+	if !strings.Contains(macOS, "Accessibility access") || strings.Contains(macOS, "could not look") {
+		t.Fatalf("macOS hint = %q, want the Accessibility setting without the look failure", macOS)
+	}
+	if windows := (dialogInspector{goos: "windows"}).answerFailedHint(); windows != "" {
+		t.Fatalf("Windows hint = %q, want none", windows)
+	}
 }

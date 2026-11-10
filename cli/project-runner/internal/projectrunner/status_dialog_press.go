@@ -10,6 +10,20 @@ import (
 
 var errDialogPressUnsupported = errors.New("pressing a dialog button is supported only on macOS")
 
+// dialogPressNotStartedError is a press that failed before osascript started, so no click can
+// have happened and pressing again is safe.
+type dialogPressNotStartedError struct {
+	err error
+}
+
+func (err dialogPressNotStartedError) Error() string {
+	return err.err.Error()
+}
+
+func (err dialogPressNotStartedError) Unwrap() error {
+	return err.err
+}
+
 // accessibilityPressScript finds the first modal dialog window of the given process, reads its
 // window title, static texts, and button names, presses the button whose name equals the label
 // exactly, and prints what it read as JSON.
@@ -29,11 +43,11 @@ func (inspector dialogInspector) canPress() bool {
 // Editor, and returns that dialog as it was before the press.
 func (inspector dialogInspector) press(ctx context.Context, projectRoot string, label string) (dialogPressResult, error) {
 	if !inspector.canPress() {
-		return dialogPressResult{}, errDialogPressUnsupported
+		return dialogPressResult{}, dialogPressNotStartedError{err: errDialogPressUnsupported}
 	}
 	pid, err := inspector.unityPid(ctx, projectRoot)
 	if err != nil {
-		return dialogPressResult{}, err
+		return dialogPressResult{}, dialogPressNotStartedError{err: err}
 	}
 	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
@@ -47,6 +61,15 @@ func (inspector dialogInspector) press(ctx context.Context, projectRoot string, 
 		return dialogPressResult{}, fmt.Errorf("osascript could not press the button: %w", err)
 	}
 	return pressResultFromAccessibilityOutput(output)
+}
+
+// answerFailedHint is added to a failed press where a missing permission can be the cause: only
+// macOS needs one to press another process's buttons.
+func (inspector dialogInspector) answerFailedHint() string {
+	if inspector.goos != "darwin" {
+		return ""
+	}
+	return "On macOS, pressing a button needs " + dialogAccessibilitySetting + "."
 }
 
 // pressResultFromAccessibilityOutput turns the press script's JSON into a result.

@@ -65,10 +65,6 @@ type dialogAnswerOutput struct {
 
 func defaultDialogCommandDeps() dialogCommandDeps {
 	inspector := defaultDialogInspector()
-	answerFailedHint := ""
-	if inspector.goos == "darwin" {
-		answerFailedHint = inspector.checkFailedNextAction()
-	}
 	return dialogCommandDeps{
 		canPress:              inspector.canPress(),
 		look:                  inspector.inspect,
@@ -76,7 +72,7 @@ func defaultDialogCommandDeps() dialogCommandDeps {
 		recheckDelay:          dialogRecheckDelay,
 		recheckCount:          dialogRecheckCount,
 		checkFailedNextAction: inspector.checkFailedNextAction(),
-		answerFailedHint:      answerFailedHint,
+		answerFailedHint:      inspector.answerFailedHint(),
 	}
 }
 
@@ -192,7 +188,11 @@ func answerDialog(
 	}
 	result, err := deps.press(ctx, projectRoot, label)
 	if err != nil {
-		writeDialogError(stderr, projectRoot, answerFailedError("uloop could not press the button: "+err.Error(), deps))
+		failure := answerFailedError("uloop could not press the button: "+err.Error(), deps)
+		var notStarted dialogPressNotStartedError
+		// Why only here: once osascript started, the click may have landed even when it failed.
+		failure.SafeToRetry = errors.As(err, &notStarted)
+		writeDialogError(stderr, projectRoot, failure)
 		return 1
 	}
 	if failure, failed := unpressedDialogError(result, label); failed {
@@ -291,8 +291,8 @@ func notAnswerableError(message string) clierrors.CLIError {
 	}
 }
 
-// answerFailedError is not safe to retry: the press may have landed, and pressing the same label
-// again could press a button of the dialog that opened next.
+// answerFailedError is not safe to retry unless the caller knows no click happened: the press may
+// have landed, and pressing the same label again could press a button of the dialog that opened next.
 func answerFailedError(message string, deps dialogCommandDeps) clierrors.CLIError {
 	nextActions := []string{
 		"Run uloop dialog to see whether the dialog is still open before pressing again.",

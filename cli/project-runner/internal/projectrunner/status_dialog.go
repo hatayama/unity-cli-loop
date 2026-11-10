@@ -202,6 +202,11 @@ func stringsExcept(values []string, excluded string) []string {
 	return result
 }
 
+// dialogAccessibilitySetting names the macOS permission that both looking at and pressing in
+// another process's windows need.
+const dialogAccessibilitySetting = "Accessibility access for the app that runs uloop " +
+	"(System Settings > Privacy & Security > Accessibility)"
+
 const dialogCheckFailedNextAction = "uloop could not look in Unity's windows for a modal dialog, so one may be " +
 	"open without being reported. If this state does not clear, ask the user to look at Unity"
 
@@ -214,8 +219,7 @@ func (inspector dialogInspector) checkFailedNextAction() string {
 	if inspector.goos != "darwin" {
 		return dialogCheckFailedNextAction + "."
 	}
-	return dialogCheckFailedNextAction + "; on macOS, Accessibility access for the app that runs uloop " +
-		"(System Settings > Privacy & Security > Accessibility) lets uloop report the dialog itself."
+	return dialogCheckFailedNextAction + "; on macOS, " + dialogAccessibilitySetting + " lets uloop report the dialog itself."
 }
 
 // needsDialogInspection reports whether the answer leaves room for a dialog uloop must look for

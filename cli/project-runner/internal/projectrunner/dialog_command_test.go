@@ -222,6 +222,19 @@ func TestRunDialogCommandReportsFailedLook(t *testing.T) {
 	}
 }
 
+// Verifies listing does not depend on pressing: where uloop can look but not press, as on
+// Windows, the open dialogs are still printed.
+func TestRunDialogCommandListsWhereUloopCannotPress(t *testing.T) {
+	fake := &fakeDialogCommand{
+		canPress: false,
+		looks:    []dialogLookAnswer{{dialogs: []statusDialog{dialogTestPressed}}},
+	}
+
+	output := decodeDialogOutput(t, runDialogForTest(context.Background(), nil, fake))
+
+	assertDialogJSON(t, output["Dialogs"], []statusDialog{dialogTestPressed})
+}
+
 // Verifies listing where uloop cannot look at Unity's windows is DIALOG_NOT_ANSWERABLE.
 func TestRunDialogCommandIsUnsupportedWhereUloopCannotLook(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: false, looks: []dialogLookAnswer{{err: errDialogInspectionUnsupported}}}
@@ -334,6 +347,22 @@ func TestRunDialogCommandReportsFailedPress(t *testing.T) {
 	}
 	if fake.lookCalls != 0 {
 		t.Fatalf("look must not run: %d", fake.lookCalls)
+	}
+}
+
+// Verifies a press that failed before osascript started, so no click can have happened, is
+// DIALOG_ANSWER_FAILED that is safe to retry.
+func TestRunDialogCommandReportsAPressThatNeverStarted(t *testing.T) {
+	fake := &fakeDialogCommand{
+		canPress: true,
+		pressErr: dialogPressNotStartedError{err: errors.New("no Unity process runs for this project")},
+	}
+
+	got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+		expectedDialogFailure{code: clierrors.ErrorCodeDialogAnswerFailed, retryable: false, safeToRetry: true})
+
+	if !strings.Contains(got.Message, "no Unity process runs for this project") {
+		t.Fatalf("Message must carry the cause: %q", got.Message)
 	}
 }
 
