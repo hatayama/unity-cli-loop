@@ -30,9 +30,13 @@ func (err dialogPressNotStartedError) Unwrap() error {
 // Why it returns what it read before the press: once the dialog closes, the same window index
 // points at another window, and reading after the press returned the main window's title in a
 // real Editor.
-// Why the reading and the press are one script: the dialog that was checked is then always the
-// dialog that was pressed.
-const accessibilityPressScript = `function run(argv){const pid=parseInt(argv[0],10);const label=argv[1];const se=Application("System Events");const ps=se.processes.whose({unixId:pid});if(ps.length===0){return JSON.stringify({processFound:false});}const p=ps[0];for(let i=0;i<p.windows.length;i++){const w=p.windows[i];if(w.subrole()!=="AXDialog"){continue;}let modal=false;try{modal=w.attributes.byName("AXModal").value()===true;}catch(e){}if(!modal){continue;}const seen={processFound:true,dialogFound:true,pressed:false,windowTitle:w.title(),texts:w.staticTexts.value(),buttons:w.buttons.name()};const idx=seen.buttons.indexOf(label);if(idx<0){return JSON.stringify(seen);}w.buttons[idx].click();seen.pressed=true;return JSON.stringify(seen);}return JSON.stringify({processFound:true,dialogFound:false});}`
+// Why the reading and the press are one script, and why it clicks by name: only one call separates
+// the reading from the press, and a click by name throws instead of pressing in a window that has
+// no button with that label, so a dialog that closed in between cannot turn the click into a press
+// of another window's button at the same index. It cannot tell apart a different dialog that
+// replaced the first one in that moment and has a button with the same label.
+// idx only decides whether to press at all.
+const accessibilityPressScript = `function run(argv){const pid=parseInt(argv[0],10);const label=argv[1];const se=Application("System Events");const ps=se.processes.whose({unixId:pid});if(ps.length===0){return JSON.stringify({processFound:false});}const p=ps[0];for(let i=0;i<p.windows.length;i++){const w=p.windows[i];if(w.subrole()!=="AXDialog"){continue;}let modal=false;try{modal=w.attributes.byName("AXModal").value()===true;}catch(e){}if(!modal){continue;}const seen={processFound:true,dialogFound:true,pressed:false,windowTitle:w.title(),texts:w.staticTexts.value(),buttons:w.buttons.name()};const idx=seen.buttons.indexOf(label);if(idx<0){return JSON.stringify(seen);}w.buttons.byName(label).click();seen.pressed=true;return JSON.stringify(seen);}return JSON.stringify({processFound:true,dialogFound:false});}`
 
 // canPress reports whether press works on this operating system.
 func (inspector dialogInspector) canPress() bool {
