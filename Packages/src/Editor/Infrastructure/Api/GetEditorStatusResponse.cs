@@ -5,6 +5,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// <summary>
     /// Editor status payload returned by the internal bridge command behind uloop status.
     /// The running-tool fields are null while no command holds the execution slot.
+    /// OpenDialogs lists the modal dialogs Unity reported as open; only Unity 6000.7 and later report
+    /// them, so it is always empty in older Editors.
     /// </summary>
     public class GetEditorStatusResponse : UnityCliLoopToolResponse
     {
@@ -18,5 +20,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool IsCompiling { get; set; }
         public bool IsUpdating { get; set; }
         public double SecondsSinceLastMainThreadTick { get; set; }
+        public EditorDialogInfo[] OpenDialogs { get; set; }
     }
 }

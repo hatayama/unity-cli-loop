@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static JsonRpcRequestProcessor CreateProcessor(UnityCliLoopToolRegistrarService registrarService)
         {
-            return new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi())));
+            return new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker()));
         }
 
         // Stays pending until its token fires or the test completes it, so the test can cancel it
@@ -168,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new AllToolsEnabledSettingsPort(),
                 new UnityCliLoopToolExecutionService(new IdleEditorRuntimeStatePort()),
                 () => Array.Empty<IUnityCliLoopTool>());
-            return new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi())));
+            return new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker()));
         }
 
         private sealed class AllToolsEnabledSettingsPort : IToolSettingsPort

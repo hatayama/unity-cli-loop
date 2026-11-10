@@ -179,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new AlwaysEnabledToolSettingsPort(),
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 () => tools);
-            return new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(api));
+            return new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(api), new EditorDialogTracker());
         }
 
         /// <summary>

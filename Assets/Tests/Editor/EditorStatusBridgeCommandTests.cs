@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: true, isPaused: false);
             UnityCliLoopEditorStateSnapshot.SetCompileStateForTesting(isCompiling: false, isUpdating: true);
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 1.5);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 1.5, Array.Empty<EditorDialogInfo>());
 
             Assert.That(response.IsBusy, Is.False);
             Assert.That(response.RunningToolName, Is.Null);
@@ -59,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionLease runningLease = session.TryEnter("run-tests").Lease;
             timestamp += 4 * Stopwatch.Frequency;
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>());
 
             Assert.That(response.IsBusy, Is.True);
             Assert.That(response.RunningToolName, Is.EqualTo("run-tests"));
@@ -78,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
             UnityCliLoopEditorStateSnapshot.ClearForTesting();
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>());
 
             Assert.That(response.HasEditorState, Is.False);
         }
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.ClearForTesting();
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>());
 
             Assert.That(response.HasEditorState, Is.False);
         }
@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.ClearForTesting();
             UnityCliLoopEditorStateSnapshot.SetCompileStateForTesting(isCompiling: false, isUpdating: false);
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>());
 
             Assert.That(response.HasEditorState, Is.False);
         }
@@ -121,7 +121,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Execute_WhenRegistrarIsNull_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(null, 0));
+            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(null, 0, Array.Empty<EditorDialogInfo>()));
+        }
+
+        /// <summary>
+        /// What: the dialogs the tracker recorded are reported with their title, message, and buttons unchanged.
+        /// </summary>
+        [Test]
+        public void Execute_WhenTrackerHasOpenDialog_ReportsIt()
+        {
+            UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
+            EditorDialogTracker tracker = new EditorDialogTracker();
+            tracker.RecordShown(1, "Save scene?", "Your changes will be lost.", new[] { "Save", "Cancel" });
+
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 6, tracker.GetOpenDialogs());
+
+            Assert.That(response.OpenDialogs, Has.Length.EqualTo(1));
+            Assert.That(response.OpenDialogs[0].Title, Is.EqualTo("Save scene?"));
+            Assert.That(response.OpenDialogs[0].Message, Is.EqualTo("Your changes will be lost."));
+            Assert.That(response.OpenDialogs[0].Buttons, Is.EqualTo(new[] { "Save", "Cancel" }));
+        }
+
+        /// <summary>
+        /// What: a missing dialog list is rejected instead of producing a payload that claims no dialog is open.
+        /// </summary>
+        [Test]
+        public void Execute_WhenOpenDialogsIsNull_ThrowsArgumentNullException()
+        {
+            UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
+
+            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(registrar, 0, null));
         }
 
         private static UnityCliLoopToolRegistrarService CreateRegistrar(ToolExecutionSession session)

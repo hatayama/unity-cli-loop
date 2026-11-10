@@ -16,15 +16,18 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly IDomainReloadDetectionService _domainReloadDetectionService;
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly EditorExecutionActivity _executionActivity;
+        private readonly EditorDialogTracker _dialogTracker;
 
         internal UnityCliLoopBridgeServerInstanceFactory(
             IDomainReloadDetectionService domainReloadDetectionService,
             UnityCliLoopToolRegistrarService toolRegistrarService,
-            EditorExecutionActivity executionActivity)
+            EditorExecutionActivity executionActivity,
+            EditorDialogTracker dialogTracker)
         {
             System.Diagnostics.Debug.Assert(domainReloadDetectionService != null, "domainReloadDetectionService must not be null");
             System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             System.Diagnostics.Debug.Assert(executionActivity != null, "executionActivity must not be null");
+            System.Diagnostics.Debug.Assert(dialogTracker != null, "dialogTracker must not be null");
 
             _domainReloadDetectionService = domainReloadDetectionService
                 ?? throw new ArgumentNullException(nameof(domainReloadDetectionService));
@@ -32,13 +35,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ?? throw new ArgumentNullException(nameof(toolRegistrarService));
             _executionActivity = executionActivity
                 ?? throw new ArgumentNullException(nameof(executionActivity));
+            _dialogTracker = dialogTracker
+                ?? throw new ArgumentNullException(nameof(dialogTracker));
         }
 
         public IUnityCliLoopServerInstance Create()
         {
             UnityCliLoopBridgeHeartbeatService heartbeatService = new();
             UnityCliLoopBridgeClientDisconnectMonitor clientDisconnectMonitor = new();
-            UnityCliLoopExecutionRouter executionRouter = new(_toolRegistrarService, _executionActivity);
+            UnityCliLoopExecutionRouter executionRouter = new(_toolRegistrarService, _executionActivity, _dialogTracker);
             JsonRpcRequestProcessor jsonRpcRequestProcessor = new(executionRouter);
             UnityCliLoopBridgeServer server = new(
                 _domainReloadDetectionService,

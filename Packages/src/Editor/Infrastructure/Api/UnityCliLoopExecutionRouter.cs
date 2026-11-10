@@ -22,18 +22,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly EditorExecutionActivity _executionActivity;
+        private readonly EditorDialogTracker _dialogTracker;
 
         internal UnityCliLoopExecutionRouter(
             UnityCliLoopToolRegistrarService toolRegistrarService,
-            EditorExecutionActivity executionActivity)
+            EditorExecutionActivity executionActivity,
+            EditorDialogTracker dialogTracker)
         {
             System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             System.Diagnostics.Debug.Assert(executionActivity != null, "executionActivity must not be null");
+            System.Diagnostics.Debug.Assert(dialogTracker != null, "dialogTracker must not be null");
 
             _toolRegistrarService = toolRegistrarService
                 ?? throw new ArgumentNullException(nameof(toolRegistrarService));
             _executionActivity = executionActivity
                 ?? throw new ArgumentNullException(nameof(executionActivity));
+            _dialogTracker = dialogTracker
+                ?? throw new ArgumentNullException(nameof(dialogTracker));
         }
 
         /// <summary>
@@ -60,7 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 EditorApplicationTickBridge.SignalTick();
                 return EditorStatusBridgeCommand.Execute(
                     _toolRegistrarService,
-                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick());
+                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
+                    _dialogTracker.GetOpenDialogs());
             }
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_CANCEL_RUNNING_TOOL)
