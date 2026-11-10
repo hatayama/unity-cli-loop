@@ -9,7 +9,13 @@ import (
 )
 
 var statusTestBlockedByDialogNextActions = []any{
-	"Show the user the dialog's Title, Message, and Buttons and ask which button to press; do not choose one yourself.",
+	"Read the dialog's Title, Message, and Buttons, then press the button that fits what the user asked for: uloop dialog --answer \"<button>\".",
+	"Ask the user first when no button clearly fits or the choice would discard work (such as \"Don't Save\").",
+	"After the dialog is closed, run uloop status again.",
+}
+
+var statusTestUnanswerableDialogNextActions = []any{
+	"uloop cannot press a button in this dialog. Show the user its Title and Message and ask them to answer it in Unity.",
 	"After the dialog is closed, run uloop status again.",
 }
 
@@ -367,6 +373,68 @@ func startBlockedMainThreadStatusServer(t *testing.T, projectRoot string, second
 		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 30})),
 		editorStatusRPCResponse(secondResult),
 	)
+}
+
+// Verifies a dialog the Editor reports is not offered to uloop dialog --answer where uloop cannot
+// press buttons; the user is asked to answer it instead.
+func TestRunStatusCommandAsksTheUserForAnEditorDialogWhereUloopCannotPress(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{
+		"OpenDialogs": editorDialogsJSON(statusTestSaveSceneDialog),
+	}))
+	deps := withDialogInspector(statusTestDeps(t), &fakeDialogInspector{})
+	deps.canAnswerDialogs = false
+
+	run := runStatusForTest(context.Background(), server.connection, nil, deps)
+
+	report := assertStatusReport(t, run, "BlockedByDialog")
+	assertStatusNextActions(t, report, statusTestUnanswerableDialogNextActions)
+}
+
+// Verifies a dialog found in Unity's windows behind a blocked main thread is not offered to
+// uloop dialog --answer where uloop cannot press buttons.
+func TestRunStatusCommandAsksTheUserForAnInspectedDialogWhereUloopCannotPress(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	server := startBlockedMainThreadStatusServer(t, projectRoot, editorStatusResultJSON(t, map[string]any{
+		"SecondsSinceLastMainThreadTick": 31,
+		"OpenDialogs":                    omittedEditorStatusField{},
+	}))
+	deps := withDialogInspector(statusTestDeps(t), &fakeDialogInspector{dialogs: []statusDialog{statusTestSaveSceneDialog}})
+	deps.canAnswerDialogs = false
+
+	run := runStatusForTest(context.Background(), server.connection, nil, deps)
+
+	report := assertStatusReport(t, run, "BlockedByDialog")
+	assertStatusNextActions(t, report, statusTestUnanswerableDialogNextActions)
+}
+
+// Verifies a dialog found in Unity's windows while its server is unavailable is not offered to
+// uloop dialog --answer where uloop cannot press buttons.
+func TestRunStatusCommandAsksTheUserForADialogBeforeTheServerWhereUloopCannotPress(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	deps := withDialogInspector(statusTestDeps(t), &fakeDialogInspector{dialogs: []statusDialog{statusTestSaveSceneDialog}})
+	deps.isUnityProcessRunning = fakeUnityProcessLookup(t, projectRoot, true, nil)
+	deps.canAnswerDialogs = false
+
+	run := runStatusForTest(context.Background(), unreachableConnection(projectRoot), nil, deps)
+
+	report := assertStatusReport(t, run, "BlockedByDialog")
+	assertStatusNextActions(t, report, statusTestUnanswerableDialogNextActions)
+}
+
+// Verifies a dialog without readable buttons, such as a modal Editor window, is not offered to
+// uloop dialog --answer even where uloop can press buttons.
+func TestRunStatusCommandAsksTheUserForADialogWithoutButtons(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{
+		"OpenDialogs": editorDialogsJSON(statusDialog{Title: "Probe modal", Buttons: []string{}}),
+	}))
+	deps := withDialogInspector(statusTestDeps(t), &fakeDialogInspector{})
+
+	run := runStatusForTest(context.Background(), server.connection, nil, deps)
+
+	report := assertStatusReport(t, run, "BlockedByDialog")
+	assertStatusNextActions(t, report, statusTestUnanswerableDialogNextActions)
 }
 
 // editorDialogsJSON spells dialogs the way the Editor sends OpenDialogs.

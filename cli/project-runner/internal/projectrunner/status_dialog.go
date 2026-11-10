@@ -304,6 +304,35 @@ func blockedByDialogReport(response editorStatusResponse, dialogs []statusDialog
 	return report
 }
 
+// withDialogAnswerGuidance points a BlockedByDialog report at uloop dialog --answer when uloop
+// can press a button of the frontmost dialog, and at the user otherwise. Every path that builds a
+// BlockedByDialog report passes through here, so the condition lives in one place.
+func withDialogAnswerGuidance(report statusReport, canAnswerDialogs bool) statusReport {
+	if report.State != statusStateBlockedByDialog {
+		return report
+	}
+	if !canAnswerDialogs || len(report.Dialogs) == 0 || len(report.Dialogs[0].Buttons) == 0 {
+		report.NextActions = unanswerableDialogNextActions()
+		return report
+	}
+	report.NextActions = []string{
+		"Read the dialog's Title, Message, and Buttons, then press the button that fits what the user asked for: " +
+			"uloop dialog --answer \"<button>\".",
+		"Ask the user first when no button clearly fits or the choice would discard work (such as \"Don't Save\").",
+		dialogClosedNextAction,
+	}
+	return report
+}
+
+const dialogClosedNextAction = "After the dialog is closed, run uloop status again."
+
+func unanswerableDialogNextActions() []string {
+	return []string{
+		"uloop cannot press a button in this dialog. Show the user its Title and Message and ask them to answer it in Unity.",
+		dialogClosedNextAction,
+	}
+}
+
 func blockedByDialogMessage(dialogs []statusDialog) string {
 	if len(dialogs) > 1 {
 		return fmt.Sprintf("%d modal dialogs are open in Unity; its main thread waits until they are closed.", len(dialogs))
