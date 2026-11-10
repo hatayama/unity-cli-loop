@@ -29,7 +29,7 @@ With `--answer`, it exits 0 once the dialog is closed and returns JSON with:
 - `Success`: `true`
 - `Pressed`: the label that was pressed
 - `Title`, `Message`, `Buttons`: the dialog that was pressed, as read just before the press
-- `NextDialogs`: a dialog that opened after the press, if any (answer it the same way)
+- `NextDialogs`: every modal dialog open after the press, frontmost first, if any (the first one is what `--answer` presses next)
 
 ## Errors
 
@@ -40,10 +40,10 @@ Errors go to stderr, nothing goes to stdout, and it exits 1.
 | `DIALOG_NOT_OPEN` | `--answer` found no modal dialog | Run `uloop status` to see what Unity is doing |
 | `DIALOG_BUTTON_NOT_FOUND` | The frontmost dialog has no button with that label; `Details.Buttons` lists the labels it has | Run `uloop dialog --answer` again with one of those labels, spelled exactly |
 | `DIALOG_NOT_ANSWERABLE` | uloop cannot look or press on this system, or the dialog has no button labels uloop can read | Ask the user to answer the dialog in Unity |
-| `DIALOG_CHECK_FAILED` | Listing failed: the operating system did not let uloop read Unity's windows | Follow `NextActions`; on macOS this is usually missing Accessibility access |
+| `DIALOG_CHECK_FAILED` | Listing failed, for example because Unity's process was not found or the operating system did not let uloop read its windows; `Message` says why | Follow `NextActions` |
 | `DIALOG_ANSWER_FAILED` | The press failed or timed out, or the dialog was still open after the press | Run `uloop dialog` to see whether the dialog is still open before pressing again; if it stays open, ask the user |
 
-`DIALOG_ANSWER_FAILED` has `SafeToRetry: false`: the press may have landed, and pressing the same label again could press a button of the dialog that opened next.
+`DIALOG_ANSWER_FAILED` has `SafeToRetry: false` once the press was attempted: it may have landed, and pressing the same label again could press a button of the dialog that opened next. It has `SafeToRetry: true` only when the press failed before anything was clicked (for example, Unity's process was not found).
 
 ## What It Can Press
 
