@@ -158,3 +158,24 @@ func listTestProcessDialogs(t *testing.T) []statusDialog {
 	}
 	return dialogsFromWin32Windows(listed)
 }
+
+// Verifies the first listing a goroutine makes returns every window the process has. The
+// goroutine's stack grows while Windows calls back into Go, and a listing that handed Windows a
+// pointer into that stack lost the windows collected after the stack moved.
+func TestListUnityProcessWindowsKeepsItsWindowsWhenTheStackGrows(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	const windowCount = 64
+	factory := newTestWindowFactory(t)
+	for index := 0; index < windowCount; index++ {
+		window := factory.create("Static", "uloop test window", testWindowStylePopup, 0, 0)
+		defer factory.destroy(window)
+	}
+
+	listed, err := listUnityProcessWindows(context.Background(), os.Getpid())
+
+	if err != nil || len(listed) < windowCount {
+		t.Fatalf("listed %d windows, %v; want at least the %d created and no error", len(listed), err, windowCount)
+	}
+}

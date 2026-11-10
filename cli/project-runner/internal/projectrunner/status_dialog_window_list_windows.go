@@ -47,6 +47,17 @@ type win32WindowSearch struct {
 	handles   []windows.HWND
 }
 
+// newPinnedWin32WindowSearch returns a search that stays where it is until release is called.
+// Why pinned: Windows holds the search's address as a plain number while the callback runs Go
+// code, and Go does not update such a number when it moves the goroutine's stack, which is where
+// a search that is not pinned lives. A listing lost the windows collected after its stack grew.
+func newPinnedWin32WindowSearch(processID uint32) (*win32WindowSearch, func()) {
+	search := &win32WindowSearch{processID: processID}
+	pinner := &runtime.Pinner{}
+	pinner.Pin(search)
+	return search, pinner.Unpin
+}
+
 var (
 	win32CollectCallbackOnce sync.Once
 	win32CollectCallback     uintptr
@@ -90,10 +101,9 @@ func collectWin32Window(handle windows.HWND, lparam unsafe.Pointer) uintptr {
 // that is not a dialog is never sent a message.
 func listUnityProcessWindows(ctx context.Context, pid int) ([]win32Window, error) {
 	api := newWin32WindowAPI()
-	search := &win32WindowSearch{processID: uint32(pid)}
-	// EnumWindows calls the callback before it returns, so the search can live on this stack.
+	search, release := newPinnedWin32WindowSearch(uint32(pid))
+	defer release()
 	err := windows.EnumWindows(api.collectWindowHandles, unsafe.Pointer(search))
-	runtime.KeepAlive(search)
 	if err != nil {
 		return nil, fmt.Errorf("EnumWindows failed: %w", err)
 	}
@@ -129,9 +139,9 @@ func (api win32WindowAPI) describeWindow(handle windows.HWND) win32Window {
 
 // controls returns the child windows of a modal window with their texts.
 func (api win32WindowAPI) controls(ctx context.Context, parent windows.HWND) []win32Control {
-	search := &win32WindowSearch{}
+	search, release := newPinnedWin32WindowSearch(0)
+	defer release()
 	windows.EnumChildWindows(parent, api.collectWindowHandles, unsafe.Pointer(search))
-	runtime.KeepAlive(search)
 
 	controls := make([]win32Control, 0, len(search.handles))
 	for _, handle := range search.handles {
