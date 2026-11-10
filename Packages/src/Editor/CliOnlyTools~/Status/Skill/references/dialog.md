@@ -24,7 +24,7 @@ Without `--answer`, it exits 0 and returns JSON with:
 - `Success`: `true`
 - `Dialogs`: each open modal dialog's `Title`, `Message`, and `Buttons`, frontmost first; an empty array when none is open
 
-With `--answer`, it exits 0 once the dialog is closed and returns JSON with:
+With `--answer`, it exits 0 once the button was pressed. uloop then looks again until the pressed dialog is gone; if that look fails or is interrupted, it still exits 0 (the press already happened) but leaves out `NextDialogs`, so run `uloop dialog` when you need to know what is open now. It returns JSON with:
 
 - `Success`: `true`
 - `Pressed`: the label that was pressed
