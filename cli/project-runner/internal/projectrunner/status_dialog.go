@@ -1,0 +1,264 @@
+package projectrunner
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
+)
+
+// statusDialog is one modal dialog: what the Editor reports in OpenDialogs and what uloop status
+// prints in Dialogs. The tags are the Editor's PascalCase property names.
+type statusDialog struct {
+	Title   string   `json:"Title"`
+	Message string   `json:"Message"`
+	Buttons []string `json:"Buttons"`
+}
+
+var errDialogInspectionUnsupported = errors.New("looking for dialogs in Unity's windows is supported only on macOS")
+
+const dialogInspectionTimeout = 5 * time.Second
+
+// accessibilityDialogScript asks System Events for every modal dialog window of the given process
+// and prints each one's window title, static texts, and button names as JSON.
+// Why AXModal as well as the AXDialog subrole: a non-modal utility window (EditorWindow.ShowUtility)
+// is also an AXDialog, and it does not hold the main thread.
+// Why it reads the windows one by one through an index: calling windows() on the whose() result
+// returned only the main window while a dialog was open, in a real Editor.
+const accessibilityDialogScript = `function run(argv){const pid=parseInt(argv[0],10);const se=Application("System Events");const ps=se.processes.whose({unixId:pid});if(ps.length===0){return JSON.stringify({processFound:false,dialogs:[]});}const p=ps[0];const out=[];for(let i=0;i<p.windows.length;i++){const w=p.windows[i];if(w.subrole()!=="AXDialog"){continue;}let modal=false;try{modal=w.attributes.byName("AXModal").value()===true;}catch(e){}if(!modal){continue;}out.push({windowTitle:w.title(),texts:w.staticTexts.value(),buttons:w.buttons.name()});}return JSON.stringify({processFound:true,dialogs:out});}`
+
+// dialogInspector looks for modal dialogs in the Unity Editor's windows through the operating
+// system. The fields are what tests replace.
+type dialogInspector struct {
+	goos          string
+	timeout       time.Duration
+	lookupProcess func(ctx context.Context, projectRoot string) (*unityprocess.UnityProcess, error)
+	runCommand    func(ctx context.Context, name string, args ...string) ([]byte, error)
+}
+
+func defaultDialogInspector() dialogInspector {
+	return dialogInspector{
+		goos:          runtime.GOOS,
+		timeout:       dialogInspectionTimeout,
+		lookupProcess: unityProcessLookup,
+		runCommand:    runCommandCapturingStderr,
+	}
+}
+
+// inspect returns the dialogs open in this project's Editor, or errDialogInspectionUnsupported
+// where it cannot look.
+func (inspector dialogInspector) inspect(ctx context.Context, projectRoot string) ([]statusDialog, error) {
+	// Why before the lookup: other operating systems must not start a process scan for nothing.
+	if inspector.goos != "darwin" {
+		return nil, errDialogInspectionUnsupported
+	}
+	process, err := inspector.lookupProcess(ctx, projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("could not find this project's Unity process: %w", err)
+	}
+	if process == nil {
+		return nil, errors.New("no Unity process runs for this project")
+	}
+
+	inspectCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
+	defer cancel()
+	output, err := inspector.runCommand(
+		inspectCtx, "osascript", "-l", "JavaScript", "-e", accessibilityDialogScript, strconv.Itoa(process.Pid))
+	// Why before err: a stopped command fails with "signal: killed", which hides why it stopped.
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("looking for dialogs was cancelled: %w", ctx.Err())
+	}
+	if inspectCtx.Err() != nil {
+		return nil, fmt.Errorf("osascript did not answer within %s", inspector.timeout)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("osascript could not read Unity's windows: %w", err)
+	}
+	return dialogsFromAccessibilityOutput(output)
+}
+
+// runCommandCapturingStderr runs a command and puts its stderr into the error, because osascript
+// explains a denied permission only there.
+func runCommandCapturingStderr(ctx context.Context, name string, args ...string) ([]byte, error) {
+	var stderr bytes.Buffer
+	command := exec.CommandContext(ctx, name, args...)
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return output, nil
+}
+
+// dialogsFromAccessibilityOutput turns the script's JSON into dialogs. Buttons is never nil, so a
+// dialog whose buttons have no names prints [].
+func dialogsFromAccessibilityOutput(output []byte) ([]statusDialog, error) {
+	var raw struct {
+		ProcessFound bool `json:"processFound"`
+		Dialogs      []struct {
+			WindowTitle *string   `json:"windowTitle"`
+			Texts       []*string `json:"texts"`
+			Buttons     []*string `json:"buttons"`
+		} `json:"dialogs"`
+	}
+	if err := json.Unmarshal(output, &raw); err != nil {
+		return nil, fmt.Errorf("unreadable osascript output: %w", err)
+	}
+	if !raw.ProcessFound {
+		return nil, errors.New("this project's Unity process is not listed by System Events")
+	}
+
+	dialogs := make([]statusDialog, 0, len(raw.Dialogs))
+	for _, window := range raw.Dialogs {
+		texts := nonEmptyStrings(window.Texts)
+		title := ""
+		if window.WindowTitle != nil {
+			title = *window.WindowTitle
+		}
+		if title == "" && len(texts) > 0 {
+			// An alert has no window title; its first text is the title.
+			title, texts = texts[0], texts[1:]
+		} else {
+			// A modal Editor window repeats its title as a text.
+			texts = stringsExcept(texts, title)
+		}
+		dialogs = append(dialogs, statusDialog{
+			Title:   title,
+			Message: strings.Join(texts, "\n"),
+			Buttons: nonEmptyStrings(window.Buttons),
+		})
+	}
+	return dialogs, nil
+}
+
+// nonEmptyStrings drops null and empty entries; window buttons such as close have no name.
+func nonEmptyStrings(values []*string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != nil && *value != "" {
+			result = append(result, *value)
+		}
+	}
+	return result
+}
+
+func stringsExcept(values []string, excluded string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != excluded {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+// Why it does not tell the reader to grant access outright: the look fails on every stalled
+// status in a sandbox or without the permission, usually while no dialog is open.
+const dialogCheckNextAction = "uloop could not look in Unity's windows for a modal dialog, so one may be open " +
+	"without being reported. If this state does not clear, ask the user to look at Unity; on macOS, " +
+	"Accessibility access for the app that runs uloop (System Settings > Privacy & Security > " +
+	"Accessibility) lets uloop report the dialog itself."
+
+// needsDialogInspection reports whether the answer leaves room for a dialog uloop must look for
+// itself. Only a stalled main thread can hide one; Busy counts because a running command such as
+// execute-dynamic-code or compile is the usual way a dialog opens.
+func needsDialogInspection(state string, response editorStatusResponse) bool {
+	if state == statusStateMainThreadBlocked {
+		return true
+	}
+	return state == statusStateBusy &&
+		response.SecondsSinceLastMainThreadTick >= editorStatusMainThreadStallThresholdSeconds
+}
+
+// withDialogInspection looks at Unity's windows when the report leaves room for a dialog, and turns
+// the report into BlockedByDialog when it finds one. A failed look keeps the state and says why.
+func withDialogInspection(
+	ctx context.Context,
+	projectRoot string,
+	response editorStatusResponse,
+	report statusReport,
+	deps statusCommandDeps,
+) statusReport {
+	if !needsDialogInspection(report.State, response) {
+		return report
+	}
+	return inspectForDialogs(ctx, projectRoot, report, deps, func(dialogs []statusDialog) statusReport {
+		return blockedByDialogReport(response, dialogs)
+	})
+}
+
+// inspectForDialogs looks at Unity's windows and returns blocked(dialogs) when it finds a dialog.
+// A failed look keeps the report and says why.
+func inspectForDialogs(
+	ctx context.Context,
+	projectRoot string,
+	report statusReport,
+	deps statusCommandDeps,
+	blocked func(dialogs []statusDialog) statusReport,
+) statusReport {
+	dialogs, err := deps.inspectDialogs(ctx, projectRoot)
+	// Where uloop cannot look, the report stays what it was before uloop looked for dialogs.
+	if errors.Is(err, errDialogInspectionUnsupported) {
+		return report
+	}
+	if err != nil {
+		report.DialogCheckError = err.Error()
+		report.NextActions = append(report.NextActions, dialogCheckNextAction)
+		return report
+	}
+	if len(dialogs) == 0 {
+		return report
+	}
+	return blocked(dialogs)
+}
+
+// withDialogInspectionBeforeServer looks for a dialog when Unity runs but its server does not
+// answer: the dialogs Unity shows while it starts, such as the Safe Mode prompt, open before the
+// server exists.
+func withDialogInspectionBeforeServer(
+	ctx context.Context,
+	projectRoot string,
+	report statusReport,
+	deps statusCommandDeps,
+) statusReport {
+	return inspectForDialogs(ctx, projectRoot, report, deps, func(dialogs []statusDialog) statusReport {
+		blockedReport := newStatusReport(statusStateBlockedByDialog, blockedByDialogMessage(dialogs))
+		blockedReport.Dialogs = dialogs
+		blockedReport.UnityProcessRunning = report.UnityProcessRunning
+		return blockedReport
+	})
+}
+
+// blockedByDialogReport describes an Editor held by the given dialogs, which must not be empty. A
+// running command is still shown, but uloop cancel is not offered: the command cannot move until
+// the dialog closes.
+func blockedByDialogReport(response editorStatusResponse, dialogs []statusDialog) statusReport {
+	report := newStatusReport(statusStateBlockedByDialog, blockedByDialogMessage(dialogs))
+	addEditorStateFields(&report, response)
+	report.Dialogs = dialogs
+	// readEditorStatus already rejected a busy answer without elapsed seconds.
+	if response.IsBusy {
+		report.RunningToolName = response.RunningToolName
+		report.RunningToolElapsedSeconds = response.RunningToolElapsedSeconds
+		report.RunningToolPhase = response.RunningToolPhase
+	}
+	return report
+}
+
+func blockedByDialogMessage(dialogs []statusDialog) string {
+	if len(dialogs) > 1 {
+		return fmt.Sprintf("%d modal dialogs are open in Unity; its main thread waits until they are closed.", len(dialogs))
+	}
+	if dialogs[0].Title == "" {
+		return "A modal dialog is open in Unity; its main thread waits until it is closed."
+	}
+	return fmt.Sprintf("A modal dialog %q is open in Unity; its main thread waits until it is closed.", dialogs[0].Title)
+}

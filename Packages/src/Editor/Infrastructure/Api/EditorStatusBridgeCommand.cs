@@ -15,11 +15,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // parameter so tests can choose the value.
         internal static GetEditorStatusResponse Execute(
             UnityCliLoopToolRegistrarService toolRegistrarService,
-            double secondsSinceLastMainThreadTick)
+            double secondsSinceLastMainThreadTick,
+            EditorDialogInfo[] openDialogs)
         {
             if (toolRegistrarService == null)
             {
                 throw new ArgumentNullException(nameof(toolRegistrarService));
+            }
+
+            if (openDialogs == null)
+            {
+                throw new ArgumentNullException(nameof(openDialogs));
             }
 
             UnityCliLoopExecutionStatus executionStatus = toolRegistrarService.GetExecutionStatus();
@@ -38,7 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsPaused = playState.IsPaused,
                 IsCompiling = compileState.IsCompiling,
                 IsUpdating = compileState.IsUpdating,
-                SecondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick
+                SecondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick,
+                OpenDialogs = openDialogs
             };
         }
     }
