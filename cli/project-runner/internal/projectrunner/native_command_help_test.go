@@ -167,6 +167,35 @@ func TestCancelHelpPrintsUsage(t *testing.T) {
 	}
 }
 
+// Verifies dialog --help prints its usage line, registry description, and the --answer option,
+// and ends by pointing at the status skill that documents it.
+func TestDialogHelpPrintsUsage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"dialog", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("dialog --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expected = "Usage:\n" +
+		"  uloop dialog [options]\n" +
+		"\n" +
+		"Show the modal dialog that blocks the Unity Editor for this project, or press one of its buttons\n" +
+		"\n" +
+		"Options:\n" +
+		"  --answer <value>                   Press the button with this exact label in the frontmost dialog\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n" +
+		"\n" +
+		"Load the uloop-status skill for workflow rules and response fields that --help does not cover.\n"
+	if stdout.String() != expected {
+		t.Fatalf("dialog --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
 // Verifies list --help prints the complete names-only option contract, including the usage and
 // global options sections that callers need after the unknown-option recovery guidance.
 func TestRunProjectLocalListHelpOutput(t *testing.T) {

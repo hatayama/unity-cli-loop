@@ -65,17 +65,26 @@ func (inspector dialogInspector) inspect(ctx context.Context, projectRoot string
 	if inspector.goos != "darwin" && inspector.goos != "windows" {
 		return nil, errDialogInspectionUnsupported
 	}
-	process, err := inspector.lookupProcess(ctx, projectRoot)
+	pid, err := inspector.unityPid(ctx, projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("could not find this project's Unity process: %w", err)
-	}
-	if process == nil {
-		return nil, errors.New("no Unity process runs for this project")
+		return nil, err
 	}
 	if inspector.goos == "windows" {
-		return inspector.inspectWin32Windows(ctx, process.Pid)
+		return inspector.inspectWin32Windows(ctx, pid)
 	}
-	return inspector.inspectAccessibility(ctx, process.Pid)
+	return inspector.inspectAccessibility(ctx, pid)
+}
+
+// unityPid finds the process ID of this project's Unity Editor.
+func (inspector dialogInspector) unityPid(ctx context.Context, projectRoot string) (int, error) {
+	process, err := inspector.lookupProcess(ctx, projectRoot)
+	if err != nil {
+		return 0, fmt.Errorf("could not find this project's Unity process: %w", err)
+	}
+	if process == nil {
+		return 0, errors.New("no Unity process runs for this project")
+	}
+	return process.Pid, nil
 }
 
 // inspectAccessibility asks System Events for the modal dialogs of the Unity process on macOS.
@@ -127,12 +136,8 @@ func runCommandCapturingStderr(ctx context.Context, name string, args ...string)
 // dialog whose buttons have no names prints [].
 func dialogsFromAccessibilityOutput(output []byte) ([]statusDialog, error) {
 	var raw struct {
-		ProcessFound bool `json:"processFound"`
-		Dialogs      []struct {
-			WindowTitle *string   `json:"windowTitle"`
-			Texts       []*string `json:"texts"`
-			Buttons     []*string `json:"buttons"`
-		} `json:"dialogs"`
+		ProcessFound bool                  `json:"processFound"`
+		Dialogs      []accessibilityWindow `json:"dialogs"`
 	}
 	if err := json.Unmarshal(output, &raw); err != nil {
 		return nil, fmt.Errorf("unreadable osascript output: %w", err)
@@ -143,25 +148,37 @@ func dialogsFromAccessibilityOutput(output []byte) ([]statusDialog, error) {
 
 	dialogs := make([]statusDialog, 0, len(raw.Dialogs))
 	for _, window := range raw.Dialogs {
-		texts := nonEmptyStrings(window.Texts)
-		title := ""
-		if window.WindowTitle != nil {
-			title = *window.WindowTitle
-		}
-		if title == "" && len(texts) > 0 {
-			// An alert has no window title; its first text is the title.
-			title, texts = texts[0], texts[1:]
-		} else {
-			// A modal Editor window repeats its title as a text.
-			texts = stringsExcept(texts, title)
-		}
-		dialogs = append(dialogs, statusDialog{
-			Title:   title,
-			Message: strings.Join(texts, "\n"),
-			Buttons: nonEmptyStrings(window.Buttons),
-		})
+		dialogs = append(dialogs, window.dialog())
 	}
 	return dialogs, nil
+}
+
+// accessibilityWindow is one dialog window as the accessibility scripts print it.
+type accessibilityWindow struct {
+	WindowTitle *string   `json:"windowTitle"`
+	Texts       []*string `json:"texts"`
+	Buttons     []*string `json:"buttons"`
+}
+
+// dialog turns the window into a title, a message, and its named buttons. Buttons is never nil.
+func (window accessibilityWindow) dialog() statusDialog {
+	texts := nonEmptyStrings(window.Texts)
+	title := ""
+	if window.WindowTitle != nil {
+		title = *window.WindowTitle
+	}
+	if title == "" && len(texts) > 0 {
+		// An alert has no window title; its first text is the title.
+		title, texts = texts[0], texts[1:]
+	} else {
+		// A modal Editor window repeats its title as a text.
+		texts = stringsExcept(texts, title)
+	}
+	return statusDialog{
+		Title:   title,
+		Message: strings.Join(texts, "\n"),
+		Buttons: nonEmptyStrings(window.Buttons),
+	}
 }
 
 // nonEmptyStrings drops null and empty entries; window buttons such as close have no name.
