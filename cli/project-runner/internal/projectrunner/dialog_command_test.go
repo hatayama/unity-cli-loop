@@ -144,6 +144,12 @@ func decodeDialogError(t *testing.T, run dialogRun, want expectedDialogFailure) 
 	return got
 }
 
+// assertDialogFailure is decodeDialogError for tests that only check the error row.
+func assertDialogFailure(t *testing.T, run dialogRun, want expectedDialogFailure) {
+	t.Helper()
+	_ = decodeDialogError(t, run, want)
+}
+
 func assertDialogJSON(t *testing.T, got any, want any) {
 	t.Helper()
 	wantJSON, err := json.Marshal(want)
@@ -220,7 +226,7 @@ func TestRunDialogCommandReportsFailedLook(t *testing.T) {
 func TestRunDialogCommandIsUnsupportedWhereUloopCannotLook(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: false, looks: []dialogLookAnswer{{err: errDialogInspectionUnsupported}}}
 
-	decodeDialogError(t, runDialogForTest(context.Background(), nil, fake),
+	assertDialogFailure(t, runDialogForTest(context.Background(), nil, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
 }
 
@@ -271,7 +277,7 @@ func TestRunDialogCommandRejectsAnUnknownButton(t *testing.T) {
 func TestRunDialogCommandFailsWhenNoDialogIsOpen(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: true, pressResult: dialogPressResult{DialogFound: false}}
 
-	decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	assertDialogFailure(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotOpen, retryable: false, safeToRetry: true})
 
 	if fake.lookCalls != 0 {
@@ -307,7 +313,7 @@ func TestRunDialogCommandCannotPressOnThisSystem(t *testing.T) {
 	fake := pressedFake()
 	fake.canPress = false
 
-	decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	assertDialogFailure(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
 
 	if fake.pressCalls != 0 || fake.lookCalls != 0 {
@@ -336,7 +342,7 @@ func TestRunDialogCommandFailsWhenTheDialogStaysOpen(t *testing.T) {
 	fake := pressedFake()
 	fake.looks = []dialogLookAnswer{{dialogs: []statusDialog{dialogTestPressed}}}
 
-	decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	assertDialogFailure(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogAnswerFailed, retryable: false, safeToRetry: false})
 
 	if fake.lookCalls != dialogTestRecheckCount {
@@ -408,7 +414,7 @@ func TestRunDialogCommandRejectsAnswerWithoutValue(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := pressedFake()
 
-			decodeDialogError(t, runDialogForTest(context.Background(), args, fake),
+			assertDialogFailure(t, runDialogForTest(context.Background(), args, fake),
 				expectedDialogFailure{code: clierrors.ErrorCodeInvalidArgument, retryable: false, safeToRetry: false})
 
 			if fake.pressCalls != 0 || fake.lookCalls != 0 {
@@ -430,7 +436,7 @@ func TestRunDialogCommandRejectsUnknownOptions(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := pressedFake()
 
-			decodeDialogError(t, runDialogForTest(context.Background(), args, fake),
+			assertDialogFailure(t, runDialogForTest(context.Background(), args, fake),
 				expectedDialogFailure{code: clierrors.ErrorCodeInvalidArgument, retryable: false, safeToRetry: false})
 
 			if fake.pressCalls != 0 || fake.lookCalls != 0 {
