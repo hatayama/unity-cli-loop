@@ -43,6 +43,8 @@ func runResolvedProjectCommand(
 		return runStatusCommand(ctx, connection, commandArgs, stdout, stderr)
 	case clicore.CancelCommandName:
 		return runCancelCommand(ctx, connection, commandArgs, stdout, stderr)
+	case clicore.DialogCommandName:
+		return runDialogCommand(ctx, connection, commandArgs, stdout, stderr)
 	case pausePointEnableCommandName:
 		return runEnablePausePointCommand(ctx, connection, commandArgs, startPath, stdout, stderr)
 	case tooldocs.RecordVideoCommandName:

@@ -623,6 +623,7 @@ func statusTestDeps(t *testing.T) statusCommandDeps {
 			return nil, errDialogInspectionUnsupported
 		},
 		dialogCheckNextAction: statusTestDialogCheckNextAction,
+		canAnswerDialogs:      true,
 	}
 }
 

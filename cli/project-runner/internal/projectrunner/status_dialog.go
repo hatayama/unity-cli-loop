@@ -65,17 +65,26 @@ func (inspector dialogInspector) inspect(ctx context.Context, projectRoot string
 	if inspector.goos != "darwin" && inspector.goos != "windows" {
 		return nil, errDialogInspectionUnsupported
 	}
-	process, err := inspector.lookupProcess(ctx, projectRoot)
+	pid, err := inspector.unityPid(ctx, projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("could not find this project's Unity process: %w", err)
-	}
-	if process == nil {
-		return nil, errors.New("no Unity process runs for this project")
+		return nil, err
 	}
 	if inspector.goos == "windows" {
-		return inspector.inspectWin32Windows(ctx, process.Pid)
+		return inspector.inspectWin32Windows(ctx, pid)
 	}
-	return inspector.inspectAccessibility(ctx, process.Pid)
+	return inspector.inspectAccessibility(ctx, pid)
+}
+
+// unityPid finds the process ID of this project's Unity Editor.
+func (inspector dialogInspector) unityPid(ctx context.Context, projectRoot string) (int, error) {
+	process, err := inspector.lookupProcess(ctx, projectRoot)
+	if err != nil {
+		return 0, fmt.Errorf("could not find this project's Unity process: %w", err)
+	}
+	if process == nil {
+		return 0, errors.New("no Unity process runs for this project")
+	}
+	return process.Pid, nil
 }
 
 // inspectAccessibility asks System Events for the modal dialogs of the Unity process on macOS.
@@ -127,12 +136,8 @@ func runCommandCapturingStderr(ctx context.Context, name string, args ...string)
 // dialog whose buttons have no names prints [].
 func dialogsFromAccessibilityOutput(output []byte) ([]statusDialog, error) {
 	var raw struct {
-		ProcessFound bool `json:"processFound"`
-		Dialogs      []struct {
-			WindowTitle *string   `json:"windowTitle"`
-			Texts       []*string `json:"texts"`
-			Buttons     []*string `json:"buttons"`
-		} `json:"dialogs"`
+		ProcessFound bool                  `json:"processFound"`
+		Dialogs      []accessibilityWindow `json:"dialogs"`
 	}
 	if err := json.Unmarshal(output, &raw); err != nil {
 		return nil, fmt.Errorf("unreadable osascript output: %w", err)
@@ -143,25 +148,37 @@ func dialogsFromAccessibilityOutput(output []byte) ([]statusDialog, error) {
 
 	dialogs := make([]statusDialog, 0, len(raw.Dialogs))
 	for _, window := range raw.Dialogs {
-		texts := nonEmptyStrings(window.Texts)
-		title := ""
-		if window.WindowTitle != nil {
-			title = *window.WindowTitle
-		}
-		if title == "" && len(texts) > 0 {
-			// An alert has no window title; its first text is the title.
-			title, texts = texts[0], texts[1:]
-		} else {
-			// A modal Editor window repeats its title as a text.
-			texts = stringsExcept(texts, title)
-		}
-		dialogs = append(dialogs, statusDialog{
-			Title:   title,
-			Message: strings.Join(texts, "\n"),
-			Buttons: nonEmptyStrings(window.Buttons),
-		})
+		dialogs = append(dialogs, window.dialog())
 	}
 	return dialogs, nil
+}
+
+// accessibilityWindow is one dialog window as the accessibility scripts print it.
+type accessibilityWindow struct {
+	WindowTitle *string   `json:"windowTitle"`
+	Texts       []*string `json:"texts"`
+	Buttons     []*string `json:"buttons"`
+}
+
+// dialog turns the window into a title, a message, and its named buttons. Buttons is never nil.
+func (window accessibilityWindow) dialog() statusDialog {
+	texts := nonEmptyStrings(window.Texts)
+	title := ""
+	if window.WindowTitle != nil {
+		title = *window.WindowTitle
+	}
+	if title == "" && len(texts) > 0 {
+		// An alert has no window title; its first text is the title.
+		title, texts = texts[0], texts[1:]
+	} else {
+		// A modal Editor window repeats its title as a text.
+		texts = stringsExcept(texts, title)
+	}
+	return statusDialog{
+		Title:   title,
+		Message: strings.Join(texts, "\n"),
+		Buttons: nonEmptyStrings(window.Buttons),
+	}
 }
 
 // nonEmptyStrings drops null and empty entries; window buttons such as close have no name.
@@ -185,6 +202,11 @@ func stringsExcept(values []string, excluded string) []string {
 	return result
 }
 
+// dialogAccessibilitySetting names the macOS permission that both looking at and pressing in
+// another process's windows need.
+const dialogAccessibilitySetting = "Accessibility access for the app that runs uloop " +
+	"(System Settings > Privacy & Security > Accessibility)"
+
 const dialogCheckFailedNextAction = "uloop could not look in Unity's windows for a modal dialog, so one may be " +
 	"open without being reported. If this state does not clear, ask the user to look at Unity"
 
@@ -197,8 +219,7 @@ func (inspector dialogInspector) checkFailedNextAction() string {
 	if inspector.goos != "darwin" {
 		return dialogCheckFailedNextAction + "."
 	}
-	return dialogCheckFailedNextAction + "; on macOS, Accessibility access for the app that runs uloop " +
-		"(System Settings > Privacy & Security > Accessibility) lets uloop report the dialog itself."
+	return dialogCheckFailedNextAction + "; on macOS, " + dialogAccessibilitySetting + " lets uloop report the dialog itself."
 }
 
 // needsDialogInspection reports whether the answer leaves room for a dialog uloop must look for
@@ -285,6 +306,35 @@ func blockedByDialogReport(response editorStatusResponse, dialogs []statusDialog
 		report.RunningToolPhase = response.RunningToolPhase
 	}
 	return report
+}
+
+// withDialogAnswerGuidance points a BlockedByDialog report at uloop dialog --answer when uloop
+// can press a button of the frontmost dialog, and at the user otherwise. Every path that builds a
+// BlockedByDialog report passes through here, so the condition lives in one place.
+func withDialogAnswerGuidance(report statusReport, canAnswerDialogs bool) statusReport {
+	if report.State != statusStateBlockedByDialog {
+		return report
+	}
+	if !canAnswerDialogs || len(report.Dialogs) == 0 || len(report.Dialogs[0].Buttons) == 0 {
+		report.NextActions = unanswerableDialogNextActions()
+		return report
+	}
+	report.NextActions = []string{
+		"Read the dialog's Title, Message, and Buttons, then press the button that fits what the user asked for: " +
+			"uloop dialog --answer \"<button>\".",
+		"Ask the user first when no button clearly fits or the choice would discard work (such as \"Don't Save\").",
+		dialogClosedNextAction,
+	}
+	return report
+}
+
+const dialogClosedNextAction = "After the dialog is closed, run uloop status again."
+
+func unanswerableDialogNextActions() []string {
+	return []string{
+		"uloop cannot press a button in this dialog. Show the user its Title and Message and ask them to answer it in Unity.",
+		dialogClosedNextAction,
+	}
 }
 
 func blockedByDialogMessage(dialogs []statusDialog) string {

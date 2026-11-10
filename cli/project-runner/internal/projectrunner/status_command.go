@@ -48,6 +48,8 @@ type statusCommandDeps struct {
 	inspectDialogs func(ctx context.Context, projectRoot string) ([]statusDialog, error)
 	// The hint added to NextActions when that look fails; it differs by operating system.
 	dialogCheckNextAction string
+	// Whether uloop dialog --answer can press a button on this operating system.
+	canAnswerDialogs bool
 }
 
 func defaultStatusCommandDeps() statusCommandDeps {
@@ -61,6 +63,7 @@ func defaultStatusCommandDeps() statusCommandDeps {
 		},
 		inspectDialogs:        inspector.inspect,
 		dialogCheckNextAction: inspector.checkFailedNextAction(),
+		canAnswerDialogs:      inspector.canPress(),
 	}
 }
 
@@ -136,6 +139,7 @@ func runStatusCommandWithDeps(
 		clierrors.WriteClassifiedError(stderr, err, errorContext)
 		return 1
 	}
+	report = withDialogAnswerGuidance(report, deps.canAnswerDialogs)
 	payload, err := json.Marshal(report)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, errorContext)
@@ -390,10 +394,9 @@ func statusNextActions(state string) []string {
 	const runAgainShortly = "Run uloop status again in a few seconds."
 	switch state {
 	case statusStateBlockedByDialog:
-		return []string{
-			"Show the user the dialog's Title, Message, and Buttons and ask which button to press; do not choose one yourself.",
-			"After the dialog is closed, run uloop status again.",
-		}
+		// Why the guidance for a dialog uloop cannot press: a report that skipped
+		// withDialogAnswerGuidance must not send the reader to a press that cannot work.
+		return unanswerableDialogNextActions()
 	case statusStateBusy:
 		return []string{
 			"Wait for the running command to finish, then run uloop status again.",
