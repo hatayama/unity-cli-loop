@@ -610,7 +610,7 @@ func runStatusForTest(ctx context.Context, connection unityipc.Connection, args 
 // statusTestDeps answers fast: a fake server replies at once, so a 2s probe timeout only runs
 // out when a probe nobody expected was sent. The process lookup fails the test unless a test
 // replaces it, because most outcomes must not look Unity up. The dialog inspector reports that it
-// cannot look, as on Windows, so outcomes stay what they were before uloop looked for dialogs.
+// cannot look, as on Linux, so outcomes stay what they were before uloop looked for dialogs.
 func statusTestDeps(t *testing.T) statusCommandDeps {
 	return statusCommandDeps{
 		probeTimeout: 2 * time.Second,
@@ -622,8 +622,12 @@ func statusTestDeps(t *testing.T) statusCommandDeps {
 		inspectDialogs: func(context.Context, string) ([]statusDialog, error) {
 			return nil, errDialogInspectionUnsupported
 		},
+		dialogCheckNextAction: statusTestDialogCheckNextAction,
 	}
 }
+
+// The hint status appends when the look for dialogs fails; the real one differs by operating system.
+const statusTestDialogCheckNextAction = "hint about the failed look for dialogs"
 
 func fakeUnityProcessLookup(
 	t *testing.T,

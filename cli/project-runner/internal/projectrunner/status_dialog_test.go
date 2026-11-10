@@ -108,10 +108,10 @@ func TestDialogsFromAccessibilityOutputFailsOnUnreadableOutput(t *testing.T) {
 	}
 }
 
-// Verifies the inspector reports that it cannot look on Windows and Linux, before it looks up
-// the Unity process or starts a command.
-func TestDialogInspectorIsUnsupportedOutsideMacOS(t *testing.T) {
-	for _, goos := range []string{"windows", "linux"} {
+// Verifies the inspector reports that it cannot look on an operating system other than macOS and
+// Windows, before it looks up the Unity process, starts a command, or lists windows.
+func TestDialogInspectorIsUnsupportedOutsideMacOSAndWindows(t *testing.T) {
+	for _, goos := range []string{"linux", "freebsd"} {
 		t.Run(goos, func(t *testing.T) {
 			inspector := dialogInspectorForTest(t, goos, failingProcessLookup(t), failingCommand(t))
 
@@ -246,7 +246,33 @@ func dialogInspectorForTest(
 	command func(context.Context, string, ...string) ([]byte, error),
 ) dialogInspector {
 	t.Helper()
-	return dialogInspector{goos: goos, timeout: 2 * time.Second, lookupProcess: lookup, runCommand: command}
+	return dialogInspector{
+		goos:          goos,
+		timeout:       2 * time.Second,
+		lookupProcess: lookup,
+		runCommand:    command,
+		listWindows:   failingWindowList(t),
+	}
+}
+
+// win32DialogInspectorForTest is the inspector as it runs on Windows: it lists windows and must
+// not start a command.
+func win32DialogInspectorForTest(
+	t *testing.T,
+	lookup func(context.Context, string) (*unityprocess.UnityProcess, error),
+	listWindows func(context.Context, int) ([]win32Window, error),
+) dialogInspector {
+	t.Helper()
+	inspector := dialogInspectorForTest(t, "windows", lookup, failingCommand(t))
+	inspector.listWindows = listWindows
+	return inspector
+}
+
+func failingWindowList(t *testing.T) func(context.Context, int) ([]win32Window, error) {
+	return func(context.Context, int) ([]win32Window, error) {
+		t.Error("the inspector must not list windows here")
+		return nil, errors.New("unexpected window listing")
+	}
 }
 
 func failingProcessLookup(t *testing.T) func(context.Context, string) (*unityprocess.UnityProcess, error) {

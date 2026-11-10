@@ -428,7 +428,7 @@ func assertDialogCheckError(t *testing.T, report map[string]any, want string) {
 	t.Helper()
 	assertStatusValue(t, report, "DialogCheckError", want)
 	nextActions, _ := report["NextActions"].([]any)
-	if len(nextActions) == 0 || nextActions[len(nextActions)-1] != dialogCheckNextAction {
+	if len(nextActions) == 0 || nextActions[len(nextActions)-1] != statusTestDialogCheckNextAction {
 		t.Fatalf("NextActions must end with the hint about the failed look: %#v", report["NextActions"])
 	}
 }

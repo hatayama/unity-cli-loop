@@ -46,9 +46,12 @@ type statusCommandDeps struct {
 	isUnityProcessRunning func(ctx context.Context, projectRoot string) (bool, error)
 	// Looks for modal dialogs in Unity's windows when the main thread has stalled.
 	inspectDialogs func(ctx context.Context, projectRoot string) ([]statusDialog, error)
+	// The hint added to NextActions when that look fails; it differs by operating system.
+	dialogCheckNextAction string
 }
 
 func defaultStatusCommandDeps() statusCommandDeps {
+	inspector := defaultDialogInspector()
 	return statusCommandDeps{
 		probeTimeout: 5 * time.Second,
 		reprobeDelay: 1 * time.Second,
@@ -56,7 +59,8 @@ func defaultStatusCommandDeps() statusCommandDeps {
 			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
-		inspectDialogs: defaultDialogInspector().inspect,
+		inspectDialogs:        inspector.inspect,
+		dialogCheckNextAction: inspector.checkFailedNextAction(),
 	}
 }
 
