@@ -159,6 +159,47 @@ func listTestProcessDialogs(t *testing.T) []statusDialog {
 	return dialogsFromWin32Windows(listed)
 }
 
+// loadProgressBarClass makes the progress bar window class available to this process. The class
+// lives in comctl32.dll, which registers it when it is loaded.
+func (factory testWindowFactory) loadProgressBarClass() {
+	factory.t.Helper()
+	initCommonControls := windows.NewLazySystemDLL("comctl32.dll").NewProc("InitCommonControls")
+	if err := initCommonControls.Find(); err != nil {
+		factory.t.Fatalf("comctl32.dll could not be loaded: %v", err)
+	}
+	_, _, _ = initCommonControls.Call()
+}
+
+// Verifies the Win32 listing reports a real dialog window that has no owner while it holds a push
+// button, as a prompt shown while the Editor starts does, and stops reporting it once it also
+// holds a progress bar, as a progress window with a Cancel button does.
+func TestListUnityProcessWindowsTellsAMessageBoxWithoutAnOwnerFromAProgressWindow(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	dialog := factory.create(
+		"#32770", "uloop test prompt", testWindowStylePopup|testWindowStyleVisible|testWindowStyleCaption, 0, 0)
+	defer factory.destroy(dialog)
+	factory.create("Edit", "Prompt body", testWindowStyleChild|testWindowStyleVisible, dialog, 1019)
+	factory.create("Button", "&Quit", testWindowStyleChild|testWindowStyleVisible, dialog, 2)
+
+	asMessageBox := listTestProcessDialogs(t)
+
+	want := []statusDialog{{Title: "uloop test prompt", Message: "Prompt body", Buttons: []string{"Quit"}}}
+	if !reflect.DeepEqual(asMessageBox, want) {
+		t.Fatalf("dialogs without a progress bar = %#v, want %#v", asMessageBox, want)
+	}
+
+	factory.loadProgressBarClass()
+	factory.create("msctls_progress32", "", testWindowStyleChild|testWindowStyleVisible, dialog, 1031)
+	asProgressWindow := listTestProcessDialogs(t)
+
+	if len(asProgressWindow) != 0 {
+		t.Fatalf("dialogs with a progress bar = %#v, want none", asProgressWindow)
+	}
+}
+
 // Verifies the first listing a goroutine makes returns every window the process has. The
 // goroutine's stack grows while Windows calls back into Go, and a listing that handed Windows a
 // pointer into that stack lost the windows collected after the stack moved.

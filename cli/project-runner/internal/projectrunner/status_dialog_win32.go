@@ -25,7 +25,7 @@ func (inspector dialogInspector) inspectWin32Windows(ctx context.Context, pid in
 }
 
 // win32Window is one top-level window of the Unity process as Win32 reports it. It carries only
-// what tells a modal window from the others; Controls is read only for a modal one.
+// what tells a modal window from the others; Controls is read only for one that may be modal.
 type win32Window struct {
 	ClassName string
 	Title     string
@@ -47,9 +47,11 @@ type win32Control struct {
 }
 
 const (
-	win32StaticClassName = "Static"
-	win32EditClassName   = "Edit"
-	win32ButtonClassName = "Button"
+	win32DialogClassName      = "#32770"
+	win32StaticClassName      = "Static"
+	win32EditClassName        = "Edit"
+	win32ButtonClassName      = "Button"
+	win32ProgressBarClassName = "msctls_progress32"
 
 	// The low four bits of a Button's style say what kind of button it is.
 	win32ButtonTypeMask        = 0xF
@@ -64,8 +66,37 @@ const (
 // has no owner and leaves the main window enabled; and a modal Editor window is not a #32770.
 // Why the window must be enabled itself: a non-modal utility window (EditorWindow.ShowUtility) is
 // owned by the main window too, and a dialog opened above it disables both.
+// Why a window with no owner can still be one: a prompt shown while the Editor starts, such as the
+// one that offers Safe Mode, opens before the main window exists.
 func (window win32Window) isModal() bool {
-	return window.Visible && window.Enabled && window.HasOwner && !window.OwnerEnabled
+	if !window.mayBeModal() {
+		return false
+	}
+	return window.HasOwner || window.isMessageBox()
+}
+
+// mayBeModal reports what the window alone tells, before its controls are read: whether it can
+// be modal. It is what decides which windows have their controls read.
+func (window win32Window) mayBeModal() bool {
+	if !window.Visible || !window.Enabled {
+		return false
+	}
+	if window.HasOwner {
+		return !window.OwnerEnabled
+	}
+	return isWin32Class(window.ClassName, win32DialogClassName)
+}
+
+// isMessageBox tells a message box from a progress window, by the controls of a dialog that has
+// no owner: a progress window always holds a progress bar, and shows a Cancel button when the
+// progress can be cancelled, so a button alone does not make a message box.
+func (window win32Window) isMessageBox() bool {
+	for _, control := range window.Controls {
+		if control.hasClass(win32ProgressBarClassName) {
+			return false
+		}
+	}
+	return len(win32DialogButtons(window.Controls)) > 0
 }
 
 // dialogsFromWin32Windows turns the Unity process's windows into the dialogs that hold its main
@@ -126,9 +157,13 @@ func win32DialogButtons(controls []win32Control) []string {
 	return labels
 }
 
-// Window class names compare without case in Win32.
 func (control win32Control) hasClass(className string) bool {
-	return strings.EqualFold(control.ClassName, className)
+	return isWin32Class(control.ClassName, className)
+}
+
+// Window class names compare without case in Win32.
+func isWin32Class(className string, expected string) bool {
+	return strings.EqualFold(className, expected)
 }
 
 // isPushButton leaves out check boxes, radio buttons, and group boxes, which share the Button class.

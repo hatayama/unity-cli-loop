@@ -45,6 +45,45 @@ var win32DisabledMainWindow = win32Window{
 	Enabled:   false,
 }
 
+// The prompt a real Editor on Windows showed while it started with compile errors: a message box
+// with no owner, because the main window does not exist yet.
+func win32StartupMessageBox() win32Window {
+	return win32Window{
+		ClassName: "#32770",
+		Title:     "Enter Safe Mode?",
+		Visible:   true,
+		Enabled:   true,
+		Controls: []win32Control{
+			{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true},
+			{ClassName: "Edit", Text: "The project has compilation errors.\r\n\r\nEnter Safe Mode?", ID: 1019, Style: 0x50000804, Visible: true},
+			{ClassName: "Button", Text: "&Enter Safe Mode", ID: 1, Style: 0x50010001, Visible: true},
+			{ClassName: "Button", Text: "&Ignore", ID: 3, Style: 0x50010000, Visible: true},
+			{ClassName: "Button", Text: "&Quit", ID: 2, Style: 0x50010000, Visible: true},
+		},
+	}
+}
+
+// The window of EditorUtility.DisplayProgressBar as a real Editor on Windows listed it: a dialog
+// with no owner whose buttons are hidden unless the progress can be cancelled.
+func win32ProgressWindow(title string, cancelButtonVisible bool) win32Window {
+	return win32Window{
+		ClassName: "#32770",
+		Title:     title,
+		Visible:   true,
+		Enabled:   true,
+		Controls: []win32Control{
+			{ClassName: "msctls_progress32", Text: "", ID: 1031, Style: 0x50000000, Visible: true},
+			{ClassName: "Button", Text: "Cancel", ID: 2, Style: 0x50010000, Visible: cancelButtonVisible},
+			{ClassName: "Button", Text: "Skip Transcoding", ID: 3, Style: 0x40010000, Visible: false},
+			{ClassName: "Static", Text: "", ID: 1033, Style: 0x40028080, Visible: false},
+			{ClassName: "Static", Text: "Working", ID: 1032, Style: 0x50028080, Visible: true},
+		},
+	}
+}
+
+// The Editor's main window while no dialog is open.
+var win32EnabledMainWindow = win32Window{ClassName: "UnityContainerWndClass", Title: "main", Visible: true, Enabled: true}
+
 // The input method windows every Unity process owns; they are never visible.
 var win32InputMethodWindow = win32Window{ClassName: "IME", Title: "Default IME", HasOwner: true, OwnerEnabled: true}
 
@@ -80,6 +119,19 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 				win32DisabledMainWindow,
 			},
 			want: []statusDialog{{Title: "Probe modal", Message: "", Buttons: []string{}}},
+		},
+		{
+			name: "message box without an owner while the Editor starts",
+			windows: []win32Window{
+				win32StartupMessageBox(),
+				{ClassName: "UnitySplashWindow", Title: "Compiling Scripts", Visible: false, Enabled: true},
+				win32InputMethodWindow,
+			},
+			want: []statusDialog{{
+				Title:   "Enter Safe Mode?",
+				Message: "The project has compilation errors.\n\nEnter Safe Mode?",
+				Buttons: []string{"Enter Safe Mode", "Quit", "Ignore"},
+			}},
 		},
 		{
 			name: "two modal windows keep their order",
@@ -153,8 +205,9 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 
 // Verifies windows that do not hold Unity's main thread are not counted as dialogs, and the
 // result is an empty, non-nil list: a utility window beside an enabled main window, the same
-// utility window while a dialog has disabled it, the main window, a progress window without an
-// owner, and a hidden window.
+// utility window while a dialog has disabled it, the main window, a hidden window, and the windows
+// that share a message box's class and lack of an owner without being one (a progress window, with
+// or without a visible Cancel button, and a dialog with no push button).
 func TestDialogsFromWin32WindowsIgnoresWindowsThatAreNotModal(t *testing.T) {
 	utilityControl := win32Control{ClassName: "UnityGUIViewWndClass", Text: "UnityEditor.EditorWindow", Visible: true}
 	cases := []struct {
@@ -186,8 +239,47 @@ func TestDialogsFromWin32WindowsIgnoresWindowsThatAreNotModal(t *testing.T) {
 		{
 			name: "progress window without an owner",
 			windows: []win32Window{
-				{ClassName: "#32770", Title: "Reloading Domain (busy for 10s)...", Visible: true, Enabled: true},
-				{ClassName: "UnityContainerWndClass", Title: "main", Visible: true, Enabled: true},
+				win32ProgressWindow("Reloading Domain (busy for 10s)...", false),
+				win32EnabledMainWindow,
+			},
+		},
+		{
+			name: "progress window with a visible Cancel button",
+			windows: []win32Window{
+				win32ProgressWindow("Importing", true),
+				win32EnabledMainWindow,
+			},
+		},
+		{
+			name:    "progress window while the Editor starts",
+			windows: []win32Window{win32ProgressWindow("Importing", true)},
+		},
+		{
+			name: "dialog without an owner and without a push button",
+			windows: []win32Window{
+				{
+					ClassName: "#32770", Title: "Notice", Visible: true, Enabled: true,
+					Controls: []win32Control{{ClassName: "Static", Text: "Working", Visible: true}},
+				},
+			},
+		},
+		{
+			name: "disabled message box without an owner",
+			windows: []win32Window{
+				func() win32Window {
+					window := win32StartupMessageBox()
+					window.Enabled = false
+					return window
+				}(),
+			},
+		},
+		{
+			name: "window of another class without an owner that has a push button",
+			windows: []win32Window{
+				{
+					ClassName: "UnityContainerWndClass", Title: "main", Visible: true, Enabled: true,
+					Controls: []win32Control{{ClassName: "Button", Text: "&OK", ID: 1, Visible: true}},
+				},
 			},
 		},
 		{

@@ -97,8 +97,8 @@ func collectWin32Window(handle windows.HWND, lparam unsafe.Pointer) uintptr {
 }
 
 // listUnityProcessWindows returns the top-level windows of the process, in the order Windows
-// enumerates them (front to back). It reads the controls only of a modal window, so a window
-// that is not a dialog is never sent a message.
+// enumerates them (front to back). It reads the controls only of a window that may be modal, so
+// the Editor's other windows are never sent a message.
 func listUnityProcessWindows(ctx context.Context, pid int) ([]win32Window, error) {
 	api := newWin32WindowAPI()
 	search, release := newPinnedWin32WindowSearch(uint32(pid))
@@ -114,7 +114,7 @@ func listUnityProcessWindows(ctx context.Context, pid int) ([]win32Window, error
 			return nil, err
 		}
 		window := api.describeWindow(handle)
-		if window.isModal() {
+		if window.mayBeModal() {
 			window.Controls = api.controls(ctx, handle)
 		}
 		result = append(result, window)
@@ -137,7 +137,7 @@ func (api win32WindowAPI) describeWindow(handle windows.HWND) win32Window {
 	return window
 }
 
-// controls returns the child windows of a modal window with their texts.
+// controls returns the child windows of a window with their texts.
 func (api win32WindowAPI) controls(ctx context.Context, parent windows.HWND) []win32Control {
 	search, release := newPinnedWin32WindowSearch(0)
 	defer release()
