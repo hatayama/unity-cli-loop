@@ -37,7 +37,8 @@ type win32Window struct {
 	Controls     []win32Control
 }
 
-// win32Control is one child window of a modal window: a label, a text box, or a button.
+// win32Control is one child window of a window that may be modal: a label, a text box, a button,
+// or a progress bar.
 type win32Control struct {
 	ClassName string
 	Text      string
