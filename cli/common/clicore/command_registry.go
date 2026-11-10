@@ -19,6 +19,7 @@ const (
 	SetCodeOptimizationCommandName  = "set-code-optimization"
 	StatusCommandName               = "status"
 	CancelCommandName               = "cancel"
+	DialogCommandName               = "dialog"
 	RunTestsCommandName             = "run-tests"
 )
 
@@ -53,6 +54,7 @@ var NativeCommands = []NativeCommandEntry{
 	{Name: SetCodeOptimizationCommandName, Description: "Switch Unity's Code Optimization to Debug for this session or, with approval, as the machine-wide startup default", Owner: RunnerOwned},
 	{Name: StatusCommandName, Description: "Report whether the Unity Editor for this project can take a command now, without changing anything", Owner: RunnerOwned},
 	{Name: CancelCommandName, Description: "Cancel the tool the Unity Editor for this project is running now", Owner: RunnerOwned},
+	{Name: DialogCommandName, Description: "Show the modal dialog that blocks the Unity Editor for this project, or press one of its buttons", Owner: RunnerOwned},
 	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
 	{Name: PackageCommandName, Description: "Install or inspect the " + product.DisplayName + " package in a project", Owner: DispatcherOwned},
 	{Name: InstallCommandName, Description: "Configure the global uloop dispatcher binary", Owner: DispatcherOwned},
