@@ -9,7 +9,7 @@ import (
 )
 
 var statusTestBlockedByDialogNextActions = []any{
-	"Read the dialog's Title, Message, and Buttons, then press the button that fits what the user asked for: uloop dialog --answer \"<button>\".",
+	"Read the dialog's Title, Message, and Buttons, then press the button that fits what the user asked for: uloop press-dialog-button --label \"<button>\".",
 	"Ask the user first when no button clearly fits or the choice would discard work (such as \"Don't Save\").",
 	"After the dialog is closed, run uloop status again.",
 }
@@ -375,8 +375,8 @@ func startBlockedMainThreadStatusServer(t *testing.T, projectRoot string, second
 	)
 }
 
-// Verifies a dialog the Editor reports is not offered to uloop dialog --answer where uloop cannot
-// press buttons; the user is asked to answer it instead.
+// Verifies a dialog the Editor reports is not offered to uloop press-dialog-button where uloop
+// cannot press buttons; the user is asked to answer it instead.
 func TestRunStatusCommandAsksTheUserForAnEditorDialogWhereUloopCannotPress(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
 	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{
@@ -392,7 +392,7 @@ func TestRunStatusCommandAsksTheUserForAnEditorDialogWhereUloopCannotPress(t *te
 }
 
 // Verifies a dialog found in Unity's windows behind a blocked main thread is not offered to
-// uloop dialog --answer where uloop cannot press buttons.
+// uloop press-dialog-button where uloop cannot press buttons.
 func TestRunStatusCommandAsksTheUserForAnInspectedDialogWhereUloopCannotPress(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
 	server := startBlockedMainThreadStatusServer(t, projectRoot, editorStatusResultJSON(t, map[string]any{
@@ -409,7 +409,7 @@ func TestRunStatusCommandAsksTheUserForAnInspectedDialogWhereUloopCannotPress(t 
 }
 
 // Verifies a dialog found in Unity's windows while its server is unavailable is not offered to
-// uloop dialog --answer where uloop cannot press buttons.
+// uloop press-dialog-button where uloop cannot press buttons.
 func TestRunStatusCommandAsksTheUserForADialogBeforeTheServerWhereUloopCannotPress(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
 	deps := withDialogInspector(statusTestDeps(t), &fakeDialogInspector{dialogs: []statusDialog{statusTestSaveSceneDialog}})
@@ -423,7 +423,7 @@ func TestRunStatusCommandAsksTheUserForADialogBeforeTheServerWhereUloopCannotPre
 }
 
 // Verifies a dialog without readable buttons, such as a modal Editor window, is not offered to
-// uloop dialog --answer even where uloop can press buttons.
+// uloop press-dialog-button even where uloop can press buttons.
 func TestRunStatusCommandAsksTheUserForADialogWithoutButtons(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
 	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{

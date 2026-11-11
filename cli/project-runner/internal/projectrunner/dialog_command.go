@@ -16,7 +16,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-const dialogAnswerOption = "--answer"
+const dialogLabelOption = "--label"
 
 // Long enough for a dialog to finish closing after the press, short enough that five rechecks
 // still answer within a couple of seconds.
@@ -76,20 +76,20 @@ func defaultDialogCommandDeps() dialogCommandDeps {
 	}
 }
 
-func runDialogCommand(
+func runGetDialogsCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
 	args []string,
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	return runDialogCommandWithDeps(ctx, connection, args, stdout, stderr, defaultDialogCommandDeps())
+	return runGetDialogsCommandWithDeps(ctx, connection, args, stdout, stderr, defaultDialogCommandDeps())
 }
 
-// runDialogCommandWithDeps lists the modal dialogs open in Unity, or with --answer presses a button
-// of the frontmost one. It talks only to the operating system, never to the Editor's server, which
-// cannot answer while a dialog holds the main thread.
-func runDialogCommandWithDeps(
+// runGetDialogsCommandWithDeps lists the modal dialogs open in Unity. It talks only to the
+// operating system, never to the Editor's server, which cannot answer while a dialog holds the
+// main thread.
+func runGetDialogsCommandWithDeps(
 	ctx context.Context,
 	connection unityipc.Connection,
 	args []string,
@@ -97,49 +97,82 @@ func runDialogCommandWithDeps(
 	stderr io.Writer,
 	deps dialogCommandDeps,
 ) int {
-	errorContext := clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: clicore.DialogCommandName}
-	label, hasAnswer, argErr := parseDialogArgs(args)
-	if argErr != nil {
-		clierrors.WriteClassifiedError(stderr, argErr, errorContext)
+	if len(args) > 0 {
+		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
+			Message:     clicore.GetDialogsCommandName + " takes no options: " + args[0],
+			Option:      args[0],
+			NextActions: []string{"Run `uloop get-dialogs` with no options other than --project-path."},
+		}, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: clicore.GetDialogsCommandName})
 		return 1
 	}
-	if !hasAnswer {
-		return listDialogs(ctx, connection.ProjectRoot, stdout, stderr, deps)
+	return listDialogs(ctx, connection.ProjectRoot, stdout, stderr, deps)
+}
+
+func runPressDialogButtonCommand(
+	ctx context.Context,
+	connection unityipc.Connection,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
+	return runPressDialogButtonCommandWithDeps(ctx, connection, args, stdout, stderr, defaultDialogCommandDeps())
+}
+
+// runPressDialogButtonCommandWithDeps presses the button with the --label text in the frontmost
+// modal dialog open in Unity. Like get-dialogs, it talks only to the operating system.
+func runPressDialogButtonCommandWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+	deps dialogCommandDeps,
+) int {
+	label, argErr := parsePressDialogButtonArgs(args)
+	if argErr != nil {
+		clierrors.WriteClassifiedError(stderr, argErr,
+			clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: clicore.PressDialogButtonCommandName})
+		return 1
 	}
 	return answerDialog(ctx, connection.ProjectRoot, label, stdout, stderr, deps)
 }
 
-// parseDialogArgs accepts --answer <label> or --answer=<label> at most once, with a non-empty label.
-func parseDialogArgs(args []string) (string, bool, *clierrors.ArgumentError) {
+// parsePressDialogButtonArgs accepts exactly one --label <label> or --label=<label>, with a
+// non-empty label, and nothing else.
+func parsePressDialogButtonArgs(args []string) (string, *clierrors.ArgumentError) {
 	label := ""
-	hasAnswer := false
+	hasLabel := false
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		value := ""
 		switch {
-		case arg == dialogAnswerOption:
+		case arg == dialogLabelOption:
 			if index+1 >= len(args) {
-				return "", false, dialogArgumentError(dialogAnswerOption+" requires a button label", arg)
+				return "", dialogArgumentError(dialogLabelOption+" requires a button label", arg)
 			}
 			index++
 			value = args[index]
-		case strings.HasPrefix(arg, dialogAnswerOption+"="):
-			value = strings.TrimPrefix(arg, dialogAnswerOption+"=")
+		case strings.HasPrefix(arg, dialogLabelOption+"="):
+			value = strings.TrimPrefix(arg, dialogLabelOption+"=")
 		default:
-			return "", false, dialogArgumentError("dialog does not accept "+arg, arg)
+			return "", dialogArgumentError(clicore.PressDialogButtonCommandName+" does not accept "+arg, arg)
 		}
 		if value == "" {
-			return "", false, dialogArgumentError(dialogAnswerOption+" requires a button label", dialogAnswerOption)
+			return "", dialogArgumentError(dialogLabelOption+" requires a button label", dialogLabelOption)
 		}
 		// Why reject instead of taking the last: pressing a button cannot be undone, so an ambiguous
 		// command must not pick one of its labels.
-		if hasAnswer {
-			return "", false, dialogArgumentError(dialogAnswerOption+" can be given only once", dialogAnswerOption)
+		if hasLabel {
+			return "", dialogArgumentError(dialogLabelOption+" can be given only once", dialogLabelOption)
 		}
 		label = value
-		hasAnswer = true
+		hasLabel = true
 	}
-	return label, hasAnswer, nil
+	if !hasLabel {
+		return "", dialogArgumentError(
+			clicore.PressDialogButtonCommandName+" requires "+dialogLabelOption+" \"<button>\"", dialogLabelOption)
+	}
+	return label, nil
 }
 
 func dialogArgumentError(message string, option string) *clierrors.ArgumentError {
@@ -147,7 +180,7 @@ func dialogArgumentError(message string, option string) *clierrors.ArgumentError
 		Message: message,
 		Option:  option,
 		NextActions: []string{
-			"Run `uloop dialog` to list the open dialogs, or `uloop dialog --answer \"<button>\"` to press one.",
+			"Run `uloop get-dialogs` to list the open dialogs and their Buttons, then `uloop press-dialog-button --label \"<button>\"`.",
 		},
 	}
 }
@@ -155,11 +188,11 @@ func dialogArgumentError(message string, option string) *clierrors.ArgumentError
 func listDialogs(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer, deps dialogCommandDeps) int {
 	dialogs, err := deps.look(ctx, projectRoot)
 	if errors.Is(err, errDialogInspectionUnsupported) {
-		writeDialogError(stderr, projectRoot, notAnswerableError(err.Error()))
+		writeDialogError(stderr, clicore.GetDialogsCommandName, projectRoot, notAnswerableError(err.Error()))
 		return 1
 	}
 	if err != nil {
-		writeDialogError(stderr, projectRoot, clierrors.CLIError{
+		writeDialogError(stderr, clicore.GetDialogsCommandName, projectRoot, clierrors.CLIError{
 			ErrorCode:   clierrors.ErrorCodeDialogCheckFailed,
 			Message:     "uloop could not look for dialogs in Unity's windows: " + err.Error(),
 			Retryable:   true,
@@ -171,7 +204,7 @@ func listDialogs(ctx context.Context, projectRoot string, stdout io.Writer, stde
 	if dialogs == nil {
 		dialogs = []statusDialog{}
 	}
-	return writeDialogOutput(stdout, stderr, projectRoot, dialogListOutput{Success: true, Dialogs: dialogs})
+	return writeDialogOutput(stdout, stderr, clicore.GetDialogsCommandName, projectRoot, dialogListOutput{Success: true, Dialogs: dialogs})
 }
 
 func answerDialog(
@@ -183,7 +216,7 @@ func answerDialog(
 	deps dialogCommandDeps,
 ) int {
 	if !deps.canPress {
-		writeDialogError(stderr, projectRoot, notAnswerableError("uloop can press a dialog button only on macOS and Windows."))
+		writeDialogError(stderr, clicore.PressDialogButtonCommandName, projectRoot, notAnswerableError("uloop can press a dialog button only on macOS and Windows."))
 		return 1
 	}
 	result, err := deps.press(ctx, projectRoot, label)
@@ -192,20 +225,20 @@ func answerDialog(
 		var notStarted dialogPressNotStartedError
 		// Why only here: once osascript started, the click may have landed even when it failed.
 		failure.SafeToRetry = errors.As(err, &notStarted)
-		writeDialogError(stderr, projectRoot, failure)
+		writeDialogError(stderr, clicore.PressDialogButtonCommandName, projectRoot, failure)
 		return 1
 	}
 	if failure, failed := unpressedDialogError(result, label); failed {
-		writeDialogError(stderr, projectRoot, failure)
+		writeDialogError(stderr, clicore.PressDialogButtonCommandName, projectRoot, failure)
 		return 1
 	}
 	next, closed := waitUntilDialogCloses(ctx, deps, projectRoot, result.Dialog)
 	if !closed {
-		writeDialogError(stderr, projectRoot, answerFailedError(
+		writeDialogError(stderr, clicore.PressDialogButtonCommandName, projectRoot, answerFailedError(
 			fmt.Sprintf("uloop pressed %q, but the dialog %q is still open.", label, result.Dialog.Title), deps))
 		return 1
 	}
-	return writeDialogOutput(stdout, stderr, projectRoot, dialogAnswerOutput{
+	return writeDialogOutput(stdout, stderr, clicore.PressDialogButtonCommandName, projectRoot, dialogAnswerOutput{
 		Success:     true,
 		Pressed:     label,
 		Title:       result.Dialog.Title,
@@ -230,13 +263,13 @@ func unpressedDialogError(result dialogPressResult, label string) (clierrors.CLI
 	}
 	if len(result.Dialog.Buttons) == 0 {
 		return notAnswerableError(fmt.Sprintf(
-			"The dialog %q has no button uloop can read, so uloop cannot press one.", result.Dialog.Title)), true
+			"The dialog %q has no button uloop can press.", result.Dialog.Title)), true
 	}
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeDialogButtonNotFound,
 		Message:     fmt.Sprintf("The dialog %q has no button labeled %q.", result.Dialog.Title, label),
 		SafeToRetry: true,
-		NextActions: []string{"Run uloop dialog --answer with one of the listed Buttons, spelled exactly."},
+		NextActions: []string{"Run uloop press-dialog-button --label with one of the listed Buttons, spelled exactly."},
 		Details:     map[string]any{"Buttons": result.Dialog.Buttons},
 	}, true
 }
@@ -295,7 +328,7 @@ func notAnswerableError(message string) clierrors.CLIError {
 // have landed, and pressing the same label again could press a button of the dialog that opened next.
 func answerFailedError(message string, deps dialogCommandDeps) clierrors.CLIError {
 	nextActions := []string{
-		"Run uloop dialog to see whether the dialog is still open before pressing again.",
+		"Run uloop get-dialogs to see whether the dialog is still open before pressing again.",
 		"If it stays open, ask the user to answer it in Unity.",
 	}
 	if deps.answerFailedHint != "" {
@@ -308,18 +341,19 @@ func answerFailedError(message string, deps dialogCommandDeps) clierrors.CLIErro
 	}
 }
 
-func writeDialogError(stderr io.Writer, projectRoot string, err clierrors.CLIError) {
+// writeDialogError writes err as the failure of command, the dialog command that ran.
+func writeDialogError(stderr io.Writer, command string, projectRoot string, err clierrors.CLIError) {
 	err.Phase = clierrors.ErrorPhaseExecution
 	err.ProjectRoot = projectRoot
-	err.Command = clicore.DialogCommandName
+	err.Command = command
 	clierrors.WriteErrorEnvelope(stderr, err)
 }
 
-func writeDialogOutput(stdout io.Writer, stderr io.Writer, projectRoot string, output any) int {
+func writeDialogOutput(stdout io.Writer, stderr io.Writer, command string, projectRoot string, output any) int {
 	payload, err := json.Marshal(output)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err,
-			clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.DialogCommandName})
+			clierrors.ErrorContext{ProjectRoot: projectRoot, Command: command})
 		return 1
 	}
 	clicore.WriteJSON(stdout, payload)
