@@ -24,6 +24,8 @@ uloop get-dialogs --project-path <path>
 - `Success`: `true`
 - `Dialogs`: each open modal dialog's `Title`, `Message`, and `Buttons`, frontmost first; an empty array when none is open
 
+The order of `Buttons` can differ from the one `uloop status` reports for the same dialog (seen on Windows with Unity 6000.7 and three buttons). The labels are the same; choose a button by its label, never by its position.
+
 `press-dialog-button` presses the button and then looks again, up to 5 times, until the pressed dialog is gone:
 
 - The dialog is gone: exit 0, with `NextDialogs` when another dialog is open.
@@ -65,3 +67,4 @@ Press a button only when it clearly fits what the user asked for. Ask the user f
 
 - Listing and pressing: macOS and Windows.
 - On macOS, both need Accessibility access for the app that runs uloop (System Settings > Privacy & Security > Accessibility). On Windows, neither needs a permission.
+- Not a Unity Editor started as administrator on Windows while uloop runs as a standard user: uloop cannot tell which project that Editor has open, so `get-dialogs` returns `DIALOG_CHECK_FAILED` and `press-dialog-button` returns `DIALOG_ANSWER_FAILED` with `SafeToRetry: true`. Nothing is pressed; ask the user to answer the dialog.
