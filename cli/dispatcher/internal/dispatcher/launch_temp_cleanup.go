@@ -31,7 +31,8 @@ type staleUnityTempCleanupResult struct {
 
 // cleanStaleUnityTemp removes the lockfile a previous Unity left behind and, on a best-effort
 // basis, the rest of the Temp directory. It returns an error only when the lockfile survives,
-// because the next Editor would then refuse to open the project as already opened.
+// because the next Editor would then refuse to open the project as already opened. A lockfile a
+// running process still holds is not stale: it is left in place and reported as an error.
 func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDeps) (staleUnityTempCleanupResult, error) {
 	lockfilePath := unityLockfilePath(projectRoot)
 	lockfileExists, err := staleUnityLockfileExists(ctx, lockfilePath, deps)
@@ -40,6 +41,9 @@ func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDep
 	}
 	if !lockfileExists {
 		return staleUnityTempCleanupResult{}, nil
+	}
+	if err := waitForUnityLockfileRelease(ctx, lockfilePath, deps); err != nil {
+		return staleUnityTempCleanupResult{}, err
 	}
 
 	removeLockfile := func() error {
@@ -54,6 +58,35 @@ func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDep
 		result.leftoverError = err
 	}
 	return result, nil
+}
+
+// waitForUnityLockfileRelease returns once no process holds a lock on the lockfile, and reports the
+// lockfile as held when one still does after the retry budget.
+// Why the lock is checked although the caller found no Editor: the process scan can miss a running
+// one (batch mode, no -projectPath), and removing a lockfile a running Editor holds lets a second
+// Editor open the same project.
+// Why it waits: an Editor that was just stopped leaves the process list before it has let go of the
+// lockfile, and a restart must not be refused for that.
+func waitForUnityLockfileRelease(ctx context.Context, lockfilePath string, deps launchDeps) error {
+	confirmReleased := func() error {
+		held, err := deps.isUnityLockfileHeld(lockfilePath)
+		// An exiting Editor may delete the lockfile itself, which leaves nothing to hold.
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf(
+				"could not check whether %s is still held by a running process: %w",
+				filepath.Join(launchTempDirectoryName, unityLockfileName),
+				err,
+			)
+		}
+		if held {
+			return heldUnityLockfileError{lockfilePath: lockfilePath}
+		}
+		return nil
+	}
+	return retryWhileTempFileIsHeld(ctx, deps, confirmReleased)
 }
 
 // staleUnityLockfileExists reports whether a previous Unity left its lockfile behind. A failure
