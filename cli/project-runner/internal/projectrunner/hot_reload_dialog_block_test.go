@@ -183,7 +183,7 @@ func TestRunHotReloadStopsTheBusyWaitWhenTheEditorReportsADialog(t *testing.T) {
 // Verifies the error asks the user to answer the dialog where uloop cannot press a button, even
 // when the dialog has buttons.
 func TestHotReloadBlockedByDialogErrorAsksTheUserWhereUloopCannotPress(t *testing.T) {
-	cliError := hotReloadBlockedByDialogError{dialogs: hotReloadMessageBoxDialogs(), canPress: false}.
+	cliError := blockedByDialogError{command: hotReloadCommandName, dialogs: hotReloadMessageBoxDialogs(), canPress: false}.
 		ToCLIError(clierrors.ErrorContext{Command: hotReloadCommandName})
 
 	assertAskTheUserGuidance(t, cliError.NextActions)

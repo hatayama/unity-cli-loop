@@ -29,6 +29,11 @@ type connectionRetryDeps struct {
 	// retryPoll. Hot reload sets it because it waits for the busy slot to free on the Editor
 	// status: resending here would only delay that wait.
 	returnBusyWithoutRetry bool
+	// probeEditorStatus reads the Editor the way uloop status does; it runs only when Unity answered
+	// main_thread_blocked, to find the dialog that kept the command from running.
+	probeEditorStatus func(context.Context, unityipc.Connection) (statusReport, error)
+	// canPressDialogs is whether uloop press-dialog-button works on this operating system.
+	canPressDialogs bool
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
@@ -37,6 +42,8 @@ func defaultConnectionRetryDeps() connectionRetryDeps {
 		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
+		probeEditorStatus:       probeEditorStatusForDialogs,
+		canPressDialogs:         defaultDialogInspector().canPress(),
 	}
 }
 
@@ -226,7 +233,25 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 	)
 }
 
+// sendWithTransientConnectionRetryWithDeps sends one tool request, retrying the failures that mean
+// it never ran, and names the dialog when one kept it from running.
+// Why the dialog is looked up here: every tool path (plain tools, compile, execute-dynamic-code,
+// control-play-mode, run-tests, hot-reload) sends through this function but writes its own failure,
+// so this is the one place that covers them all.
 func sendWithTransientConnectionRetryWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	params map[string]any,
+	progress unityipc.ProgressFunc,
+	responseTimeout time.Duration,
+	deps connectionRetryDeps,
+) (unityipc.UnitySendOutcome, error) {
+	outcome, err := sendWithTransientConnectionRetryAttempts(ctx, connection, method, params, progress, responseTimeout, deps)
+	return outcome, explainBlockedByDialog(ctx, connection, method, err, deps)
+}
+
+func sendWithTransientConnectionRetryAttempts(
 	ctx context.Context,
 	connection unityipc.Connection,
 	method string,
@@ -360,6 +385,16 @@ func isUnityServerBusyRPCError(err error) bool {
 		return false
 	}
 	return clierrors.RPCDataType(rpcErr.Data) == "server_busy"
+}
+
+// isMainThreadBlockedRPCError reports whether Unity gave up waiting for its blocked main thread
+// before the tool's code ran.
+func isMainThreadBlockedRPCError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		return false
+	}
+	return clierrors.RPCDataType(rpcErr.Data) == "main_thread_blocked"
 }
 
 func connectionRetryFocusReasonForError(
