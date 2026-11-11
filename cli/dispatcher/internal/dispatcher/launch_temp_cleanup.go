@@ -31,7 +31,8 @@ type staleUnityTempCleanupResult struct {
 
 // cleanStaleUnityTemp removes the lockfile a previous Unity left behind and, on a best-effort
 // basis, the rest of the Temp directory. It returns an error only when the lockfile survives,
-// because the next Editor would then refuse to open the project as already opened.
+// because the next Editor would then refuse to open the project as already opened. A lockfile a
+// running process still holds is not stale: it is left in place and reported as an error.
 func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDeps) (staleUnityTempCleanupResult, error) {
 	lockfilePath := unityLockfilePath(projectRoot)
 	lockfileExists, err := staleUnityLockfileExists(ctx, lockfilePath, deps)
@@ -40,6 +41,20 @@ func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDep
 	}
 	if !lockfileExists {
 		return staleUnityTempCleanupResult{}, nil
+	}
+	// Why the lock is checked although the caller found no Editor: the process scan can miss one
+	// (batch mode, no -projectPath, a launch racing this one), and removing a lockfile a running
+	// Editor holds lets a second Editor open the same project.
+	lockfileHeld, err := deps.isUnityLockfileHeld(lockfilePath)
+	if err != nil {
+		return staleUnityTempCleanupResult{}, fmt.Errorf(
+			"could not check whether %s is still held by a running process: %w",
+			filepath.Join(launchTempDirectoryName, unityLockfileName),
+			err,
+		)
+	}
+	if lockfileHeld {
+		return staleUnityTempCleanupResult{}, heldUnityLockfileError{lockfilePath: lockfilePath}
 	}
 
 	removeLockfile := func() error {
