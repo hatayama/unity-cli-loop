@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -11,8 +12,6 @@ import (
 // sent to the dialog.
 // Why a disabled button is not pressed: the dialog would act on the click all the same, and uloop
 // must not do what the dialog does not let the user do.
-// Why a failed press is not: the click may have reached the dialog even when its answer did not
-// come back, so pressing the same label again could press a button of the dialog that opened next.
 func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, label string) (dialogPressResult, error) {
 	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
@@ -36,13 +35,32 @@ func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, 
 		}
 	}
 	if err := inspector.pressWindowButton(pressCtx, target); err != nil {
-		if stopErr := inspector.stoppedLookError(ctx, pressCtx, "the dialog did not answer the press"); stopErr != nil {
-			return dialogPressResult{}, stopErr
-		}
-		return dialogPressResult{}, fmt.Errorf("could not press the button: %w", err)
+		return dialogPressResult{}, inspector.win32PressFailure(ctx, pressCtx, err)
 	}
 	result.Pressed = true
 	return result, nil
+}
+
+// win32PressFailure words a failed press, and keeps apart the one that sent no click.
+// Why a press that sent no click stays one that did not start, also when it was stopped: the
+// caller may press again only when nothing can have reached the dialog.
+// Why any other failed press is not: the click may have reached the dialog even when its answer
+// did not come back, so pressing the same label again could press a button of the dialog that
+// opened next.
+// Why the stop is looked at before err: a stopped press fails with whatever the press saw last,
+// which hides why it stopped.
+func (inspector dialogInspector) win32PressFailure(ctx context.Context, pressCtx context.Context, err error) error {
+	var notStarted dialogPressNotStartedError
+	if errors.As(err, &notStarted) {
+		if stopErr := inspector.stoppedLookError(ctx, pressCtx, "the press did not start"); stopErr != nil {
+			return dialogPressNotStartedError{err: stopErr}
+		}
+		return notStarted
+	}
+	if stopErr := inspector.stoppedLookError(ctx, pressCtx, "the dialog did not answer the press"); stopErr != nil {
+		return stopErr
+	}
+	return err
 }
 
 // win32PressTargetResult is what choosing the button to press found in the Unity process's

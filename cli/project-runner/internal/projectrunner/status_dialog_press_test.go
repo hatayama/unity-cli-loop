@@ -350,14 +350,14 @@ func TestDialogPressOnWindowsFailsBeforeThePressStarts(t *testing.T) {
 func TestDialogPressOnWindowsReportsAFailedPress(t *testing.T) {
 	t.Run("fails", func(t *testing.T) {
 		press := func(context.Context, win32PressTargetResult) error {
-			return errors.New("the dialog closed before the button was pressed")
+			return errors.New("the dialog did not answer the click")
 		}
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 
 		_, err := inspector.press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, false)
-		if !strings.Contains(err.Error(), "the dialog closed before the button was pressed") {
+		if !strings.Contains(err.Error(), "the dialog did not answer the click") {
 			t.Fatalf("error = %v, want the press failure", err)
 		}
 	})
@@ -411,4 +411,53 @@ func TestDialogPressOnWindowsPressesNothingInADisabledButton(t *testing.T) {
 	if !strings.Contains(err.Error(), `the button "Later" is disabled`) {
 		t.Fatalf("error = %v, want it to name the disabled button", err)
 	}
+}
+
+// Verifies that on Windows a press that reports no click was sent stays safe to retry, also when
+// the press ran out of time or was cancelled before anything was sent.
+func TestDialogPressOnWindowsKeepsAnUnsentPressSafeToRetry(t *testing.T) {
+	unsent := dialogPressNotStartedError{err: errors.New("the dialog closed before its button was pressed")}
+	t.Run("not sent", func(t *testing.T) {
+		press := func(context.Context, win32PressTargetResult) error {
+			return unsent
+		}
+		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, true)
+		if !strings.Contains(err.Error(), "the dialog closed before its button was pressed") {
+			t.Fatalf("error = %v, want the reason nothing was sent", err)
+		}
+	})
+	t.Run("out of time", func(t *testing.T) {
+		press := func(ctx context.Context, _ win32PressTargetResult) error {
+			<-ctx.Done()
+			return unsent
+		}
+		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
+		inspector.timeout = 50 * time.Millisecond
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, true)
+		if !strings.Contains(err.Error(), "the press did not start within 50ms") {
+			t.Fatalf("error = %v, want a timeout error", err)
+		}
+	})
+	t.Run("cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		press := func(context.Context, win32PressTargetResult) error {
+			cancel()
+			return unsent
+		}
+		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
+
+		_, err := inspector.press(ctx, "/project", "Later")
+
+		assertPressNotStarted(t, err, true)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want a cancellation", err)
+		}
+	})
 }

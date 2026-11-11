@@ -90,7 +90,7 @@ func TestPressWin32WindowButtonSendsTheClickToTheDialog(t *testing.T) {
 	}
 }
 
-// Verifies a dialog that is no longer shown is sent nothing and the press fails.
+// Verifies a dialog that is no longer shown is sent nothing, and the failure says no click was sent.
 func TestPressWin32WindowButtonPressesNothingInAHiddenDialog(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -101,12 +101,14 @@ func TestPressWin32WindowButtonPressesNothingInAHiddenDialog(t *testing.T) {
 
 	err := pressWin32WindowButton(context.Background(), target)
 
-	if err == nil || len(*messages) != 0 {
-		t.Fatalf("error = %v, messages = %#v; want an error and no message", err, *messages)
+	assertPressNotStarted(t, err, true)
+	if len(*messages) != 0 {
+		t.Fatalf("messages = %#v, want none", *messages)
 	}
 }
 
-// Verifies a dialog whose window no longer exists makes the press fail instead of reporting a press.
+// Verifies a dialog whose window no longer exists makes the press fail as one that sent no click,
+// instead of reporting a press.
 func TestPressWin32WindowButtonFailsForADestroyedDialog(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -117,13 +119,11 @@ func TestPressWin32WindowButtonFailsForADestroyedDialog(t *testing.T) {
 
 	err := pressWin32WindowButton(context.Background(), target)
 
-	if err == nil {
-		t.Fatal("pressWin32WindowButton must fail for a destroyed dialog")
-	}
+	assertPressNotStarted(t, err, true)
 }
 
-// Verifies a press whose context has already ended sends the dialog nothing and fails, instead of
-// reporting a press.
+// Verifies a press whose context has already ended sends the dialog nothing and fails as one that
+// sent no click, instead of reporting a press.
 func TestPressWin32WindowButtonPressesNothingWhenItHasNoTimeLeft(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -136,7 +136,19 @@ func TestPressWin32WindowButtonPressesNothingWhenItHasNoTimeLeft(t *testing.T) {
 
 	err := pressWin32WindowButton(ctx, target)
 
-	if err == nil || len(*messages) != 0 {
-		t.Fatalf("error = %v, messages = %#v; want an error and no message", err, *messages)
+	assertPressNotStarted(t, err, true)
+	if len(*messages) != 0 {
+		t.Fatalf("messages = %#v, want none", *messages)
 	}
+}
+
+// Verifies what the answer to a click means: an answered click is a press, a click Windows refused
+// to deliver was never sent, and any other unanswered click may have reached the dialog.
+func TestWin32ClickErrorTellsAnUnsentClickFromAnUnansweredOne(t *testing.T) {
+	if err := win32ClickError(1, windows.ERROR_SUCCESS); err != nil {
+		t.Fatalf("answered click returned error: %v", err)
+	}
+	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_ACCESS_DENIED), true)
+	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_TIMEOUT), false)
+	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_SUCCESS), false)
 }
