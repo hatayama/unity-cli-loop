@@ -203,7 +203,8 @@ func win32ButtonLabels(buttons []win32Control) []string {
 
 // win32PushButtons returns a dialog's visible push buttons.
 // Why sorted by control ID and not left to right: Unity numbers the buttons OK, Cancel, Alt, which
-// is the order its own dialog report and the macOS look give, while Windows draws Alt in the middle.
+// is the order the macOS look gives, while Windows draws Alt in the middle. The Editor's own dialog
+// report on Windows (Unity 6000.7) lists them as drawn, OK, Alt, Cancel, so the two orders can differ.
 func win32PushButtons(controls []win32Control) []win32Control {
 	buttons := make([]win32Control, 0, len(controls))
 	for _, control := range controls {
