@@ -157,7 +157,7 @@ func TestPausePointWaitStopsWhenADialogHoldsUnity(t *testing.T) {
 
 	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, 0, false, true)
 
-	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName), startedCommandDialogClosedNextAction, false)
+	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName), pausePointDialogClosedNextAction, false)
 	if cliError := clierrors.ClassifyError(err, clierrors.ErrorContext{}); !strings.Contains(cliError.Message, "uloop "+clicore.PausePointAwaitCommandName+" stopped waiting") {
 		t.Fatalf("Message = %q, want it to name %s", cliError.Message, clicore.PausePointAwaitCommandName)
 	}
@@ -221,6 +221,9 @@ type heartbeatScript struct {
 	// finish answers the request after the heartbeats; otherwise the server waits for the client to
 	// hang up.
 	finish bool
+	// together sends the heartbeats and the answer in one write, so the answer is already read when
+	// the watch acts on the last heartbeat.
+	together bool
 }
 
 // serveHeartbeats accepts one request, accepts it, and sends heartbeats reporting stallSeconds.
@@ -248,8 +251,20 @@ func serveHeartbeats(t *testing.T, script heartbeatScript) unityipc.Connection {
 		if script.finish {
 			frames = append(frames, `{"jsonrpc":"2.0","result":{"Success":true},"id":1}`)
 		}
+		var together bytes.Buffer
+		if script.together {
+			for _, frame := range frames[1:] {
+				_ = unityipc.Write(&together, []byte(frame))
+			}
+			frames = frames[:1]
+		}
 		for _, frame := range frames {
 			if writeErr := unityipc.Write(conn, []byte(frame)); writeErr != nil {
+				return
+			}
+		}
+		if together.Len() > 0 {
+			if _, writeErr := conn.Write(together.Bytes()); writeErr != nil {
 				return
 			}
 		}
@@ -516,5 +531,21 @@ func TestRunCompileStoppedByADialogKeepsItsRequest(t *testing.T) {
 				t.Fatal("the stopped compile's request must be kept for the next uloop compile")
 			}
 		})
+	}
+}
+
+// Verifies a command whose answer arrives while the watch finds a dialog returns its answer: it
+// finished, so reporting the dialog instead would lose its result.
+func TestSendReturnsTheAnswerThatArrivedWhileTheWatchLooked(t *testing.T) {
+	look := newFakeDialogLook(commandDialogPlayerStoppedDialog())
+
+	outcome, err := sendWithHeartbeats(t, context.Background(), "get-logs",
+		heartbeatScript{stallSeconds: 36, beats: 1, finish: true, together: true}, look)
+
+	if err != nil || !strings.Contains(string(outcome.Result), "Success") {
+		t.Fatalf("err = %v, result = %s, want the answer", err, outcome.Result)
+	}
+	if look.calls != 1 {
+		t.Fatalf("looked %d times, want 1", look.calls)
 	}
 }

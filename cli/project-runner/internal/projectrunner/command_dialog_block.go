@@ -22,6 +22,10 @@ const (
 		"result is not returned; run uloop status, then check the effect before running it again."
 	controlPlayModeDialogClosedNextAction = "After the dialog is closed, run uloop control-play-mode --action Status " +
 		"to see the state it reached."
+	// The pause-point wait ends in uloop only; the marker stays armed in Unity, and a repeated --trigger
+	// would send the trigger again.
+	pausePointDialogClosedNextAction = "After the dialog is closed, run uloop pause-point-status to see whether the " +
+		"marker was hit; if it is still waiting, run uloop await-pause-point again without --trigger."
 	startedCommandStoppedFormat = "uloop %s stopped waiting; the command had already started and continues in " +
 		"Unity once the dialog is closed."
 	// The heartbeat wait gives up on the response itself, so it cannot promise the command goes on.
@@ -95,6 +99,8 @@ func startedCommandDialogClosedNextActionFor(command string) string {
 		return executeDynamicCodeDialogClosedNextAction
 	case controlPlayModeCommandName:
 		return controlPlayModeDialogClosedNextAction
+	case clicore.PausePointAwaitCommandName, pausePointEnableCommandName:
+		return pausePointDialogClosedNextAction
 	default:
 		return startedCommandDialogClosedNextAction
 	}
