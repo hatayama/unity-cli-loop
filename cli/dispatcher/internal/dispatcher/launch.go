@@ -172,7 +172,7 @@ func findLaunchRunningProcess(
 	stderr io.Writer,
 	deps launchDeps,
 ) (*unityprocess.UnityProcess, bool, int) {
-	runningProcess, err := deps.findRunningUnityProcess(ctx, projectRoot)
+	runningProcess, err := launchRunningProcessLookup(options, deps)(ctx, projectRoot)
 	if err == nil {
 		return runningProcess, false, 0
 	}
@@ -186,8 +186,23 @@ func findLaunchRunningProcess(
 		}
 		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
 	}
-	clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+	clierrors.WriteClassifiedError(stderr, launchStopLookupError(err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 	return nil, true, 1
+}
+
+// launchRunningProcessLookup picks the lookup that decides whether this project's Editor runs. Quit uses the
+// definitive one, because reading "no Editor" while one may be this project's would report a quit that stopped
+// nothing, and no one could notice. Plain launch and restart keep the ordinary one: when the unidentified Editor
+// is this project's, Unity itself refuses to open the project a second time, while failing whenever an unrelated
+// Editor's project is unknown would make them unusable beside it.
+func launchRunningProcessLookup(
+	options launchOptions,
+	deps launchDeps,
+) func(context.Context, string) (*unityprocess.UnityProcess, error) {
+	if options.quit {
+		return deps.findRunningUnityProcessDefinitively
+	}
+	return deps.findRunningUnityProcess
 }
 
 func handleExistingLaunchProcess(

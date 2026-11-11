@@ -204,6 +204,7 @@ func TestRunLaunchQuitIgnoresUnusableLogFile(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.requestUnityQuit = func(context.Context, string) bool {
 		return false
 	}

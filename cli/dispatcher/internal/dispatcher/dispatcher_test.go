@@ -232,6 +232,7 @@ func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
 	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
+	deps.launch.findRunningUnityProcessDefinitively = deps.launch.findRunningUnityProcess
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -254,6 +255,7 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
+	deps.launch.findRunningUnityProcessDefinitively = deps.launch.findRunningUnityProcess
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

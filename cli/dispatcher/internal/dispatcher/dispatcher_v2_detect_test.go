@@ -569,6 +569,7 @@ func TestRunDispatcherKeepsV2LaunchInNativeDispatcher(t *testing.T) {
 	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
+	deps.launch.findRunningUnityProcessDefinitively = deps.launch.findRunningUnityProcess
 
 	var stdout bytes.Buffer
 	code := runDispatcherWithDeps(context.Background(), []string{"launch", "--quit", projectRoot}, &stdout, io.Discard, deps)

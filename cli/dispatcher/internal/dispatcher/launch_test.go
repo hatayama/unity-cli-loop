@@ -339,6 +339,7 @@ func TestRunLaunchQuitDoesNotLaunchWhenUnityIsNotRunning(t *testing.T) {
 	// reason unrelated to the quit branch it covers.
 	deps := defaultLaunchDeps()
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 
 	code := runLaunchWithDeps(
 		context.Background(),
@@ -898,6 +899,7 @@ func TestRunLaunchQuitWaitsForKilledUnityProcess(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.killUnityProcess = func(pid int) error {
 		return nil
 	}
