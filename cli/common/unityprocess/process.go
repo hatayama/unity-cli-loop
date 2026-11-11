@@ -27,7 +27,8 @@ var (
 
 type UnityProcess struct {
 	Pid int
-	// projectPath is empty for an Editor whose command line does not name its project.
+	// projectPath is empty for an Editor whose command line does not name its project, and for a Unity
+	// process whose command line could not be read.
 	projectPath string
 }
 
@@ -176,12 +177,18 @@ func runProcessListCommandWithin(ctx context.Context, timeout time.Duration, nam
 // (e.g. CP932 on Japanese Windows), so non-ASCII project paths in the command
 // line get corrupted when Go reads the output as UTF-8. Base64 over UTF-8
 // bytes keeps the stream ASCII-only regardless of the console code page.
+// Why a process with a null command line is still written (as "pid|"): an
+// unelevated shell reads an elevated Editor's command line as null, and
+// dropping it would conclude that no Editor runs even when it is the project's.
 func windowsUnityProcessListScript() string {
 	scriptLines := []string{
 		"$ErrorActionPreference = 'Stop'",
-		"$processes = Get-CimInstance Win32_Process -Filter \"Name = 'Unity.exe'\" | Where-Object { $_.CommandLine }",
+		"$processes = Get-CimInstance Win32_Process -Filter \"Name = 'Unity.exe'\"",
 		"foreach ($process in $processes) {",
-		"  $commandLine = $process.CommandLine -replace \"`r\", ' ' -replace \"`n\", ' '",
+		"  $commandLine = ''",
+		"  if ($null -ne $process.CommandLine) {",
+		"    $commandLine = $process.CommandLine -replace \"`r\", ' ' -replace \"`n\", ' '",
+		"  }",
 		"  $encodedCommandLine = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($commandLine))",
 		"  Write-Output (\"{0}|{1}\" -f $process.ProcessId, $encodedCommandLine)",
 		"}",
@@ -342,8 +349,16 @@ func parseWindowsUnityProcesses(output string) []UnityProcess {
 		}
 
 		command := strings.TrimSpace(string(decodedCommand))
+		// Why an unreadable command line is listed: an unelevated shell reads an elevated Editor's command
+		// line as null (measured on Windows), and dropping it would conclude no Editor runs even when it is
+		// the project's. Without the command line an Editor, a batchmode run, and an import worker look the
+		// same, so each counts as an Editor whose project is unknown, the less harmful side.
+		if command == "" {
+			processes = append(processes, UnityProcess{Pid: pid})
+			continue
+		}
 		args := splitWindowsCommandLine(command)
-		if hasNonEditorArg(args) || !windowsUnityExecutablePattern.MatchString(command) {
+		if isUnityHubCommandLineTool(args) || hasNonEditorArg(args) || !windowsUnityExecutablePattern.MatchString(command) {
 			continue
 		}
 		processes = append(processes, UnityProcess{Pid: pid, projectPath: projectPathFromArgs(args)})

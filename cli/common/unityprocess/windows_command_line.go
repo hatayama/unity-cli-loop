@@ -52,3 +52,32 @@ func splitWindowsCommandLine(commandLine string) []string {
 	}
 	return args
 }
+
+// isUnityHubCommandLineTool reports whether a Windows command line is Unity Hub's helper process, measured as
+// `"<UNITY_HUB_DIR>\resources\unity.exe" serve`: a unity.exe right inside a "resources" directory that runs a
+// subcommand rather than Editor flags, which all start with "-".
+// Why so narrow: leaving a real Editor out of the list makes launch delete its lockfile and Temp and open a
+// second Editor, while keeping the helper only reports Unreachable and fails `launch -q`. A Unity command line
+// tool placed outside Unity Hub is not recognized and stays listed as an Editor of unknown project, which is the
+// less harmful side.
+// Why not filepath: the tests run on macOS and Linux too, where filepath does not split on "\".
+func isUnityHubCommandLineTool(args []string) bool {
+	if len(args) < 2 || strings.HasPrefix(args[1], "-") {
+		return false
+	}
+	executableDirectory, executableName := splitLastWindowsPathElement(args[0])
+	if !strings.EqualFold(executableName, "unity.exe") {
+		return false
+	}
+	_, parentDirectoryName := splitLastWindowsPathElement(executableDirectory)
+	return strings.EqualFold(parentDirectoryName, "resources")
+}
+
+// splitLastWindowsPathElement splits a path at its last "\" or "/" into the directory and the final element.
+func splitLastWindowsPathElement(windowsPath string) (string, string) {
+	separatorIndex := strings.LastIndexAny(windowsPath, `\/`)
+	if separatorIndex < 0 {
+		return "", windowsPath
+	}
+	return windowsPath[:separatorIndex], windowsPath[separatorIndex+1:]
+}
