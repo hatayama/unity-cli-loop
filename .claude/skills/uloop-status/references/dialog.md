@@ -43,7 +43,7 @@ On exit 0 it returns JSON with:
 
 ## Errors
 
-Errors of `get-dialogs` and `press-dialog-button` go to stderr, nothing goes to stdout, and they exit 1. `BLOCKED_BY_DIALOG` comes from `uloop hot-reload` instead: it goes to stderr and exits 1, and when the first apply had already answered, that answer is on stdout.
+Errors of `get-dialogs` and `press-dialog-button` go to stderr, nothing goes to stdout, and they exit 1. `BLOCKED_BY_DIALOG` comes from the command that a dialog blocked instead: it goes to stderr and exits 1, and when a first `uloop hot-reload` apply had already answered, that answer is on stdout.
 
 | ErrorCode | Meaning | What to do |
 |-----------|---------|------------|
@@ -52,7 +52,7 @@ Errors of `get-dialogs` and `press-dialog-button` go to stderr, nothing goes to 
 | `DIALOG_NOT_ANSWERABLE` | uloop cannot look or press on this system, or the dialog has no button labels uloop can read | Ask the user to answer the dialog in Unity |
 | `DIALOG_CHECK_FAILED` | Listing failed, for example because Unity's process was not found or the operating system did not let uloop read its windows; `Message` says why | Follow `NextActions` |
 | `DIALOG_ANSWER_FAILED` | The press failed or timed out, or the dialog was still open after the press | Run `uloop get-dialogs` to see whether the dialog is still open before pressing again; if it stays open, ask the user |
-| `BLOCKED_BY_DIALOG` | `uloop hot-reload` was waiting for the Editor, and the Editor reported a modal dialog; hot-reload stopped waiting and applied nothing | Read `Details.Dialogs` and follow `NextActions`; once the dialog is closed, run `uloop hot-reload` again |
+| `BLOCKED_BY_DIALOG` | A modal dialog kept the command from running: Unity's main thread was blocked and the command did not run (any command), or `uloop hot-reload` was waiting for the Editor and stopped without applying anything | Read `Details.Dialogs` and follow `NextActions`; once the dialog is closed, run the command again |
 
 `DIALOG_ANSWER_FAILED` has `SafeToRetry: false` once the press was attempted: it may have landed, and pressing the same label again could press a button of the dialog that opened next. It has `SafeToRetry: true` only when the press failed before anything was clicked (for example, Unity's process was not found).
 
