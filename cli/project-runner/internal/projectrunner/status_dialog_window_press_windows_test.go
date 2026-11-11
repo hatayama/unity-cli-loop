@@ -122,6 +122,25 @@ func TestPressWin32WindowButtonFailsForADestroyedDialog(t *testing.T) {
 	assertPressNotStarted(t, err, true)
 }
 
+// Verifies a dialog that was disabled after it was read, as a nested modal dialog opened over it
+// does, is sent nothing, and the failure says no click was sent.
+func TestPressWin32WindowButtonPressesNothingInADisabledDialog(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	target, messages := factory.createDialogWithButton(testShownDialogStyle, 3)
+	defer factory.destroy(windows.HWND(target.DialogHandle))
+	factory.setEnabled(windows.HWND(target.DialogHandle), false)
+
+	err := pressWin32WindowButton(context.Background(), target)
+
+	assertPressNotStarted(t, err, true)
+	if len(*messages) != 0 {
+		t.Fatalf("messages = %#v, want none", *messages)
+	}
+}
+
 // Verifies a button that was disabled after the dialog was read is sent nothing, and the failure
 // says no click was sent, because WM_COMMAND would act on the dialog even for a disabled button.
 func TestPressWin32WindowButtonPressesNothingForADisabledButton(t *testing.T) {
