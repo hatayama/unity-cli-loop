@@ -58,7 +58,10 @@ const (
 	ErrorCodeDialogCheckFailed = "DIALOG_CHECK_FAILED"
 	// ErrorCodeDialogAnswerFailed is returned when pressing the button failed or the dialog did not close.
 	ErrorCodeDialogAnswerFailed = "DIALOG_ANSWER_FAILED"
-	ErrorCodeInternalError      = "INTERNAL_ERROR"
+	// ErrorCodeBlockedByDialog is returned when, while a command waited for the Editor, the Editor
+	// reported that a modal dialog holds it.
+	ErrorCodeBlockedByDialog = "BLOCKED_BY_DIALOG"
+	ErrorCodeInternalError   = "INTERNAL_ERROR"
 
 	ErrorPhaseArgumentParsing = "argument_parsing"
 	ErrorPhaseProjectResolve  = "project_resolution"

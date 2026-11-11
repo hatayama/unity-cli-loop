@@ -23,8 +23,6 @@ const (
 		`"SecondsSinceLastMainThreadTick":0.1}`
 	editorReadyRetryStatusReady = `{"IsBusy":false,"HasEditorState":true,"IsCompiling":false,"IsUpdating":false,` +
 		`"SecondsSinceLastMainThreadTick":0.1}`
-	editorReadyRetryStatusReadyWithDialog = `{"IsBusy":false,"HasEditorState":true,"IsCompiling":false,"IsUpdating":false,` +
-		`"SecondsSinceLastMainThreadTick":0.1,"OpenDialogs":[{"Title":"Save scene?","Message":"","Buttons":["Save"]}]}`
 	editorReadyRetrySecondApplied = `{"Success":true,"Outcome":"Applied","RetryAfterEditorReady":false,` +
 		`"CompileFallback":"NotNeeded","Message":"applied","Timing":{"TotalMs":34}}`
 )
@@ -391,22 +389,6 @@ func TestRunHotReloadKeepsWaitingWhileTheEditorRestarts(t *testing.T) {
 			{method: hotReloadCommandName, result: editorReadyRetryFirstRefused},
 			{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusCompiling},
 			{method: editorStatusBridgeCommandName, drop: true},
-			{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusReady},
-			{method: hotReloadCommandName, result: editorReadyRetrySecondApplied},
-		},
-		editorReadyRetryNoCompile())
-
-	assertAppliedAfterTheWait(t, run)
-}
-
-// Verifies hot reload does not apply while the Editor reports an open modal dialog: the dialog
-// blocks the main thread, so it waits for an answer without one before applying again.
-func TestRunHotReloadKeepsWaitingWhileTheEditorReportsADialog(t *testing.T) {
-	useFastEditorReadyWait(t, fastEditorReadyWaitOptions())
-	run := runScriptedHotReload(t, context.Background(), t.TempDir(), map[string]any{},
-		[]scriptedIPCStep{
-			{method: hotReloadCommandName, result: editorReadyRetryFirstRefused},
-			{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusReadyWithDialog},
 			{method: editorStatusBridgeCommandName, result: editorReadyRetryStatusReady},
 			{method: hotReloadCommandName, result: editorReadyRetrySecondApplied},
 		},
