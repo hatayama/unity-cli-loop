@@ -80,6 +80,20 @@ func TestPressResultFromAccessibilityOutputRejectsUnusableOutput(t *testing.T) {
 	}
 }
 
+// Verifies a Unity process the script could not find is a press that did not start, because the
+// script returns before it reaches the click, and the message still names the missing process.
+func TestPressResultFromAccessibilityOutputReportsAMissingProcessAsNotStarted(t *testing.T) {
+	_, err := pressResultFromAccessibilityOutput([]byte(`{"processFound":false}`))
+
+	var notStarted dialogPressNotStartedError
+	if !errors.As(err, &notStarted) {
+		t.Fatalf("err = %v, want a press that did not start", err)
+	}
+	if err.Error() != "this project's Unity process is not listed by System Events" {
+		t.Fatalf("err = %q, want the missing process message", err.Error())
+	}
+}
+
 // Verifies press runs the press script through osascript with the Unity process ID and the label
 // as given.
 func TestDialogPressRunsTheScriptWithThePidAndLabel(t *testing.T) {

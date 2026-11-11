@@ -122,6 +122,44 @@ func TestPressWin32WindowButtonFailsForADestroyedDialog(t *testing.T) {
 	assertPressNotStarted(t, err, true)
 }
 
+// Verifies a button that was disabled after the dialog was read is sent nothing, and the failure
+// says no click was sent, because WM_COMMAND would act on the dialog even for a disabled button.
+func TestPressWin32WindowButtonPressesNothingForADisabledButton(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	target, messages := factory.createDialogWithButton(testShownDialogStyle, 3)
+	defer factory.destroy(windows.HWND(target.DialogHandle))
+	factory.setEnabled(windows.HWND(target.ButtonHandle), false)
+
+	err := pressWin32WindowButton(context.Background(), target)
+
+	assertPressNotStarted(t, err, true)
+	if len(*messages) != 0 {
+		t.Fatalf("messages = %#v, want none", *messages)
+	}
+}
+
+// Verifies a button that was destroyed after the dialog was read is sent nothing, and the failure
+// says no click was sent.
+func TestPressWin32WindowButtonPressesNothingForADestroyedButton(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	target, messages := factory.createDialogWithButton(testShownDialogStyle, 3)
+	defer factory.destroy(windows.HWND(target.DialogHandle))
+	factory.destroy(windows.HWND(target.ButtonHandle))
+
+	err := pressWin32WindowButton(context.Background(), target)
+
+	assertPressNotStarted(t, err, true)
+	if len(*messages) != 0 {
+		t.Fatalf("messages = %#v, want none", *messages)
+	}
+}
+
 // Verifies a press whose context has already ended sends the dialog nothing and fails as one that
 // sent no click, instead of reporting a press.
 func TestPressWin32WindowButtonPressesNothingWhenItHasNoTimeLeft(t *testing.T) {
@@ -143,12 +181,14 @@ func TestPressWin32WindowButtonPressesNothingWhenItHasNoTimeLeft(t *testing.T) {
 }
 
 // Verifies what the answer to a click means: an answered click is a press, a click Windows refused
-// to deliver was never sent, and any other unanswered click may have reached the dialog.
+// to deliver or could not deliver to a closed dialog was never sent, and any other unanswered click
+// may have reached the dialog.
 func TestWin32ClickErrorTellsAnUnsentClickFromAnUnansweredOne(t *testing.T) {
 	if err := win32ClickError(1, windows.ERROR_SUCCESS); err != nil {
 		t.Fatalf("answered click returned error: %v", err)
 	}
 	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_ACCESS_DENIED), true)
+	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_INVALID_WINDOW_HANDLE), true)
 	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_TIMEOUT), false)
 	assertPressNotStarted(t, win32ClickError(0, windows.ERROR_SUCCESS), false)
 }

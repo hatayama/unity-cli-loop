@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"time"
 
@@ -203,8 +204,8 @@ func readEditorStatus(
 
 	// Why not through reportFromProbeError: its disconnect check also matches message text, so an
 	// unreadable answer could be mistaken for a dropped connection.
-	var response editorStatusResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
+	response, err := decodeEditorStatusResponse(raw)
+	if err != nil {
 		return nil, statusReport{}, fmt.Errorf("unexpected %s response: %w", editorStatusBridgeCommandName, err)
 	}
 	// The Busy message reads the elapsed seconds, and the Editor always sends them while a
@@ -294,6 +295,19 @@ func notRunningStatusReport(projectRoot string, probeErr error) statusReport {
 	report := newStatusReport(statusStateNotRunning, notRunning.ToCLIError(clierrors.ErrorContext{}).Message)
 	report.NextActions = append(notRunning.EditorLogNextActions(), report.NextActions...)
 	return report
+}
+
+// decodeEditorStatusResponse reads a get-editor-status answer, with OpenDialogs frontmost first as
+// uloop lists the dialogs it reads from the OS.
+// Why reversed: the Editor lists its dialogs in the order they opened, and a nested modal dialog
+// opens over the one before it, so the last one is in front.
+func decodeEditorStatusResponse(raw []byte) (editorStatusResponse, error) {
+	var response editorStatusResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return editorStatusResponse{}, err
+	}
+	slices.Reverse(response.OpenDialogs)
+	return response, nil
 }
 
 func reportFromEditorResponse(response editorStatusResponse) statusReport {

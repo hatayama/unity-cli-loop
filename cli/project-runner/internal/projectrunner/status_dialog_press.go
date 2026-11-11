@@ -94,7 +94,10 @@ func pressResultFromAccessibilityOutput(output []byte) (dialogPressResult, error
 		return dialogPressResult{}, fmt.Errorf("unreadable osascript output: %w", err)
 	}
 	if !raw.ProcessFound {
-		return dialogPressResult{}, errors.New("this project's Unity process is not listed by System Events")
+		// The script returns before its click when it finds no process, so nothing was pressed.
+		return dialogPressResult{}, dialogPressNotStartedError{
+			err: errors.New("this project's Unity process is not listed by System Events"),
+		}
 	}
 	if !raw.DialogFound {
 		return dialogPressResult{DialogFound: false}, nil
