@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -78,18 +79,43 @@ func (fake *fakeDialogCommand) deps() dialogCommandDeps {
 	}
 }
 
+// dialogRun is one command run; command is the name its error envelope must carry.
 type dialogRun struct {
-	code   int
-	stdout string
-	stderr string
+	command string
+	code    int
+	stdout  string
+	stderr  string
 }
 
-func runDialogForTest(ctx context.Context, args []string, fake *fakeDialogCommand) dialogRun {
+type dialogCommandEntry func(
+	ctx context.Context,
+	connection unityipc.Connection,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+	deps dialogCommandDeps,
+) int
+
+func runDialogEntryForTest(
+	ctx context.Context,
+	command string,
+	entry dialogCommandEntry,
+	args []string,
+	fake *fakeDialogCommand,
+) dialogRun {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	connection := unityipc.Connection{ProjectRoot: dialogTestProjectRoot}
-	code := runDialogCommandWithDeps(ctx, connection, args, &stdout, &stderr, fake.deps())
-	return dialogRun{code: code, stdout: stdout.String(), stderr: stderr.String()}
+	code := entry(ctx, connection, args, &stdout, &stderr, fake.deps())
+	return dialogRun{command: command, code: code, stdout: stdout.String(), stderr: stderr.String()}
+}
+
+func runGetDialogsForTest(ctx context.Context, args []string, fake *fakeDialogCommand) dialogRun {
+	return runDialogEntryForTest(ctx, "get-dialogs", runGetDialogsCommandWithDeps, args, fake)
+}
+
+func runPressDialogButtonForTest(ctx context.Context, args []string, fake *fakeDialogCommand) dialogRun {
+	return runDialogEntryForTest(ctx, "press-dialog-button", runPressDialogButtonCommandWithDeps, args, fake)
 }
 
 func pressedFake() *fakeDialogCommand {
@@ -138,8 +164,9 @@ func decodeDialogError(t *testing.T, run dialogRun, want expectedDialogFailure) 
 		t.Fatalf("error = %s Retryable=%v SafeToRetry=%v, want %s Retryable=%v SafeToRetry=%v\n%s",
 			got.ErrorCode, got.Retryable, got.SafeToRetry, want.code, want.retryable, want.safeToRetry, run.stderr)
 	}
-	if got.Command != "dialog" || got.ProjectRoot != dialogTestProjectRoot {
-		t.Fatalf("error must name the command and project: Command=%q ProjectRoot=%q", got.Command, got.ProjectRoot)
+	if got.Command != run.command || got.ProjectRoot != dialogTestProjectRoot {
+		t.Fatalf("error must name the command and project: Command=%q ProjectRoot=%q, want Command=%q",
+			got.Command, got.ProjectRoot, run.command)
 	}
 	return got
 }
@@ -175,7 +202,7 @@ func assertPressedDialogOutput(t *testing.T, output map[string]any) {
 	assertDialogJSON(t, output["Buttons"], dialogTestPressed.Buttons)
 }
 
-// Verifies uloop dialog without --answer prints every open dialog in the order the look found
+// Verifies uloop get-dialogs prints every open dialog in the order the look found
 // them and never presses anything.
 func TestRunDialogCommandListsOpenDialogs(t *testing.T) {
 	fake := &fakeDialogCommand{
@@ -183,7 +210,7 @@ func TestRunDialogCommandListsOpenDialogs(t *testing.T) {
 		looks:    []dialogLookAnswer{{dialogs: []statusDialog{dialogTestPressed, dialogTestFollowing}}},
 	}
 
-	output := decodeDialogOutput(t, runDialogForTest(context.Background(), nil, fake))
+	output := decodeDialogOutput(t, runGetDialogsForTest(context.Background(), nil, fake))
 
 	if output["Success"] != true {
 		t.Fatalf("Success must be true: %#v", output)
@@ -194,11 +221,11 @@ func TestRunDialogCommandListsOpenDialogs(t *testing.T) {
 	}
 }
 
-// Verifies uloop dialog prints an empty Dialogs array, not null, when no dialog is open.
+// Verifies uloop get-dialogs prints an empty Dialogs array, not null, when no dialog is open.
 func TestRunDialogCommandListsNoDialogs(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: true, looks: []dialogLookAnswer{{dialogs: nil}}}
 
-	run := runDialogForTest(context.Background(), nil, fake)
+	run := runGetDialogsForTest(context.Background(), nil, fake)
 	output := decodeDialogOutput(t, run)
 
 	dialogs, ok := output["Dialogs"].([]any)
@@ -214,7 +241,7 @@ func TestRunDialogCommandReportsFailedLook(t *testing.T) {
 		looks:    []dialogLookAnswer{{err: errors.New("osascript could not read Unity's windows")}},
 	}
 
-	got := decodeDialogError(t, runDialogForTest(context.Background(), nil, fake),
+	got := decodeDialogError(t, runGetDialogsForTest(context.Background(), nil, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogCheckFailed, retryable: true, safeToRetry: true})
 
 	if !strings.Contains(got.Message, "osascript could not read Unity's windows") {
@@ -230,7 +257,7 @@ func TestRunDialogCommandListsWhereUloopCannotPress(t *testing.T) {
 		looks:    []dialogLookAnswer{{dialogs: []statusDialog{dialogTestPressed}}},
 	}
 
-	output := decodeDialogOutput(t, runDialogForTest(context.Background(), nil, fake))
+	output := decodeDialogOutput(t, runGetDialogsForTest(context.Background(), nil, fake))
 
 	assertDialogJSON(t, output["Dialogs"], []statusDialog{dialogTestPressed})
 }
@@ -239,17 +266,17 @@ func TestRunDialogCommandListsWhereUloopCannotPress(t *testing.T) {
 func TestRunDialogCommandIsUnsupportedWhereUloopCannotLook(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: false, looks: []dialogLookAnswer{{err: errDialogInspectionUnsupported}}}
 
-	assertDialogFailure(t, runDialogForTest(context.Background(), nil, fake),
+	assertDialogFailure(t, runGetDialogsForTest(context.Background(), nil, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
 }
 
-// Verifies --answer presses the named button once and prints the dialog read before the press.
+// Verifies --label presses the named button once and prints the dialog read before the press.
 func TestRunDialogCommandPressesTheNamedButton(t *testing.T) {
-	for _, args := range [][]string{{"--answer", "Later"}, {"--answer=Later"}} {
+	for _, args := range [][]string{{"--label", "Later"}, {"--label=Later"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := pressedFake()
 
-			output := decodeDialogOutput(t, runDialogForTest(context.Background(), args, fake))
+			output := decodeDialogOutput(t, runPressDialogButtonForTest(context.Background(), args, fake))
 
 			assertPressedDialogOutput(t, output)
 			if _, ok := output["NextDialogs"]; ok {
@@ -272,7 +299,7 @@ func TestRunDialogCommandRejectsAnUnknownButton(t *testing.T) {
 				pressResult: dialogPressResult{DialogFound: true, Pressed: false, Dialog: dialogTestPressed},
 			}
 
-			got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", label}, fake),
+			got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), []string{"--label", label}, fake),
 				expectedDialogFailure{code: clierrors.ErrorCodeDialogButtonNotFound, retryable: false, safeToRetry: true})
 
 			assertDialogJSON(t, got.Details["Buttons"], []string{"Yes", "No", "Later"})
@@ -286,11 +313,11 @@ func TestRunDialogCommandRejectsAnUnknownButton(t *testing.T) {
 	}
 }
 
-// Verifies --answer with no modal dialog open is DIALOG_NOT_OPEN and nothing is rechecked.
+// Verifies --label with no modal dialog open is DIALOG_NOT_OPEN and nothing is rechecked.
 func TestRunDialogCommandFailsWhenNoDialogIsOpen(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: true, pressResult: dialogPressResult{DialogFound: false}}
 
-	assertDialogFailure(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	assertDialogFailure(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotOpen, retryable: false, safeToRetry: true})
 
 	if fake.lookCalls != 0 {
@@ -310,7 +337,7 @@ func TestRunDialogCommandCannotAnswerADialogWithoutButtons(t *testing.T) {
 		},
 	}
 
-	got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "OK"}, fake),
+	got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "OK"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
 
 	if !strings.Contains(got.Message, "Probe modal") {
@@ -321,13 +348,13 @@ func TestRunDialogCommandCannotAnswerADialogWithoutButtons(t *testing.T) {
 	}
 }
 
-// Verifies --answer where uloop cannot press buttons fails before looking or pressing, and names
+// Verifies --label where uloop cannot press buttons fails before looking or pressing, and names
 // the operating systems where it can.
 func TestRunDialogCommandCannotPressOnThisSystem(t *testing.T) {
 	fake := pressedFake()
 	fake.canPress = false
 
-	got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
 
 	if got.Message != "uloop can press a dialog button only on macOS and Windows." {
@@ -344,7 +371,7 @@ func TestRunDialogCommandCannotPressOnThisSystem(t *testing.T) {
 func TestRunDialogCommandReportsFailedPress(t *testing.T) {
 	fake := &fakeDialogCommand{canPress: true, pressErr: errors.New("osascript did not answer within 5s")}
 
-	got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogAnswerFailed, retryable: false, safeToRetry: false})
 
 	if !strings.Contains(got.Message, "osascript did not answer within 5s") {
@@ -363,7 +390,7 @@ func TestRunDialogCommandReportsAPressThatNeverStarted(t *testing.T) {
 		pressErr: dialogPressNotStartedError{err: errors.New("no Unity process runs for this project")},
 	}
 
-	got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogAnswerFailed, retryable: false, safeToRetry: true})
 
 	if !strings.Contains(got.Message, "no Unity process runs for this project") {
@@ -376,7 +403,7 @@ func TestRunDialogCommandFailsWhenTheDialogStaysOpen(t *testing.T) {
 	fake := pressedFake()
 	fake.looks = []dialogLookAnswer{{dialogs: []statusDialog{dialogTestPressed}}}
 
-	assertDialogFailure(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	assertDialogFailure(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogAnswerFailed, retryable: false, safeToRetry: false})
 
 	if fake.lookCalls != dialogTestRecheckCount {
@@ -389,7 +416,7 @@ func TestRunDialogCommandWaitsForTheDialogToClose(t *testing.T) {
 	fake := pressedFake()
 	fake.looks = []dialogLookAnswer{{dialogs: []statusDialog{dialogTestPressed}}, {dialogs: nil}}
 
-	output := decodeDialogOutput(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake))
+	output := decodeDialogOutput(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake))
 
 	assertPressedDialogOutput(t, output)
 	if fake.lookCalls != 2 {
@@ -402,7 +429,7 @@ func TestRunDialogCommandReportsTheDialogThatFollows(t *testing.T) {
 	fake := pressedFake()
 	fake.looks = []dialogLookAnswer{{dialogs: []statusDialog{dialogTestFollowing}}}
 
-	output := decodeDialogOutput(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake))
+	output := decodeDialogOutput(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake))
 
 	assertPressedDialogOutput(t, output)
 	assertDialogJSON(t, output["NextDialogs"], []statusDialog{dialogTestFollowing})
@@ -413,7 +440,7 @@ func TestRunDialogCommandSucceedsWhenTheRecheckFails(t *testing.T) {
 	fake := pressedFake()
 	fake.looks = []dialogLookAnswer{{err: errors.New("osascript could not read Unity's windows")}}
 
-	output := decodeDialogOutput(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake))
+	output := decodeDialogOutput(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake))
 
 	assertPressedDialogOutput(t, output)
 	if _, ok := output["NextDialogs"]; ok {
@@ -431,7 +458,7 @@ func TestRunDialogCommandSucceedsWhenCancelledAfterThePress(t *testing.T) {
 	fake.recheckDelay = time.Hour
 	fake.afterPress = cancel
 
-	output := decodeDialogOutput(t, runDialogForTest(ctx, []string{"--answer", "Later"}, fake))
+	output := decodeDialogOutput(t, runPressDialogButtonForTest(ctx, []string{"--label", "Later"}, fake))
 
 	assertPressedDialogOutput(t, output)
 	if _, ok := output["NextDialogs"]; ok {
@@ -442,14 +469,18 @@ func TestRunDialogCommandSucceedsWhenCancelledAfterThePress(t *testing.T) {
 	}
 }
 
-// Verifies --answer without a non-empty value is INVALID_ARGUMENT and touches no dialog.
+// Verifies --label without a non-empty value is INVALID_ARGUMENT and touches no dialog.
 func TestRunDialogCommandRejectsAnswerWithoutValue(t *testing.T) {
-	for _, args := range [][]string{{"--answer"}, {"--answer", ""}, {"--answer="}} {
+	for _, args := range [][]string{{"--label"}, {"--label", ""}, {"--label="}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := pressedFake()
 
-			assertDialogFailure(t, runDialogForTest(context.Background(), args, fake),
+			got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), args, fake),
 				expectedDialogFailure{code: clierrors.ErrorCodeInvalidArgument, retryable: false, safeToRetry: false})
+
+			if got.Message != "--label requires a button label" {
+				t.Fatalf("Message = %q", got.Message)
+			}
 
 			if fake.pressCalls != 0 || fake.lookCalls != 0 {
 				t.Fatalf("press and look must not run: press=%d look=%d", fake.pressCalls, fake.lookCalls)
@@ -458,24 +489,68 @@ func TestRunDialogCommandRejectsAnswerWithoutValue(t *testing.T) {
 	}
 }
 
-// Verifies unknown options, extra positional arguments, and a repeated --answer are
-// INVALID_ARGUMENT and touch no dialog.
+// Verifies unknown options, extra positional arguments, the old --answer option, and a repeated
+// --label are INVALID_ARGUMENT for press-dialog-button and touch no dialog.
 func TestRunDialogCommandRejectsUnknownOptions(t *testing.T) {
-	for _, args := range [][]string{
-		{"--bogus"},
-		{"extra"},
-		{"--answer", "Later", "extra"},
-		{"--answer", "A", "--answer", "B"},
+	for _, testCase := range []struct {
+		args        []string
+		wantMessage string
+	}{
+		{args: []string{"--bogus"}, wantMessage: "press-dialog-button does not accept --bogus"},
+		{args: []string{"extra"}, wantMessage: "press-dialog-button does not accept extra"},
+		{args: []string{"--answer", "Later"}, wantMessage: "press-dialog-button does not accept --answer"},
+		{args: []string{"--label", "Later", "extra"}, wantMessage: "press-dialog-button does not accept extra"},
+		{args: []string{"--label", "A", "--label", "B"}, wantMessage: "--label can be given only once"},
 	} {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
+		t.Run(strings.Join(testCase.args, " "), func(t *testing.T) {
 			fake := pressedFake()
 
-			assertDialogFailure(t, runDialogForTest(context.Background(), args, fake),
+			got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), testCase.args, fake),
 				expectedDialogFailure{code: clierrors.ErrorCodeInvalidArgument, retryable: false, safeToRetry: false})
+
+			if got.Message != testCase.wantMessage {
+				t.Fatalf("Message = %q, want %q", got.Message, testCase.wantMessage)
+			}
 
 			if fake.pressCalls != 0 || fake.lookCalls != 0 {
 				t.Fatalf("press and look must not run: press=%d look=%d", fake.pressCalls, fake.lookCalls)
 			}
 		})
+	}
+}
+
+// Verifies get-dialogs takes no options: any argument is INVALID_ARGUMENT naming it, and neither
+// look nor press runs.
+func TestRunGetDialogsCommandRejectsOptions(t *testing.T) {
+	for _, args := range [][]string{{"--label", "Later"}, {"extra"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			fake := pressedFake()
+
+			got := decodeDialogError(t, runGetDialogsForTest(context.Background(), args, fake),
+				expectedDialogFailure{code: clierrors.ErrorCodeInvalidArgument, retryable: false, safeToRetry: false})
+
+			if got.Message != "get-dialogs takes no options: "+args[0] {
+				t.Fatalf("Message = %q", got.Message)
+			}
+			if fake.pressCalls != 0 || fake.lookCalls != 0 {
+				t.Fatalf("press and look must not run: press=%d look=%d", fake.pressCalls, fake.lookCalls)
+			}
+		})
+	}
+}
+
+// Verifies press-dialog-button without --label is INVALID_ARGUMENT and neither looks nor presses,
+// instead of falling back to listing the dialogs.
+func TestRunPressDialogButtonCommandRequiresALabel(t *testing.T) {
+	fake := pressedFake()
+
+	got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), nil, fake),
+		expectedDialogFailure{code: clierrors.ErrorCodeInvalidArgument, retryable: false, safeToRetry: false})
+
+	if !strings.Contains(got.Message, "requires --label") {
+		t.Fatalf("Message = %q, want it to ask for --label", got.Message)
+	}
+	if fake.pressCalls != 0 || fake.lookCalls != 0 {
+		t.Fatalf("press and look must not run: press=%d look=%d", fake.pressCalls, fake.lookCalls)
 	}
 }

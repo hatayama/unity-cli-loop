@@ -167,32 +167,59 @@ func TestCancelHelpPrintsUsage(t *testing.T) {
 	}
 }
 
-// Verifies dialog --help prints its usage line, registry description, and the --answer option,
-// and ends by pointing at the status skill that documents it.
-func TestDialogHelpPrintsUsage(t *testing.T) {
+// Verifies press-dialog-button --help prints its usage line, registry description, and the --label
+// option, and ends by pointing at the status skill that documents it.
+func TestPressDialogButtonHelpPrintsUsage(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := RunProjectLocal(context.Background(), []string{"dialog", "--help"}, &stdout, &stderr)
+	code := RunProjectLocal(context.Background(), []string{"press-dialog-button", "--help"}, &stdout, &stderr)
 
 	if code != 0 {
-		t.Fatalf("dialog --help failed: code=%d stderr=%s", code, stderr.String())
+		t.Fatalf("press-dialog-button --help failed: code=%d stderr=%s", code, stderr.String())
 	}
 	const expected = "Usage:\n" +
-		"  uloop dialog [options]\n" +
+		"  uloop press-dialog-button [options]\n" +
 		"\n" +
-		"Show the modal dialog that blocks the Unity Editor for this project, or press one of its buttons\n" +
+		"Press a button in the modal dialog that blocks the Unity Editor for this project\n" +
 		"\n" +
 		"Options:\n" +
-		"  --answer <value>                   Press the button with this exact label in the frontmost dialog\n" +
+		"  --label <value>                    Press the button with this exact label in the frontmost dialog\n" +
 		"\n" +
 		"Global options:\n" +
 		"  --project-path <path>   Run against a Unity project outside the current directory\n" +
 		"\n" +
 		"Load the uloop-status skill for workflow rules and response fields that --help does not cover.\n"
 	if stdout.String() != expected {
-		t.Fatalf("dialog --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+		t.Fatalf("press-dialog-button --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
+// Verifies get-dialogs --help prints its usage line and registry description with only the global
+// option, since get-dialogs takes no options of its own, and ends by pointing at the status skill
+// that documents it.
+func TestGetDialogsHelpPrintsUsage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"get-dialogs", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("get-dialogs --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expected = "Usage:\n" +
+		"  uloop get-dialogs\n" +
+		"\n" +
+		"List the modal dialogs that block the Unity Editor for this project\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n" +
+		"\n" +
+		"Load the uloop-status skill for workflow rules and response fields that --help does not cover.\n"
+	if stdout.String() != expected {
+		t.Fatalf("get-dialogs --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
 	}
 }
 

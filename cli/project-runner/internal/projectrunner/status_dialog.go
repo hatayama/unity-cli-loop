@@ -311,9 +311,9 @@ func blockedByDialogReport(response editorStatusResponse, dialogs []statusDialog
 	return report
 }
 
-// withDialogAnswerGuidance points a BlockedByDialog report at uloop dialog --answer when uloop
-// can press a button of the frontmost dialog, and at the user otherwise. Every path that builds a
-// BlockedByDialog report passes through here, so the condition lives in one place.
+// withDialogAnswerGuidance points a BlockedByDialog report at uloop press-dialog-button when
+// uloop can press a button of the frontmost dialog, and at the user otherwise. Every path that
+// builds a BlockedByDialog report passes through here, so the condition lives in one place.
 func withDialogAnswerGuidance(report statusReport, canAnswerDialogs bool) statusReport {
 	if report.State != statusStateBlockedByDialog {
 		return report
@@ -324,7 +324,7 @@ func withDialogAnswerGuidance(report statusReport, canAnswerDialogs bool) status
 	}
 	report.NextActions = []string{
 		"Read the dialog's Title, Message, and Buttons, then press the button that fits what the user asked for: " +
-			"uloop dialog --answer \"<button>\".",
+			"uloop press-dialog-button --label \"<button>\".",
 		"Ask the user first when no button clearly fits or the choice would discard work (such as \"Don't Save\").",
 		dialogClosedNextAction,
 	}

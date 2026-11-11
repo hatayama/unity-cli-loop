@@ -48,7 +48,7 @@ type statusCommandDeps struct {
 	inspectDialogs func(ctx context.Context, projectRoot string) ([]statusDialog, error)
 	// The hint added to NextActions when that look fails; it differs by operating system.
 	dialogCheckNextAction string
-	// Whether uloop dialog --answer can press a button on this operating system.
+	// Whether uloop press-dialog-button can press a button on this operating system.
 	canAnswerDialogs bool
 }
 
