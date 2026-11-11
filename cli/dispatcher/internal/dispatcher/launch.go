@@ -172,7 +172,7 @@ func findLaunchRunningProcess(
 	stderr io.Writer,
 	deps launchDeps,
 ) (*unityprocess.UnityProcess, bool, int) {
-	runningProcess, err := deps.findRunningUnityProcess(ctx, projectRoot)
+	runningProcess, err := launchRunningProcessLookup(options, deps)(ctx, projectRoot)
 	if err == nil {
 		return runningProcess, false, 0
 	}
@@ -186,8 +186,22 @@ func findLaunchRunningProcess(
 		}
 		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
 	}
-	clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+	clierrors.WriteClassifiedError(stderr, launchStopLookupError(err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 	return nil, true, 1
+}
+
+// launchRunningProcessLookup picks the lookup that decides whether this project's Editor runs. Quit and
+// restart use the definitive one, because reading "no Editor" while one may be this project's would report a
+// quit that stopped nothing, or open a second Editor on the project. Plain launch keeps the ordinary one:
+// refusing to start whenever an unrelated Editor's project is unknown would make launch unusable beside it.
+func launchRunningProcessLookup(
+	options launchOptions,
+	deps launchDeps,
+) func(context.Context, string) (*unityprocess.UnityProcess, error) {
+	if options.quit || options.restart {
+		return deps.findRunningUnityProcessDefinitively
+	}
+	return deps.findRunningUnityProcess
 }
 
 func handleExistingLaunchProcess(
