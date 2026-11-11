@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -574,12 +575,21 @@ func TestSendReturnsTheErrorAnswerThatArrivedWhileTheWatchLooked(t *testing.T) {
 	}
 }
 
-// Verifies the marker id in the pause-point step cannot run a command when the step is pasted into a
-// shell: it stays inside single quotes, a quote in it included.
+// Verifies the marker id in the pause-point step cannot run a command when the step is pasted into
+// the shell of each operating system: it stays inside single quotes, a quote in it included.
 func TestPausePointDialogStepQuotesTheMarkerForTheShell(t *testing.T) {
-	step := pausePointDialogClosedNextAction("a$(touch x)`id`'b")
-
-	if !strings.Contains(step, `--id 'a$(touch x)`+"`id`"+`'\''b' `) {
-		t.Fatalf("step = %q, want the id in single quotes", step)
+	id := "a$(touch x)`id`'b"
+	cases := map[string]string{
+		"darwin":  `'a$(touch x)` + "`id`" + `'\''b'`,
+		"linux":   `'a$(touch x)` + "`id`" + `'\''b'`,
+		"windows": `'a$(touch x)` + "`id`" + `''b'`,
+	}
+	for goos, want := range cases {
+		if got := singleQuoteShellArgument(id, goos); got != want {
+			t.Errorf("%s: quoted = %s, want %s", goos, got, want)
+		}
+	}
+	if step := pausePointDialogClosedNextAction(id); !strings.Contains(step, "--id "+singleQuoteShellArgument(id, runtime.GOOS)+" ") {
+		t.Fatalf("step = %q, want the id quoted for this system", step)
 	}
 }

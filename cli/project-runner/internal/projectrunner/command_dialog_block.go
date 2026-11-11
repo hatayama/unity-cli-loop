@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -92,12 +93,16 @@ func startedCommandBlockedByDialog(
 // single quotes: the step is pasted into a shell, and inside them neither POSIX shells nor PowerShell
 // expand $( ) or backticks, so an id cannot run anything.
 func pausePointDialogClosedNextAction(id string) string {
-	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, singleQuoteShellArgument(id))
+	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, singleQuoteShellArgument(id, runtime.GOOS))
 }
 
-// singleQuoteShellArgument wraps value in single quotes for a POSIX shell; a single quote inside it
-// closes the quotes, adds an escaped quote, and opens them again.
-func singleQuoteShellArgument(value string) string {
+// singleQuoteShellArgument wraps value in single quotes for the shell an agent uses on goos. Why two
+// rules: PowerShell, the Windows shell, writes a quote inside single quotes as two quotes, while a
+// POSIX shell closes the quotes, adds an escaped quote, and opens them again.
+func singleQuoteShellArgument(value string, goos string) string {
+	if goos == "windows" {
+		return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+	}
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
