@@ -5,7 +5,7 @@ Cancel the uloop command that holds the Editor's command slot, from another term
 ## When to Use
 
 - Every command is rejected with `UNITY_SERVER_BUSY`, `uloop status` keeps reporting `Busy`, and the running command shows no sign of finishing.
-  `MAIN_THREAD_BLOCKED`, and a `BLOCKED_BY_DIALOG` whose Message says the command `was not run` (follow its `NextActions`), mean the command never ran and released its hold on the slot (one that says the command `had already started` does not: the command keeps the slot until it finishes once the dialog is closed), so `uloop cancel` is not needed for it (an `execute-dynamic-code` run sharing the slot may still hold it).
+  `MAIN_THREAD_BLOCKED`, and a `BLOCKED_BY_DIALOG` whose Message says the command `was not run` (follow its `NextActions`), mean the command never ran and released its hold on the slot (one that says the command `had already started` does not: the command keeps the slot until it finishes once the dialog is closed, so run `uloop status` after closing the dialog to see when it is free), so `uloop cancel` is not needed for it (an `execute-dynamic-code` run sharing the slot may still hold it).
 - A command you started does not return, for example an `execute-dynamic-code` snippet that awaits something that never completes.
 
 ## Usage

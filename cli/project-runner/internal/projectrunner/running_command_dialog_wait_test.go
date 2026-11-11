@@ -163,8 +163,9 @@ func TestPausePointWaitStopsWhenADialogHoldsUnity(t *testing.T) {
 	}
 }
 
-// Verifies the --trigger command's send looks for a dialog at the pause-point interval, because a
-// pause point holds the main thread on purpose while the trigger runs.
+// Verifies the pause-point --trigger command's send looks for a dialog at the pause-point interval,
+// because a pause point holds the main thread on purpose while it runs, and that a trigger run without
+// a pause point (record-video's) keeps the ordinary interval.
 func TestPausePointTriggerLooksAtThePausePointInterval(t *testing.T) {
 	var interval time.Duration
 	original := dispatchPausePointTriggerCommand
@@ -173,14 +174,16 @@ func TestPausePointTriggerLooksAtThePausePointInterval(t *testing.T) {
 		return 0
 	}
 	t.Cleanup(func() { dispatchPausePointTriggerCommand = original })
+	connection := unansweredIPCConnection(t)
 
-	runPausePointTriggerSync(context.Background(), unansweredIPCConnection(t), "", "get-logs", nil, "get-logs")
-
+	startPausePointTrigger(context.Background(), connection, "", "get-logs", nil).join()
 	if interval != pausePointDialogWatchInterval {
-		t.Fatalf("interval = %v, want %v", interval, pausePointDialogWatchInterval)
+		t.Fatalf("pause-point trigger interval = %v, want %v", interval, pausePointDialogWatchInterval)
 	}
-	if heartbeatDialogInterval(context.Background()) != dialogWatchInterval {
-		t.Fatal("other sends must keep the ordinary interval")
+
+	runPausePointTriggerSync(context.Background(), connection, "", "get-logs", nil, "get-logs")
+	if interval != dialogWatchInterval {
+		t.Fatalf("trigger interval without a pause point = %v, want %v", interval, dialogWatchInterval)
 	}
 }
 

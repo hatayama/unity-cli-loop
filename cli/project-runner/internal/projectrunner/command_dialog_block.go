@@ -47,6 +47,8 @@ type blockedByDialogError struct {
 	closedNextAction string
 	phase            string
 	safeToRetry      bool
+	// details are the replaced error's details, kept beside Dialogs.
+	details map[string]any
 }
 
 // hotReloadWaitBlockedByDialog is the error of hot-reload's waits before it applies.
@@ -129,6 +131,9 @@ func (err blockedByDialogError) ToCLIError(context clierrors.ErrorContext) clier
 	closedNextAction := err.closedNextAction
 	safeToRetry := err.safeToRetry
 	details := map[string]any{}
+	for key, value := range err.details {
+		details[key] = value
+	}
 	if err.notRun != nil {
 		notRunError := clierrors.ClassifyError(err.notRun, context)
 		phase = notRunError.Phase
@@ -184,14 +189,21 @@ func explainBlockedByDialog(
 		return blockedByDialogError{command: command, dialogs: dialogs, canPress: deps.canPressDialogs, notRun: err}
 	}
 	original := clierrors.ClassifyError(err, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command})
+	return neutralBlockedByDialog(command, dialogs, deps.canPressDialogs, original)
+}
+
+// neutralBlockedByDialog replaces a failed wait whose command may or may not still be running: its
+// Message does not say, and it keeps the replaced error's phase, SafeToRetry, and details.
+func neutralBlockedByDialog(command string, dialogs []statusDialog, canPress bool, original clierrors.CLIError) blockedByDialogError {
 	return blockedByDialogError{
 		command:          command,
 		dialogs:          dialogs,
-		canPress:         deps.canPressDialogs,
+		canPress:         canPress,
 		stopped:          fmt.Sprintf(neutralStoppedFormat, command),
 		closedNextAction: startedCommandDialogClosedNextAction,
 		phase:            original.Phase,
 		safeToRetry:      original.SafeToRetry,
+		details:          original.Details,
 	}
 }
 

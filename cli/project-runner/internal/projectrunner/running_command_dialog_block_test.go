@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -248,6 +249,11 @@ func TestExplainBlockedByDialogExplainsTheFiveMinuteStall(t *testing.T) {
 		t.Fatalf("got %q / %q / SafeToRetry %v, want BLOCKED_BY_DIALOG / %q / %v",
 			cliError.ErrorCode, cliError.Message, cliError.SafeToRetry, wantMessage, originalError.SafeToRetry)
 	}
+	for key, value := range originalError.Details {
+		if fmt.Sprint(cliError.Details[key]) != fmt.Sprint(value) {
+			t.Fatalf("Details[%q] = %v, want the original %v", key, cliError.Details[key], value)
+		}
+	}
 
 	withoutDialog := explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), "get-logs", original, newFakeDialogLook().deps())
 	if withoutDialog != error(original) {
@@ -259,14 +265,20 @@ func TestExplainBlockedByDialogExplainsTheFiveMinuteStall(t *testing.T) {
 // --- execute-dynamic-code's readiness wait ---
 
 // Verifies a failed readiness wait after execute-dynamic-code is explained by a dialog when one is open,
-// kept when none is, and that a successful wait never looks.
+// without saying the snippet is still running (it may have returned), kept when none is, and that a
+// successful wait never looks.
 func TestExplainReadinessFailureByDialog(t *testing.T) {
 	failure := errors.New("timed out waiting for Unity tool readiness")
 
 	found := explainReadinessFailureByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), failure,
 		newFakeDialogLook(commandDialogPlayerStoppedDialog()).deps())
-	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, found, clicore.ExecuteDynamicCodeCommandName),
-		executeDynamicCodeDialogClosedNextAction, false)
+	cliError := classifyStartedDialogError(t, found, clicore.ExecuteDynamicCodeCommandName)
+	wantMessage := blockedByDialogMessage([]statusDialog{commandDialogPlayerStoppedDialog()}) + " uloop execute-dynamic-code stopped waiting."
+	if cliError.Message != wantMessage || cliError.SafeToRetry ||
+		cliError.NextActions[len(cliError.NextActions)-1] != startedCommandDialogClosedNextAction {
+		t.Fatalf("Message = %q, SafeToRetry = %v, NextActions = %q, want the neutral form that is not safe to retry",
+			cliError.Message, cliError.SafeToRetry, cliError.NextActions)
+	}
 
 	if kept := explainReadinessFailureByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), failure, newFakeDialogLook().deps()); kept != failure {
 		t.Fatalf("error = %#v, want the original failure", kept)

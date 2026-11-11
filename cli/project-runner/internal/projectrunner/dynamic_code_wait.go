@@ -34,8 +34,8 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 		if shouldWaitForExecuteDynamicCodeDisconnect(err, outcome) {
 			spinner.Update("Connection lost during execute-dynamic-code. Waiting for domain reload to complete...")
 			if waitErr := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
-				spinner.Stop()
 				waitErr = explainReadinessFailureByDialog(ctx, connection, waitErr, defaultDialogWatchDeps())
+				spinner.Stop()
 				clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 					ProjectRoot: connection.ProjectRoot,
 					Command:     clicore.ExecuteDynamicCodeCommandName,
@@ -55,8 +55,8 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 	if executeDynamicCodeDomainReloadWaitRequired(outcome.Result) {
 		spinner.Update("Waiting for domain reload to complete...")
 		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
-			spinner.Stop()
 			err = explainReadinessFailureByDialog(ctx, connection, err, defaultDialogWatchDeps())
+			spinner.Stop()
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 				ProjectRoot: connection.ProjectRoot,
 				Command:     clicore.ExecuteDynamicCodeCommandName,
@@ -144,6 +144,9 @@ func explainReadinessFailureByDialog(
 	if len(dialogs) == 0 {
 		return err
 	}
-	// Not safe to retry: the snippet already ran, and running it again repeats its effect.
-	return startedCommandBlockedByDialog(clicore.ExecuteDynamicCodeCommandName, dialogs, deps.canPressDialogs, false)
+	// Why the neutral form: the snippet may have returned, so only the reload it started is held.
+	// Not safe to retry: the snippet ran, and running it again repeats its effect.
+	original := clierrors.ClassifyError(err, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: clicore.ExecuteDynamicCodeCommandName})
+	original.SafeToRetry = false
+	return neutralBlockedByDialog(clicore.ExecuteDynamicCodeCommandName, dialogs, deps.canPressDialogs, original)
 }
