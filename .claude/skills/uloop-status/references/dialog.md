@@ -62,6 +62,5 @@ Press a button only when it clearly fits what the user asked for. Ask the user f
 
 ## Supported Systems
 
-- Listing: macOS and Windows.
-- Pressing: macOS only for now.
-- On macOS, both need Accessibility access for the app that runs uloop (System Settings > Privacy & Security > Accessibility).
+- Listing and pressing: macOS and Windows.
+- On macOS, both need Accessibility access for the app that runs uloop (System Settings > Privacy & Security > Accessibility). On Windows, neither needs a permission.
