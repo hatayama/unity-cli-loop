@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -116,6 +117,13 @@ func (watch *heartbeatDialogWatch) blockedError() error {
 	err := startedCommandBlockedByDialog(watch.method, watch.dialogs, watch.deps.canPressDialogs, safeToRetry)
 	err.stopped = heartbeatStoppedSentence(watch.method)
 	return err
+}
+
+// isUnityAnswerError reports whether err is Unity's own answer to the request rather than the send
+// giving up on it.
+func isUnityAnswerError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	return errors.As(err, &rpcErr)
 }
 
 func (watch *heartbeatDialogWatch) release() {

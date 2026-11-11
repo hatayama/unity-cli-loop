@@ -157,7 +157,9 @@ func TestPausePointWaitStopsWhenADialogHoldsUnity(t *testing.T) {
 
 	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, 0, false, true)
 
-	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName), pausePointDialogClosedNextAction, false)
+	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName),
+		`After the dialog is closed, run uloop pause-point-status --id "pause_point_dialog" to see whether the marker was hit; `+
+			`if it is still waiting, run uloop await-pause-point --id "pause_point_dialog" again without --trigger.`, false)
 	if cliError := clierrors.ClassifyError(err, clierrors.ErrorContext{}); !strings.Contains(cliError.Message, "uloop "+clicore.PausePointAwaitCommandName+" stopped waiting") {
 		t.Fatalf("Message = %q, want it to name %s", cliError.Message, clicore.PausePointAwaitCommandName)
 	}
@@ -224,6 +226,8 @@ type heartbeatScript struct {
 	// together sends the heartbeats and the answer in one write, so the answer is already read when
 	// the watch acts on the last heartbeat.
 	together bool
+	// failure makes the answer a JSON-RPC error.
+	failure bool
 }
 
 // serveHeartbeats accepts one request, accepts it, and sends heartbeats reporting stallSeconds.
@@ -250,6 +254,9 @@ func serveHeartbeats(t *testing.T, script heartbeatScript) unityipc.Connection {
 		}
 		if script.finish {
 			frames = append(frames, `{"jsonrpc":"2.0","result":{"Success":true},"id":1}`)
+		}
+		if script.failure {
+			frames = append(frames, `{"jsonrpc":"2.0","error":{"code":-32000,"message":"tool failed"},"id":1}`)
 		}
 		var together bytes.Buffer
 		if script.together {
@@ -544,6 +551,23 @@ func TestSendReturnsTheAnswerThatArrivedWhileTheWatchLooked(t *testing.T) {
 
 	if err != nil || !strings.Contains(string(outcome.Result), "Success") {
 		t.Fatalf("err = %v, result = %s, want the answer", err, outcome.Result)
+	}
+	if look.calls != 1 {
+		t.Fatalf("looked %d times, want 1", look.calls)
+	}
+}
+
+// Verifies a command whose error answer arrives while the watch finds a dialog reports that error,
+// which says how the command ended, rather than the dialog.
+func TestSendReturnsTheErrorAnswerThatArrivedWhileTheWatchLooked(t *testing.T) {
+	look := newFakeDialogLook(commandDialogPlayerStoppedDialog())
+
+	_, err := sendWithHeartbeats(t, context.Background(), "get-logs",
+		heartbeatScript{stallSeconds: 36, beats: 1, failure: true, together: true}, look)
+
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) || rpcErr.Message != "tool failed" {
+		t.Fatalf("err = %#v, want Unity's error answer", err)
 	}
 	if look.calls != 1 {
 		t.Fatalf("looked %d times, want 1", look.calls)

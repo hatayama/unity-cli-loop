@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -24,8 +25,8 @@ const (
 		"to see the state it reached."
 	// The pause-point wait ends in uloop only; the marker stays armed in Unity, and a repeated --trigger
 	// would send the trigger again.
-	pausePointDialogClosedNextAction = "After the dialog is closed, run uloop pause-point-status to see whether the " +
-		"marker was hit; if it is still waiting, run uloop await-pause-point again without --trigger."
+	pausePointDialogClosedNextActionFormat = "After the dialog is closed, run uloop pause-point-status --id %[1]s to see " +
+		"whether the marker was hit; if it is still waiting, run uloop await-pause-point --id %[1]s again without --trigger."
 	startedCommandStoppedFormat = "uloop %s stopped waiting; the command had already started and continues in " +
 		"Unity once the dialog is closed."
 	// The heartbeat wait gives up on the response itself, so it cannot promise the command goes on.
@@ -87,6 +88,11 @@ func startedCommandBlockedByDialog(
 	}
 }
 
+// pausePointDialogClosedNextAction names the marker, because both commands need it to find it.
+func pausePointDialogClosedNextAction(id string) string {
+	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, strconv.Quote(id))
+}
+
 func heartbeatStoppedSentence(command string) string {
 	return fmt.Sprintf(heartbeatStoppedFormat, command)
 }
@@ -99,8 +105,6 @@ func startedCommandDialogClosedNextActionFor(command string) string {
 		return executeDynamicCodeDialogClosedNextAction
 	case controlPlayModeCommandName:
 		return controlPlayModeDialogClosedNextAction
-	case clicore.PausePointAwaitCommandName, pausePointEnableCommandName:
-		return pausePointDialogClosedNextAction
 	default:
 		return startedCommandDialogClosedNextAction
 	}

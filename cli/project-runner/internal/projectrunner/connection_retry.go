@@ -286,9 +286,9 @@ func sendWithTransientConnectionRetryAttempts(
 		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
 		outcome, err := client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, progress)
 		cancelAttempt()
-		// Why the answer first: the final answer can arrive while the watch looks, and a command that
-		// finished must return its result rather than a dialog that no longer stops it.
-		if blockedErr := dialogWatch.blockedError(); err != nil && blockedErr != nil {
+		// Why Unity's answer first, a result or an error: it can arrive while the watch looks, and a
+		// command that finished must report how it ended rather than a dialog that no longer stops it.
+		if blockedErr := dialogWatch.blockedError(); blockedErr != nil && err != nil && !isUnityAnswerError(err) {
 			return outcome, blockedErr
 		}
 		if isUnityServerBusyRPCError(err) {

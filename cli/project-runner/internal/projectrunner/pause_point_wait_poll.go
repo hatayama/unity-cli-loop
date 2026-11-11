@@ -303,8 +303,9 @@ func waitForPausePointStatus(
 		}
 		if dialogs := state.dialogWatch.observePoll(waitContext, err == nil); dialogs != nil {
 			// Not safe to retry: the marker and any --trigger stay in effect in Unity.
-			return state.lastResponse, "", state.triggerResult, state.hasBaseline,
-				startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
+			blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
+			blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
+			return state.lastResponse, "", state.triggerResult, state.hasBaseline, blocked
 		}
 
 		select {
