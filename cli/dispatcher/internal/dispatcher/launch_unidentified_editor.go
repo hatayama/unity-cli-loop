@@ -35,8 +35,6 @@ func (err launchUnidentifiedEditorError) ToCLIError(context clierrors.ErrorConte
 		Command:     context.Command,
 		NextActions: []string{
 			"If that Unity Editor has this project open, close it by hand.",
-			"On Windows, the Editor may be running as administrator while uloop is not; " +
-				"if so, run uloop from a shell with the same rights.",
 		},
 	}
 }
