@@ -67,6 +67,26 @@ func TestCleanStaleUnityTempWaitsForAnExitingEditorToReleaseTheLockfile(t *testi
 	}
 }
 
+func TestCleanStaleUnityTempContinuesWhenTheLockfileDisappearsBeforeTheProbe(t *testing.T) {
+	// Verifies a lockfile the exiting Editor deleted between the existence check and the lock probe
+	// counts as released instead of failing the cleanup.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	deps := defaultLaunchDeps()
+	useFakeLaunchClock(&deps)
+	deps.isUnityLockfileHeld = func(string) (bool, error) {
+		return false, os.ErrNotExist
+	}
+
+	result, err := cleanStaleUnityTemp(context.Background(), projectRoot, deps)
+	if err != nil {
+		t.Fatalf("cleanStaleUnityTemp failed: %v", err)
+	}
+	if !result.lockfileRemoved {
+		t.Fatal("expected the cleanup to finish removing Temp")
+	}
+}
+
 func TestCleanStaleUnityTempKeepsLockfileWhenTheHolderCannotBeDetermined(t *testing.T) {
 	// Verifies a failed lock probe stops the cleanup instead of being read as "nobody holds it".
 	projectRoot := createLaunchTestProject(t)
