@@ -368,7 +368,10 @@ func persistCompilePendingRecordOrWarn(projectRoot string, requestID string, std
 // promises that the next uloop compile reattaches to it instead of starting another.
 func persistCompilePendingRecordWhenBlockedByDialog(projectRoot string, requestID string, waitErr error, stderr io.Writer) {
 	var blocked blockedByDialogError
-	if !errors.As(waitErr, &blocked) {
+	// Why the guidance and not the type: a compile that was not run, or one stopped at the five-minute
+	// stall, is not promised a reattach, and a record would send the next compile after a request that
+	// may not exist.
+	if !errors.As(waitErr, &blocked) || blocked.notRun != nil || blocked.closedNextAction != compileDialogClosedNextAction {
 		return
 	}
 	persistCompilePendingRecordOrWarn(projectRoot, requestID, stderr)

@@ -402,3 +402,116 @@ func unansweredIPCConnection(t *testing.T) unityipc.Connection {
 		ProjectRoot: t.TempDir(),
 	}
 }
+
+// --- wiring and per-wait negatives ---
+
+// Verifies every wait's default dependencies look for a dialog: a nil probe turns a watch off without
+// any error, so a dropped default would silently remove the feature.
+func TestDefaultWaitDependenciesLookForDialogs(t *testing.T) {
+	pausePointOptions, err := parseWaitForPausePointOptions([]string{"--id", "jump"})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	defaults := map[string]dialogWatchDeps{
+		"response wait":       defaultConnectionRetryDeps().dialogWatch,
+		"compile":             defaultCompileWaitDeps().dialogWatch,
+		"run-tests":           defaultRunTestsWaitDeps().dialogWatch,
+		"hot-reload":          hotReloadEditorReadyWaitDefaults.dialogWatch,
+		"await-pause-point":   pausePointOptions.dialogWatch,
+		"default dialog look": defaultDialogWatchDeps(),
+	}
+	for name, deps := range defaults {
+		if deps.probeEditorStatus == nil || deps.now == nil {
+			t.Errorf("%s: the dialog watch is off", name)
+		}
+	}
+}
+
+// Verifies the waits that poll after the command started end as before when the look finds no dialog
+// or fails: none of them reports BLOCKED_BY_DIALOG.
+func TestStartedCommandWaitsKeepTheirOwnEndWithoutADialog(t *testing.T) {
+	looks := map[string]func() *fakeDialogLook{
+		"no dialog":   func() *fakeDialogLook { return newFakeDialogLook() },
+		"look failed": func() *fakeDialogLook { return &fakeDialogLook{err: errors.New("osascript failed"), step: time.Second} },
+	}
+	waits := map[string]func(t *testing.T, look *fakeDialogLook) error{
+		"compile attach": func(t *testing.T, look *fakeDialogLook) error {
+			_, outcome, _, err := waitForAttachedCompileCompletion(context.Background(), compileDialogWaitOptions(t), compileDialogWaitDeps(look, false))
+			if outcome != attachWaitTimedOut {
+				t.Errorf("outcome = %v, want attachWaitTimedOut", outcome)
+			}
+			return err
+		},
+		"control-play-mode": func(t *testing.T, look *fakeDialogLook) error {
+			connection := unansweredIPCConnection(t)
+			exitWatch := clicore.NewUnityExitWatch(connection.ProjectRoot, connection.Endpoint.Address, runningUnityProcessLookup, time.Now)
+			_, _, err := waitForControlPlayModeState(context.Background(), connection, "Play", 300*time.Millisecond, exitWatch, look.deps())
+			return err
+		},
+		"run-tests": func(t *testing.T, look *fakeDialogLook) error {
+			unanswered := func(context.Context, unityipc.Connection, string) (runTestsStatusResponse, error) {
+				return runTestsStatusResponse{}, errors.New("status query timed out")
+			}
+			_, completed, err := waitForRunTestsResult(context.Background(), compileWaitTestConnection(t), "run_tests_dialog",
+				300*time.Millisecond, time.Millisecond, unanswered, look.deps())
+			if completed || err != nil {
+				t.Errorf("completed = %v, err = %v, want the timeout", completed, err)
+			}
+			return err
+		},
+		"pause point": func(t *testing.T, look *fakeDialogLook) error {
+			useUnityProcessLookup(t, runningUnityProcessLookup)
+			options := waitForPausePointOptions{id: "pause_point_dialog", timeout: 300 * time.Millisecond, dialogWatch: look.deps()}
+			// The timeout's own final status query goes unanswered too, so the wait ends with that.
+			_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, 0, false, true)
+			return err
+		},
+	}
+	for waitName, wait := range waits {
+		for lookName, newLook := range looks {
+			t.Run(waitName+"/"+lookName, func(t *testing.T) {
+				look := newLook()
+				err := wait(t, look)
+				var blocked blockedByDialogError
+				if errors.As(err, &blocked) {
+					t.Fatalf("err = %v, want the wait's own end", err)
+				}
+				if look.calls == 0 {
+					t.Fatal("the wait never looked for a dialog")
+				}
+			})
+		}
+	}
+}
+
+// Verifies uloop compile keeps its request for the next uloop compile whichever wait a dialog stopped,
+// the response wait or the status wait, so the reattach its guidance promises can happen.
+func TestRunCompileStoppedByADialogKeepsItsRequest(t *testing.T) {
+	dialogs := []statusDialog{commandDialogPlayerStoppedDialog()}
+	cases := map[string]error{
+		// The response wait ends the send itself with the dialog.
+		"response wait": (&heartbeatDialogWatch{method: clicore.CompileCommandName, dialogs: dialogs, deps: dialogWatchDeps{canPressDialogs: true}}).blockedError(),
+		// The send loses the connection to the domain reload, and the status wait finds the dialog.
+		"status wait": errors.New("read: EOF"),
+	}
+	for name, sendErr := range cases {
+		t.Run(name, func(t *testing.T) {
+			deps := compileDialogWaitDeps(newFakeDialogLook(dialogs...), false)
+			deps.freshWaitPollInterval = time.Millisecond
+			deps.sendCompile = func(context.Context, unityipc.Connection, string, map[string]any, unityipc.ProgressFunc, time.Duration) (unityipc.UnitySendOutcome, error) {
+				return unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, sendErr
+			}
+			connection := compileWaitTestConnection(t)
+			var stdout, stderr bytes.Buffer
+
+			code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, map[string]any{}, &stdout, &stderr, deps)
+
+			if code != 1 || !strings.Contains(stderr.String(), clierrors.ErrorCodeBlockedByDialog) {
+				t.Fatalf("code = %d, stderr = %s, want BLOCKED_BY_DIALOG", code, stderr.String())
+			}
+			if _, found := readCompilePendingRecord(connection.ProjectRoot); !found {
+				t.Fatal("the stopped compile's request must be kept for the next uloop compile")
+			}
+		})
+	}
+}

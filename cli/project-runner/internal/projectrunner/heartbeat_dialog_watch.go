@@ -19,16 +19,16 @@ const heartbeatDialogStallThresholdSeconds = 35
 // never comes for them and a long stall does not mean they started. Pairs with
 // InternalBridgeCommandRouter.IsInternalCommand in the Unity package.
 var internalBridgeMethods = map[string]bool{
-	"get-version":                         true,
-	"get-compile-status":                  true,
-	"get-run-tests-status":                true,
-	"get-pause-point-status":              true,
-	"clear-pause-point-status":            true,
-	"extend-pause-point-status":           true,
-	"set-code-optimization-debug":         true,
-	"set-code-optimization-debug-startup": true,
-	"get-tool-details":                    true,
-	"quit-editor":                         true,
+	"get-version":                              true,
+	compileStatusCommandName:                   true,
+	runTestsStatusCommandName:                  true,
+	pausePointStatusCommandName:                true,
+	pausePointClearStatusCommandName:           true,
+	pausePointExtendStatusCommandName:          true,
+	setCodeOptimizationDebugCommandName:        true,
+	setCodeOptimizationDebugStartupCommandName: true,
+	"get-tool-details":                         true,
+	"quit-editor":                              true,
 }
 
 type heartbeatDialogIntervalKey struct{}
@@ -91,7 +91,8 @@ func (watch *heartbeatDialogWatch) sendContext(ctx context.Context) context.Cont
 }
 
 // observeStall takes each stall the heartbeats report. Why the look runs here, inside the client's
-// read loop: cancelling the send context makes the client stop reading at once.
+// read loop: the client sees the cancelled send context when it reads the next heartbeat, so the wait
+// ends within one heartbeat of the look instead of at the five-minute stall.
 func (watch *heartbeatDialogWatch) observeStall(stallSeconds float64) {
 	if watch == nil || watch.dialogs != nil {
 		return
