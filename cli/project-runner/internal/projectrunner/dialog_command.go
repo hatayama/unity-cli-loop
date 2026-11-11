@@ -183,7 +183,7 @@ func answerDialog(
 	deps dialogCommandDeps,
 ) int {
 	if !deps.canPress {
-		writeDialogError(stderr, projectRoot, notAnswerableError("uloop can press a dialog button only on macOS."))
+		writeDialogError(stderr, projectRoot, notAnswerableError("uloop can press a dialog button only on macOS and Windows."))
 		return 1
 	}
 	result, err := deps.press(ctx, projectRoot, label)

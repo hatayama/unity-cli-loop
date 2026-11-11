@@ -54,7 +54,8 @@ Errors go to stderr, nothing goes to stdout, and it exits 1.
 ## What It Can Press
 
 - Message boxes whose button labels uloop can read, such as `EditorUtility.DisplayDialog` prompts and the prompts Unity shows while it starts.
-- Not modal Editor windows or file pickers: their buttons have no readable labels, so `Buttons` is empty and `--answer` returns `DIALOG_NOT_ANSWERABLE`. Ask the user to answer those.
+- Not modal Editor windows or file pickers: uloop reads no button from them, so `Buttons` is empty and `--answer` returns `DIALOG_NOT_ANSWERABLE`. Ask the user to answer those.
+- Not a button the dialog has disabled (Windows): it is listed in `Buttons`, but `--answer` presses nothing and returns `DIALOG_ANSWER_FAILED` with `SafeToRetry: true`.
 
 ## Before Pressing
 
@@ -62,6 +63,5 @@ Press a button only when it clearly fits what the user asked for. Ask the user f
 
 ## Supported Systems
 
-- Listing: macOS and Windows.
-- Pressing: macOS only for now.
-- On macOS, both need Accessibility access for the app that runs uloop (System Settings > Privacy & Security > Accessibility).
+- Listing and pressing: macOS and Windows.
+- On macOS, both need Accessibility access for the app that runs uloop (System Settings > Privacy & Security > Accessibility). On Windows, neither needs a permission.

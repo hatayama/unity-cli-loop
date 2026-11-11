@@ -252,6 +252,8 @@ func dialogInspectorForTest(
 		lookupProcess: lookup,
 		runCommand:    command,
 		listWindows:   failingWindowList(t),
+		// Only a test of the press on Windows replaces this.
+		pressWindowButton: failingWindowButtonPress(t),
 	}
 }
 
@@ -272,6 +274,13 @@ func failingWindowList(t *testing.T) func(context.Context, int) ([]win32Window, 
 	return func(context.Context, int) ([]win32Window, error) {
 		t.Error("the inspector must not list windows here")
 		return nil, errors.New("unexpected window listing")
+	}
+}
+
+func failingWindowButtonPress(t *testing.T) func(context.Context, win32PressTargetResult) error {
+	return func(context.Context, win32PressTargetResult) error {
+		t.Error("the inspector must not press a window's button here")
+		return errors.New("unexpected window button press")
 	}
 }
 

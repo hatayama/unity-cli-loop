@@ -24,9 +24,12 @@ func (inspector dialogInspector) inspectWin32Windows(ctx context.Context, pid in
 	return dialogsFromWin32Windows(windows), nil
 }
 
-// win32Window is one top-level window of the Unity process as Win32 reports it. It carries only
-// what tells a modal window from the others; Controls is read only for one that may be modal.
+// win32Window is one top-level window of the Unity process as Win32 reports it. It carries what
+// tells a modal window from the others, and the handle a press is sent to; Controls is read only
+// for one that may be modal.
 type win32Window struct {
+	// What Windows names the window by. A press is sent to it; no rule here reads it.
+	Handle    uintptr
 	ClassName string
 	Title     string
 	Visible   bool
@@ -40,6 +43,8 @@ type win32Window struct {
 // win32Control is one child window of a window that may be modal: a label, a text box, a button,
 // or a progress bar.
 type win32Control struct {
+	// What Windows names the control by, as win32Window.Handle.
+	Handle    uintptr
 	ClassName string
 	Text      string
 	ID        int
@@ -58,6 +63,9 @@ const (
 	win32ButtonTypeMask        = 0xF
 	win32ButtonTypePush        = 0x0
 	win32ButtonTypeDefaultPush = 0x1
+
+	// WS_DISABLED: the window, here a control, takes no input from the user.
+	win32StyleDisabled = 0x08000000
 )
 
 // isModal reports whether the window holds Unity's main thread. Unity disables every other window
@@ -97,24 +105,71 @@ func (window win32Window) isMessageBox() bool {
 			return false
 		}
 	}
-	return len(win32DialogButtons(window.Controls)) > 0
+	return len(win32ButtonLabels(win32PushButtons(window.Controls))) > 0
+}
+
+// isBuiltLikeAMessageBox reports whether the window holds nothing but what a message box is built
+// from: labels, text boxes, and buttons.
+// Why it is asked at all: on Windows a file picker is a dialog like a message box, and its Save,
+// Select Folder, and Cancel are push buttons with labels. uloop answers message boxes only; what
+// a picker takes is a choice of a file, which is the user's to make.
+// Why by what a message box holds and not by what a picker holds: a dialog uloop has never seen
+// must not become one it presses. A real Editor's message boxes held these three kinds only, and
+// each of its three file pickers held a dozen other kinds.
+// Why a hidden control counts too: it is part of what the dialog is built from, and counting it
+// can only keep uloop from pressing.
+func (window win32Window) isBuiltLikeAMessageBox() bool {
+	for _, control := range window.Controls {
+		isMessageBoxControl := control.hasClass(win32StaticClassName) ||
+			control.hasClass(win32EditClassName) ||
+			control.hasClass(win32ButtonClassName)
+		if !isMessageBoxControl {
+			return false
+		}
+	}
+	return true
+}
+
+// answerButtons returns the buttons uloop may list and press in the window: the visible push
+// buttons of a message box, and none of any other dialog. Both the listing and the press take
+// their buttons from here, so a button that is not listed cannot be pressed.
+func (window win32Window) answerButtons() []win32Control {
+	if !window.isBuiltLikeAMessageBox() {
+		return []win32Control{}
+	}
+	return win32PushButtons(window.Controls)
 }
 
 // dialogsFromWin32Windows turns the Unity process's windows into the dialogs that hold its main
 // thread, in the order given. The result is never nil, and neither is a dialog's Buttons.
 func dialogsFromWin32Windows(windows []win32Window) []statusDialog {
 	dialogs := make([]statusDialog, 0)
-	for _, window := range windows {
-		if !window.isModal() {
-			continue
-		}
-		dialogs = append(dialogs, statusDialog{
-			Title:   window.Title,
-			Message: win32DialogMessage(window.Controls),
-			Buttons: win32DialogButtons(window.Controls),
-		})
+	for _, window := range win32ModalWindows(windows) {
+		dialogs = append(dialogs, window.dialog())
 	}
 	return dialogs
+}
+
+// win32ModalWindows keeps the windows that hold Unity's main thread, in the order given. Both the
+// listing and the press take their dialogs from here, so they agree on which window is one.
+func win32ModalWindows(windows []win32Window) []win32Window {
+	modalWindows := make([]win32Window, 0)
+	for _, window := range windows {
+		if window.isModal() {
+			modalWindows = append(modalWindows, window)
+		}
+	}
+	return modalWindows
+}
+
+// dialog is what a modal window shows: its title, its text, and the labels of the buttons uloop
+// may press in it.
+func (window win32Window) dialog() statusDialog {
+	return statusDialog{
+		Title:   window.Title,
+		Message: win32DialogMessage(window.Controls),
+		Buttons: win32ButtonLabels(window.answerButtons()),
+	}
 }
 
 // win32DialogMessage joins the texts a dialog shows. Unity's message box keeps its message in a
@@ -134,10 +189,22 @@ func win32DialogMessage(controls []win32Control) string {
 	return strings.Join(texts, "\n")
 }
 
-// win32DialogButtons returns the labels of a dialog's push buttons.
+// win32ButtonLabels returns the labels of the buttons, leaving out a button that shows no label.
+func win32ButtonLabels(buttons []win32Control) []string {
+	labels := make([]string, 0, len(buttons))
+	for _, button := range buttons {
+		label := withoutMnemonicMarker(button.Text)
+		if label != "" {
+			labels = append(labels, label)
+		}
+	}
+	return labels
+}
+
+// win32PushButtons returns a dialog's visible push buttons.
 // Why sorted by control ID and not left to right: Unity numbers the buttons OK, Cancel, Alt, which
 // is the order its own dialog report and the macOS look give, while Windows draws Alt in the middle.
-func win32DialogButtons(controls []win32Control) []string {
+func win32PushButtons(controls []win32Control) []win32Control {
 	buttons := make([]win32Control, 0, len(controls))
 	for _, control := range controls {
 		if control.Visible && control.isPushButton() {
@@ -147,15 +214,7 @@ func win32DialogButtons(controls []win32Control) []string {
 	sort.SliceStable(buttons, func(i int, j int) bool {
 		return buttons[i].ID < buttons[j].ID
 	})
-
-	labels := make([]string, 0, len(buttons))
-	for _, button := range buttons {
-		label := withoutMnemonicMarker(button.Text)
-		if label != "" {
-			labels = append(labels, label)
-		}
-	}
-	return labels
+	return buttons
 }
 
 func (control win32Control) hasClass(className string) bool {
@@ -174,6 +233,11 @@ func (control win32Control) isPushButton() bool {
 	}
 	buttonType := control.Style & win32ButtonTypeMask
 	return buttonType == win32ButtonTypePush || buttonType == win32ButtonTypeDefaultPush
+}
+
+// isDisabled reports whether the user cannot click the control.
+func (control win32Control) isDisabled() bool {
+	return control.Style&win32StyleDisabled != 0
 }
 
 // withoutMnemonicMarker removes the "&" Unity puts before a button's keyboard shortcut letter

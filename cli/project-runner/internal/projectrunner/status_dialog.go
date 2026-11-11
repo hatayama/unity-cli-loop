@@ -46,15 +46,18 @@ type dialogInspector struct {
 	runCommand func(ctx context.Context, name string, args ...string) ([]byte, error)
 	// Lists the Unity process's windows on Windows.
 	listWindows func(ctx context.Context, pid int) ([]win32Window, error)
+	// Presses the button chosen in a dialog on Windows; target always names a button.
+	pressWindowButton func(ctx context.Context, target win32PressTargetResult) error
 }
 
 func defaultDialogInspector() dialogInspector {
 	return dialogInspector{
-		goos:          runtime.GOOS,
-		timeout:       dialogInspectionTimeout,
-		lookupProcess: unityProcessLookup,
-		runCommand:    runCommandCapturingStderr,
-		listWindows:   listUnityProcessWindows,
+		goos:              runtime.GOOS,
+		timeout:           dialogInspectionTimeout,
+		lookupProcess:     unityProcessLookup,
+		runCommand:        runCommandCapturingStderr,
+		listWindows:       listUnityProcessWindows,
+		pressWindowButton: pressWin32WindowButton,
 	}
 }
 
