@@ -7,7 +7,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
-// launchUnidentifiedEditorError reports that quit or restart cannot tell which Editor to stop, because an
+// launchUnidentifiedEditorError reports that quit cannot tell which Editor to stop, because an
 // Editor whose command line does not name its project is running and may be this project's.
 type launchUnidentifiedEditorError struct {
 	cause error
@@ -34,14 +34,14 @@ func (err launchUnidentifiedEditorError) ToCLIError(context clierrors.ErrorConte
 		ProjectRoot: context.ProjectRoot,
 		Command:     context.Command,
 		NextActions: []string{
-			"Close that Unity Editor by hand, then run the command again.",
+			"If that Unity Editor has this project open, close it by hand.",
 			"On Windows, the Editor may be running as administrator while uloop is not; " +
 				"if so, run uloop from a shell with the same rights.",
 		},
 	}
 }
 
-// launchStopLookupError turns the definitive lookup's unidentified-Editor result into the launch error
+// launchStopLookupError turns quit's definitive lookup's unidentified-Editor result into the launch error
 // that explains it, and returns any other error as is.
 func launchStopLookupError(err error) error {
 	if errors.Is(err, unityprocess.ErrUnidentifiedUnityEditor) {

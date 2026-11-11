@@ -159,7 +159,6 @@ func TestRunLaunchWithUnusableLogFileLeavesTheRunningEditorAlone(t *testing.T) {
 			deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 				return &clicore.UnityProcess{Pid: 222}, nil
 			}
-			deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 			deps.requestUnityQuit = func(context.Context, string) bool {
 				stopAttempted = true
 				return false

@@ -68,24 +68,6 @@ func TestRunLaunchQuitFailsWhenAnUnidentifiedEditorIsRunning(t *testing.T) {
 	}
 }
 
-// Verifies restart fails without starting a new Editor when an Editor that may be this project's cannot be
-// identified, so two Editors never open the same project.
-func TestRunLaunchRestartDoesNotStartAnEditorWhenAnUnidentifiedEditorIsRunning(t *testing.T) {
-	deps, editorStarts, _ := unidentifiedEditorLaunchDeps(nil, unityprocess.ErrUnidentifiedUnityEditor)
-
-	code, stdout, stderr := runUnidentifiedEditorLaunch(t, launchOptions{restart: true}, deps)
-
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1; stdout=%s stderr=%s", code, stdout, stderr)
-	}
-	if *editorStarts != 0 {
-		t.Fatalf("restart tried to start an Editor %d time(s)", *editorStarts)
-	}
-	if !strings.Contains(stderr, "does not name its project") {
-		t.Fatalf("stderr does not explain the unidentified Editor: %s", stderr)
-	}
-}
-
 // Verifies quit still reports success when the definitive lookup proves no Editor can be this project's.
 func TestRunLaunchQuitSucceedsWhenNoEditorCanBeTheProjects(t *testing.T) {
 	deps, _, _ := unidentifiedEditorLaunchDeps(nil, nil)
@@ -100,23 +82,35 @@ func TestRunLaunchQuitSucceedsWhenNoEditorCanBeTheProjects(t *testing.T) {
 	}
 }
 
-// Verifies plain launch keeps the ordinary lookup, so an unrelated Editor whose project is unknown does not
-// stop it from starting this project's Editor.
-func TestRunLaunchWithoutQuitOrRestartKeepsTheOrdinaryLookup(t *testing.T) {
-	deps, editorStarts, _ := unidentifiedEditorLaunchDeps(nil, nil)
-	definitiveCalls := 0
-	deps.findRunningUnityProcessDefinitively = func(context.Context, string) (*clicore.UnityProcess, error) {
-		definitiveCalls++
-		return nil, unityprocess.ErrUnidentifiedUnityEditor
+// Verifies plain launch and restart keep the ordinary lookup and go on to start an Editor, so an unrelated
+// Editor whose project is unknown does not stop them. Restart may then meet this project's own Editor, which
+// refuses a second instance itself.
+func TestRunLaunchWithoutQuitKeepsTheOrdinaryLookup(t *testing.T) {
+	cases := []struct {
+		name    string
+		options launchOptions
+	}{
+		{name: "plain launch", options: launchOptions{}},
+		{name: "restart", options: launchOptions{restart: true}},
 	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			deps, editorStarts, _ := unidentifiedEditorLaunchDeps(nil, unityprocess.ErrUnidentifiedUnityEditor)
+			definitiveCalls := 0
+			deps.findRunningUnityProcessDefinitively = func(context.Context, string) (*clicore.UnityProcess, error) {
+				definitiveCalls++
+				return nil, unityprocess.ErrUnidentifiedUnityEditor
+			}
 
-	runUnidentifiedEditorLaunch(t, launchOptions{}, deps)
+			runUnidentifiedEditorLaunch(t, testCase.options, deps)
 
-	if definitiveCalls != 0 {
-		t.Fatalf("plain launch used the definitive lookup %d time(s)", definitiveCalls)
-	}
-	if *editorStarts != 1 {
-		t.Fatalf("plain launch tried to start an Editor %d time(s), want 1", *editorStarts)
+			if definitiveCalls != 0 {
+				t.Fatalf("used the definitive lookup %d time(s)", definitiveCalls)
+			}
+			if *editorStarts != 1 {
+				t.Fatalf("tried to start an Editor %d time(s), want 1", *editorStarts)
+			}
+		})
 	}
 }
 

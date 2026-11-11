@@ -213,7 +213,6 @@ func TestRunLaunchRestartReportsHowThePreviousEditorStopped(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	fakeUnityPath := fakeUnityExecutablePath(t)
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityPath, nil }
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return nil }

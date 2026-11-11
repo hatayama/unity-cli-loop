@@ -540,7 +540,6 @@ func TestRunLaunchForV2RestartPassesPreviousServerSessionID(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 444}, nil
 	}
-	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.killUnityProcess = func(int) error { return nil }
 	deps.waitForUnityProcessExit = func(context.Context, string, int, time.Duration, time.Duration) error { return nil }
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
@@ -834,7 +833,6 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.killUnityProcess = func(pid int) error {
 		killedPid = pid
 		return nil
@@ -945,7 +943,6 @@ func TestRunLaunchRestartReportsProcessExitWaitFailure(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 444}, nil
 	}
-	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.killUnityProcess = func(pid int) error {
 		return nil
 	}
@@ -1501,7 +1498,6 @@ func newRestartLaunchTestDeps(t *testing.T) launchDeps {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 555}, nil
 	}
-	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.killUnityProcess = func(int) error {
 		return nil
 	}
@@ -1807,7 +1803,6 @@ func isolatedLaunchTestDeps(t *testing.T) launchDeps {
 	t.Helper()
 	deps := defaultLaunchDeps()
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) { return nil, nil }
-	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.focusUnityProcess = func(context.Context, int) error { return nil }
 	deps.killUnityProcess = func(pid int) error {
 		t.Fatalf("unexpected kill of pid %d", pid)
@@ -1895,7 +1890,6 @@ func TestRunLaunchReportsRunningProcessFailures(t *testing.T) {
 		deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 			return &clicore.UnityProcess{Pid: 4242}, nil
 		}
-		deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 		deps.killUnityProcess = func(int) error { return errors.New("kill denied") }
 		projectRoot := createVersionedLaunchTestProject(t)
 		var stderr bytes.Buffer

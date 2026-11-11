@@ -190,15 +190,16 @@ func findLaunchRunningProcess(
 	return nil, true, 1
 }
 
-// launchRunningProcessLookup picks the lookup that decides whether this project's Editor runs. Quit and
-// restart use the definitive one, because reading "no Editor" while one may be this project's would report a
-// quit that stopped nothing, or open a second Editor on the project. Plain launch keeps the ordinary one:
-// refusing to start whenever an unrelated Editor's project is unknown would make launch unusable beside it.
+// launchRunningProcessLookup picks the lookup that decides whether this project's Editor runs. Quit uses the
+// definitive one, because reading "no Editor" while one may be this project's would report a quit that stopped
+// nothing, and no one could notice. Plain launch and restart keep the ordinary one: when the unidentified Editor
+// is this project's, Unity itself refuses to open the project a second time, while failing whenever an unrelated
+// Editor's project is unknown would make them unusable beside it.
 func launchRunningProcessLookup(
 	options launchOptions,
 	deps launchDeps,
 ) func(context.Context, string) (*unityprocess.UnityProcess, error) {
-	if options.quit || options.restart {
+	if options.quit {
 		return deps.findRunningUnityProcessDefinitively
 	}
 	return deps.findRunningUnityProcess

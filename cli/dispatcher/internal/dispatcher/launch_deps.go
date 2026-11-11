@@ -12,8 +12,8 @@ import (
 type launchDeps struct {
 	now                     func() time.Time
 	findRunningUnityProcess func(context.Context, string) (*unityprocess.UnityProcess, error)
-	// findRunningUnityProcessDefinitively is the lookup for quit and restart, which must not read "no
-	// Editor" while an Editor whose command line does not name its project may be this project's.
+	// findRunningUnityProcessDefinitively is the lookup for quit, which must not read "no Editor" while an
+	// Editor whose command line does not name its project may be this project's.
 	findRunningUnityProcessDefinitively func(context.Context, string) (*unityprocess.UnityProcess, error)
 	focusUnityProcess                   func(context.Context, int) error
 	killUnityProcess                    func(int) error
