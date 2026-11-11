@@ -135,6 +135,7 @@ func waitForBusyEditor(
 	// The first attempt counts: its arrival started the Editor's grace period for the slot.
 	lastResend := startedAt
 	wait := hotReloadBusyWait{}
+	dialogWatch := newHotReloadDialogWatch(connection, options)
 	for {
 		status, probeErr := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
 		answered := probeErr == nil
@@ -147,7 +148,7 @@ func waitForBusyEditor(
 			return wait, nil
 		}
 		// Why before the resend: a request sent while a dialog holds the Editor cannot run either.
-		if dialogErr := hotReloadDialogBlock(status, answered, options.canPressDialogs); dialogErr != nil {
+		if dialogErr := dialogWatch.hotReloadBlock(ctx, status, answered); dialogErr != nil {
 			wait.waited = time.Since(startedAt)
 			return wait, dialogErr
 		}

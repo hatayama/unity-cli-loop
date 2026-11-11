@@ -34,6 +34,7 @@ func TestWaitForControlPlayModeStateStopsOnceUnityHasExited(t *testing.T) {
 		// Long enough that only the exit watch, never the timeout, can end the wait first.
 		5*time.Second,
 		exitedEditorWatch(connection.ProjectRoot),
+		dialogWatchDeps{},
 	)
 
 	if completed {

@@ -42,9 +42,9 @@ type hotReloadEditorReadyWaitOptions struct {
 	// busyResendInterval is how often the busy wait sends the request again while a cancelled
 	// execute-dynamic-code request holds the Editor.
 	busyResendInterval time.Duration
-	// canPressDialogs is whether uloop press-dialog-button works on this operating system, which
-	// decides the guidance a wait stopped by a dialog gives.
-	canPressDialogs bool
+	// dialogWatch ends a wait that a modal dialog holds: the dialogs the Editor reports, or on an
+	// Editor older than Unity 6000.7 a look at Unity's windows once the main thread stalled.
+	dialogWatch dialogWatchDeps
 }
 
 // Why a package variable: the fallback tests already swap hotReloadFallbackCompile, so the tests
@@ -55,7 +55,7 @@ var hotReloadEditorReadyWaitDefaults = hotReloadEditorReadyWaitOptions{
 	probeTimeout: 5 * time.Second,
 	// The Editor's grace period before it takes back a cancelled request's slot.
 	busyResendInterval: 5 * time.Second,
-	canPressDialogs:    defaultDialogInspector().canPress(),
+	dialogWatch:        defaultDialogWatchDeps(),
 }
 
 // hotReloadEditorReadyRetryOutcome is what the retry leaves for the fallback decision.
@@ -215,6 +215,7 @@ func waitForEditorReady(
 ) (time.Duration, bool, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.budget)
+	dialogWatch := newHotReloadDialogWatch(connection, options)
 	for {
 		status, probeErr := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
 		if probeErr == nil && classifyEditorState(status) == statusStateReady {
@@ -223,7 +224,7 @@ func waitForEditorReady(
 		if exitErr := exitWatch.Observe(ctx, probeErr); exitErr != nil {
 			return time.Since(startedAt), false, exitErr
 		}
-		if dialogErr := hotReloadDialogBlock(status, probeErr == nil, options.canPressDialogs); dialogErr != nil {
+		if dialogErr := dialogWatch.hotReloadBlock(ctx, status, probeErr == nil); dialogErr != nil {
 			return time.Since(startedAt), false, dialogErr
 		}
 		if !time.Now().Before(deadline) {

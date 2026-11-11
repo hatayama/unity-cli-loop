@@ -29,11 +29,9 @@ type connectionRetryDeps struct {
 	// retryPoll. Hot reload sets it because it waits for the busy slot to free on the Editor
 	// status: resending here would only delay that wait.
 	returnBusyWithoutRetry bool
-	// probeEditorStatus reads the Editor the way uloop status does; it runs only when Unity answered
-	// main_thread_blocked, to find the dialog that kept the command from running.
-	probeEditorStatus func(context.Context, unityipc.Connection) (statusReport, error)
-	// canPressDialogs is whether uloop press-dialog-button works on this operating system.
-	canPressDialogs bool
+	// dialogWatch looks for the dialog that holds Unity's main thread when the response waits on a
+	// long stall, and when the send ends in main_thread_blocked or after the five-minute stall.
+	dialogWatch dialogWatchDeps
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
@@ -42,8 +40,7 @@ func defaultConnectionRetryDeps() connectionRetryDeps {
 		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
-		probeEditorStatus:       probeEditorStatusForDialogs,
-		canPressDialogs:         defaultDialogInspector().canPress(),
+		dialogWatch:             defaultDialogWatchDeps(),
 	}
 }
 
@@ -248,7 +245,7 @@ func sendWithTransientConnectionRetryWithDeps(
 	deps connectionRetryDeps,
 ) (unityipc.UnitySendOutcome, error) {
 	outcome, err := sendWithTransientConnectionRetryAttempts(ctx, connection, method, params, progress, responseTimeout, deps)
-	return outcome, explainBlockedByDialog(ctx, connection, method, err, deps)
+	return outcome, explainBlockedByDialog(ctx, connection, method, err, deps.dialogWatch)
 }
 
 func sendWithTransientConnectionRetryAttempts(
@@ -273,18 +270,27 @@ func sendWithTransientConnectionRetryAttempts(
 		focusController.restore(restoreContext)
 	}()
 
+	dialogWatch := newHeartbeatDialogWatch(ctx, connection, method, deps.dialogWatch)
+	defer dialogWatch.release()
+
 	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
 	for {
 		client := newConnectionRetryClient(connection, method, responseTimeout, func(stallSeconds float64) {
 			focusController.handleMainThreadStall(ctx, stallSeconds)
+			dialogWatch.observeStall(stallSeconds)
 		})
 		// Each attempt keeps the base accept bound: a dispatched request that never gets
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
 		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
-		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, attemptContext, method, params, progress)
+		outcome, err := client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, progress)
 		cancelAttempt()
+		// Why Unity's answer first, a result or an error: it can arrive while the watch looks, and a
+		// command that finished must report how it ended rather than a dialog that no longer stops it.
+		if blockedErr := dialogWatch.blockedError(); blockedErr != nil && err != nil && !isUnityAnswerError(err) {
+			return outcome, blockedErr
+		}
 		if isUnityServerBusyRPCError(err) {
 			if deps.returnBusyWithoutRetry {
 				return outcome, err

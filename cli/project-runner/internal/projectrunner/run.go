@@ -305,6 +305,8 @@ func runFreshCompileAttempt(
 	}
 	if !shouldWaitForCompileStatus(err, outcome) {
 		spinner.Stop()
+		// The send itself stops when a dialog holds Unity after the compile started.
+		persistCompilePendingRecordWhenBlockedByDialog(connection.ProjectRoot, requestID, err, stderr)
 		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
@@ -332,6 +334,7 @@ func runFreshCompileAttempt(
 	}
 	if waitErr != nil {
 		spinner.Stop()
+		persistCompilePendingRecordWhenBlockedByDialog(connection.ProjectRoot, requestID, waitErr, stderr)
 		clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,

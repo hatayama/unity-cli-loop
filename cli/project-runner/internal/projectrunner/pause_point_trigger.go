@@ -341,8 +341,12 @@ func startPausePointTrigger(
 		done:    make(chan *pausePointTriggerResult, 1),
 	}
 
+	// Why the pause-point interval: the trigger runs while the pause point may hold the main thread on
+	// purpose, so its send's look for a dialog would find none most of the time. Only here: other
+	// triggers, such as record-video's, run without a pause point.
+	triggerContext := withHeartbeatDialogInterval(ctx, pausePointDialogWatchInterval)
 	go func() {
-		handle.done <- runPausePointTriggerSync(ctx, connection, startPath, triggerCommand, triggerArgs, handle.command)
+		handle.done <- runPausePointTriggerSync(triggerContext, connection, startPath, triggerCommand, triggerArgs, handle.command)
 	}()
 
 	return handle

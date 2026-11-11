@@ -338,6 +338,7 @@ func runEnablePausePointAndAwait(
 		startPath:             startPath,
 		resumePlay:            resumePlay,
 		markerJustEnabled:     true,
+		dialogWatch:           defaultDialogWatchDeps(),
 	}
 
 	announceEnablePausePointAwaitStart(stderr, waitOptions.id, waitOptions.timeoutSeconds)

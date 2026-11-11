@@ -257,6 +257,7 @@ func waitForAttachedCompileCompletion(
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
 	exitWatch := newCompileUnityExitWatch(options.connection, deps)
+	dialogWatch := newCompileDialogWatch(options.connection, deps)
 	startPendingFocus := newCompileStartPendingFocus(options, deps)
 	defer startPendingFocus.finish()
 
@@ -283,20 +284,19 @@ func waitForAttachedCompileCompletion(
 				result := addCliDiagnosticsToNotStartedResult(status.Result, startPendingFocus.outcome(), deps.readHeldMouseButtons)
 				return result, attachWaitCompleted, nil, nil
 			}
-			if status.Ready && !status.HasResult {
-				missingResultStreak++
-				if missingResultStreak >= compileAttachMissingResultStreak {
-					logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
-					return nil, attachWaitDisappeared, lastObservedCompileStatus(lastStatus, observedStatus), nil
-				}
-			} else {
-				missingResultStreak = 0
+			missingResultStreak = nextMissingResultStreak(status, missingResultStreak)
+			if missingResultStreak >= compileAttachMissingResultStreak {
+				logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
+				return nil, attachWaitDisappeared, lastObservedCompileStatus(lastStatus, observedStatus), nil
 			}
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 		if exitErr := exitWatch.Observe(ctx, err); exitErr != nil {
 			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
+		}
+		if dialogs := dialogWatch.observePoll(ctx, err == nil); dialogs != nil {
+			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), compileBlockedByDialog(dialogs, deps)
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
 		startPendingFocus.observe(ctx, status, err)
@@ -311,6 +311,15 @@ func waitForAttachedCompileCompletion(
 
 	logCompileWaitTimedOut(options, startedAt, attempts, lastStatus, lastErr)
 	return nil, attachWaitTimedOut, lastObservedCompileStatus(lastStatus, observedStatus), nil
+}
+
+// nextMissingResultStreak counts the answers in a row in which a ready Editor holds no result for the
+// attached compile; any other answer starts the count again.
+func nextMissingResultStreak(status compileStatusResponse, streak int) int {
+	if status.Ready && !status.HasResult {
+		return streak + 1
+	}
+	return 0
 }
 
 func returnAttachedStoredCompileResult(
@@ -352,6 +361,20 @@ func persistCompilePendingRecordOrWarn(projectRoot string, requestID string, std
 		return
 	}
 	_, _ = fmt.Fprintf(stderr, "warning: failed to persist pending compile request for retry attach: %v\n", err)
+}
+
+// persistCompilePendingRecordWhenBlockedByDialog keeps the compile request for the next uloop compile
+// when a dialog ended the wait: the compile goes on in Unity once the dialog closes, and the guidance
+// promises that the next uloop compile reattaches to it instead of starting another.
+func persistCompilePendingRecordWhenBlockedByDialog(projectRoot string, requestID string, waitErr error, stderr io.Writer) {
+	var blocked blockedByDialogError
+	// Why the guidance and not the type: a compile that was not run, or one stopped at the five-minute
+	// stall, is not promised a reattach, and a record would send the next compile after a request that
+	// may not exist.
+	if !errors.As(waitErr, &blocked) || blocked.notRun != nil || blocked.closedNextAction != compileDialogClosedNextAction {
+		return
+	}
+	persistCompilePendingRecordOrWarn(projectRoot, requestID, stderr)
 }
 
 func logCompileAttachStart(connection unityipc.Connection, requestID string, mode string) {
