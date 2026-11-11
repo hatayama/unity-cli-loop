@@ -63,6 +63,9 @@ const (
 	win32ButtonTypeMask        = 0xF
 	win32ButtonTypePush        = 0x0
 	win32ButtonTypeDefaultPush = 0x1
+
+	// WS_DISABLED: the window, here a control, takes no input from the user.
+	win32StyleDisabled = 0x08000000
 )
 
 // isModal reports whether the window holds Unity's main thread. Unity disables every other window
@@ -199,6 +202,11 @@ func (control win32Control) isPushButton() bool {
 	}
 	buttonType := control.Style & win32ButtonTypeMask
 	return buttonType == win32ButtonTypePush || buttonType == win32ButtonTypeDefaultPush
+}
+
+// isDisabled reports whether the user cannot click the control.
+func (control win32Control) isDisabled() bool {
+	return control.Style&win32StyleDisabled != 0
 }
 
 // withoutMnemonicMarker removes the "&" Unity puts before a button's keyboard shortcut letter

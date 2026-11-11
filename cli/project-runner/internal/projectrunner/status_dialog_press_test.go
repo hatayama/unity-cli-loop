@@ -392,3 +392,23 @@ func TestDialogPressOnWindowsReportsAFailedPress(t *testing.T) {
 		}
 	})
 }
+
+// Verifies that on Windows a button the dialog has disabled is not pressed, and the failure says
+// the press never started and names the button.
+func TestDialogPressOnWindowsPressesNothingInADisabledButton(t *testing.T) {
+	windows := win32ProbeDialogWindows()
+	controls := windows[0].Controls
+	for index := range controls {
+		if controls[index].Handle == win32ProbeLaterButtonHandle {
+			controls[index].Style |= win32StyleDisabled
+		}
+	}
+	inspector := win32PressInspectorForTest(t, listingWin32Windows(windows), failingWindowButtonPress(t))
+
+	_, err := inspector.press(context.Background(), "/project", "Later")
+
+	assertPressNotStarted(t, err, true)
+	if !strings.Contains(err.Error(), `the button "Later" is disabled`) {
+		t.Fatalf("error = %v, want it to name the disabled button", err)
+	}
+}

@@ -154,3 +154,28 @@ func TestWin32PressTargetTakesTheFirstOfDuplicateLabels(t *testing.T) {
 		t.Fatalf("target = %#v, want the button with control ID 4", got)
 	}
 }
+
+// Verifies a button the dialog has disabled is found but marked as one that must not be pressed,
+// while its label is still listed and an enabled button of the same dialog is not marked.
+func TestWin32PressTargetMarksADisabledButton(t *testing.T) {
+	windows := win32ProbeDialogWindows()
+	controls := windows[0].Controls
+	for index := range controls {
+		if controls[index].Handle == win32ProbeLaterButtonHandle {
+			controls[index].Style |= win32StyleDisabled
+		}
+	}
+
+	disabled := win32PressTarget(windows, "Later")
+	enabled := win32PressTarget(windows, "Yes")
+
+	if !disabled.ButtonFound || !disabled.ButtonDisabled || disabled.ButtonHandle != win32ProbeLaterButtonHandle {
+		t.Fatalf("target = %#v, want the Later button marked disabled", disabled)
+	}
+	if !reflect.DeepEqual(disabled.Dialog.Buttons, []string{"Yes", "No", "Later"}) {
+		t.Fatalf("buttons = %#v, want the three of the dialog", disabled.Dialog.Buttons)
+	}
+	if !enabled.ButtonFound || enabled.ButtonDisabled {
+		t.Fatalf("target = %#v, want the Yes button not marked disabled", enabled)
+	}
+}

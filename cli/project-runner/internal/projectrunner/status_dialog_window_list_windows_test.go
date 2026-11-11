@@ -247,3 +247,35 @@ func TestListUnityProcessWindowsKeepsItsWindowsWhenTheStackGrows(t *testing.T) {
 		t.Fatalf("listed %d windows, %v; want at least the %d created and no error", len(listed), err, windowCount)
 	}
 }
+
+// Verifies the Win32 listing tells a real button that was disabled from an enabled one, so a press
+// does not choose a button the user could not click.
+func TestListUnityProcessWindowsTellsADisabledButton(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	owner := factory.create("Static", "uloop test owner", testWindowStylePopup|testWindowStyleVisible, 0, 0)
+	defer factory.destroy(owner)
+	dialog := factory.create(
+		"#32770", "uloop test dialog", testWindowStylePopup|testWindowStyleVisible|testWindowStyleCaption, owner, 0)
+	defer factory.destroy(dialog)
+	factory.create("Button", "&Yes", testWindowStyleChild|testWindowStyleVisible|testButtonStyleDefault, dialog, 1)
+	later := factory.create("Button", "&Later", testWindowStyleChild|testWindowStyleVisible, dialog, 3)
+	factory.setEnabled(owner, false)
+	factory.setEnabled(later, false)
+
+	listed, err := listUnityProcessWindows(context.Background(), os.Getpid())
+	if err != nil {
+		t.Fatalf("listUnityProcessWindows returned error: %v", err)
+	}
+	disabled := win32PressTarget(listed, "Later")
+	enabled := win32PressTarget(listed, "Yes")
+
+	if !disabled.ButtonFound || !disabled.ButtonDisabled {
+		t.Fatalf("target = %#v, want the Later button marked disabled", disabled)
+	}
+	if !enabled.ButtonFound || enabled.ButtonDisabled {
+		t.Fatalf("target = %#v, want the Yes button not marked disabled", enabled)
+	}
+}

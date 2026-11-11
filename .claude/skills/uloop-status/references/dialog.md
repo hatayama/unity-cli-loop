@@ -55,6 +55,7 @@ Errors go to stderr, nothing goes to stdout, and it exits 1.
 
 - Message boxes whose button labels uloop can read, such as `EditorUtility.DisplayDialog` prompts and the prompts Unity shows while it starts.
 - Not modal Editor windows or file pickers: their buttons have no readable labels, so `Buttons` is empty and `--answer` returns `DIALOG_NOT_ANSWERABLE`. Ask the user to answer those.
+- Not a button the dialog has disabled (Windows): it is listed in `Buttons`, but `--answer` presses nothing and returns `DIALOG_ANSWER_FAILED` with `SafeToRetry: true`.
 
 ## Before Pressing
 

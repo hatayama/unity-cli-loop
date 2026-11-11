@@ -7,7 +7,10 @@ import (
 
 // pressWin32Button presses the button labeled exactly label in the frontmost modal window of the
 // Unity process on Windows, and returns that dialog as it was read before the press.
-// Why a failed listing is a press that did not start: nothing has been sent to the dialog yet.
+// Why a failed listing and a disabled button are presses that did not start: nothing has been
+// sent to the dialog.
+// Why a disabled button is not pressed: the dialog would act on the click all the same, and uloop
+// must not do what the dialog does not let the user do.
 // Why a failed press is not: the click may have reached the dialog even when its answer did not
 // come back, so pressing the same label again could press a button of the dialog that opened next.
 func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, label string) (dialogPressResult, error) {
@@ -27,6 +30,11 @@ func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, 
 	if !target.ButtonFound {
 		return result, nil
 	}
+	if target.ButtonDisabled {
+		return dialogPressResult{}, dialogPressNotStartedError{
+			err: fmt.Errorf("the button %q is disabled in the dialog %q", label, target.Dialog.Title),
+		}
+	}
 	if err := inspector.pressWindowButton(pressCtx, target); err != nil {
 		if stopErr := inspector.stoppedLookError(ctx, pressCtx, "the dialog did not answer the press"); stopErr != nil {
 			return dialogPressResult{}, stopErr
@@ -41,13 +49,15 @@ func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, 
 // windows. DialogFound is false when no modal window is open; ButtonFound is false when the
 // frontmost one has no button with the label. Dialog is the frontmost dialog as the listing shows
 // it. The handles and the control ID say where the press goes; they are zero without a button.
+// ButtonDisabled is true when the dialog shows the button but does not let the user click it.
 type win32PressTargetResult struct {
-	DialogFound  bool
-	ButtonFound  bool
-	Dialog       statusDialog
-	DialogHandle uintptr
-	ButtonHandle uintptr
-	ButtonID     int
+	DialogFound    bool
+	ButtonFound    bool
+	ButtonDisabled bool
+	Dialog         statusDialog
+	DialogHandle   uintptr
+	ButtonHandle   uintptr
+	ButtonID       int
 }
 
 // win32PressTarget chooses the button of the frontmost modal window whose label equals label.
@@ -70,6 +80,7 @@ func win32PressTarget(windows []win32Window, label string) win32PressTargetResul
 			continue
 		}
 		target.ButtonFound = true
+		target.ButtonDisabled = button.isDisabled()
 		target.ButtonHandle = button.Handle
 		target.ButtonID = button.ID
 		return target
