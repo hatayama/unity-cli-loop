@@ -304,18 +304,20 @@ func TestRunStatusCommandStopsWhenCancelledBeforeSecondProbe(t *testing.T) {
 	assertServerDidNotFail(t, server.serverErr)
 }
 
-// Verifies a stall just under the threshold is Ready without a second probe.
+// Verifies a stall just under the blocked threshold is not MainThreadBlocked: once the main thread
+// runs before the second probe, the answer is Ready.
 func TestRunStatusCommandTreatsShortStallAsReady(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
-	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{
-		"SecondsSinceLastMainThreadTick": 4.9,
-	}))
+	server := startFakeEditorStatusSequenceServer(t, projectRoot,
+		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 4.9})),
+		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 0.2})),
+	)
 
 	run := runStatusForTest(context.Background(), server.connection, nil, statusTestDeps(t))
 
 	report := assertStatusReport(t, run, "Ready")
 	assertStatusFields(t, report, statusTestEditorStateFields...)
-	assertStatusRequestCount(t, server, 1)
+	assertStatusRequestCount(t, server, 2)
 }
 
 // Verifies compiling is decided before importing when Unity reports both.
