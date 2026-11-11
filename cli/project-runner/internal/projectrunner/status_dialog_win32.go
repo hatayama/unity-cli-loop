@@ -66,6 +66,9 @@ const (
 
 	// WS_DISABLED: the window, here a control, takes no input from the user.
 	win32StyleDisabled = 0x08000000
+
+	// ES_READONLY: the user cannot change the text of the Edit.
+	win32EditStyleReadOnly = 0x0800
 )
 
 // isModal reports whether the window holds Unity's main thread. Unity disables every other window
@@ -109,7 +112,7 @@ func (window win32Window) isMessageBox() bool {
 }
 
 // isBuiltLikeAMessageBox reports whether the window holds nothing but what a message box is built
-// from: labels, text boxes, and buttons.
+// from: labels, read-only text boxes, and buttons.
 // Why it is asked at all: on Windows a file picker is a dialog like a message box, and its Save,
 // Select Folder, and Cancel are push buttons with labels. uloop answers message boxes only; what
 // a picker takes is a choice of a file, which is the user's to make.
@@ -120,14 +123,23 @@ func (window win32Window) isMessageBox() bool {
 // can only keep uloop from pressing.
 func (window win32Window) isBuiltLikeAMessageBox() bool {
 	for _, control := range window.Controls {
-		isMessageBoxControl := control.hasClass(win32StaticClassName) ||
-			control.hasClass(win32EditClassName) ||
-			control.hasClass(win32ButtonClassName)
-		if !isMessageBoxControl {
+		if !control.isMessageBoxPart() {
 			return false
 		}
 	}
 	return true
+}
+
+// isMessageBoxPart reports whether the control is one of the kinds a message box is built from.
+// Why a text box must be read-only: a dialog with a text box the user can type in is a form, and
+// pressing its button sends whatever the box holds at that moment. A message box keeps its message
+// in a text box the user cannot type in: every one a real Editor showed was read-only (Unity
+// 2022.3 and 6000.7, from a plain two-button box to the prompt that offers Safe Mode).
+func (control win32Control) isMessageBoxPart() bool {
+	if control.hasClass(win32EditClassName) {
+		return control.isReadOnly()
+	}
+	return control.hasClass(win32StaticClassName) || control.hasClass(win32ButtonClassName)
 }
 
 // answerButtons returns the buttons uloop may list and press in the window: the visible push
@@ -239,6 +251,12 @@ func (control win32Control) isPushButton() bool {
 // isDisabled reports whether the user cannot click the control.
 func (control win32Control) isDisabled() bool {
 	return control.Style&win32StyleDisabled != 0
+}
+
+// isReadOnly reports whether the user cannot change the text of the control. It is meaningful for
+// an Edit only: the same bit of another class's style says something else.
+func (control win32Control) isReadOnly() bool {
+	return control.Style&win32EditStyleReadOnly != 0
 }
 
 // withoutMnemonicMarker removes the "&" Unity puts before a button's keyboard shortcut letter
