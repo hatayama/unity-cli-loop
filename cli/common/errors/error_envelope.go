@@ -48,7 +48,7 @@ const (
 	// ErrorCodeCompileCheckProjectBusy is returned when another compile-check on the same project
 	// kept its lock for longer than this run was willing to wait.
 	ErrorCodeCompileCheckProjectBusy = "COMPILE_CHECK_PROJECT_BUSY"
-	// ErrorCodeDialogNotOpen is returned when uloop dialog --answer finds no modal dialog to press.
+	// ErrorCodeDialogNotOpen is returned when uloop press-dialog-button finds no modal dialog to press.
 	ErrorCodeDialogNotOpen = "DIALOG_NOT_OPEN"
 	// ErrorCodeDialogButtonNotFound is returned when the frontmost dialog has no button with the given label.
 	ErrorCodeDialogButtonNotFound = "DIALOG_BUTTON_NOT_FOUND"
