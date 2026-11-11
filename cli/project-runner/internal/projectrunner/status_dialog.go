@@ -151,6 +151,9 @@ func dialogsFromAccessibilityOutput(output []byte) ([]statusDialog, error) {
 
 	dialogs := make([]statusDialog, 0, len(raw.Dialogs))
 	for _, window := range raw.Dialogs {
+		if window.isUntitledWithoutButtons() {
+			continue
+		}
 		dialogs = append(dialogs, window.dialog())
 	}
 	return dialogs, nil
@@ -161,6 +164,17 @@ type accessibilityWindow struct {
 	WindowTitle *string   `json:"windowTitle"`
 	Texts       []*string `json:"texts"`
 	Buttons     []*string `json:"buttons"`
+}
+
+// isUntitledWithoutButtons reports whether the window has neither a title nor a named button. Unity's
+// splash screen is such a modal AXDialog while a project opens; it asks nothing and closes by itself.
+// Why both conditions: an alert has no window title but always a named button, and a modal Editor
+// window has unnamed buttons but a title, and both of those hold the main thread.
+func (window accessibilityWindow) isUntitledWithoutButtons() bool {
+	if window.WindowTitle != nil && *window.WindowTitle != "" {
+		return false
+	}
+	return len(nonEmptyStrings(window.Buttons)) == 0
 }
 
 // dialog turns the window into a title, a message, and its named buttons. Buttons is never nil.

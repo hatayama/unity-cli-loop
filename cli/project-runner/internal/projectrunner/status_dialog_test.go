@@ -48,11 +48,6 @@ func TestDialogsFromAccessibilityOutputUsesFirstTextAsTitleWhenWindowHasNoTitle(
 			want:   []statusDialog{{Title: "Spike modal", Message: "Body", Buttons: []string{}}},
 		},
 		{
-			name:   "null window title and nothing else",
-			output: `{"processFound":true,"dialogs":[{"windowTitle":null,"texts":[],"buttons":[]}]}`,
-			want:   []statusDialog{{Title: "", Message: "", Buttons: []string{}}},
-		},
-		{
 			name:   "empty and null texts are dropped",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":"","texts":[null,"Title","","Body",null],"buttons":["","OK"]}]}`,
 			want:   []statusDialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
@@ -75,6 +70,60 @@ func TestDialogsFromAccessibilityOutputUsesFirstTextAsTitleWhenWindowHasNoTitle(
 				t.Fatalf("dialogsFromAccessibilityOutput returned error: %v", err)
 			}
 			if !reflect.DeepEqual(got, testCase.want) {
+				t.Fatalf("dialogs = %#v, want %#v", got, testCase.want)
+			}
+		})
+	}
+}
+
+// Unity's splash screen as osascript printed it in a real Editor while it opened a project: a modal
+// AXDialog without a window title whose only button has no name.
+const accessibilitySplashScreenWindow = `{"windowTitle":"","texts":["6000.3.15f1","© Unity Technologies.",` +
+	`"Open Project: Initialize Asset Database","SampleProject"],"buttons":[null]}`
+
+// A dialog Unity shows while it starts; like an alert it has no window title, but its buttons have names.
+const accessibilityStartupDialogWindow = `{"windowTitle":"","texts":["Project Change Required","Body"],` +
+	`"buttons":["Continue","Quit"]}`
+
+// Verifies a window without a title and without a named button, such as Unity's splash screen, is not
+// listed as a dialog, while the dialogs beside it are still listed in their order.
+func TestDialogsFromAccessibilityOutputSkipsTheSplashScreen(t *testing.T) {
+	startupDialog := statusDialog{Title: "Project Change Required", Message: "Body", Buttons: []string{"Continue", "Quit"}}
+	cases := []struct {
+		name   string
+		output string
+		want   []statusDialog
+	}{
+		{
+			name:   "splash screen alone",
+			output: `{"processFound":true,"dialogs":[` + accessibilitySplashScreenWindow + `]}`,
+			want:   []statusDialog{},
+		},
+		{
+			name: "startup dialog before the splash screen",
+			output: `{"processFound":true,"dialogs":[` +
+				accessibilityStartupDialogWindow + `,` + accessibilitySplashScreenWindow + `]}`,
+			want: []statusDialog{startupDialog},
+		},
+		{
+			name: "splash screen before the startup dialog",
+			output: `{"processFound":true,"dialogs":[` +
+				accessibilitySplashScreenWindow + `,` + accessibilityStartupDialogWindow + `]}`,
+			want: []statusDialog{startupDialog},
+		},
+		{
+			name:   "null window title and no button",
+			output: `{"processFound":true,"dialogs":[{"windowTitle":null,"texts":[],"buttons":[]}]}`,
+			want:   []statusDialog{},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := dialogsFromAccessibilityOutput([]byte(testCase.output))
+			if err != nil {
+				t.Fatalf("dialogsFromAccessibilityOutput returned error: %v", err)
+			}
+			if got == nil || !reflect.DeepEqual(got, testCase.want) {
 				t.Fatalf("dialogs = %#v, want %#v", got, testCase.want)
 			}
 		})
