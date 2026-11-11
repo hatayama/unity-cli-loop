@@ -160,6 +160,7 @@ func TestRunLaunchQuitReportsAnEditorThatQuitOnItsOwn(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -187,6 +188,7 @@ func TestRunLaunchQuitReportsAForceKilledEditor(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

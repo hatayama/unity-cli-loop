@@ -171,6 +171,19 @@ func TestWindowsUnityProcessListScriptEncodesCommandLineAsUTF8Base64(t *testing.
 	}
 }
 
+// Verifies the Windows process list script keeps a Unity.exe whose command line is null, which is what an
+// unelevated shell reads for an elevated Editor, and writes it with an empty command field.
+func TestWindowsUnityProcessListScriptKeepsProcessesWithANullCommandLine(t *testing.T) {
+	script := windowsUnityProcessListScript()
+
+	if strings.Contains(script, "Where-Object") {
+		t.Fatalf("script must not filter out processes: %s", script)
+	}
+	if !strings.Contains(script, "if ($null -ne $process.CommandLine) {") {
+		t.Fatalf("script must handle a null command line explicitly: %s", script)
+	}
+}
+
 // Verifies comparable project paths preserve case on case-sensitive-capable platforms.
 func TestNormalizeComparablePathPreservesCaseOutsideWindows(t *testing.T) {
 	if runtime.GOOS == "windows" {
