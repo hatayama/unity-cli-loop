@@ -105,7 +105,39 @@ func (window win32Window) isMessageBox() bool {
 			return false
 		}
 	}
-	return len(win32DialogButtons(window.Controls)) > 0
+	return len(win32ButtonLabels(win32PushButtons(window.Controls))) > 0
+}
+
+// isBuiltLikeAMessageBox reports whether the window holds nothing but what a message box is built
+// from: labels, text boxes, and buttons.
+// Why it is asked at all: on Windows a file picker is a dialog like a message box, and its Save,
+// Select Folder, and Cancel are push buttons with labels. uloop answers message boxes only; what
+// a picker takes is a choice of a file, which is the user's to make.
+// Why by what a message box holds and not by what a picker holds: a dialog uloop has never seen
+// must not become one it presses. A real Editor's message boxes held these three kinds only, and
+// each of its three file pickers held a dozen other kinds.
+// Why a hidden control counts too: it is part of what the dialog is built from, and counting it
+// can only keep uloop from pressing.
+func (window win32Window) isBuiltLikeAMessageBox() bool {
+	for _, control := range window.Controls {
+		isMessageBoxControl := control.hasClass(win32StaticClassName) ||
+			control.hasClass(win32EditClassName) ||
+			control.hasClass(win32ButtonClassName)
+		if !isMessageBoxControl {
+			return false
+		}
+	}
+	return true
+}
+
+// answerButtons returns the buttons uloop may list and press in the window: the visible push
+// buttons of a message box, and none of any other dialog. Both the listing and the press take
+// their buttons from here, so a button that is not listed cannot be pressed.
+func (window win32Window) answerButtons() []win32Control {
+	if !window.isBuiltLikeAMessageBox() {
+		return []win32Control{}
+	}
+	return win32PushButtons(window.Controls)
 }
 
 // dialogsFromWin32Windows turns the Unity process's windows into the dialogs that hold its main
@@ -130,12 +162,13 @@ func win32ModalWindows(windows []win32Window) []win32Window {
 	return modalWindows
 }
 
-// dialog is what a modal window shows: its title, its text, and the labels of its push buttons.
+// dialog is what a modal window shows: its title, its text, and the labels of the buttons uloop
+// may press in it.
 func (window win32Window) dialog() statusDialog {
 	return statusDialog{
 		Title:   window.Title,
 		Message: win32DialogMessage(window.Controls),
-		Buttons: win32DialogButtons(window.Controls),
+		Buttons: win32ButtonLabels(window.answerButtons()),
 	}
 }
 
@@ -156,10 +189,8 @@ func win32DialogMessage(controls []win32Control) string {
 	return strings.Join(texts, "\n")
 }
 
-// win32DialogButtons returns the labels of a dialog's push buttons, leaving out a button that
-// shows no label.
-func win32DialogButtons(controls []win32Control) []string {
-	buttons := win32PushButtons(controls)
+// win32ButtonLabels returns the labels of the buttons, leaving out a button that shows no label.
+func win32ButtonLabels(buttons []win32Control) []string {
 	labels := make([]string, 0, len(buttons))
 	for _, button := range buttons {
 		label := withoutMnemonicMarker(button.Text)

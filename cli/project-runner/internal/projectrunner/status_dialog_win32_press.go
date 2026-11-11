@@ -93,7 +93,7 @@ func win32PressTarget(windows []win32Window, label string) win32PressTargetResul
 
 	dialog := modalWindows[0]
 	target := win32PressTargetResult{DialogFound: true, Dialog: dialog.dialog(), DialogHandle: dialog.Handle}
-	for _, button := range win32PushButtons(dialog.Controls) {
+	for _, button := range dialog.answerButtons() {
 		if withoutMnemonicMarker(button.Text) != label {
 			continue
 		}

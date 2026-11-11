@@ -97,6 +97,31 @@ func TestWin32PressTargetReportsADialogWithoutButtons(t *testing.T) {
 	}
 }
 
+// Verifies no button of a file picker is chosen, neither the one that takes the choice nor Cancel,
+// while the picker is returned as a dialog with an empty, non-nil button list.
+func TestWin32PressTargetChoosesNoButtonInAFilePicker(t *testing.T) {
+	picker := win32FilePickerWindow("Probe save", win32FilePickerSaveButton)
+	picker.Handle = 0x7000
+	for index := range picker.Controls {
+		picker.Controls[index].Handle = 0x7001 + uintptr(index)
+	}
+
+	for _, label := range []string{"Save", "Cancel"} {
+		t.Run(label, func(t *testing.T) {
+			got := win32PressTarget([]win32Window{picker, win32DisabledMainWindow}, label)
+
+			want := win32PressTargetResult{
+				DialogFound:  true,
+				Dialog:       statusDialog{Title: "Probe save", Message: "File &name:", Buttons: []string{}},
+				DialogHandle: 0x7000,
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("target = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
 // Verifies only the first dialog is searched: a button with the label in the dialog behind it is
 // not chosen.
 func TestWin32PressTargetLooksOnlyAtTheFirstDialog(t *testing.T) {

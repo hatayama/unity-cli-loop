@@ -258,10 +258,12 @@ func TestDialogPressOnWindowsPressesTheLabeledButton(t *testing.T) {
 }
 
 // Verifies that on Windows nothing is pressed without a button to press: a label the dialog
-// lacks, no dialog at all, and a dialog that has no button each return what was read.
+// lacks, no dialog at all, a dialog that has no button, and a file picker, whose buttons are not
+// for uloop to press, each return what was read.
 func TestDialogPressOnWindowsPressesNothingWithoutAMatch(t *testing.T) {
 	modal := win32ModalWindow("UnityContainerWndClass", "Probe modal",
 		win32Control{ClassName: "UnityGUIViewWndClass", Text: "UnityEditor.EditorWindow", Visible: true})
+	picker := win32FilePickerWindow("Probe save", win32FilePickerSaveButton)
 	cases := []struct {
 		name    string
 		windows []win32Window
@@ -288,6 +290,16 @@ func TestDialogPressOnWindowsPressesNothingWithoutAMatch(t *testing.T) {
 				DialogFound: true,
 				Pressed:     false,
 				Dialog:      statusDialog{Title: "Probe modal", Message: "", Buttons: []string{}},
+			},
+		},
+		{
+			name:    "file picker",
+			windows: []win32Window{picker, win32DisabledMainWindow},
+			label:   "Cancel",
+			want: dialogPressResult{
+				DialogFound: true,
+				Pressed:     false,
+				Dialog:      statusDialog{Title: "Probe save", Message: "File &name:", Buttons: []string{}},
 			},
 		},
 	}

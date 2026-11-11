@@ -81,6 +81,31 @@ func win32ProgressWindow(title string, cancelButtonVisible bool) win32Window {
 	}
 }
 
+// The window of a file picker (EditorUtility.OpenFilePanel, SaveFilePanel, OpenFolderPanel) as a
+// real Editor on Windows listed it, cut down to one control of each kind and with the labels put
+// in English. confirm is the button that takes the choice: a split button in the picker that opens
+// a file, a push button in the other two.
+func win32FilePickerWindow(title string, confirm win32Control) win32Window {
+	return win32ModalWindow("#32770", title,
+		win32Control{ClassName: "DUIViewWndClassName", Style: 0x52000000, Visible: true},
+		win32Control{ClassName: "DirectUIHWND", Style: 0x56000000, Visible: true},
+		win32Control{ClassName: "SysTreeView32", ID: 100, Style: 0x5621922D, Visible: true},
+		win32Control{ClassName: "SHELLDLL_DefView", Text: "ShellView", ID: 1121, Style: 0x56010000, Visible: true},
+		win32Control{ClassName: "Static", Text: "File &name:", ID: 1090, Style: 0x50020102, Visible: true},
+		win32Control{ClassName: "ComboBox", ID: 1148, Style: 0x56000413, Visible: true},
+		win32Control{ClassName: "Edit", ID: 1148, Style: 0x54000080, Visible: true},
+		confirm,
+		win32Control{ClassName: "Button", Text: "Cancel", ID: 2, Style: 0x50030000, Visible: true},
+		win32Control{ClassName: "Button", Text: "&Help", ID: 1038, Style: 0x48030000, Visible: false},
+		win32Control{ClassName: "ReBarWindow32", ID: 40965, Style: 0x5602EA69, Visible: true},
+		win32Control{ClassName: "ToolbarWindow32", Style: 0x5601894D, Visible: true},
+		win32Control{ClassName: "msctls_progress32", Style: 0x52000000, Visible: true},
+	)
+}
+
+// The button that takes the choice in the picker that saves a file.
+var win32FilePickerSaveButton = win32Control{ClassName: "Button", Text: "&Save", ID: 1, Style: 0x50030001, Visible: true}
+
 // The Editor's main window while no dialog is open.
 var win32EnabledMainWindow = win32Window{ClassName: "UnityContainerWndClass", Title: "main", Visible: true, Enabled: true}
 
@@ -198,6 +223,65 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 			got := dialogsFromWin32Windows(testCase.windows)
 			if !reflect.DeepEqual(got, testCase.want) {
 				t.Fatalf("dialogs = %#v, want %#v", got, testCase.want)
+			}
+		})
+	}
+}
+
+// Verifies a file picker, which on Windows is a dialog whose buttons have labels, is listed with
+// its title and text but without buttons, whichever button takes the choice.
+func TestDialogsFromWin32WindowsListsAFilePickerWithoutButtons(t *testing.T) {
+	cases := []struct {
+		name    string
+		confirm win32Control
+	}{
+		{
+			name:    "picker that opens a file",
+			confirm: win32Control{ClassName: "Button", Text: "&Open", ID: 1, Style: 0x5003000D, Visible: true},
+		},
+		{name: "picker that saves a file", confirm: win32FilePickerSaveButton},
+		{
+			name:    "picker that selects a folder",
+			confirm: win32Control{ClassName: "Button", Text: "Select Folder", ID: 1, Style: 0x50030001, Visible: true},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			windows := []win32Window{win32FilePickerWindow("Probe picker", testCase.confirm), win32DisabledMainWindow}
+
+			got := dialogsFromWin32Windows(windows)
+
+			want := []statusDialog{{Title: "Probe picker", Message: "File &name:", Buttons: []string{}}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("dialogs = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+// Verifies a dialog lists its push buttons only when it is built from nothing but labels, text
+// boxes, and buttons: one control of another kind, visible or hidden, leaves the dialog listed
+// without buttons.
+func TestDialogsFromWin32WindowsListsButtonsOnlyForADialogBuiltLikeAMessageBox(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra win32Control
+	}{
+		{name: "visible combo box", extra: win32Control{ClassName: "ComboBox", ID: 1136, Visible: true}},
+		{name: "hidden list box", extra: win32Control{ClassName: "ListBox", ID: 1120, Visible: false}},
+		{name: "progress bar", extra: win32Control{ClassName: "msctls_progress32", Visible: true}},
+		{name: "control whose class could not be read", extra: win32Control{ClassName: "", Visible: true}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			controls := append(win32ComplexDialogControls("Line one. Line two."), testCase.extra)
+			windows := []win32Window{win32ModalWindow("#32770", "Probe title", controls...), win32DisabledMainWindow}
+
+			got := dialogsFromWin32Windows(windows)
+
+			want := []statusDialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{}}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("dialogs = %#v, want %#v", got, want)
 			}
 		})
 	}
