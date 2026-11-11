@@ -131,6 +131,33 @@ func TestListUnityProcessWindowsReadsARealModalWindow(t *testing.T) {
 	}
 }
 
+// Verifies the Win32 listing gives a real dialog window and its button the handles Windows names
+// them by, so the button chosen for a press is that very window.
+func TestListUnityProcessWindowsGivesTheHandlesAPressNeeds(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	owner := factory.create("Static", "uloop test owner", testWindowStylePopup|testWindowStyleVisible, 0, 0)
+	defer factory.destroy(owner)
+	dialog := factory.create(
+		"#32770", "uloop test dialog", testWindowStylePopup|testWindowStyleVisible|testWindowStyleCaption, owner, 0)
+	defer factory.destroy(dialog)
+	factory.create("Button", "&Yes", testWindowStyleChild|testWindowStyleVisible|testButtonStyleDefault, dialog, 1)
+	later := factory.create("Button", "&Later", testWindowStyleChild|testWindowStyleVisible, dialog, 3)
+	factory.setEnabled(owner, false)
+
+	listed, err := listUnityProcessWindows(context.Background(), os.Getpid())
+	if err != nil {
+		t.Fatalf("listUnityProcessWindows returned error: %v", err)
+	}
+	target := win32PressTarget(listed, "Later")
+
+	if !target.ButtonFound || target.DialogHandle != uintptr(dialog) || target.ButtonHandle != uintptr(later) || target.ButtonID != 3 {
+		t.Fatalf("target = %#v, want dialog %#x and button %#x with control ID 3", target, uintptr(dialog), uintptr(later))
+	}
+}
+
 // Verifies a listing whose context is already cancelled stops with the context's error instead
 // of returning windows.
 func TestListUnityProcessWindowsStopsWhenCancelled(t *testing.T) {

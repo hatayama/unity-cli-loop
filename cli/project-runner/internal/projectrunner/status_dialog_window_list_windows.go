@@ -125,6 +125,7 @@ func listUnityProcessWindows(ctx context.Context, pid int) ([]win32Window, error
 func (api win32WindowAPI) describeWindow(handle windows.HWND) win32Window {
 	owner := api.owner(handle)
 	window := win32Window{
+		Handle:    uintptr(handle),
 		ClassName: win32ClassName(handle),
 		Title:     api.windowText(handle),
 		Visible:   windows.IsWindowVisible(handle),
@@ -146,6 +147,7 @@ func (api win32WindowAPI) controls(ctx context.Context, parent windows.HWND) []w
 	controls := make([]win32Control, 0, len(search.handles))
 	for _, handle := range search.handles {
 		control := win32Control{
+			Handle:    uintptr(handle),
 			ClassName: win32ClassName(handle),
 			ID:        api.controlID(handle),
 			Style:     api.style(handle),

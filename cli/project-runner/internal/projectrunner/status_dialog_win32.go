@@ -24,9 +24,12 @@ func (inspector dialogInspector) inspectWin32Windows(ctx context.Context, pid in
 	return dialogsFromWin32Windows(windows), nil
 }
 
-// win32Window is one top-level window of the Unity process as Win32 reports it. It carries only
-// what tells a modal window from the others; Controls is read only for one that may be modal.
+// win32Window is one top-level window of the Unity process as Win32 reports it. It carries what
+// tells a modal window from the others, and the handle a press is sent to; Controls is read only
+// for one that may be modal.
 type win32Window struct {
+	// What Windows names the window by. A press is sent to it; no rule here reads it.
+	Handle    uintptr
 	ClassName string
 	Title     string
 	Visible   bool
@@ -40,6 +43,8 @@ type win32Window struct {
 // win32Control is one child window of a window that may be modal: a label, a text box, a button,
 // or a progress bar.
 type win32Control struct {
+	// What Windows names the control by, as win32Window.Handle.
+	Handle    uintptr
 	ClassName string
 	Text      string
 	ID        int
@@ -104,17 +109,31 @@ func (window win32Window) isMessageBox() bool {
 // thread, in the order given. The result is never nil, and neither is a dialog's Buttons.
 func dialogsFromWin32Windows(windows []win32Window) []statusDialog {
 	dialogs := make([]statusDialog, 0)
-	for _, window := range windows {
-		if !window.isModal() {
-			continue
-		}
-		dialogs = append(dialogs, statusDialog{
-			Title:   window.Title,
-			Message: win32DialogMessage(window.Controls),
-			Buttons: win32DialogButtons(window.Controls),
-		})
+	for _, window := range win32ModalWindows(windows) {
+		dialogs = append(dialogs, window.dialog())
 	}
 	return dialogs
+}
+
+// win32ModalWindows keeps the windows that hold Unity's main thread, in the order given. Both the
+// listing and the press take their dialogs from here, so they agree on which window is one.
+func win32ModalWindows(windows []win32Window) []win32Window {
+	modalWindows := make([]win32Window, 0)
+	for _, window := range windows {
+		if window.isModal() {
+			modalWindows = append(modalWindows, window)
+		}
+	}
+	return modalWindows
+}
+
+// dialog is what a modal window shows: its title, its text, and the labels of its push buttons.
+func (window win32Window) dialog() statusDialog {
+	return statusDialog{
+		Title:   window.Title,
+		Message: win32DialogMessage(window.Controls),
+		Buttons: win32DialogButtons(window.Controls),
+	}
 }
 
 // win32DialogMessage joins the texts a dialog shows. Unity's message box keeps its message in a
@@ -134,10 +153,24 @@ func win32DialogMessage(controls []win32Control) string {
 	return strings.Join(texts, "\n")
 }
 
-// win32DialogButtons returns the labels of a dialog's push buttons.
+// win32DialogButtons returns the labels of a dialog's push buttons, leaving out a button that
+// shows no label.
+func win32DialogButtons(controls []win32Control) []string {
+	buttons := win32PushButtons(controls)
+	labels := make([]string, 0, len(buttons))
+	for _, button := range buttons {
+		label := withoutMnemonicMarker(button.Text)
+		if label != "" {
+			labels = append(labels, label)
+		}
+	}
+	return labels
+}
+
+// win32PushButtons returns a dialog's visible push buttons.
 // Why sorted by control ID and not left to right: Unity numbers the buttons OK, Cancel, Alt, which
 // is the order its own dialog report and the macOS look give, while Windows draws Alt in the middle.
-func win32DialogButtons(controls []win32Control) []string {
+func win32PushButtons(controls []win32Control) []win32Control {
 	buttons := make([]win32Control, 0, len(controls))
 	for _, control := range controls {
 		if control.Visible && control.isPushButton() {
@@ -147,15 +180,7 @@ func win32DialogButtons(controls []win32Control) []string {
 	sort.SliceStable(buttons, func(i int, j int) bool {
 		return buttons[i].ID < buttons[j].ID
 	})
-
-	labels := make([]string, 0, len(buttons))
-	for _, button := range buttons {
-		label := withoutMnemonicMarker(button.Text)
-		if label != "" {
-			labels = append(labels, label)
-		}
-	}
-	return labels
+	return buttons
 }
 
 func (control win32Control) hasClass(className string) bool {
