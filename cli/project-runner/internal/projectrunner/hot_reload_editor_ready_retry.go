@@ -246,11 +246,7 @@ func probeHotReloadEditorStatus(
 	if err != nil {
 		return editorStatusResponse{}, err
 	}
-	var response editorStatusResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return editorStatusResponse{}, err
-	}
-	return response, nil
+	return decodeEditorStatusResponse(raw)
 }
 
 // composeHotReloadEditorReadyNote appends sentence to the note an earlier wait in this command left

@@ -32,6 +32,8 @@ The order of `Buttons` can differ from the one `uloop status` reports for the sa
 - A look failed or was interrupted: exit 0 without `NextDialogs`, because the press already happened. Run `uloop get-dialogs` when you need to know what is open now.
 - The dialog is still open after every look: exit 1 with `DIALOG_ANSWER_FAILED`, even though the button was pressed.
 
+uloop treats the dialog as still open while the frontmost dialog has the same `Title`, `Message`, and `Buttons` it read before the press. So a new dialog that looks exactly the same as the pressed one ends in `DIALOG_ANSWER_FAILED`, and the same dialog that stays open with different content counts as closed and exits 0. In either case, run `uloop get-dialogs` to see what is open now.
+
 On exit 0 it returns JSON with:
 
 - `Success`: `true`

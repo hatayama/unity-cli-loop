@@ -135,7 +135,8 @@ func TestRunStatusCommandReportsBlockedByDialogBeforeStarting(t *testing.T) {
 	assertDialogInspections(t, inspector, 0)
 }
 
-// Verifies every dialog the Editor reports is printed in order, and the message counts them.
+// Verifies every dialog the Editor reports is printed, frontmost first although the Editor lists
+// them in the order they opened, and the message counts them.
 func TestRunStatusCommandReportsEveryOpenDialog(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
 	second := statusDialog{Title: "Script Updating Consent", Message: "Update the API?", Buttons: []string{"Go Ahead", "No Thanks"}}
@@ -148,8 +149,24 @@ func TestRunStatusCommandReportsEveryOpenDialog(t *testing.T) {
 
 	report := assertStatusReport(t, run, "BlockedByDialog")
 	assertStatusMessage(t, report, "2 modal dialogs are open in Unity; its main thread waits until they are closed.")
-	assertStatusDialogs(t, run, []statusDialog{statusTestSaveSceneDialog, second})
+	assertStatusDialogs(t, run, []statusDialog{second, statusTestSaveSceneDialog})
 	assertDialogInspections(t, inspector, 0)
+}
+
+// Verifies the guidance follows the dialog opened last, which is the frontmost one: a message box
+// opened over a modal window without buttons is offered to uloop press-dialog-button.
+func TestRunStatusCommandGuidesThePressForTheDialogOpenedLast(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	modalWindow := statusDialog{Title: "Probe modal", Buttons: []string{}}
+	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{
+		"OpenDialogs": editorDialogsJSON(modalWindow, statusTestSaveSceneDialog),
+	}))
+
+	run := runStatusForTest(context.Background(), server.connection, nil, withDialogInspector(statusTestDeps(t), &fakeDialogInspector{}))
+
+	report := assertStatusReport(t, run, "BlockedByDialog")
+	assertStatusDialogs(t, run, []statusDialog{statusTestSaveSceneDialog, modalWindow})
+	assertStatusNextActions(t, report, statusTestBlockedByDialogNextActions)
 }
 
 // Verifies a running command whose main thread still runs is Busy without a look at Unity's windows.
