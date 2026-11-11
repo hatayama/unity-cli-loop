@@ -4,6 +4,7 @@ package projectrunner
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"runtime"
 	"testing"
@@ -194,6 +195,39 @@ func TestPressWin32WindowButtonPressesNothingWhenItHasNoTimeLeft(t *testing.T) {
 	err := pressWin32WindowButton(ctx, target)
 
 	assertPressNotStarted(t, err, true)
+	if len(*messages) != 0 {
+		t.Fatalf("messages = %#v, want none", *messages)
+	}
+}
+
+// Verifies a press of a real dialog window that holds a text box the user can type in sends the
+// dialog no click: the dialog is read from its real controls, returned without buttons, and not
+// reported as pressed.
+func TestPressWin32ButtonSendsNoClickToARealDialogWithAnEditableTextBox(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	factory := newTestWindowFactory(t)
+	owner := factory.create("Static", "uloop test owner", testWindowStylePopup|testWindowStyleVisible, 0, 0)
+	defer factory.destroy(owner)
+	dialog := factory.create("#32770", "uloop test form", testShownDialogStyle, owner, 0)
+	defer factory.destroy(dialog)
+	factory.create("Edit", "Typed", testWindowStyleChild|testWindowStyleVisible, dialog, 1019)
+	factory.create("Button", "&OK", testWindowStyleChild|testWindowStyleVisible|testButtonStyleDefault, dialog, 1)
+	messages := factory.recordCommands(dialog)
+	factory.setEnabled(owner, false)
+	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(os.Getpid()), listUnityProcessWindows)
+	inspector.pressWindowButton = pressWin32WindowButton
+
+	result, err := inspector.pressWin32Button(context.Background(), os.Getpid(), "OK")
+
+	want := dialogPressResult{
+		DialogFound: true,
+		Dialog:      statusDialog{Title: "uloop test form", Message: "Typed", Buttons: []string{}},
+	}
+	if err != nil || !reflect.DeepEqual(result, want) {
+		t.Fatalf("press = %#v, %v; want %#v and no error", result, err, want)
+	}
 	if len(*messages) != 0 {
 		t.Fatalf("messages = %#v, want none", *messages)
 	}

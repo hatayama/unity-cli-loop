@@ -21,6 +21,7 @@ const (
 	testWindowStyleCaption  = 0x00C00000 // WS_CAPTION
 	testButtonStyleDefault  = 0x00000001 // BS_DEFPUSHBUTTON
 	testButtonStyleCheckBox = 0x00000003 // BS_AUTOCHECKBOX
+	testEditStyleReadOnly   = 0x00000800 // ES_READONLY
 	// WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE: no taskbar button, and the test does not take the focus.
 	testWindowExStyleUnobtrusive = 0x00000080 | 0x08000000
 	// Far outside every monitor, so the test windows are never seen.
@@ -112,7 +113,8 @@ func TestListUnityProcessWindowsReadsARealModalWindow(t *testing.T) {
 	dialog := factory.create(
 		"#32770", "uloop test dialog", testWindowStylePopup|testWindowStyleVisible|testWindowStyleCaption, owner, 0)
 	defer factory.destroy(dialog)
-	factory.create("Edit", "Line one\r\nLine two", testWindowStyleChild|testWindowStyleVisible, dialog, 1019)
+	factory.create(
+		"Edit", "Line one\r\nLine two", testWindowStyleChild|testWindowStyleVisible|testEditStyleReadOnly, dialog, 1019)
 	factory.create("Button", "&Later", testWindowStyleChild|testWindowStyleVisible, dialog, 3)
 	factory.create("Button", "&Remember", testWindowStyleChild|testWindowStyleVisible|testButtonStyleCheckBox, dialog, 4)
 	factory.create("Button", "&Yes", testWindowStyleChild|testWindowStyleVisible|testButtonStyleDefault, dialog, 1)
@@ -208,7 +210,7 @@ func TestListUnityProcessWindowsTellsAMessageBoxWithoutAnOwnerFromAProgressWindo
 	dialog := factory.create(
 		"#32770", "uloop test prompt", testWindowStylePopup|testWindowStyleVisible|testWindowStyleCaption, 0, 0)
 	defer factory.destroy(dialog)
-	factory.create("Edit", "Prompt body", testWindowStyleChild|testWindowStyleVisible, dialog, 1019)
+	factory.create("Edit", "Prompt body", testWindowStyleChild|testWindowStyleVisible|testEditStyleReadOnly, dialog, 1019)
 	factory.create("Button", "&Quit", testWindowStyleChild|testWindowStyleVisible, dialog, 2)
 
 	asMessageBox := listTestProcessDialogs(t)

@@ -162,7 +162,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 			name: "two modal windows keep their order",
 			windows: []win32Window{
 				win32ModalWindow("#32770", "First",
-					win32Control{ClassName: "Edit", Text: "First body", Visible: true},
+					win32Control{ClassName: "Edit", Text: "First body", Style: win32EditStyleReadOnly, Visible: true},
 					win32Control{ClassName: "Button", Text: "&OK", ID: 1, Visible: true}),
 				win32ModalWindow("UnityContainerWndClass", "Second"),
 				win32DisabledMainWindow,
@@ -177,7 +177,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 			windows: []win32Window{
 				win32ModalWindow("#32770", "Title",
 					win32Control{ClassName: "Static", Text: "", Visible: true},
-					win32Control{ClassName: "Edit", Text: "Body", Visible: true},
+					win32Control{ClassName: "Edit", Text: "Body", Style: win32EditStyleReadOnly, Visible: true},
 					win32Control{ClassName: "Static", Text: "Hidden text", Visible: false},
 					win32Control{ClassName: "Button", Text: "", ID: 1, Visible: true},
 					win32Control{ClassName: "Button", Text: "&Hidden", ID: 2, Visible: false},
@@ -191,7 +191,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 			windows: []win32Window{
 				win32ModalWindow("#32770", "Native",
 					win32Control{ClassName: "Static", Text: "Heading", Visible: true},
-					win32Control{ClassName: "Edit", Text: "Detail", Visible: true},
+					win32Control{ClassName: "Edit", Text: "Detail", Style: win32EditStyleReadOnly, Visible: true},
 					win32Control{ClassName: "Button", Text: "OK", ID: 1, Visible: true}),
 			},
 			want: []statusDialog{{Title: "Native", Message: "Heading\nDetail", Buttons: []string{"OK"}}},
@@ -200,7 +200,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 			name: "class names compare without case",
 			windows: []win32Window{
 				win32ModalWindow("#32770", "Title",
-					win32Control{ClassName: "EDIT", Text: "Body", Visible: true},
+					win32Control{ClassName: "EDIT", Text: "Body", Style: win32EditStyleReadOnly, Visible: true},
 					win32Control{ClassName: "button", Text: "&OK", ID: 1, Visible: true}),
 			},
 			want: []statusDialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
@@ -282,6 +282,78 @@ func TestDialogsFromWin32WindowsListsButtonsOnlyForADialogBuiltLikeAMessageBox(t
 			want := []statusDialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{}}}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("dialogs = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+// Verifies a dialog built like a message box keeps its buttons, in the listing and for a press,
+// only while it holds no text box the user can type in: a read-only text box or no text box keeps
+// them, and a text box the user can type in, shown or hidden, leaves the dialog listed without
+// buttons and with no button to press.
+func TestWin32DialogWithAnEditableTextBoxHasNoButtonToPress(t *testing.T) {
+	const dialogHandle, okButtonHandle uintptr = 0x8000, 0x8001
+	icon := win32Control{ClassName: "Static", ID: 1040, Visible: true}
+	readOnlyText := win32Control{ClassName: "Edit", Text: "Body", ID: 1019, Style: win32EditStyleReadOnly, Visible: true}
+	ok := win32Control{ClassName: "Button", Text: "&OK", ID: 1, Visible: true, Handle: okButtonHandle}
+	cancel := win32Control{ClassName: "Button", Text: "&Cancel", ID: 2, Visible: true, Handle: 0x8002}
+	cases := []struct {
+		name        string
+		controls    []win32Control
+		wantMessage string
+		wantButtons []string
+		wantOK      bool
+	}{
+		{
+			name:        "read-only text box",
+			controls:    []win32Control{icon, readOnlyText, ok, cancel},
+			wantMessage: "Body",
+			wantButtons: []string{"OK", "Cancel"},
+			wantOK:      true,
+		},
+		{
+			name: "text box the user can type in",
+			controls: []win32Control{
+				icon, {ClassName: "Edit", Text: "Typed", ID: 1019, Visible: true}, ok, cancel,
+			},
+			wantMessage: "Typed",
+			wantButtons: []string{},
+		},
+		{
+			name: "read-only text box beside a hidden one the user can type in",
+			controls: []win32Control{
+				icon, readOnlyText, {ClassName: "Edit", Text: "Hidden", ID: 1020, Visible: false}, ok, cancel,
+			},
+			wantMessage: "Body",
+			wantButtons: []string{},
+		},
+		{
+			name:        "no text box",
+			controls:    []win32Control{icon, ok, cancel},
+			wantMessage: "",
+			wantButtons: []string{"OK", "Cancel"},
+			wantOK:      true,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			dialog := win32ModalWindow("#32770", "Probe title", testCase.controls...)
+			dialog.Handle = dialogHandle
+			windows := []win32Window{dialog, win32DisabledMainWindow}
+
+			listed := dialogsFromWin32Windows(windows)
+			target := win32PressTarget(windows, "OK")
+
+			wantDialog := statusDialog{Title: "Probe title", Message: testCase.wantMessage, Buttons: testCase.wantButtons}
+			if !reflect.DeepEqual(listed, []statusDialog{wantDialog}) {
+				t.Fatalf("dialogs = %#v, want %#v", listed, []statusDialog{wantDialog})
+			}
+			wantTarget := win32PressTargetResult{DialogFound: true, Dialog: wantDialog, DialogHandle: dialogHandle}
+			if testCase.wantOK {
+				wantTarget.ButtonFound, wantTarget.ButtonHandle, wantTarget.ButtonID = true, okButtonHandle, 1
+			}
+			if !reflect.DeepEqual(target, wantTarget) {
+				t.Fatalf("target = %#v, want %#v", target, wantTarget)
 			}
 		})
 	}
