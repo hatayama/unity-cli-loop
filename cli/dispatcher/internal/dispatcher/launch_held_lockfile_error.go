@@ -29,6 +29,7 @@ func (err heldUnityLockfileError) ToCLIError(context clierrors.ErrorContext) cli
 		ProjectRoot: context.ProjectRoot,
 		Command:     context.Command,
 		NextActions: []string{
+			"Before closing anything, save the output of `ps -axo pid,lstart,args | grep MacOS/Unity` (or your platform's process list): it shows which process the scan missed.",
 			"Check whether a Unity Editor already has this project open, including one started in batch mode or without -projectPath, and use or close it.",
 			"If no Unity process has the project open, find the process holding the lockfile (for example with `lsof` on the lockfile path), stop it, and retry the launch command.",
 		},

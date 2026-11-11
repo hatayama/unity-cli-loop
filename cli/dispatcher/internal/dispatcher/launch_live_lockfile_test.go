@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -17,6 +18,7 @@ func TestCleanStaleUnityTempKeepsLockfileHeldByRunningEditor(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	createStaleUnityLockfile(t, projectRoot)
 	deps := defaultLaunchDeps()
+	useFakeLaunchClock(&deps)
 	deps.isUnityLockfileHeld = func(string) (bool, error) {
 		return true, nil
 	}
@@ -37,11 +39,40 @@ func TestCleanStaleUnityTempKeepsLockfileHeldByRunningEditor(t *testing.T) {
 	}
 }
 
+func TestCleanStaleUnityTempWaitsForAnExitingEditorToReleaseTheLockfile(t *testing.T) {
+	// Verifies the cleanup waits out a lock that is released shortly after, as an Editor that just left
+	// the process list does, and then removes the lockfile.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	deps := defaultLaunchDeps()
+	useFakeLaunchClock(&deps)
+	probeCalls := 0
+	deps.isUnityLockfileHeld = func(string) (bool, error) {
+		probeCalls++
+		return probeCalls < 3, nil
+	}
+
+	result, err := cleanStaleUnityTemp(context.Background(), projectRoot, deps)
+	if err != nil {
+		t.Fatalf("cleanStaleUnityTemp failed: %v", err)
+	}
+	if !result.lockfileRemoved {
+		t.Fatal("expected the released lockfile to be removed")
+	}
+	if probeCalls != 3 {
+		t.Fatalf("probe count mismatch: %d", probeCalls)
+	}
+	if _, err := os.Stat(unityLockfilePath(projectRoot)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile still exists after cleanup: %v", err)
+	}
+}
+
 func TestCleanStaleUnityTempKeepsLockfileWhenTheHolderCannotBeDetermined(t *testing.T) {
 	// Verifies a failed lock probe stops the cleanup instead of being read as "nobody holds it".
 	projectRoot := createLaunchTestProject(t)
 	createStaleUnityLockfile(t, projectRoot)
 	deps := defaultLaunchDeps()
+	useFakeLaunchClock(&deps)
 	probeFailure := errors.New("probe failed")
 	deps.isUnityLockfileHeld = func(string) (bool, error) {
 		return false, probeFailure
@@ -68,6 +99,7 @@ func TestRunLaunchDoesNotStartUnityWhileLockfileIsHeld(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	createStaleUnityLockfile(t, projectRoot)
 	deps := defaultLaunchDeps()
+	useFakeLaunchClock(&deps)
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
@@ -120,5 +152,17 @@ func TestClassifyHeldUnityLockfileError(t *testing.T) {
 	}
 	if cliErr.Details["LockfilePath"] != "/tmp/MyProject/Temp/UnityLockfile" {
 		t.Fatalf("lockfile details mismatch: %#v", cliErr.Details)
+	}
+}
+
+// useFakeLaunchClock makes sleeping advance the clock instead of waiting, so a test can run a
+// retry budget out instantly.
+func useFakeLaunchClock(deps *launchDeps) {
+	current := time.Unix(0, 0)
+	deps.now = func() time.Time {
+		return current
+	}
+	deps.sleep = func(duration time.Duration) {
+		current = current.Add(duration)
 	}
 }
