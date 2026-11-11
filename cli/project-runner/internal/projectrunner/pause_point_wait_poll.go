@@ -305,6 +305,7 @@ func waitForPausePointStatus(
 			// Not safe to retry: the marker and any --trigger stay in effect in Unity.
 			blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
 			blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
+			blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
 			return state.lastResponse, "", state.triggerResult, state.hasBaseline, blocked
 		}
 

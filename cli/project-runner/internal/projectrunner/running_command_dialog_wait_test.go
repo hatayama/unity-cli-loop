@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -159,8 +158,11 @@ func TestPausePointWaitStopsWhenADialogHoldsUnity(t *testing.T) {
 	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, 0, false, true)
 
 	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName),
-		`After the dialog is closed, run uloop pause-point-status --id 'pause_point_dialog' to see whether the marker was hit; `+
-			`if it is still waiting, run uloop await-pause-point --id 'pause_point_dialog' again without --trigger.`, false)
+		`After the dialog is closed, run uloop pause-point-status --id pause_point_dialog to see whether the marker was hit; `+
+			`if it is still waiting, run uloop await-pause-point --id pause_point_dialog again without --trigger.`, false)
+	if cliError := clierrors.ClassifyError(err, clierrors.ErrorContext{}); cliError.Details[pausePointDialogIDDetailKey] != "pause_point_dialog" {
+		t.Fatalf("Details = %#v, want the marker id", cliError.Details)
+	}
 	if cliError := clierrors.ClassifyError(err, clierrors.ErrorContext{}); !strings.Contains(cliError.Message, "uloop "+clicore.PausePointAwaitCommandName+" stopped waiting") {
 		t.Fatalf("Message = %q, want it to name %s", cliError.Message, clicore.PausePointAwaitCommandName)
 	}
@@ -575,21 +577,19 @@ func TestSendReturnsTheErrorAnswerThatArrivedWhileTheWatchLooked(t *testing.T) {
 	}
 }
 
-// Verifies the marker id in the pause-point step cannot run a command when the step is pasted into
-// the shell of each operating system: it stays inside single quotes, a quote in it included.
-func TestPausePointDialogStepQuotesTheMarkerForTheShell(t *testing.T) {
-	id := "a$(touch x)`id`'b"
-	cases := map[string]string{
-		"darwin":  `'a$(touch x)` + "`id`" + `'\''b'`,
-		"linux":   `'a$(touch x)` + "`id`" + `'\''b'`,
-		"windows": `'a$(touch x)` + "`id`" + `''b'`,
+// Verifies the pause-point step names a plain marker id directly, and refers to Details for any id a
+// shell could read as syntax, so a pasted step cannot run a command in any shell.
+func TestPausePointDialogStepNamesOnlyAPlainMarkerID(t *testing.T) {
+	if step := pausePointDialogClosedNextAction("Assets/Scripts/Foo.cs:42"); !strings.Contains(step, "--id Assets/Scripts/Foo.cs:42 ") {
+		t.Fatalf("step = %q, want the plain id", step)
 	}
-	for goos, want := range cases {
-		if got := singleQuoteShellArgument(id, goos); got != want {
-			t.Errorf("%s: quoted = %s, want %s", goos, got, want)
+	for _, id := range []string{"a$(touch x)", "a`id`", "x'; Write-Output injected; #", "x\u2019; #", "with space", ""} {
+		step := pausePointDialogClosedNextAction(id)
+		if id != "" && strings.Contains(step, id) {
+			t.Errorf("step = %q, must not contain the id %q", step, id)
 		}
-	}
-	if step := pausePointDialogClosedNextAction(id); !strings.Contains(step, "--id "+singleQuoteShellArgument(id, runtime.GOOS)+" ") {
-		t.Fatalf("step = %q, want the id quoted for this system", step)
+		if !strings.Contains(step, "--id <Details.PausePointId> ") {
+			t.Errorf("step = %q, want the Details reference", step)
+		}
 	}
 }

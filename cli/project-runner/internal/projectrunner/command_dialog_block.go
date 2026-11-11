@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -26,6 +25,8 @@ const (
 		"to see the state it reached."
 	// The pause-point wait ends in uloop only; the marker stays armed in Unity, and a repeated --trigger
 	// would send the trigger again.
+	// pausePointDialogIDDetailKey holds the awaited marker's id in the pause-point wait's Details.
+	pausePointDialogIDDetailKey            = "PausePointId"
 	pausePointDialogClosedNextActionFormat = "After the dialog is closed, run uloop pause-point-status --id %[1]s to see " +
 		"whether the marker was hit; if it is still waiting, run uloop await-pause-point --id %[1]s again without --trigger."
 	startedCommandStoppedFormat = "uloop %s stopped waiting; the command had already started and continues in " +
@@ -90,20 +91,30 @@ func startedCommandBlockedByDialog(
 }
 
 // pausePointDialogClosedNextAction names the marker, because both commands need it to find it. Why
-// single quotes: the step is pasted into a shell, and inside them neither POSIX shells nor PowerShell
-// expand $( ) or backticks, so an id cannot run anything.
+// only a plain id goes into the step: the step is pasted into whatever shell the agent uses, and no
+// one quoting rule is safe in POSIX shells, PowerShell, and Git Bash alike; any other id is read from
+// Details instead.
 func pausePointDialogClosedNextAction(id string) string {
-	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, singleQuoteShellArgument(id, runtime.GOOS))
+	if !isShellSafeArgument(id) {
+		id = "<Details." + pausePointDialogIDDetailKey + ">"
+	}
+	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, id)
 }
 
-// singleQuoteShellArgument wraps value in single quotes for the shell an agent uses on goos. Why two
-// rules: PowerShell, the Windows shell, writes a quote inside single quotes as two quotes, while a
-// POSIX shell closes the quotes, adds an escaped quote, and opens them again.
-func singleQuoteShellArgument(value string, goos string) string {
-	if goos == "windows" {
-		return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+// isShellSafeArgument reports whether value is non-empty and made only of characters no common shell
+// treats specially.
+func isShellSafeArgument(value string) bool {
+	if value == "" {
+		return false
 	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+	for _, r := range value {
+		safe := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			strings.ContainsRune("_-.:/", r)
+		if !safe {
+			return false
+		}
+	}
+	return true
 }
 
 func heartbeatStoppedSentence(command string) string {
