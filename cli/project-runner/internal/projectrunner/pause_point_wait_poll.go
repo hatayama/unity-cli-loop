@@ -267,6 +267,7 @@ type pausePointWaitLoopState struct {
 	hasBaseline      bool
 	baselineDecided  bool
 	exitWatch        *clicore.UnityExitWatch
+	dialogWatch      *dialogBlockWatch
 }
 
 func waitForPausePointStatus(
@@ -287,6 +288,9 @@ func waitForPausePointStatus(
 		hasBaseline:      hasBaseline,
 		baselineDecided:  baselineDecided,
 		exitWatch:        newUnityExitWatch(connection),
+		// Why the longer interval: a pause point holds the main thread on purpose, so most looks
+		// while this wait's polls go unanswered find no dialog.
+		dialogWatch: newDialogBlockWatch(connection, options.dialogWatch, pausePointDialogWatchInterval, dialogWatchStallThresholdSeconds),
 	}
 	triggerDone := triggerHandle.doneChannel()
 	ticker := time.NewTicker(pausePointStatusPoll)
@@ -296,6 +300,11 @@ func waitForPausePointStatus(
 		waitState, done, pollErr := applyPausePointWaitPoll(waitContext, &state, response, err, options.markerJustEnabled)
 		if done {
 			return state.lastResponse, waitState, state.triggerResult, state.hasBaseline, pollErr
+		}
+		if dialogs := state.dialogWatch.observePoll(waitContext, err == nil); dialogs != nil {
+			// Not safe to retry: the marker and any --trigger stay in effect in Unity.
+			return state.lastResponse, "", state.triggerResult, state.hasBaseline,
+				startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
 		}
 
 		select {

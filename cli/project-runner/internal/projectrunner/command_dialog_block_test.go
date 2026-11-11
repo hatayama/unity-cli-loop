@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -52,13 +53,14 @@ type commandDialogProbe struct {
 	calls  int
 }
 
-func (probe *commandDialogProbe) deps(canPress bool) connectionRetryDeps {
-	return connectionRetryDeps{
+func (probe *commandDialogProbe) deps(canPress bool) dialogWatchDeps {
+	return dialogWatchDeps{
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
 			probe.calls++
 			return probe.report, probe.err
 		},
 		canPressDialogs: canPress,
+		now:             time.Now,
 	}
 }
 
@@ -72,7 +74,7 @@ func classifyCommandDialogError(err error) clierrors.CLIError {
 	return clierrors.ClassifyError(err, clierrors.ErrorContext{ProjectRoot: "<PROJECT_ROOT>", Command: commandDialogBlockCommand})
 }
 
-func explainCommandDialogBlock(err error, deps connectionRetryDeps) error {
+func explainCommandDialogBlock(err error, deps dialogWatchDeps) error {
 	return explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), commandDialogBlockCommand, err, deps)
 }
 
@@ -303,7 +305,7 @@ func TestBlockedByDialogErrorDoesNotReadAsADisconnect(t *testing.T) {
 		{name: "command not run", err: explainCommandDialogBlock(
 			commandDialogMainThreadBlockedRPCError(commandDialogBlockCommand),
 			(&commandDialogProbe{report: blockedByDialogStatusReport(dialog)}).deps(true))},
-		{name: "hot-reload wait", err: blockedByDialogError{command: hotReloadCommandName, dialogs: []statusDialog{dialog}, canPress: true}},
+		{name: "hot-reload wait", err: hotReloadWaitBlockedByDialog([]statusDialog{dialog}, true)},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

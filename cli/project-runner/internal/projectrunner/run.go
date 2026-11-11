@@ -332,6 +332,7 @@ func runFreshCompileAttempt(
 	}
 	if waitErr != nil {
 		spinner.Stop()
+		persistCompilePendingRecordWhenBlockedByDialog(connection.ProjectRoot, requestID, waitErr, stderr)
 		clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,

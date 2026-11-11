@@ -199,6 +199,7 @@ func waitForCompileCompletionWithDeps(
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
 	missing := compileRequestMissingTracker{serverRestartSeen: options.serverRestartSeen}
 	exitWatch := newCompileUnityExitWatch(options.connection, deps)
+	dialogWatch := newCompileDialogWatch(options.connection, deps)
 	startPendingFocus := newCompileStartPendingFocus(options, deps)
 	defer startPendingFocus.finish()
 
@@ -234,6 +235,9 @@ func waitForCompileCompletionWithDeps(
 		if exitErr := exitWatch.Observe(ctx, err); exitErr != nil {
 			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
+		}
+		if dialogs := dialogWatch.observePoll(ctx, err == nil); dialogs != nil {
+			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), compileBlockedByDialog(dialogs, deps)
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
 		startPendingFocus.observe(ctx, status, err)

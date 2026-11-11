@@ -35,6 +35,7 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 			spinner.Update("Connection lost during execute-dynamic-code. Waiting for domain reload to complete...")
 			if waitErr := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); waitErr != nil {
 				spinner.Stop()
+				waitErr = explainReadinessFailureByDialog(ctx, connection, waitErr, defaultDialogWatchDeps())
 				clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 					ProjectRoot: connection.ProjectRoot,
 					Command:     clicore.ExecuteDynamicCodeCommandName,
@@ -55,6 +56,7 @@ func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection u
 		spinner.Update("Waiting for domain reload to complete...")
 		if err := clicore.WaitForToolReadiness(ctx, connection.ProjectRoot); err != nil {
 			spinner.Stop()
+			err = explainReadinessFailureByDialog(ctx, connection, err, defaultDialogWatchDeps())
 			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 				ProjectRoot: connection.ProjectRoot,
 				Command:     clicore.ExecuteDynamicCodeCommandName,
@@ -123,4 +125,25 @@ func stripExecuteDynamicCodeControlResult(result []byte) []byte {
 		return result
 	}
 	return sanitized
+}
+
+// explainReadinessFailureByDialog turns a failed wait for the Editor to be ready again after
+// execute-dynamic-code into BLOCKED_BY_DIALOG when a dialog holds the main thread, and returns err
+// unchanged otherwise. Why one look at the end and not during the wait: the wait lives in the shared
+// CLI code, which this lookup must not reach into, and the guidance is what matters to the caller.
+func explainReadinessFailureByDialog(
+	ctx context.Context,
+	connection unityipc.Connection,
+	err error,
+	deps dialogWatchDeps,
+) error {
+	if err == nil {
+		return nil
+	}
+	dialogs := findBlockingDialogs(ctx, connection, deps)
+	if len(dialogs) == 0 {
+		return err
+	}
+	// Not safe to retry: the snippet already ran, and running it again repeats its effect.
+	return startedCommandBlockedByDialog(clicore.ExecuteDynamicCodeCommandName, dialogs, deps.canPressDialogs, false)
 }

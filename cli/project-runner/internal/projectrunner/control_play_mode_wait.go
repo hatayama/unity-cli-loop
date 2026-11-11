@@ -120,7 +120,7 @@ func runControlPlayModeWithStateWait(
 	}
 
 	spinner.Update("Waiting for play mode state...")
-	response, completed, waitErr := waitForControlPlayModeState(ctx, connection, action, timeout, newUnityExitWatch(connection))
+	response, completed, waitErr := waitForControlPlayModeState(ctx, connection, action, timeout, newUnityExitWatch(connection), defaultDialogWatchDeps())
 	spinner.Stop()
 	if waitErr != nil {
 		writeDebugTiming(stderr, controlPlayModeCommandName, time.Since(startedAt), outcome)
@@ -169,10 +169,12 @@ func waitForControlPlayModeState(
 	action string,
 	timeout time.Duration,
 	exitWatch *clicore.UnityExitWatch,
+	dialogs dialogWatchDeps,
 ) (controlPlayModeResponse, bool, error) {
 	waitContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	dialogWatch := newDialogBlockWatch(connection, dialogs, dialogWatchInterval, dialogWatchStallThresholdSeconds)
 	lastResponse := controlPlayModeResponse{}
 	var lastErr error
 	hasResponse := false
@@ -184,6 +186,10 @@ func waitForControlPlayModeState(
 		// found no Editor.
 		if exitErr := exitWatch.Observe(waitContext, err); exitErr != nil {
 			return lastResponse, false, exitErr
+		}
+		if found := dialogWatch.observePoll(waitContext, err == nil); found != nil {
+			// Safe to retry: a repeated action reports the state the Editor reached.
+			return lastResponse, false, startedCommandBlockedByDialog(controlPlayModeCommandName, found, dialogs.canPressDialogs, true)
 		}
 		if err == nil {
 			lastResponse = response

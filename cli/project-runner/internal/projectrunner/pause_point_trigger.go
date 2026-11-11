@@ -390,7 +390,10 @@ func runPausePointTriggerSync(
 ) *pausePointTriggerResult {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := dispatchPausePointTriggerCommand(ctx, connection, triggerCommand, triggerArgs, startPath, &stdout, &stderr)
+	// Why the pause-point interval: the trigger runs while the pause point may hold the main thread on
+	// purpose, so its send's look for a dialog would find none most of the time.
+	triggerContext := withHeartbeatDialogInterval(ctx, pausePointDialogWatchInterval)
+	exitCode := dispatchPausePointTriggerCommand(triggerContext, connection, triggerCommand, triggerArgs, startPath, &stdout, &stderr)
 
 	result := &pausePointTriggerResult{Command: commandString, Completed: true}
 

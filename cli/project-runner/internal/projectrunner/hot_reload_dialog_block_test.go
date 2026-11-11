@@ -109,7 +109,7 @@ func assertSettleWaitStoppedOnDialog(t *testing.T, run editorReadyRetryRun) {
 // BLOCKED_BY_DIALOG with the press guidance, and never sends the second apply.
 func TestRunHotReloadStopsTheSettleWaitWhenTheEditorReportsADialog(t *testing.T) {
 	options := fastEditorReadyWaitOptions()
-	options.canPressDialogs = true
+	options.dialogWatch.canPressDialogs = true
 	useFastEditorReadyWait(t, options)
 	run := runScriptedHotReload(t, context.Background(), t.TempDir(), map[string]any{},
 		[]scriptedIPCStep{
@@ -126,7 +126,7 @@ func TestRunHotReloadStopsTheSettleWaitWhenTheEditorReportsADialog(t *testing.T)
 // Verifies the settle wait also stops when the dialog appears only after a few compiling answers.
 func TestRunHotReloadStopsTheSettleWaitWhenADialogOpensWhileCompiling(t *testing.T) {
 	options := fastEditorReadyWaitOptions()
-	options.canPressDialogs = true
+	options.dialogWatch.canPressDialogs = true
 	useFastEditorReadyWait(t, options)
 	run := runScriptedHotReload(t, context.Background(), t.TempDir(), map[string]any{},
 		[]scriptedIPCStep{
@@ -146,7 +146,7 @@ func TestRunHotReloadStopsTheSettleWaitWhenADialogOpensWhileCompiling(t *testing
 // there is no button to press.
 func TestRunHotReloadStopsTheSettleWaitWithAskTheUserGuidanceForADialogWithoutButtons(t *testing.T) {
 	options := fastEditorReadyWaitOptions()
-	options.canPressDialogs = true
+	options.dialogWatch.canPressDialogs = true
 	useFastEditorReadyWait(t, options)
 	run := runScriptedHotReload(t, context.Background(), t.TempDir(), map[string]any{},
 		[]scriptedIPCStep{
@@ -165,7 +165,7 @@ func TestRunHotReloadStopsTheSettleWaitWithAskTheUserGuidanceForADialogWithoutBu
 // stderr carries BLOCKED_BY_DIALOG, and the request is not sent again.
 func TestRunHotReloadStopsTheBusyWaitWhenTheEditorReportsADialog(t *testing.T) {
 	options := fastEditorReadyWaitOptions()
-	options.canPressDialogs = true
+	options.dialogWatch.canPressDialogs = true
 	useFastEditorReadyWait(t, options)
 	run := runScriptedHotReload(t, context.Background(), t.TempDir(), busyWaitParams(),
 		[]scriptedIPCStep{
@@ -183,7 +183,7 @@ func TestRunHotReloadStopsTheBusyWaitWhenTheEditorReportsADialog(t *testing.T) {
 // Verifies the error asks the user to answer the dialog where uloop cannot press a button, even
 // when the dialog has buttons.
 func TestHotReloadBlockedByDialogErrorAsksTheUserWhereUloopCannotPress(t *testing.T) {
-	cliError := blockedByDialogError{command: hotReloadCommandName, dialogs: hotReloadMessageBoxDialogs(), canPress: false}.
+	cliError := hotReloadWaitBlockedByDialog(hotReloadMessageBoxDialogs(), false).
 		ToCLIError(clierrors.ErrorContext{Command: hotReloadCommandName})
 
 	assertAskTheUserGuidance(t, cliError.NextActions)
