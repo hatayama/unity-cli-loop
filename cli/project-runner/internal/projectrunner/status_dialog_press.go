@@ -8,10 +8,11 @@ import (
 	"strconv"
 )
 
-var errDialogPressUnsupported = errors.New("pressing a dialog button is supported only on macOS")
+var errDialogPressUnsupported = errors.New("pressing a dialog button is supported only on macOS and Windows")
 
-// dialogPressNotStartedError is a press that failed before osascript started, so no click can
-// have happened and pressing again is safe.
+// dialogPressNotStartedError is a press that failed before anything reached the dialog: before
+// osascript started on macOS, before the click was sent on Windows. No click can have happened,
+// so pressing again is safe.
 type dialogPressNotStartedError struct {
 	err error
 }
@@ -40,7 +41,7 @@ const accessibilityPressScript = `function run(argv){const pid=parseInt(argv[0],
 
 // canPress reports whether press works on this operating system.
 func (inspector dialogInspector) canPress() bool {
-	return inspector.goos == "darwin"
+	return inspector.goos == "darwin" || inspector.goos == "windows"
 }
 
 // press presses the button labeled exactly label in the frontmost modal dialog of this project's
@@ -52,6 +53,9 @@ func (inspector dialogInspector) press(ctx context.Context, projectRoot string, 
 	pid, err := inspector.unityPid(ctx, projectRoot)
 	if err != nil {
 		return dialogPressResult{}, dialogPressNotStartedError{err: err}
+	}
+	if inspector.goos == "windows" {
+		return inspector.pressWin32Button(ctx, pid, label)
 	}
 	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()

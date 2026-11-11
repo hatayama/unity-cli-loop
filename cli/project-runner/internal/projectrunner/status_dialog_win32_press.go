@@ -1,5 +1,42 @@
 package projectrunner
 
+import (
+	"context"
+	"fmt"
+)
+
+// pressWin32Button presses the button labeled exactly label in the frontmost modal window of the
+// Unity process on Windows, and returns that dialog as it was read before the press.
+// Why a failed listing is a press that did not start: nothing has been sent to the dialog yet.
+// Why a failed press is not: the click may have reached the dialog even when its answer did not
+// come back, so pressing the same label again could press a button of the dialog that opened next.
+func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, label string) (dialogPressResult, error) {
+	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
+	defer cancel()
+	windows, err := inspector.listWindows(pressCtx, pid)
+	// Why before err: a stopped listing returns the context's error, which hides why it stopped.
+	if stopErr := inspector.stoppedLookError(ctx, pressCtx, "reading Unity's windows did not finish"); stopErr != nil {
+		return dialogPressResult{}, dialogPressNotStartedError{err: stopErr}
+	}
+	if err != nil {
+		return dialogPressResult{}, dialogPressNotStartedError{err: fmt.Errorf("could not read Unity's windows: %w", err)}
+	}
+
+	target := win32PressTarget(windows, label)
+	result := dialogPressResult{DialogFound: target.DialogFound, Dialog: target.Dialog}
+	if !target.ButtonFound {
+		return result, nil
+	}
+	if err := inspector.pressWindowButton(pressCtx, target); err != nil {
+		if stopErr := inspector.stoppedLookError(ctx, pressCtx, "the dialog did not answer the press"); stopErr != nil {
+			return dialogPressResult{}, stopErr
+		}
+		return dialogPressResult{}, fmt.Errorf("could not press the button: %w", err)
+	}
+	result.Pressed = true
+	return result, nil
+}
+
 // win32PressTargetResult is what choosing the button to press found in the Unity process's
 // windows. DialogFound is false when no modal window is open; ButtonFound is false when the
 // frontmost one has no button with the label. Dialog is the frontmost dialog as the listing shows

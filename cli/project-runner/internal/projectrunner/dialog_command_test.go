@@ -222,8 +222,8 @@ func TestRunDialogCommandReportsFailedLook(t *testing.T) {
 	}
 }
 
-// Verifies listing does not depend on pressing: where uloop can look but not press, as on
-// Windows, the open dialogs are still printed.
+// Verifies listing does not depend on pressing: where uloop can look but not press, the open
+// dialogs are still printed.
 func TestRunDialogCommandListsWhereUloopCannotPress(t *testing.T) {
 	fake := &fakeDialogCommand{
 		canPress: false,
@@ -321,13 +321,18 @@ func TestRunDialogCommandCannotAnswerADialogWithoutButtons(t *testing.T) {
 	}
 }
 
-// Verifies --answer where uloop cannot press buttons fails before looking or pressing.
+// Verifies --answer where uloop cannot press buttons fails before looking or pressing, and names
+// the operating systems where it can.
 func TestRunDialogCommandCannotPressOnThisSystem(t *testing.T) {
 	fake := pressedFake()
 	fake.canPress = false
 
-	assertDialogFailure(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
+	got := decodeDialogError(t, runDialogForTest(context.Background(), []string{"--answer", "Later"}, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
+
+	if got.Message != "uloop can press a dialog button only on macOS and Windows." {
+		t.Fatalf("Message = %q, want it to name macOS and Windows", got.Message)
+	}
 
 	if fake.pressCalls != 0 || fake.lookCalls != 0 {
 		t.Fatalf("press and look must not run: press=%d look=%d", fake.pressCalls, fake.lookCalls)

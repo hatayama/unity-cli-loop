@@ -99,21 +99,23 @@ func TestDialogPressRunsTheScriptWithThePidAndLabel(t *testing.T) {
 	}
 }
 
-// Verifies pressing is macOS-only: elsewhere press fails without a process lookup or a command.
-func TestDialogPressIsMacOSOnly(t *testing.T) {
-	for _, goos := range []string{"windows", "linux"} {
-		t.Run(goos, func(t *testing.T) {
-			inspector := dialogInspectorForTest(t, goos, failingProcessLookup(t), failingCommand(t))
-
-			if inspector.canPress() {
-				t.Fatal("canPress must be false")
-			}
-			_, err := inspector.press(context.Background(), "/project", "Later")
-			assertPressNotStarted(t, err, true)
-		})
+// Verifies pressing is supported on macOS and Windows only: elsewhere press fails without a
+// process lookup, a command, a window listing, or a press, and names the two systems.
+func TestDialogPressIsSupportedOnMacOSAndWindowsOnly(t *testing.T) {
+	for _, goos := range []string{"darwin", "windows"} {
+		if !dialogInspectorForTest(t, goos, failingProcessLookup(t), failingCommand(t)).canPress() {
+			t.Fatalf("canPress must be true on %s", goos)
+		}
 	}
-	if !dialogInspectorForTest(t, "darwin", failingProcessLookup(t), failingCommand(t)).canPress() {
-		t.Fatal("canPress must be true on macOS")
+
+	inspector := dialogInspectorForTest(t, "linux", failingProcessLookup(t), failingCommand(t))
+	if inspector.canPress() {
+		t.Fatal("canPress must be false on linux")
+	}
+	_, err := inspector.press(context.Background(), "/project", "Later")
+	assertPressNotStarted(t, err, true)
+	if !strings.Contains(err.Error(), "only on macOS and Windows") {
+		t.Fatalf("error = %v, want it to name macOS and Windows", err)
 	}
 }
 
@@ -206,4 +208,187 @@ func TestDialogInspectorAnswerFailedHintNamesTheAccessibilitySetting(t *testing.
 	if windows := (dialogInspector{goos: "windows"}).answerFailedHint(); windows != "" {
 		t.Fatalf("Windows hint = %q, want none", windows)
 	}
+}
+
+// win32PressInspectorForTest is the inspector as it presses on Windows: it lists windows, hands
+// the chosen button to press, and must not start a command.
+func win32PressInspectorForTest(
+	t *testing.T,
+	listWindows func(context.Context, int) ([]win32Window, error),
+	press func(context.Context, win32PressTargetResult) error,
+) dialogInspector {
+	t.Helper()
+	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
+	inspector.pressWindowButton = press
+	return inspector
+}
+
+func listingWin32Windows(windows []win32Window) func(context.Context, int) ([]win32Window, error) {
+	return func(context.Context, int) ([]win32Window, error) {
+		return windows, nil
+	}
+}
+
+// Verifies that on Windows press lists the windows of the Unity process ID, hands the button
+// chosen for the label to the press exactly once, and returns the dialog read before the press.
+func TestDialogPressOnWindowsPressesTheLabeledButton(t *testing.T) {
+	windows := win32ProbeDialogWindows()
+	var listedPID int
+	listWindows := func(_ context.Context, pid int) ([]win32Window, error) {
+		listedPID = pid
+		return windows, nil
+	}
+	var pressed []win32PressTargetResult
+	press := func(_ context.Context, target win32PressTargetResult) error {
+		pressed = append(pressed, target)
+		return nil
+	}
+	inspector := win32PressInspectorForTest(t, listWindows, press)
+
+	got, err := inspector.press(context.Background(), "/project", "Later")
+
+	assertPressResult(t, got, err, dialogPressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
+	if listedPID != 4242 {
+		t.Fatalf("listed process ID = %d, want 4242", listedPID)
+	}
+	want := []win32PressTargetResult{win32PressTarget(windows, "Later")}
+	if !reflect.DeepEqual(pressed, want) || pressed[0].ButtonHandle != win32ProbeLaterButtonHandle {
+		t.Fatalf("pressed = %#v, want one press of the Later button %#v", pressed, want)
+	}
+}
+
+// Verifies that on Windows nothing is pressed without a button to press: a label the dialog
+// lacks, no dialog at all, and a dialog that has no button each return what was read.
+func TestDialogPressOnWindowsPressesNothingWithoutAMatch(t *testing.T) {
+	modal := win32ModalWindow("UnityContainerWndClass", "Probe modal",
+		win32Control{ClassName: "UnityGUIViewWndClass", Text: "UnityEditor.EditorWindow", Visible: true})
+	cases := []struct {
+		name    string
+		windows []win32Window
+		label   string
+		want    dialogPressResult
+	}{
+		{
+			name:    "label the dialog lacks",
+			windows: win32ProbeDialogWindows(),
+			label:   "later",
+			want:    dialogPressResult{DialogFound: true, Pressed: false, Dialog: accessibilityPressProbeDialog},
+		},
+		{
+			name:    "no dialog",
+			windows: []win32Window{win32EnabledMainWindow, win32InputMethodWindow},
+			label:   "Later",
+			want:    dialogPressResult{DialogFound: false},
+		},
+		{
+			name:    "dialog without buttons",
+			windows: []win32Window{modal, win32DisabledMainWindow},
+			label:   "OK",
+			want: dialogPressResult{
+				DialogFound: true,
+				Pressed:     false,
+				Dialog:      statusDialog{Title: "Probe modal", Message: "", Buttons: []string{}},
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			inspector := win32PressInspectorForTest(t, listingWin32Windows(testCase.windows), failingWindowButtonPress(t))
+
+			got, err := inspector.press(context.Background(), "/project", testCase.label)
+
+			assertPressResult(t, got, err, testCase.want)
+		})
+	}
+}
+
+// Verifies that on Windows a failure before the press starts says so and presses nothing: the
+// Unity process is not found, or its windows cannot be listed, in time or at all.
+func TestDialogPressOnWindowsFailsBeforeThePressStarts(t *testing.T) {
+	t.Run("process lookup fails", func(t *testing.T) {
+		lookup := func(context.Context, string) (*unityprocess.UnityProcess, error) {
+			return nil, errors.New("process list refused")
+		}
+		inspector := win32DialogInspectorForTest(t, lookup, failingWindowList(t))
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, true)
+	})
+	t.Run("window listing fails", func(t *testing.T) {
+		listWindows := func(context.Context, int) ([]win32Window, error) {
+			return nil, errors.New("EnumWindows failed: access is denied")
+		}
+		inspector := win32PressInspectorForTest(t, listWindows, failingWindowButtonPress(t))
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, true)
+		if !strings.Contains(err.Error(), "EnumWindows failed: access is denied") {
+			t.Fatalf("error = %v, want the listing failure", err)
+		}
+	})
+	t.Run("window listing times out", func(t *testing.T) {
+		listWindows := func(ctx context.Context, _ int) ([]win32Window, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		inspector := win32PressInspectorForTest(t, listWindows, failingWindowButtonPress(t))
+		inspector.timeout = 50 * time.Millisecond
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, true)
+		if !strings.Contains(err.Error(), "reading Unity's windows did not finish within 50ms") {
+			t.Fatalf("error = %v, want a timeout error", err)
+		}
+	})
+}
+
+// Verifies that on Windows a press that fails, runs out of time, or is cancelled is an error that
+// does not claim the press never started, because the click may have reached the dialog.
+func TestDialogPressOnWindowsReportsAFailedPress(t *testing.T) {
+	t.Run("fails", func(t *testing.T) {
+		press := func(context.Context, win32PressTargetResult) error {
+			return errors.New("the dialog closed before the button was pressed")
+		}
+		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, false)
+		if !strings.Contains(err.Error(), "the dialog closed before the button was pressed") {
+			t.Fatalf("error = %v, want the press failure", err)
+		}
+	})
+	t.Run("times out", func(t *testing.T) {
+		press := func(ctx context.Context, _ win32PressTargetResult) error {
+			<-ctx.Done()
+			return errors.New("the dialog did not answer")
+		}
+		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
+		inspector.timeout = 50 * time.Millisecond
+
+		_, err := inspector.press(context.Background(), "/project", "Later")
+
+		assertPressNotStarted(t, err, false)
+		if !strings.Contains(err.Error(), "the dialog did not answer the press within 50ms") {
+			t.Fatalf("error = %v, want a timeout error", err)
+		}
+	})
+	t.Run("cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		press := func(context.Context, win32PressTargetResult) error {
+			cancel()
+			return errors.New("the dialog did not answer")
+		}
+		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
+
+		_, err := inspector.press(ctx, "/project", "Later")
+
+		assertPressNotStarted(t, err, false)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want a cancellation", err)
+		}
+	})
 }

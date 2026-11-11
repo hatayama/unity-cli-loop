@@ -23,9 +23,9 @@ const (
 	// The longest a window class name can be, plus the terminating zero.
 	win32ClassNameCapacity = 257
 
-	// How long one control may take to answer with its text. A modal dialog runs a message loop,
-	// so it answers at once; the limit only bounds a window whose thread has stopped.
-	win32ControlTextTimeout = time.Second
+	// How long a window may take to answer one message. A modal dialog runs a message loop, so it
+	// answers at once; the limit only bounds a window whose thread has stopped.
+	win32MessageAnswerTimeout = time.Second
 )
 
 // win32WindowAPI wraps the user32.dll procs that golang.org/x/sys/windows does not expose.
@@ -36,6 +36,7 @@ type win32WindowAPI struct {
 	getWindowTextLength  *windows.LazyProc
 	getDialogControlID   *windows.LazyProc
 	isWindowEnabled      *windows.LazyProc
+	isWindowProc         *windows.LazyProc
 	sendMessageTimeout   *windows.LazyProc
 	collectWindowHandles uintptr
 }
@@ -76,6 +77,7 @@ func newWin32WindowAPI() win32WindowAPI {
 		getWindowTextLength:  dll.NewProc("GetWindowTextLengthW"),
 		getDialogControlID:   dll.NewProc("GetDlgCtrlID"),
 		isWindowEnabled:      dll.NewProc("IsWindowEnabled"),
+		isWindowProc:         dll.NewProc("IsWindow"),
 		sendMessageTimeout:   dll.NewProc("SendMessageTimeoutW"),
 		collectWindowHandles: win32CollectCallback,
 	}
@@ -218,11 +220,8 @@ func (api win32WindowAPI) sendMessage(
 	wparam uintptr,
 	lparam unsafe.Pointer,
 ) (uintptr, bool) {
-	timeout := win32ControlTextTimeout
-	if deadline, hasDeadline := ctx.Deadline(); hasDeadline && time.Until(deadline) < timeout {
-		timeout = time.Until(deadline)
-	}
-	if ctx.Err() != nil || timeout < time.Millisecond {
+	timeout, hasTime := win32SendTimeout(ctx)
+	if !hasTime {
 		return 0, false
 	}
 	var result uintptr
@@ -236,6 +235,20 @@ func (api win32WindowAPI) sendMessage(
 		uintptr(unsafe.Pointer(&result)),
 	)
 	return result, sent != 0
+}
+
+// win32SendTimeout returns how long one message may wait for its answer: the usual limit, or what
+// ctx has left when that is less. The second result is false when ctx has ended or has less than
+// a millisecond left, which is the shortest wait Windows can be given.
+func win32SendTimeout(ctx context.Context) (time.Duration, bool) {
+	timeout := win32MessageAnswerTimeout
+	if deadline, hasDeadline := ctx.Deadline(); hasDeadline && time.Until(deadline) < timeout {
+		timeout = time.Until(deadline)
+	}
+	if ctx.Err() != nil || timeout < time.Millisecond {
+		return 0, false
+	}
+	return timeout, true
 }
 
 func (api win32WindowAPI) owner(handle windows.HWND) windows.HWND {
