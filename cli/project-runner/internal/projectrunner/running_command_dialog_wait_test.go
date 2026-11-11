@@ -158,8 +158,8 @@ func TestPausePointWaitStopsWhenADialogHoldsUnity(t *testing.T) {
 	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, 0, false, true)
 
 	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName),
-		`After the dialog is closed, run uloop pause-point-status --id "pause_point_dialog" to see whether the marker was hit; `+
-			`if it is still waiting, run uloop await-pause-point --id "pause_point_dialog" again without --trigger.`, false)
+		`After the dialog is closed, run uloop pause-point-status --id 'pause_point_dialog' to see whether the marker was hit; `+
+			`if it is still waiting, run uloop await-pause-point --id 'pause_point_dialog' again without --trigger.`, false)
 	if cliError := clierrors.ClassifyError(err, clierrors.ErrorContext{}); !strings.Contains(cliError.Message, "uloop "+clicore.PausePointAwaitCommandName+" stopped waiting") {
 		t.Fatalf("Message = %q, want it to name %s", cliError.Message, clicore.PausePointAwaitCommandName)
 	}
@@ -571,5 +571,15 @@ func TestSendReturnsTheErrorAnswerThatArrivedWhileTheWatchLooked(t *testing.T) {
 	}
 	if look.calls != 1 {
 		t.Fatalf("looked %d times, want 1", look.calls)
+	}
+}
+
+// Verifies the marker id in the pause-point step cannot run a command when the step is pasted into a
+// shell: it stays inside single quotes, a quote in it included.
+func TestPausePointDialogStepQuotesTheMarkerForTheShell(t *testing.T) {
+	step := pausePointDialogClosedNextAction("a$(touch x)`id`'b")
+
+	if !strings.Contains(step, `--id 'a$(touch x)`+"`id`"+`'\''b' `) {
+		t.Fatalf("step = %q, want the id in single quotes", step)
 	}
 }

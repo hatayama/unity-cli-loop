@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
+	"strings"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -88,9 +88,17 @@ func startedCommandBlockedByDialog(
 	}
 }
 
-// pausePointDialogClosedNextAction names the marker, because both commands need it to find it.
+// pausePointDialogClosedNextAction names the marker, because both commands need it to find it. Why
+// single quotes: the step is pasted into a shell, and inside them neither POSIX shells nor PowerShell
+// expand $( ) or backticks, so an id cannot run anything.
 func pausePointDialogClosedNextAction(id string) string {
-	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, strconv.Quote(id))
+	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, singleQuoteShellArgument(id))
+}
+
+// singleQuoteShellArgument wraps value in single quotes for a POSIX shell; a single quote inside it
+// closes the quotes, adds an escaped quote, and opens them again.
+func singleQuoteShellArgument(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 func heartbeatStoppedSentence(command string) string {
