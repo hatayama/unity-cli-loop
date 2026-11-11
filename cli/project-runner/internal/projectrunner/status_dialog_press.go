@@ -79,7 +79,7 @@ func (inspector dialogInspector) answerFailedHint() string {
 	if inspector.goos != "darwin" {
 		return ""
 	}
-	return "On macOS, pressing a button needs " + dialogAccessibilitySetting + "."
+	return "On macOS, pressing a button needs " + dialogMacPermissions + "."
 }
 
 // pressResultFromAccessibilityOutput turns the press script's JSON into a result.

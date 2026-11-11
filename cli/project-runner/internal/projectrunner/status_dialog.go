@@ -219,24 +219,25 @@ func stringsExcept(values []string, excluded string) []string {
 	return result
 }
 
-// dialogAccessibilitySetting names the macOS permission that both looking at and pressing in
-// another process's windows need.
-const dialogAccessibilitySetting = "Accessibility access for the app that runs uloop " +
-	"(System Settings > Privacy & Security > Accessibility)"
+// dialogMacPermissions names the macOS permissions that both looking at and pressing in another
+// process's windows need: Accessibility to read the windows, and Automation to ask System Events,
+// which runs the script that reads them.
+const dialogMacPermissions = "Accessibility and Automation (System Events) access for the app that runs uloop " +
+	"(System Settings > Privacy & Security)"
 
 const dialogCheckFailedNextAction = "uloop could not look in Unity's windows for a modal dialog, so one may be " +
 	"open without being reported. If this state does not clear, ask the user to look at Unity"
 
 // checkFailedNextAction is the hint status adds when the look fails.
-// Why only macOS explains a permission: reading another process's windows needs Accessibility
-// access there and nothing on Windows, where a failed look has no setting behind it.
+// Why only macOS explains a permission: reading another process's windows needs permissions
+// there and nothing on Windows, where a failed look has no setting behind it.
 // Why it does not tell the reader to grant access outright: the look fails on every stalled
 // status in a sandbox or without the permission, usually while no dialog is open.
 func (inspector dialogInspector) checkFailedNextAction() string {
 	if inspector.goos != "darwin" {
 		return dialogCheckFailedNextAction + "."
 	}
-	return dialogCheckFailedNextAction + "; on macOS, " + dialogAccessibilitySetting + " lets uloop report the dialog itself."
+	return dialogCheckFailedNextAction + "; on macOS, " + dialogMacPermissions + " lets uloop report the dialog itself."
 }
 
 // needsDialogInspection reports whether the answer leaves room for a dialog uloop must look for
