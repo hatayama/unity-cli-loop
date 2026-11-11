@@ -290,3 +290,33 @@ func TestRunToolReportsBlockedByDialogOnEveryPath(t *testing.T) {
 		})
 	}
 }
+
+// Verifies a dialog whose title contains words the transport checks look for in error text (such as
+// "EOF") does not make the dialog error read as a lost connection, which would hide the dialog and
+// send compile and the other waiting paths into their disconnect waits.
+func TestBlockedByDialogErrorDoesNotReadAsADisconnect(t *testing.T) {
+	dialog := statusDialog{Title: "Unexpected EOF while reading the scene", Buttons: []string{"OK"}}
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "command not run", err: explainCommandDialogBlock(
+			commandDialogMainThreadBlockedRPCError(commandDialogBlockCommand),
+			(&commandDialogProbe{report: blockedByDialogStatusReport(dialog)}).deps(true))},
+		{name: "hot-reload wait", err: blockedByDialogError{command: hotReloadCommandName, dialogs: []statusDialog{dialog}, canPress: true}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if clierrors.IsTransportDisconnectError(testCase.err) {
+				t.Fatalf("the dialog error reads as a disconnect: %q", testCase.err.Error())
+			}
+			var stderr bytes.Buffer
+			clierrors.WriteToolFailure(&stderr, testCase.err, unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+				clierrors.ErrorContext{ProjectRoot: "<PROJECT_ROOT>", Command: commandDialogBlockCommand})
+			cliError := hotReloadErrorEnvelope(t, stderr.String()).Error
+			if cliError.ErrorCode != clierrors.ErrorCodeBlockedByDialog || !strings.Contains(cliError.Message, dialog.Title) {
+				t.Fatalf("ErrorCode = %q, Message = %q, want BLOCKED_BY_DIALOG naming the dialog", cliError.ErrorCode, cliError.Message)
+			}
+		})
+	}
+}

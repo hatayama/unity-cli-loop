@@ -23,7 +23,17 @@ type blockedByDialogError struct {
 	notRun error
 }
 
+// Error leaves out the dialog's text on purpose: the transport checks read words such as "EOF" in
+// error text, so a dialog title would make this error read as a lost connection, hide the dialog, and
+// send the waiting paths into their disconnect waits. The dialog's text goes into the envelope only.
 func (err blockedByDialogError) Error() string {
+	if err.notRun != nil {
+		return err.notRun.Error()
+	}
+	return fmt.Sprintf("a modal dialog is open in Unity; uloop %s stopped waiting, and nothing was applied", err.command)
+}
+
+func (err blockedByDialogError) message() string {
 	if err.notRun != nil {
 		return fmt.Sprintf("'%s' was not run: %s", err.command, blockedByDialogMessage(err.dialogs))
 	}
@@ -53,7 +63,7 @@ func (err blockedByDialogError) ToCLIError(context clierrors.ErrorContext) clier
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeBlockedByDialog,
 		Phase:       phase,
-		Message:     err.Error(),
+		Message:     err.message(),
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: context.ProjectRoot,
