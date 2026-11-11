@@ -107,6 +107,9 @@ https://github.com/user-attachments/assets/118c8b4a-8254-4798-a63c-f6a213fc1031
 > [!NOTE]
 > **V2 からアップグレードする場合**: V2 API で作ったカスタムツールがあるプロジェクトでは、V3 パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity 起動時の Safe Mode の問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity CLI Loop > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルの V3 移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
 
+> [!NOTE]
+> **macOS の許可の確認**: Unity が応答しないとき、`uloop status` は Unity のウィンドウを見て、Unity を止めているダイアログを探します。`uloop get-dialogs` / `uloop press-dialog-button` は、そのダイアログを読んでボタンを押します。初回は、uloop を実行するアプリ（ターミナルや LLM ツール）に System Events の制御とアクセシビリティを許可するか、macOS が確認します。「システム設定 > プライバシーとセキュリティ」の「オートメーション」と「アクセシビリティ」で両方を許可してください。許可しなくても uloop は動きますが、ダイアログの報告と押下はできず、確認に答えるまで `uloop status` が 5 秒ほど長くかかることがあります。
+
 ## ターミナルから入れる場合
 
 ### ステップ 1：CLI をインストールする
