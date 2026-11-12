@@ -234,7 +234,7 @@ func TestRunLaunchHandsTheReadinessWaitADialogLook(t *testing.T) {
 
 			result := run(t, projectRoot, deps)
 
-			assertLaunchBlockedByDialog(t, result, 1)
+			_ = assertLaunchBlockedByDialog(t, result, 1)
 			if lookedAt != projectRoot || definitiveLookups != 1 {
 				t.Fatalf("look at %q with %d definitive lookups, want %q and 1", lookedAt, definitiveLookups, projectRoot)
 			}
