@@ -140,6 +140,7 @@ func waitForV2ServerReady(
 	projectRoot string,
 	previousServerSessionID string,
 	dial func(port int) error,
+	lookout *clicore.DialogLookout,
 	poll time.Duration,
 	timeout time.Duration,
 ) error {
@@ -154,6 +155,11 @@ func waitForV2ServerReady(
 	for {
 		if isV2ServerReadyNow(projectRoot, previousServerSessionID, dial) {
 			return nil
+		}
+		if lookout != nil {
+			if err := lookout.Look(timeoutContext, nil); err != nil {
+				return err
+			}
 		}
 
 		select {
@@ -215,7 +221,9 @@ func waitForExistingV2LaunchReadiness(ctx context.Context, projectRoot string, p
 	spinner := ui.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := deps.waitForV2ServerReady(ctx, projectRoot, "", launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
+	lookout := v2LaunchDialogLookout(projectRoot, pid, deps)
+	if err := deps.waitForV2ServerReady(ctx, projectRoot, "", lookout, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
+		err = asLaunchDialogError(err, projectRoot, false)
 		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1

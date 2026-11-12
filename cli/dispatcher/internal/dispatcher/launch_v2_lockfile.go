@@ -100,7 +100,9 @@ func waitForV2ProjectOpened(
 	// readiness probe.
 	logLaunchV2FocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := deps.waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
+	lookout := v2LaunchDialogLookout(projectRoot, currentPid, deps)
+	if err := deps.waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, lookout, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
+		err = asLaunchDialogError(err, projectRoot, false)
 		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1

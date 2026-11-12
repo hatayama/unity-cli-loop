@@ -1,0 +1,94 @@
+package dispatcher
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/hatayama/unity-cli-loop/common/clicore"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
+)
+
+const launchDialogClosedNextAction = "After the dialog is closed, run uloop launch again to wait for the Editor."
+
+// launchDialogFinder is the dialog look a launch hands its readiness wait: it reads the windows of the
+// Editor lookupProcess finds in projectRoot. A look that cannot find the Editor, or runs where uloop
+// cannot read windows, fails, and the wait goes on as without it.
+func launchDialogFinder(projectRoot string, lookupProcess unitydialog.ProcessLookup, deps launchDeps) clicore.DialogFinder {
+	return func(ctx context.Context) ([]unitydialog.Dialog, error) {
+		return deps.lookForDialogs(ctx, projectRoot, lookupProcess)
+	}
+}
+
+// v3LaunchDialogFinder looks up the Editor by the project each time it looks.
+// Why the definitive lookup: an Editor whose command line does not name its project may still be
+// this project's, and the look would miss its dialog.
+func v3LaunchDialogFinder(projectRoot string, deps launchDeps) clicore.DialogFinder {
+	return launchDialogFinder(projectRoot, deps.findRunningUnityProcessDefinitively, deps)
+}
+
+// v2LaunchDialogLookout looks at the Editor whose process ID the V2 launch already knows.
+func v2LaunchDialogLookout(projectRoot string, pid int, deps launchDeps) *clicore.DialogLookout {
+	lookupProcess := func(context.Context, string) (*unityprocess.UnityProcess, error) {
+		return &unityprocess.UnityProcess{Pid: pid}, nil
+	}
+	return clicore.NewDialogLookout(launchDialogFinder(projectRoot, lookupProcess, deps), deps.now)
+}
+
+// launchBlockedByDialogError reports that launch stopped waiting for an Editor that a modal dialog
+// holds. The Editor goes on running.
+type launchBlockedByDialogError struct {
+	projectRoot string
+	// dialogs is never empty, frontmost first.
+	dialogs []unitydialog.Dialog
+	// canPress is whether uloop press-dialog-button can answer the dialog for this project.
+	canPress bool
+}
+
+// asLaunchDialogError turns a wait that stopped at a dialog into launchBlockedByDialogError and
+// returns any other err unchanged. canPress is false for a V2 project, whose commands go to the V2
+// CLI, which has no dialog commands.
+func asLaunchDialogError(err error, projectRoot string, canPress bool) error {
+	var blocked clicore.ToolReadinessBlockedByDialogError
+	if !errors.As(err, &blocked) {
+		return err
+	}
+	return launchBlockedByDialogError{projectRoot: projectRoot, dialogs: blocked.Dialogs, canPress: canPress}
+}
+
+// Error leaves out the dialog's text on purpose: the transport checks read words such as "EOF" in
+// error text, so a dialog title would make this error read as a lost connection.
+func (err launchBlockedByDialogError) Error() string {
+	return "a modal dialog is open in Unity; uloop launch stopped waiting for the Editor"
+}
+
+// ToCLIError reports the dialogs the way uloop status does, with the last step pointing back at
+// uloop launch. Safe to retry: launch started nothing that a second run would repeat.
+func (err launchBlockedByDialogError) ToCLIError(context clierrors.ErrorContext) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeBlockedByDialog,
+		Phase:       clierrors.ErrorPhaseConnection,
+		Message:     launchBlockedByDialogMessage(err.dialogs),
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: clicore.FirstNonEmpty(context.ProjectRoot, err.projectRoot),
+		Command:     context.Command,
+		NextActions: clicore.DialogAnswerNextActions(err.dialogs, err.canPress, launchDialogClosedNextAction),
+		Details:     map[string]any{"Dialogs": err.dialogs},
+	}
+}
+
+// launchBlockedByDialogMessage counts the dialogs as uloop status does: the number of them when
+// several are open, and the title of a single one only when it has one.
+func launchBlockedByDialogMessage(dialogs []unitydialog.Dialog) string {
+	const stopped = " uloop launch stopped waiting; the Editor keeps running."
+	if len(dialogs) > 1 {
+		return fmt.Sprintf("Unity is running, but %d modal dialogs are open; Unity waits until they are closed.", len(dialogs)) + stopped
+	}
+	if dialogs[0].Title == "" {
+		return "Unity is running, but a modal dialog is open; Unity waits until it is closed." + stopped
+	}
+	return fmt.Sprintf("Unity is running, but a modal dialog %q is open; Unity waits until it is closed.", dialogs[0].Title) + stopped
+}

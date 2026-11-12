@@ -27,9 +27,13 @@ func (err launchStartupTimeoutError) Unwrap() error {
 }
 
 func waitForLaunchReadinessWithDeps(ctx context.Context, projectRoot string, deps launchDeps) error {
-	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout)
+	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout, v3LaunchDialogFinder(projectRoot, deps))
 	if err == nil {
 		return nil
+	}
+	var blocked clicore.ToolReadinessBlockedByDialogError
+	if errors.As(err, &blocked) {
+		return asLaunchDialogError(err, projectRoot, deps.canPressDialogs)
 	}
 	if ctx.Err() != nil || clicore.IsReadinessCLIUpdateRequiredError(err) {
 		return err
