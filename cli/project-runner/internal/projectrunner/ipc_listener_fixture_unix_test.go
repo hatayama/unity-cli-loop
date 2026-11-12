@@ -22,3 +22,18 @@ func newLoopbackIpcListener(t *testing.T) net.Listener {
 	})
 	return listener
 }
+
+// relistenLoopbackIpc opens a listener again on an endpoint a test closed, so the server can stand
+// in for one that comes up while a command waits for it.
+func relistenLoopbackIpc(t *testing.T, network string, address string) net.Listener {
+	t.Helper()
+
+	listener, err := net.Listen(network, address)
+	if err != nil {
+		t.Fatalf("failed to listen again on %s: %v", address, err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+	return listener
+}

@@ -272,6 +272,10 @@ func sendWithTransientConnectionRetryAttempts(
 
 	dialogWatch := newHeartbeatDialogWatch(ctx, connection, method, deps.dialogWatch)
 	defer dialogWatch.release()
+	// serverWaitDialogWatch looks for a dialog while the server stays unreachable with Unity running.
+	// Why: a dialog Unity shows while it starts keeps its server from starting, so the wait below
+	// would last its whole window and end in a "wait and retry" error that never names the dialog.
+	serverWaitDialogWatch := newDialogBlockWatch(connection, deps.dialogWatch, dialogWatchInterval, dialogWatchStallThresholdSeconds)
 
 	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
@@ -360,6 +364,12 @@ func sendWithTransientConnectionRetryAttempts(
 			focusReasonUndispatchedConnectionFailure,
 			err,
 		)
+		// Safe to report as not run: no attempt reached Unity. Why in step with the dial loop: the
+		// look takes about a second once per interval, and a server that came up meanwhile gets the
+		// command on the next attempt.
+		if dialogs := serverWaitDialogWatch.observePoll(retryContext, false); dialogs != nil {
+			return outcome, notSentBlockedByDialog(method, dialogs, deps.dialogWatch.canPressDialogs)
+		}
 
 		lastOutcome = outcome
 		lastErr = err
