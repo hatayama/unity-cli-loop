@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"slices"
 	"strconv"
 	"time"
@@ -65,9 +66,9 @@ func defaultStatusCommandDeps() statusCommandDeps {
 			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
-		inspectDialogs:        inspector.inspect,
-		dialogCheckNextAction: inspector.checkFailedNextAction(),
-		canAnswerDialogs:      inspector.canPress(),
+		inspectDialogs:        inspector.Inspect,
+		dialogCheckNextAction: dialogCheckFailedNextActionFor(runtime.GOOS),
+		canAnswerDialogs:      inspector.CanPress(),
 	}
 }
 

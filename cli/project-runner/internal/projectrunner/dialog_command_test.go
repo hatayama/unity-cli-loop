@@ -14,6 +14,7 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
 const dialogTestProjectRoot = "/project"
@@ -264,7 +265,7 @@ func TestRunDialogCommandListsWhereUloopCannotPress(t *testing.T) {
 
 // Verifies listing where uloop cannot look at Unity's windows is DIALOG_NOT_ANSWERABLE.
 func TestRunDialogCommandIsUnsupportedWhereUloopCannotLook(t *testing.T) {
-	fake := &fakeDialogCommand{canPress: false, looks: []dialogLookAnswer{{err: errDialogInspectionUnsupported}}}
+	fake := &fakeDialogCommand{canPress: false, looks: []dialogLookAnswer{{err: unitydialog.ErrInspectionUnsupported}}}
 
 	assertDialogFailure(t, runGetDialogsForTest(context.Background(), nil, fake),
 		expectedDialogFailure{code: clierrors.ErrorCodeDialogNotAnswerable, retryable: false, safeToRetry: true})
@@ -387,7 +388,7 @@ func TestRunDialogCommandReportsFailedPress(t *testing.T) {
 func TestRunDialogCommandReportsAPressThatNeverStarted(t *testing.T) {
 	fake := &fakeDialogCommand{
 		canPress: true,
-		pressErr: dialogPressNotStartedError{err: errors.New("no Unity process runs for this project")},
+		pressErr: unitydialog.PressNotStartedError{Err: errors.New("no Unity process runs for this project")},
 	}
 
 	got := decodeDialogError(t, runPressDialogButtonForTest(context.Background(), []string{"--label", "Later"}, fake),

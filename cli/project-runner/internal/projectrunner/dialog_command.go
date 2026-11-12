@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
 const dialogLabelOption = "--label"
@@ -41,13 +43,8 @@ type dialogCommandDeps struct {
 	answerFailedHint string
 }
 
-// dialogPressResult is what one press attempt saw. DialogFound is false when no modal dialog was
-// open; Pressed is false when Dialog has no button with the label. Dialog is read before the press.
-type dialogPressResult struct {
-	DialogFound bool
-	Pressed     bool
-	Dialog      statusDialog
-}
+// dialogPressResult is what one press attempt saw.
+type dialogPressResult = unitydialog.PressResult
 
 type dialogListOutput struct {
 	Success bool           `json:"Success"`
@@ -66,13 +63,13 @@ type dialogAnswerOutput struct {
 func defaultDialogCommandDeps() dialogCommandDeps {
 	inspector := defaultDialogInspector()
 	return dialogCommandDeps{
-		canPress:              inspector.canPress(),
-		look:                  inspector.inspect,
-		press:                 inspector.press,
+		canPress:              inspector.CanPress(),
+		look:                  inspector.Inspect,
+		press:                 inspector.Press,
 		recheckDelay:          dialogRecheckDelay,
 		recheckCount:          dialogRecheckCount,
-		checkFailedNextAction: inspector.checkFailedNextAction(),
-		answerFailedHint:      inspector.answerFailedHint(),
+		checkFailedNextAction: dialogCheckFailedNextActionFor(runtime.GOOS),
+		answerFailedHint:      dialogAnswerFailedHintFor(runtime.GOOS),
 	}
 }
 
@@ -187,7 +184,7 @@ func dialogArgumentError(message string, option string) *clierrors.ArgumentError
 
 func listDialogs(ctx context.Context, projectRoot string, stdout io.Writer, stderr io.Writer, deps dialogCommandDeps) int {
 	dialogs, err := deps.look(ctx, projectRoot)
-	if errors.Is(err, errDialogInspectionUnsupported) {
+	if errors.Is(err, unitydialog.ErrInspectionUnsupported) {
 		writeDialogError(stderr, clicore.GetDialogsCommandName, projectRoot, notAnswerableError(err.Error()))
 		return 1
 	}
@@ -222,7 +219,7 @@ func answerDialog(
 	result, err := deps.press(ctx, projectRoot, label)
 	if err != nil {
 		failure := answerFailedError("uloop could not press the button: "+err.Error(), deps)
-		var notStarted dialogPressNotStartedError
+		var notStarted unitydialog.PressNotStartedError
 		// Why only here: once osascript started, the click may have landed even when it failed.
 		failure.SafeToRetry = errors.As(err, &notStarted)
 		writeDialogError(stderr, clicore.PressDialogButtonCommandName, projectRoot, failure)

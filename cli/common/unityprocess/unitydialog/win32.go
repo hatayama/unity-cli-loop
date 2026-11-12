@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 // inspectWin32Windows lists the Unity process's windows on Windows and returns the modal ones.
 // Why not a command as on macOS: Win32 answers in-process, needs no permission, and starts nothing.
-func (inspector dialogInspector) inspectWin32Windows(ctx context.Context, pid int) ([]statusDialog, error) {
+func (inspector Inspector) inspectWin32Windows(ctx context.Context, pid int) ([]Dialog, error) {
 	inspectCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
 	windows, err := inspector.listWindows(inspectCtx, pid)
@@ -154,8 +154,8 @@ func (window win32Window) answerButtons() []win32Control {
 
 // dialogsFromWin32Windows turns the Unity process's windows into the dialogs that hold its main
 // thread, in the order given. The result is never nil, and neither is a dialog's Buttons.
-func dialogsFromWin32Windows(windows []win32Window) []statusDialog {
-	dialogs := make([]statusDialog, 0)
+func dialogsFromWin32Windows(windows []win32Window) []Dialog {
+	dialogs := make([]Dialog, 0)
 	for _, window := range win32ModalWindows(windows) {
 		dialogs = append(dialogs, window.dialog())
 	}
@@ -176,8 +176,8 @@ func win32ModalWindows(windows []win32Window) []win32Window {
 
 // dialog is what a modal window shows: its title, its text, and the labels of the buttons uloop
 // may press in it.
-func (window win32Window) dialog() statusDialog {
-	return statusDialog{
+func (window win32Window) dialog() Dialog {
+	return Dialog{
 		Title:   window.Title,
 		Message: win32DialogMessage(window.Controls),
 		Buttons: win32ButtonLabels(window.answerButtons()),

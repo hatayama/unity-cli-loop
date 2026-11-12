@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -18,13 +18,13 @@ const accessibilityPressedOutput = `{"processFound":true,"dialogFound":true,"pre
 // Press output for the same dialog given a label it lacks, as osascript printed it in a real Editor.
 const accessibilityUnpressedOutput = `{"processFound":true,"dialogFound":true,"pressed":false,"windowTitle":"","texts":["Probe title","Line one. Line two."],"buttons":["Yes","No","Later"]}`
 
-var accessibilityPressProbeDialog = statusDialog{
+var accessibilityPressProbeDialog = Dialog{
 	Title:   "Probe title",
 	Message: "Line one. Line two.",
 	Buttons: []string{"Yes", "No", "Later"},
 }
 
-func assertPressResult(t *testing.T, got dialogPressResult, err error, want dialogPressResult) {
+func assertPressResult(t *testing.T, got PressResult, err error, want PressResult) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -39,14 +39,14 @@ func assertPressResult(t *testing.T, got dialogPressResult, err error, want dial
 func TestPressResultFromAccessibilityOutputReadsThePressedDialog(t *testing.T) {
 	got, err := pressResultFromAccessibilityOutput([]byte(accessibilityPressedOutput))
 
-	assertPressResult(t, got, err, dialogPressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
+	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
 }
 
 // Verifies an alert without the label is reported as found but not pressed, with its content.
 func TestPressResultFromAccessibilityOutputKeepsTheDialogWhenNothingWasPressed(t *testing.T) {
 	got, err := pressResultFromAccessibilityOutput([]byte(accessibilityUnpressedOutput))
 
-	assertPressResult(t, got, err, dialogPressResult{DialogFound: true, Pressed: false, Dialog: accessibilityPressProbeDialog})
+	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: false, Dialog: accessibilityPressProbeDialog})
 }
 
 // Verifies the unnamed frame buttons of a modal Editor window are dropped, leaving no buttons.
@@ -55,10 +55,10 @@ func TestPressResultFromAccessibilityOutputDropsUnnamedButtons(t *testing.T) {
 
 	got, err := pressResultFromAccessibilityOutput([]byte(output))
 
-	assertPressResult(t, got, err, dialogPressResult{
+	assertPressResult(t, got, err, PressResult{
 		DialogFound: true,
 		Pressed:     false,
-		Dialog:      statusDialog{Title: "Probe modal", Message: "", Buttons: []string{}},
+		Dialog:      Dialog{Title: "Probe modal", Message: "", Buttons: []string{}},
 	})
 }
 
@@ -66,7 +66,7 @@ func TestPressResultFromAccessibilityOutputDropsUnnamedButtons(t *testing.T) {
 func TestPressResultFromAccessibilityOutputReportsNoDialog(t *testing.T) {
 	got, err := pressResultFromAccessibilityOutput([]byte(`{"processFound":true,"dialogFound":false}`))
 
-	assertPressResult(t, got, err, dialogPressResult{DialogFound: false})
+	assertPressResult(t, got, err, PressResult{DialogFound: false})
 }
 
 // Verifies a missing Unity process and output that is not JSON are errors.
@@ -85,7 +85,7 @@ func TestPressResultFromAccessibilityOutputRejectsUnusableOutput(t *testing.T) {
 func TestPressResultFromAccessibilityOutputReportsAMissingProcessAsNotStarted(t *testing.T) {
 	_, err := pressResultFromAccessibilityOutput([]byte(`{"processFound":false}`))
 
-	var notStarted dialogPressNotStartedError
+	var notStarted PressNotStartedError
 	if !errors.As(err, &notStarted) {
 		t.Fatalf("err = %v, want a press that did not start", err)
 	}
@@ -104,9 +104,9 @@ func TestDialogPressRunsTheScriptWithThePidAndLabel(t *testing.T) {
 	}
 	inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 
-	got, err := inspector.press(context.Background(), "/project", "Later")
+	got, err := inspector.Press(context.Background(), "/project", "Later")
 
-	assertPressResult(t, got, err, dialogPressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
+	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
 	want := []string{"osascript", "-l", "JavaScript", "-e", accessibilityPressScript, "4242", "Later"}
 	if !reflect.DeepEqual(gotArgs, want) {
 		t.Fatalf("command = %q, want %q", gotArgs, want)
@@ -117,16 +117,16 @@ func TestDialogPressRunsTheScriptWithThePidAndLabel(t *testing.T) {
 // process lookup, a command, a window listing, or a press, and names the two systems.
 func TestDialogPressIsSupportedOnMacOSAndWindowsOnly(t *testing.T) {
 	for _, goos := range []string{"darwin", "windows"} {
-		if !dialogInspectorForTest(t, goos, failingProcessLookup(t), failingCommand(t)).canPress() {
+		if !dialogInspectorForTest(t, goos, failingProcessLookup(t), failingCommand(t)).CanPress() {
 			t.Fatalf("canPress must be true on %s", goos)
 		}
 	}
 
 	inspector := dialogInspectorForTest(t, "linux", failingProcessLookup(t), failingCommand(t))
-	if inspector.canPress() {
+	if inspector.CanPress() {
 		t.Fatal("canPress must be false on linux")
 	}
-	_, err := inspector.press(context.Background(), "/project", "Later")
+	_, err := inspector.Press(context.Background(), "/project", "Later")
 	assertPressNotStarted(t, err, true)
 	if !strings.Contains(err.Error(), "only on macOS and Windows") {
 		t.Fatalf("error = %v, want it to name macOS and Windows", err)
@@ -147,7 +147,7 @@ func TestDialogPressFailsWithoutAUnityProcess(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			inspector := dialogInspectorForTest(t, "darwin", lookup, failingCommand(t))
 
-			_, err := inspector.press(context.Background(), "/project", "Later")
+			_, err := inspector.Press(context.Background(), "/project", "Later")
 			assertPressNotStarted(t, err, true)
 		})
 	}
@@ -161,7 +161,7 @@ func TestDialogPressReportsWhyTheScriptStopped(t *testing.T) {
 		}
 		inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		if err == nil || !strings.Contains(err.Error(), "not allowed assistive access") {
 			t.Fatalf("error = %v, want the osascript error text", err)
@@ -176,7 +176,7 @@ func TestDialogPressReportsWhyTheScriptStopped(t *testing.T) {
 		inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 		inspector.timeout = 50 * time.Millisecond
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		if err == nil || !strings.Contains(err.Error(), "did not answer within 50ms") {
 			t.Fatalf("error = %v, want a timeout error", err)
@@ -191,7 +191,7 @@ func TestDialogPressReportsWhyTheScriptStopped(t *testing.T) {
 		}
 		inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 
-		_, err := inspector.press(ctx, "/project", "Later")
+		_, err := inspector.Press(ctx, "/project", "Later")
 
 		if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "did not answer") {
 			t.Fatalf("error = %v, want a cancellation", err)
@@ -206,22 +206,9 @@ func assertPressNotStarted(t *testing.T, err error, want bool) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	var notStarted dialogPressNotStartedError
+	var notStarted PressNotStartedError
 	if got := errors.As(err, &notStarted); got != want {
 		t.Fatalf("not started = %v, want %v: %v", got, want, err)
-	}
-}
-
-// Verifies the hint added to a failed press names both macOS permissions, Accessibility and
-// Automation of System Events, without describing a failed look, and is empty where no permission
-// is involved.
-func TestDialogInspectorAnswerFailedHintNamesBothMacPermissions(t *testing.T) {
-	macOS := dialogInspector{goos: "darwin"}.answerFailedHint()
-	if !strings.Contains(macOS, "Accessibility and Automation (System Events)") || strings.Contains(macOS, "could not look") {
-		t.Fatalf("macOS hint = %q, want both permissions without the look failure", macOS)
-	}
-	if windows := (dialogInspector{goos: "windows"}).answerFailedHint(); windows != "" {
-		t.Fatalf("Windows hint = %q, want none", windows)
 	}
 }
 
@@ -231,7 +218,7 @@ func win32PressInspectorForTest(
 	t *testing.T,
 	listWindows func(context.Context, int) ([]win32Window, error),
 	press func(context.Context, win32PressTargetResult) error,
-) dialogInspector {
+) Inspector {
 	t.Helper()
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
 	inspector.pressWindowButton = press
@@ -260,9 +247,9 @@ func TestDialogPressOnWindowsPressesTheLabeledButton(t *testing.T) {
 	}
 	inspector := win32PressInspectorForTest(t, listWindows, press)
 
-	got, err := inspector.press(context.Background(), "/project", "Later")
+	got, err := inspector.Press(context.Background(), "/project", "Later")
 
-	assertPressResult(t, got, err, dialogPressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
+	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
 	if listedPID != 4242 {
 		t.Fatalf("listed process ID = %d, want 4242", listedPID)
 	}
@@ -283,38 +270,38 @@ func TestDialogPressOnWindowsPressesNothingWithoutAMatch(t *testing.T) {
 		name    string
 		windows []win32Window
 		label   string
-		want    dialogPressResult
+		want    PressResult
 	}{
 		{
 			name:    "label the dialog lacks",
 			windows: win32ProbeDialogWindows(),
 			label:   "later",
-			want:    dialogPressResult{DialogFound: true, Pressed: false, Dialog: accessibilityPressProbeDialog},
+			want:    PressResult{DialogFound: true, Pressed: false, Dialog: accessibilityPressProbeDialog},
 		},
 		{
 			name:    "no dialog",
 			windows: []win32Window{win32EnabledMainWindow, win32InputMethodWindow},
 			label:   "Later",
-			want:    dialogPressResult{DialogFound: false},
+			want:    PressResult{DialogFound: false},
 		},
 		{
 			name:    "dialog without buttons",
 			windows: []win32Window{modal, win32DisabledMainWindow},
 			label:   "OK",
-			want: dialogPressResult{
+			want: PressResult{
 				DialogFound: true,
 				Pressed:     false,
-				Dialog:      statusDialog{Title: "Probe modal", Message: "", Buttons: []string{}},
+				Dialog:      Dialog{Title: "Probe modal", Message: "", Buttons: []string{}},
 			},
 		},
 		{
 			name:    "file picker",
 			windows: []win32Window{picker, win32DisabledMainWindow},
 			label:   "Cancel",
-			want: dialogPressResult{
+			want: PressResult{
 				DialogFound: true,
 				Pressed:     false,
-				Dialog:      statusDialog{Title: "Probe save", Message: "File &name:", Buttons: []string{}},
+				Dialog:      Dialog{Title: "Probe save", Message: "File &name:", Buttons: []string{}},
 			},
 		},
 	}
@@ -322,7 +309,7 @@ func TestDialogPressOnWindowsPressesNothingWithoutAMatch(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			inspector := win32PressInspectorForTest(t, listingWin32Windows(testCase.windows), failingWindowButtonPress(t))
 
-			got, err := inspector.press(context.Background(), "/project", testCase.label)
+			got, err := inspector.Press(context.Background(), "/project", testCase.label)
 
 			assertPressResult(t, got, err, testCase.want)
 		})
@@ -338,7 +325,7 @@ func TestDialogPressOnWindowsFailsBeforeThePressStarts(t *testing.T) {
 		}
 		inspector := win32DialogInspectorForTest(t, lookup, failingWindowList(t))
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, true)
 	})
@@ -348,7 +335,7 @@ func TestDialogPressOnWindowsFailsBeforeThePressStarts(t *testing.T) {
 		}
 		inspector := win32PressInspectorForTest(t, listWindows, failingWindowButtonPress(t))
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, true)
 		if !strings.Contains(err.Error(), "EnumWindows failed: access is denied") {
@@ -363,7 +350,7 @@ func TestDialogPressOnWindowsFailsBeforeThePressStarts(t *testing.T) {
 		inspector := win32PressInspectorForTest(t, listWindows, failingWindowButtonPress(t))
 		inspector.timeout = 50 * time.Millisecond
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, true)
 		if !strings.Contains(err.Error(), "reading Unity's windows did not finish within 50ms") {
@@ -381,7 +368,7 @@ func TestDialogPressOnWindowsReportsAFailedPress(t *testing.T) {
 		}
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, false)
 		if !strings.Contains(err.Error(), "the dialog did not answer the click") {
@@ -396,7 +383,7 @@ func TestDialogPressOnWindowsReportsAFailedPress(t *testing.T) {
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 		inspector.timeout = 50 * time.Millisecond
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, false)
 		if !strings.Contains(err.Error(), "the dialog did not answer the press within 50ms") {
@@ -411,7 +398,7 @@ func TestDialogPressOnWindowsReportsAFailedPress(t *testing.T) {
 		}
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 
-		_, err := inspector.press(ctx, "/project", "Later")
+		_, err := inspector.Press(ctx, "/project", "Later")
 
 		assertPressNotStarted(t, err, false)
 		if !errors.Is(err, context.Canceled) {
@@ -432,7 +419,7 @@ func TestDialogPressOnWindowsPressesNothingInADisabledButton(t *testing.T) {
 	}
 	inspector := win32PressInspectorForTest(t, listingWin32Windows(windows), failingWindowButtonPress(t))
 
-	_, err := inspector.press(context.Background(), "/project", "Later")
+	_, err := inspector.Press(context.Background(), "/project", "Later")
 
 	assertPressNotStarted(t, err, true)
 	if !strings.Contains(err.Error(), `the button "Later" is disabled`) {
@@ -443,14 +430,14 @@ func TestDialogPressOnWindowsPressesNothingInADisabledButton(t *testing.T) {
 // Verifies that on Windows a press that reports no click was sent stays safe to retry, also when
 // the press ran out of time or was cancelled before anything was sent.
 func TestDialogPressOnWindowsKeepsAnUnsentPressSafeToRetry(t *testing.T) {
-	unsent := dialogPressNotStartedError{err: errors.New("the dialog closed before its button was pressed")}
+	unsent := PressNotStartedError{Err: errors.New("the dialog closed before its button was pressed")}
 	t.Run("not sent", func(t *testing.T) {
 		press := func(context.Context, win32PressTargetResult) error {
 			return unsent
 		}
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, true)
 		if !strings.Contains(err.Error(), "the dialog closed before its button was pressed") {
@@ -465,7 +452,7 @@ func TestDialogPressOnWindowsKeepsAnUnsentPressSafeToRetry(t *testing.T) {
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 		inspector.timeout = 50 * time.Millisecond
 
-		_, err := inspector.press(context.Background(), "/project", "Later")
+		_, err := inspector.Press(context.Background(), "/project", "Later")
 
 		assertPressNotStarted(t, err, true)
 		if !strings.Contains(err.Error(), "the press did not start within 50ms") {
@@ -480,7 +467,7 @@ func TestDialogPressOnWindowsKeepsAnUnsentPressSafeToRetry(t *testing.T) {
 		}
 		inspector := win32PressInspectorForTest(t, listingWin32Windows(win32ProbeDialogWindows()), press)
 
-		_, err := inspector.press(ctx, "/project", "Later")
+		_, err := inspector.Press(ctx, "/project", "Later")
 
 		assertPressNotStarted(t, err, true)
 		if !errors.Is(err, context.Canceled) {

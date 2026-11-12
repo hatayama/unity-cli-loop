@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -20,44 +20,44 @@ func TestDialogsFromAccessibilityOutputUsesFirstTextAsTitleWhenWindowHasNoTitle(
 	cases := []struct {
 		name   string
 		output string
-		want   []statusDialog
+		want   []Dialog
 	}{
 		{
 			name:   "alert without a window title",
 			output: accessibilityDisplayDialogOutput,
-			want:   []statusDialog{{Title: "uloop spike", Message: "Spike dialog body text", Buttons: []string{"Abort", "Proceed"}}},
+			want:   []Dialog{{Title: "uloop spike", Message: "Spike dialog body text", Buttons: []string{"Abort", "Proceed"}}},
 		},
 		{
 			name:   "three buttons and a message with a line break",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":"","texts":["Probe title","Line one\nLine two"],"buttons":["Yes","No","Later"]}]}`,
-			want:   []statusDialog{{Title: "Probe title", Message: "Line one\nLine two", Buttons: []string{"Yes", "No", "Later"}}},
+			want:   []Dialog{{Title: "Probe title", Message: "Line one\nLine two", Buttons: []string{"Yes", "No", "Later"}}},
 		},
 		{
 			name:   "file picker with only a window title",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":"Spike pick","texts":[],"buttons":[]}]}`,
-			want:   []statusDialog{{Title: "Spike pick", Message: "", Buttons: []string{}}},
+			want:   []Dialog{{Title: "Spike pick", Message: "", Buttons: []string{}}},
 		},
 		{
 			name:   "modal Editor window repeating its title and unnamed window buttons",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":"Spike modal","texts":["Spike modal"],"buttons":[null,null,null]}]}`,
-			want:   []statusDialog{{Title: "Spike modal", Message: "", Buttons: []string{}}},
+			want:   []Dialog{{Title: "Spike modal", Message: "", Buttons: []string{}}},
 		},
 		{
 			name:   "window title and a separate body text",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":"Spike modal","texts":["Spike modal","Body"],"buttons":[]}]}`,
-			want:   []statusDialog{{Title: "Spike modal", Message: "Body", Buttons: []string{}}},
+			want:   []Dialog{{Title: "Spike modal", Message: "Body", Buttons: []string{}}},
 		},
 		{
 			name:   "empty and null texts are dropped",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":"","texts":[null,"Title","","Body",null],"buttons":["","OK"]}]}`,
-			want:   []statusDialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
+			want:   []Dialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
 		},
 		{
 			name: "two dialogs keep their order",
 			output: `{"processFound":true,"dialogs":[` +
 				`{"windowTitle":"","texts":["First"],"buttons":["OK"]},` +
 				`{"windowTitle":"Second","texts":[],"buttons":[]}]}`,
-			want: []statusDialog{
+			want: []Dialog{
 				{Title: "First", Message: "", Buttons: []string{"OK"}},
 				{Title: "Second", Message: "", Buttons: []string{}},
 			},
@@ -88,33 +88,33 @@ const accessibilityStartupDialogWindow = `{"windowTitle":"","texts":["Project Ch
 // Verifies a window without a title and without a named button, such as Unity's splash screen, is not
 // listed as a dialog, while the dialogs beside it are still listed in their order.
 func TestDialogsFromAccessibilityOutputSkipsTheSplashScreen(t *testing.T) {
-	startupDialog := statusDialog{Title: "Project Change Required", Message: "Body", Buttons: []string{"Continue", "Quit"}}
+	startupDialog := Dialog{Title: "Project Change Required", Message: "Body", Buttons: []string{"Continue", "Quit"}}
 	cases := []struct {
 		name   string
 		output string
-		want   []statusDialog
+		want   []Dialog
 	}{
 		{
 			name:   "splash screen alone",
 			output: `{"processFound":true,"dialogs":[` + accessibilitySplashScreenWindow + `]}`,
-			want:   []statusDialog{},
+			want:   []Dialog{},
 		},
 		{
 			name: "startup dialog before the splash screen",
 			output: `{"processFound":true,"dialogs":[` +
 				accessibilityStartupDialogWindow + `,` + accessibilitySplashScreenWindow + `]}`,
-			want: []statusDialog{startupDialog},
+			want: []Dialog{startupDialog},
 		},
 		{
 			name: "splash screen before the startup dialog",
 			output: `{"processFound":true,"dialogs":[` +
 				accessibilitySplashScreenWindow + `,` + accessibilityStartupDialogWindow + `]}`,
-			want: []statusDialog{startupDialog},
+			want: []Dialog{startupDialog},
 		},
 		{
 			name:   "null window title and no button",
 			output: `{"processFound":true,"dialogs":[{"windowTitle":null,"texts":[],"buttons":[]}]}`,
-			want:   []statusDialog{},
+			want:   []Dialog{},
 		},
 	}
 	for _, testCase := range cases {
@@ -164,10 +164,10 @@ func TestDialogInspectorIsUnsupportedOutsideMacOSAndWindows(t *testing.T) {
 		t.Run(goos, func(t *testing.T) {
 			inspector := dialogInspectorForTest(t, goos, failingProcessLookup(t), failingCommand(t))
 
-			_, err := inspector.inspect(context.Background(), "/project")
+			_, err := inspector.Inspect(context.Background(), "/project")
 
-			if !errors.Is(err, errDialogInspectionUnsupported) {
-				t.Fatalf("error = %v, want errDialogInspectionUnsupported", err)
+			if !errors.Is(err, ErrInspectionUnsupported) {
+				t.Fatalf("error = %v, want ErrInspectionUnsupported", err)
 			}
 		})
 	}
@@ -180,7 +180,7 @@ func TestDialogInspectorFailsWhenProcessLookupFails(t *testing.T) {
 	}
 	inspector := dialogInspectorForTest(t, "darwin", lookup, failingCommand(t))
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "ps refused") {
 		t.Fatalf("error = %v, want the lookup failure", err)
@@ -194,7 +194,7 @@ func TestDialogInspectorFailsWhenUnityIsNotRunning(t *testing.T) {
 	}
 	inspector := dialogInspectorForTest(t, "darwin", lookup, failingCommand(t))
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "no Unity process runs for this project") {
 		t.Fatalf("error = %v, want one saying Unity is not running", err)
@@ -209,7 +209,7 @@ func TestDialogInspectorFailsWhenOsascriptFails(t *testing.T) {
 	}
 	inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "not allowed assistive access") {
 		t.Fatalf("error = %v, want the osascript error text", err)
@@ -226,7 +226,7 @@ func TestDialogInspectorFailsWhenOsascriptTimesOut(t *testing.T) {
 	inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 	inspector.timeout = 50 * time.Millisecond
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "osascript did not answer within 50ms") {
 		t.Fatalf("error = %v, want a timeout error", err)
@@ -242,7 +242,7 @@ func TestDialogInspectorReportsCancellation(t *testing.T) {
 	}
 	inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 
-	_, err := inspector.inspect(ctx, "/project")
+	_, err := inspector.Inspect(ctx, "/project")
 
 	if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "did not answer") {
 		t.Fatalf("error = %v, want a cancellation", err)
@@ -274,7 +274,7 @@ func TestDialogInspectorReadsDialogsFromOsascript(t *testing.T) {
 	}
 	inspector := dialogInspectorForTest(t, "darwin", unityProcessWithPID(4242), command)
 
-	dialogs, err := inspector.inspect(context.Background(), "/project")
+	dialogs, err := inspector.Inspect(context.Background(), "/project")
 	if err != nil {
 		t.Fatalf("inspect returned error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestDialogInspectorReadsDialogsFromOsascript(t *testing.T) {
 	if gotName != "osascript" || !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("command = %q %q, want osascript %q", gotName, gotArgs, wantArgs)
 	}
-	want := []statusDialog{{Title: "uloop spike", Message: "Spike dialog body text", Buttons: []string{"Abort", "Proceed"}}}
+	want := []Dialog{{Title: "uloop spike", Message: "Spike dialog body text", Buttons: []string{"Abort", "Proceed"}}}
 	if !reflect.DeepEqual(dialogs, want) {
 		t.Fatalf("dialogs = %#v, want %#v", dialogs, want)
 	}
@@ -293,9 +293,9 @@ func dialogInspectorForTest(
 	goos string,
 	lookup func(context.Context, string) (*unityprocess.UnityProcess, error),
 	command func(context.Context, string, ...string) ([]byte, error),
-) dialogInspector {
+) Inspector {
 	t.Helper()
-	return dialogInspector{
+	return Inspector{
 		goos:          goos,
 		timeout:       2 * time.Second,
 		lookupProcess: lookup,
@@ -312,7 +312,7 @@ func win32DialogInspectorForTest(
 	t *testing.T,
 	lookup func(context.Context, string) (*unityprocess.UnityProcess, error),
 	listWindows func(context.Context, int) ([]win32Window, error),
-) dialogInspector {
+) Inspector {
 	t.Helper()
 	inspector := dialogInspectorForTest(t, "windows", lookup, failingCommand(t))
 	inspector.listWindows = listWindows

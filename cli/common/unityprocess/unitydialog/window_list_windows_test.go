@@ -1,6 +1,6 @@
 //go:build windows
 
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -127,7 +127,7 @@ func TestListUnityProcessWindowsReadsARealModalWindow(t *testing.T) {
 	factory.setEnabled(owner, false)
 	whileOwnerIsDisabled := listTestProcessDialogs(t)
 
-	want := []statusDialog{{Title: "uloop test dialog", Message: "Line one\nLine two", Buttons: []string{"Yes", "Later"}}}
+	want := []Dialog{{Title: "uloop test dialog", Message: "Line one\nLine two", Buttons: []string{"Yes", "Later"}}}
 	if !reflect.DeepEqual(whileOwnerIsDisabled, want) {
 		t.Fatalf("dialogs while the owner is disabled = %#v, want %#v", whileOwnerIsDisabled, want)
 	}
@@ -179,7 +179,7 @@ func TestListUnityProcessWindowsStopsWhenCancelled(t *testing.T) {
 	}
 }
 
-func listTestProcessDialogs(t *testing.T) []statusDialog {
+func listTestProcessDialogs(t *testing.T) []Dialog {
 	t.Helper()
 	listed, err := listUnityProcessWindows(context.Background(), os.Getpid())
 	if err != nil {
@@ -215,7 +215,7 @@ func TestListUnityProcessWindowsTellsAMessageBoxWithoutAnOwnerFromAProgressWindo
 
 	asMessageBox := listTestProcessDialogs(t)
 
-	want := []statusDialog{{Title: "uloop test prompt", Message: "Prompt body", Buttons: []string{"Quit"}}}
+	want := []Dialog{{Title: "uloop test prompt", Message: "Prompt body", Buttons: []string{"Quit"}}}
 	if !reflect.DeepEqual(asMessageBox, want) {
 		t.Fatalf("dialogs without a progress bar = %#v, want %#v", asMessageBox, want)
 	}

@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -10,19 +10,27 @@ import (
 
 var errDialogPressUnsupported = errors.New("pressing a dialog button is supported only on macOS and Windows")
 
-// dialogPressNotStartedError is a press that failed before anything reached the dialog: before
+// PressResult is what one press attempt saw. DialogFound is false when no modal dialog was
+// open; Pressed is false when Dialog has no button with the label. Dialog is read before the press.
+type PressResult struct {
+	DialogFound bool
+	Pressed     bool
+	Dialog      Dialog
+}
+
+// PressNotStartedError is a press that failed before anything reached the dialog: before
 // osascript started on macOS, before the click was sent on Windows. No click can have happened,
 // so pressing again is safe.
-type dialogPressNotStartedError struct {
-	err error
+type PressNotStartedError struct {
+	Err error
 }
 
-func (err dialogPressNotStartedError) Error() string {
-	return err.err.Error()
+func (err PressNotStartedError) Error() string {
+	return err.Err.Error()
 }
 
-func (err dialogPressNotStartedError) Unwrap() error {
-	return err.err
+func (err PressNotStartedError) Unwrap() error {
+	return err.Err
 }
 
 // accessibilityPressScript finds the first modal dialog window of the given process, reads its
@@ -42,19 +50,19 @@ func (err dialogPressNotStartedError) Unwrap() error {
 const accessibilityPressScript = `function run(argv){const pid=parseInt(argv[0],10);const label=argv[1];const se=Application("System Events");const ps=se.processes.whose({unixId:pid});if(ps.length===0){return JSON.stringify({processFound:false});}const p=ps[0];for(let i=0;i<p.windows.length;i++){const w=p.windows[i];if(w.subrole()!=="AXDialog"){continue;}let modal=false;try{modal=w.attributes.byName("AXModal").value()===true;}catch(e){}if(!modal){continue;}const seen={processFound:true,dialogFound:true,pressed:false,windowTitle:w.title(),texts:w.staticTexts.value(),buttons:w.buttons.name()};if(!seen.windowTitle&&!seen.buttons.some(function(b){return !!b;})){continue;}const idx=seen.buttons.indexOf(label);if(idx<0){return JSON.stringify(seen);}w.buttons.byName(label).click();seen.pressed=true;return JSON.stringify(seen);}return JSON.stringify({processFound:true,dialogFound:false});}`
 
 // canPress reports whether press works on this operating system.
-func (inspector dialogInspector) canPress() bool {
+func (inspector Inspector) CanPress() bool {
 	return inspector.goos == "darwin" || inspector.goos == "windows"
 }
 
 // press presses the button labeled exactly label in the frontmost modal dialog of this project's
 // Editor, and returns that dialog as it was before the press.
-func (inspector dialogInspector) press(ctx context.Context, projectRoot string, label string) (dialogPressResult, error) {
-	if !inspector.canPress() {
-		return dialogPressResult{}, dialogPressNotStartedError{err: errDialogPressUnsupported}
+func (inspector Inspector) Press(ctx context.Context, projectRoot string, label string) (PressResult, error) {
+	if !inspector.CanPress() {
+		return PressResult{}, PressNotStartedError{Err: errDialogPressUnsupported}
 	}
 	pid, err := inspector.unityPid(ctx, projectRoot)
 	if err != nil {
-		return dialogPressResult{}, dialogPressNotStartedError{err: err}
+		return PressResult{}, PressNotStartedError{Err: err}
 	}
 	if inspector.goos == "windows" {
 		return inspector.pressWin32Button(ctx, pid, label)
@@ -65,25 +73,16 @@ func (inspector dialogInspector) press(ctx context.Context, projectRoot string, 
 		pressCtx, "osascript", "-l", "JavaScript", "-e", accessibilityPressScript, strconv.Itoa(pid), label)
 	// Why before err: a stopped command fails with "signal: killed", which hides why it stopped.
 	if stopErr := inspector.stoppedLookError(ctx, pressCtx, "osascript did not answer"); stopErr != nil {
-		return dialogPressResult{}, stopErr
+		return PressResult{}, stopErr
 	}
 	if err != nil {
-		return dialogPressResult{}, fmt.Errorf("osascript could not press the button: %w", err)
+		return PressResult{}, fmt.Errorf("osascript could not press the button: %w", err)
 	}
 	return pressResultFromAccessibilityOutput(output)
 }
 
-// answerFailedHint is added to a failed press where a missing permission can be the cause: only
-// macOS needs one to press another process's buttons.
-func (inspector dialogInspector) answerFailedHint() string {
-	if inspector.goos != "darwin" {
-		return ""
-	}
-	return "On macOS, pressing a button needs " + dialogMacPermissions + "."
-}
-
 // pressResultFromAccessibilityOutput turns the press script's JSON into a result.
-func pressResultFromAccessibilityOutput(output []byte) (dialogPressResult, error) {
+func pressResultFromAccessibilityOutput(output []byte) (PressResult, error) {
 	var raw struct {
 		ProcessFound bool `json:"processFound"`
 		DialogFound  bool `json:"dialogFound"`
@@ -91,16 +90,16 @@ func pressResultFromAccessibilityOutput(output []byte) (dialogPressResult, error
 		accessibilityWindow
 	}
 	if err := json.Unmarshal(output, &raw); err != nil {
-		return dialogPressResult{}, fmt.Errorf("unreadable osascript output: %w", err)
+		return PressResult{}, fmt.Errorf("unreadable osascript output: %w", err)
 	}
 	if !raw.ProcessFound {
 		// The script returns before its click when it finds no process, so nothing was pressed.
-		return dialogPressResult{}, dialogPressNotStartedError{
-			err: errors.New("this project's Unity process is not listed by System Events"),
+		return PressResult{}, PressNotStartedError{
+			Err: errors.New("this project's Unity process is not listed by System Events"),
 		}
 	}
 	if !raw.DialogFound {
-		return dialogPressResult{DialogFound: false}, nil
+		return PressResult{DialogFound: false}, nil
 	}
-	return dialogPressResult{DialogFound: true, Pressed: raw.Pressed, Dialog: raw.dialog()}, nil
+	return PressResult{DialogFound: true, Pressed: raw.Pressed, Dialog: raw.dialog()}, nil
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
 const statusTestAcceptedResponse = `{"jsonrpc":"2.0","id":1,"uloop":{"phase":"accepted"}}`
@@ -622,7 +623,7 @@ func statusTestDeps(t *testing.T) statusCommandDeps {
 			return false, errors.New("unexpected Unity process lookup")
 		},
 		inspectDialogs: func(context.Context, string) ([]statusDialog, error) {
-			return nil, errDialogInspectionUnsupported
+			return nil, unitydialog.ErrInspectionUnsupported
 		},
 		dialogCheckNextAction: statusTestDialogCheckNextAction,
 		canAnswerDialogs:      true,

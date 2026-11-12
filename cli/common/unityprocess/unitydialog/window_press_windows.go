@@ -1,6 +1,6 @@
 //go:build windows
 
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -31,14 +31,14 @@ func pressWin32WindowButton(ctx context.Context, target win32PressTargetResult) 
 	api := newWin32WindowAPI()
 	dialog := windows.HWND(target.DialogHandle)
 	if !api.isWindow(dialog) || !windows.IsWindowVisible(dialog) || !api.isEnabled(dialog) {
-		return dialogPressNotStartedError{
-			err: errors.New("the dialog closed, was hidden, or was disabled before its button was pressed"),
+		return PressNotStartedError{
+			Err: errors.New("the dialog closed, was hidden, or was disabled before its button was pressed"),
 		}
 	}
 	button := windows.HWND(target.ButtonHandle)
 	if !api.isWindow(button) || !windows.IsWindowVisible(button) || !api.isEnabled(button) {
-		return dialogPressNotStartedError{
-			err: errors.New("the button was closed, hidden, or disabled before it was pressed"),
+		return PressNotStartedError{
+			Err: errors.New("the button was closed, hidden, or disabled before it was pressed"),
 		}
 	}
 	return api.sendButtonClicked(ctx, dialog, target.ButtonID, button)
@@ -56,7 +56,7 @@ func (api win32WindowAPI) sendButtonClicked(
 ) error {
 	timeout, hasTime := win32SendTimeout(ctx)
 	if !hasTime {
-		return dialogPressNotStartedError{err: errors.New("no time was left to press the button")}
+		return PressNotStartedError{Err: errors.New("no time was left to press the button")}
 	}
 	// The control ID is the low word and the notification the high word of the first argument.
 	wparam := uintptr(buttonID&0xFFFF) | uintptr(win32NotificationClicked)<<16
@@ -90,12 +90,12 @@ func win32ClickError(sent uintptr, callErr error) error {
 		return nil
 	}
 	if errors.Is(callErr, windows.ERROR_ACCESS_DENIED) {
-		return dialogPressNotStartedError{err: errors.New(
+		return PressNotStartedError{Err: errors.New(
 			"the click was not delivered: Windows denied access, which happens when Unity runs with higher privileges than uloop",
 		)}
 	}
 	if errors.Is(callErr, windows.ERROR_INVALID_WINDOW_HANDLE) {
-		return dialogPressNotStartedError{err: errors.New("the dialog closed before its button was pressed")}
+		return PressNotStartedError{Err: errors.New("the dialog closed before its button was pressed")}
 	}
 	return errors.New("the dialog did not answer the click, so the button may or may not have been pressed")
 }

@@ -1,6 +1,6 @@
 //go:build windows
 
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -221,9 +221,9 @@ func TestPressWin32ButtonSendsNoClickToARealDialogWithAnEditableTextBox(t *testi
 
 	result, err := inspector.pressWin32Button(context.Background(), os.Getpid(), "OK")
 
-	want := dialogPressResult{
+	want := PressResult{
 		DialogFound: true,
-		Dialog:      statusDialog{Title: "uloop test form", Message: "Typed", Buttons: []string{}},
+		Dialog:      Dialog{Title: "uloop test form", Message: "Typed", Buttons: []string{}},
 	}
 	if err != nil || !reflect.DeepEqual(result, want) {
 		t.Fatalf("press = %#v, %v; want %#v and no error", result, err, want)

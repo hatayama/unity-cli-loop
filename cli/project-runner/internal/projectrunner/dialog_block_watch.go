@@ -33,7 +33,7 @@ type dialogWatchDeps struct {
 func defaultDialogWatchDeps() dialogWatchDeps {
 	return dialogWatchDeps{
 		probeEditorStatus: probeEditorStatusForDialogs,
-		canPressDialogs:   defaultDialogInspector().canPress(),
+		canPressDialogs:   defaultDialogInspector().CanPress(),
 		now:               time.Now,
 	}
 }

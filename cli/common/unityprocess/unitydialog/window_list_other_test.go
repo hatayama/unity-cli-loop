@@ -1,6 +1,6 @@
 //go:build !windows
 
-package projectrunner
+package unitydialog
 
 import (
 	"context"

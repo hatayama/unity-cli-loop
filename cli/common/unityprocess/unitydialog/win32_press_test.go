@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"reflect"
@@ -89,7 +89,7 @@ func TestWin32PressTargetReportsADialogWithoutButtons(t *testing.T) {
 
 	want := win32PressTargetResult{
 		DialogFound:  true,
-		Dialog:       statusDialog{Title: "Probe modal", Message: "", Buttons: []string{}},
+		Dialog:       Dialog{Title: "Probe modal", Message: "", Buttons: []string{}},
 		DialogHandle: 0x2000,
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -112,7 +112,7 @@ func TestWin32PressTargetChoosesNoButtonInAFilePicker(t *testing.T) {
 
 			want := win32PressTargetResult{
 				DialogFound:  true,
-				Dialog:       statusDialog{Title: "Probe save", Message: "File &name:", Buttons: []string{}},
+				Dialog:       Dialog{Title: "Probe save", Message: "File &name:", Buttons: []string{}},
 				DialogHandle: 0x7000,
 			}
 			if !reflect.DeepEqual(got, want) {
@@ -137,7 +137,7 @@ func TestWin32PressTargetLooksOnlyAtTheFirstDialog(t *testing.T) {
 
 	want := win32PressTargetResult{
 		DialogFound:  true,
-		Dialog:       statusDialog{Title: "First", Message: "", Buttons: []string{"Yes", "No"}},
+		Dialog:       Dialog{Title: "First", Message: "", Buttons: []string{"Yes", "No"}},
 		DialogHandle: 0x3000,
 	}
 	if !reflect.DeepEqual(got, want) {
