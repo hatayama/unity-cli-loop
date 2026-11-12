@@ -48,6 +48,8 @@ type blockedByDialogError struct {
 	// notRun is Unity's main_thread_blocked answer when Unity gave up waiting for its main thread
 	// before the command ran. The other fields below are unused then.
 	notRun error
+	// notSent is true when uloop found the dialog before sending the command, so Unity never saw it.
+	notSent bool
 	// stopped is the sentence after the dialog sentence: what uloop stopped and what became of the
 	// command.
 	stopped          string
@@ -67,6 +69,21 @@ func hotReloadWaitBlockedByDialog(dialogs []statusDialog, canPress bool) blocked
 		stopped:          "uloop hot-reload stopped waiting, and nothing was applied.",
 		closedNextAction: "After the dialog is closed, run uloop hot-reload again.",
 		phase:            clierrors.ErrorPhaseExecution,
+		safeToRetry:      true,
+	}
+}
+
+// notSentBlockedByDialog is the error of a command uloop did not send because the check before
+// sending found a dialog. Why phase connection: it is the phase of the failures that never reached
+// Unity, which is what makes the command safe to run again once the dialog is closed.
+func notSentBlockedByDialog(command string, dialogs []statusDialog, canPress bool) blockedByDialogError {
+	return blockedByDialogError{
+		command:          command,
+		dialogs:          dialogs,
+		canPress:         canPress,
+		notSent:          true,
+		closedNextAction: commandDialogClosedNextAction,
+		phase:            clierrors.ErrorPhaseConnection,
 		safeToRetry:      true,
 	}
 }
@@ -141,11 +158,14 @@ func (err blockedByDialogError) Error() string {
 	if err.notRun != nil {
 		return err.notRun.Error()
 	}
+	if err.notSent {
+		return fmt.Sprintf("a modal dialog is open in Unity; uloop did not send %s", err.command)
+	}
 	return fmt.Sprintf("a modal dialog is open in Unity; uloop %s stopped waiting", err.command)
 }
 
 func (err blockedByDialogError) message() string {
-	if err.notRun != nil {
+	if err.notRun != nil || err.notSent {
 		return fmt.Sprintf("'%s' was not run: %s", err.command, blockedByDialogMessage(err.dialogs))
 	}
 	return blockedByDialogMessage(err.dialogs) + " " + err.stopped
