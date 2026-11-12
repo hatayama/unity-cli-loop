@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 	"testing"
 	"time"
@@ -234,13 +233,11 @@ type heartbeatScript struct {
 }
 
 // serveHeartbeats accepts one request, accepts it, and sends heartbeats reporting stallSeconds.
+// Why newLoopbackIpcListener: the client dials only named pipes on Windows, so a TCP listener
+// there is never reached and the send retries until the test's deadline.
 func serveHeartbeats(t *testing.T, script heartbeatScript) unityipc.Connection {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	t.Cleanup(func() { _ = listener.Close() })
+	listener := newLoopbackIpcListener(t)
 	go func() {
 		conn, acceptErr := listener.Accept()
 		if acceptErr != nil {
@@ -281,7 +278,7 @@ func serveHeartbeats(t *testing.T, script heartbeatScript) unityipc.Connection {
 		_, _ = io.Copy(io.Discard, conn)
 	}()
 	return unityipc.Connection{
-		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: listener.Addr().String()},
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
 		ProjectRoot: t.TempDir(),
 	}
 }
@@ -411,11 +408,7 @@ func TestSendExplainsTheFiveMinuteStallByADialog(t *testing.T) {
 // poll looks while Unity's main thread is held.
 func unansweredIPCConnection(t *testing.T) unityipc.Connection {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	t.Cleanup(func() { _ = listener.Close() })
+	listener := newLoopbackIpcListener(t)
 	go func() {
 		for {
 			conn, acceptErr := listener.Accept()
@@ -426,7 +419,7 @@ func unansweredIPCConnection(t *testing.T) unityipc.Connection {
 		}
 	}()
 	return unityipc.Connection{
-		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: listener.Addr().String()},
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
 		ProjectRoot: t.TempDir(),
 	}
 }
