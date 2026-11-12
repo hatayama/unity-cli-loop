@@ -175,6 +175,63 @@ func TestClassifyHeldUnityLockfileError(t *testing.T) {
 	}
 }
 
+func TestCleanStaleUnityTempKeepsTheDeleteErrorForAPermissionFailure(t *testing.T) {
+	// Verifies a delete that fails for lack of permission stays the retried delete failure instead of
+	// being reported as a project that is already open.
+	projectRoot := createLaunchTestProject(t)
+	createStaleUnityLockfile(t, projectRoot)
+	deps := defaultLaunchDeps()
+	useFakeLaunchClock(&deps)
+	deps.isUnityLockfileHeld = func(string) (bool, error) {
+		return false, nil
+	}
+	removeCalls := 0
+	deps.removePath = func(path string) error {
+		removeCalls++
+		return &os.PathError{Op: "unlinkat", Path: path, Err: os.ErrPermission}
+	}
+
+	_, err := cleanStaleUnityTemp(context.Background(), projectRoot, deps)
+
+	var heldError heldUnityLockfileError
+	if errors.As(err, &heldError) {
+		t.Fatalf("a permission failure must not be reported as a held lockfile: %v", err)
+	}
+	if !errors.Is(err, os.ErrPermission) || !strings.Contains(err.Error(), "could not delete the stale") {
+		t.Fatalf("expected the stale-lockfile delete failure, got %v", err)
+	}
+	if removeCalls < 2 {
+		t.Fatalf("a permission failure should still be retried, got %d delete attempts", removeCalls)
+	}
+}
+
+func TestHeldUnityLockfileNextActionsNameWindowsTools(t *testing.T) {
+	// Verifies the next actions point a Windows user at Windows tools instead of ps and lsof.
+	actions := strings.Join(heldUnityLockfileNextActions("windows"), "\n")
+
+	for _, expected := range []string{"Get-CimInstance", "Task Manager", "Resource Monitor"} {
+		if !strings.Contains(actions, expected) {
+			t.Fatalf("Windows next actions should mention %s: %s", expected, actions)
+		}
+	}
+	for _, unexpected := range []string{"ps -axo", "lsof"} {
+		if strings.Contains(actions, unexpected) {
+			t.Fatalf("Windows next actions should not mention %s: %s", unexpected, actions)
+		}
+	}
+}
+
+func TestHeldUnityLockfileNextActionsKeepUnixTools(t *testing.T) {
+	// Verifies the next actions outside Windows keep pointing at ps and lsof.
+	actions := strings.Join(heldUnityLockfileNextActions("darwin"), "\n")
+
+	for _, expected := range []string{"ps -axo", "lsof"} {
+		if !strings.Contains(actions, expected) {
+			t.Fatalf("next actions should mention %s: %s", expected, actions)
+		}
+	}
+}
+
 // useFakeLaunchClock makes sleeping advance the clock instead of waiting, so a test can run a
 // retry budget out instantly.
 func useFakeLaunchClock(deps *launchDeps) {
