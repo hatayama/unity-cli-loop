@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
@@ -371,5 +375,85 @@ func TestPreSendStatusProbeTakesOneRoundTripDuringAPausePointStop(t *testing.T) 
 	case err := <-serverErr:
 		t.Fatalf("fake Unity server failed: %v", err)
 	default:
+	}
+}
+
+// listenOnProjectEndpoint serves a fake Editor on the endpoint uloop resolves for projectRoot, so a
+// test can run the uloop entry itself without replacing any dependency.
+func listenOnProjectEndpoint(t *testing.T, projectRoot string) net.Listener {
+	t.Helper()
+	endpoint := project.CreateEndpoint(projectRoot)
+	if endpoint.Network == "unix" {
+		if err := os.MkdirAll(filepath.Dir(endpoint.Address), 0o700); err != nil {
+			t.Fatalf("failed to create the socket directory: %v", err)
+		}
+		_ = os.Remove(endpoint.Address)
+		t.Cleanup(func() { _ = os.Remove(endpoint.Address) })
+	}
+	return relistenLoopbackIpc(t, endpoint.Network, endpoint.Address)
+}
+
+// Verifies the uloop entry, with nothing replaced, asks the Editor before sending: an Editor that
+// reports a dialog itself (as Unity 6000.7 and later do) gets the status request only, and the
+// command is refused with BLOCKED_BY_DIALOG without reaching it.
+func TestRunProjectLocalRefusesBeforeSendingWithTheProductionCheck(t *testing.T) {
+	useUnityProcessLookup(t, noUnityProcessLookup)
+	projectRoot := writeFakeUnityProject(t)
+	listener := listenOnProjectEndpoint(t, projectRoot)
+	steps := []scriptedIPCStep{{method: editorStatusBridgeCommandName, result: commandDialogStatusWithDialog}}
+	requests := make(chan scriptedIPCRequest, len(steps)+1)
+	serverErr := make(chan error, len(steps)+1)
+	go serveScriptedIPCResponses(listener, steps, requests, serverErr)
+	var stdout, stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"--project-path", projectRoot, commandDialogBlockCommand},
+		&stdout, &stderr)
+
+	assertRefusedBeforeSend(t, preSendRun{code: code, stdout: stdout.String(), stderr: stderr.String()},
+		commandDialogBlockCommand, commandDialogPlayerStoppedDialog().Title)
+	if len(requests) != 1 {
+		t.Fatalf("requests = %d, want only the status request", len(requests))
+	}
+	select {
+	case err := <-serverErr:
+		t.Fatalf("fake Unity server failed: %v", err)
+	default:
+	}
+}
+
+// Verifies the production check before sending leaves an Editor that does not answer to the send: it
+// neither reads the process list nor looks at Unity's windows.
+func TestDefaultPreSendCheckDoesNotDiagnoseAnUnreachableEditor(t *testing.T) {
+	lookups := 0
+	useUnityProcessLookup(t, func(context.Context, string) (*clicore.UnityProcess, error) {
+		lookups++
+		return &clicore.UnityProcess{Pid: os.Getpid()}, nil
+	})
+
+	_, err := defaultPreSendDialogWatchDeps().probeEditorStatus(context.Background(), unreachableConnection(t.TempDir()))
+
+	if err == nil || lookups != 0 {
+		t.Fatalf("err = %v, process lookups = %d, want an error and no lookup", err, lookups)
+	}
+}
+
+// Verifies the uloop entry wires the check that leaves an unreachable Editor alone: with the run
+// already cancelled, the send gives up before any process lookup, so a lookup can only come from a
+// check that diagnoses the unreachable Editor the way uloop status does.
+func TestRunProjectLocalChecksWithoutDiagnosingAnUnreachableEditor(t *testing.T) {
+	lookups := 0
+	useUnityProcessLookup(t, func(context.Context, string) (*clicore.UnityProcess, error) {
+		lookups++
+		return nil, nil
+	})
+	projectRoot := writeFakeUnityProject(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stdout, stderr bytes.Buffer
+
+	_ = RunProjectLocal(ctx, []string{"--project-path", projectRoot, commandDialogBlockCommand}, &stdout, &stderr)
+
+	if lookups != 0 {
+		t.Fatalf("process lookups = %d, want 0\nstderr=%s", lookups, stderr.String())
 	}
 }
