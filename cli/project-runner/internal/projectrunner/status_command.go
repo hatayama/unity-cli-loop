@@ -51,6 +51,9 @@ type statusCommandDeps struct {
 	dialogCheckNextAction string
 	// Whether uloop press-dialog-button can press a button on this operating system.
 	canAnswerDialogs bool
+	// returnUnreachableAsError hands a failed round trip back as its error instead of reading the
+	// process list and Unity's windows to describe it. The check before a command is sent sets it.
+	returnUnreachableAsError bool
 }
 
 func defaultStatusCommandDeps() statusCommandDeps {
@@ -211,6 +214,9 @@ func readEditorStatus(
 		map[string]any{},
 	)
 	if err != nil {
+		if deps.returnUnreachableAsError {
+			return nil, statusReport{}, err
+		}
 		// The process lookup gets the caller's ctx because probeCtx may already have run out.
 		report, reportErr := reportFromProbeError(ctx, connection.ProjectRoot, err, deps)
 		return nil, report, reportErr

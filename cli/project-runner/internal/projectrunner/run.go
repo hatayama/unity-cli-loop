@@ -20,6 +20,17 @@ import (
 )
 
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
+	return runProjectLocalWithDeps(ctx, args, stdout, stderr, defaultPreSendDialogWatchDeps())
+}
+
+// runProjectLocalWithDeps is RunProjectLocal with the dialog check before sending replaceable.
+func runProjectLocalWithDeps(
+	ctx context.Context,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+	dialogCheck dialogWatchDeps,
+) int {
 	remainingArgs, projectPath, err := clicore.ParseGlobalProjectPath(args)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
@@ -64,7 +75,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: command})
 		return 1
 	}
-	return runResolvedProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr)
+	return runProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr, dialogCheck)
 }
 
 func runTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {

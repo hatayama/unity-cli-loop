@@ -122,6 +122,7 @@ func runRecordVideoOneShot(
 	stopCtx, cancel := context.WithTimeout(context.Background(), recordVideoOneShotStopTimeout)
 	defer cancel()
 	stopResult, stopErr := sendRecordVideoRequest(stopCtx, connection, recordVideoActionArgs("stop"), startPath)
+	stopErr = recordingStopBlockedByDialog(stopErr)
 	spinner.Stop()
 
 	return writeRecordVideoOneShotResult(connection, report, outcome, stopResult, stopErr, stdout, stderr)
