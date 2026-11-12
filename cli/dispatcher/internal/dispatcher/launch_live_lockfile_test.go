@@ -222,13 +222,26 @@ func TestHeldUnityLockfileNextActionsNameWindowsTools(t *testing.T) {
 }
 
 func TestHeldUnityLockfileNextActionsKeepUnixTools(t *testing.T) {
-	// Verifies the next actions outside Windows keep pointing at ps and lsof.
+	// Verifies the next actions on macOS keep pointing at ps filtered to the macOS Editor binary, and lsof.
 	actions := strings.Join(heldUnityLockfileNextActions("darwin"), "\n")
 
-	for _, expected := range []string{"ps -axo", "lsof"} {
+	for _, expected := range []string{"ps -axo", "MacOS/Unity", "lsof"} {
 		if !strings.Contains(actions, expected) {
 			t.Fatalf("next actions should mention %s: %s", expected, actions)
 		}
+	}
+}
+
+func TestHeldUnityLockfileNextActionsFilterLinuxEditors(t *testing.T) {
+	// Verifies the process list suggested on Linux filters for the Linux Editor binary instead of the
+	// macOS one, which would match no Linux Editor.
+	actions := strings.Join(heldUnityLockfileNextActions("linux"), "\n")
+
+	if !strings.Contains(actions, "grep Editor/Unity") || !strings.Contains(actions, "lsof") {
+		t.Fatalf("Linux next actions should filter for Editor/Unity and mention lsof: %s", actions)
+	}
+	if strings.Contains(actions, "MacOS/Unity") {
+		t.Fatalf("Linux next actions should not filter for the macOS Editor: %s", actions)
 	}
 }
 

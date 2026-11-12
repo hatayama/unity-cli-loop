@@ -51,8 +51,15 @@ func heldUnityLockfileNextActions(goos string) []string {
 				"(for example in Resource Monitor: CPU tab, Associated Handles, search for UnityLockfile), stop it, and retry the launch command.",
 		}
 	}
+	// Why the filter differs: the Editor binary is .../Unity.app/Contents/MacOS/Unity on macOS and
+	// .../Editor/Unity on Linux, and neither filter matches the other platform's Editor.
+	editorBinaryFilter := "MacOS/Unity"
+	if goos == "linux" {
+		editorBinaryFilter = "Editor/Unity"
+	}
 	return []string{
-		"Before closing anything, save the output of `ps -axo pid,lstart,args | grep MacOS/Unity` (or your platform's process list): it shows which process the scan missed.",
+		"Before closing anything, save the output of `ps -axo pid,lstart,args | grep " + editorBinaryFilter +
+			"`: it shows which process the scan missed.",
 		checkOpenEditor,
 		"If no Unity process has the project open, find the process holding the lockfile (for example with `lsof` on the lockfile path), stop it, and retry the launch command.",
 	}
