@@ -16,7 +16,7 @@ uloop status --project-path <path>
 
 ## States
 
-The states are checked in this order, and the first one that matches is reported. A dialog found in Unity's windows replaces `Busy`, `MainThreadBlocked`, or `ServerUnavailable`.
+The states are checked in this order, and the first one that matches is reported. A dialog found in Unity's windows replaces `Ready`, `Compiling`, `ImportingAssets`, `Busy`, `MainThreadBlocked`, or `ServerUnavailable`.
 
 | State | Meaning | Exit code |
 |-------|---------|-----------|
