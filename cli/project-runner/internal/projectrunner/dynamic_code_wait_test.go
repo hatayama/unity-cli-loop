@@ -66,14 +66,15 @@ func runDynamicCodeReloadWaitForTest(t *testing.T, connection unityipc.Connectio
 		t.Fatalf("readiness waits = %d, want 1\nstderr: %s", waits, stderr.String())
 	}
 	var envelope clierrors.CLIErrorEnvelope
-	if err := json.Unmarshal([]byte(lastJSONObject(stderr.String())), &envelope); err != nil {
+	if err := json.Unmarshal([]byte(fromFirstBrace(stderr.String())), &envelope); err != nil {
 		t.Fatalf("stderr has no JSON error envelope: %v\n%s", err, stderr.String())
 	}
 	return dynamicCodeReloadRun{code: code, stdout: stdout.String(), cliError: envelope.Error}
 }
 
-// lastJSONObject drops the progress lines a spinner may print before the envelope.
-func lastJSONObject(output string) string {
+// fromFirstBrace returns the output from its first "{" on, dropping the progress lines a spinner may
+// print before the envelope.
+func fromFirstBrace(output string) string {
 	index := strings.Index(output, "{")
 	if index < 0 {
 		return output
