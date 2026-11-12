@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.15.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.15.0...dispatcher-v3.15.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* execute-dynamic-code no longer tells you to retry a snippet that reloaded scripts before Unity could answer ([#3491](https://github.com/hatayama/unity-cli-loop/issues/3491)) ([20868bf](https://github.com/hatayama/unity-cli-loop/commit/20868bf64960665914f3e663359a909110a0c71d))
+* uloop launch -q no longer reports success while an Editor it cannot identify keeps running ([#3475](https://github.com/hatayama/unity-cli-loop/issues/3475)) ([236389b](https://github.com/hatayama/unity-cli-loop/commit/236389b60723092200f5c4f5252478f401b52cea))
+* uloop launch no longer opens a second Unity Editor on a project that is already open ([#3464](https://github.com/hatayama/unity-cli-loop/issues/3464)) ([ed9d1af](https://github.com/hatayama/unity-cli-loop/commit/ed9d1af1bc572d8a6d9bb4f6202e720eddf8080d))
+* uloop launch on Windows reports a project another Editor has open as already open, instead of an internal error ([#3488](https://github.com/hatayama/unity-cli-loop/issues/3488)) ([9130ac6](https://github.com/hatayama/unity-cli-loop/commit/9130ac69949085783402849d499df9d901a236b8))
+* uloop no longer mistakes Unity Hub's helper for an Editor on Windows, and counts an Editor it cannot read as one it cannot identify ([#3478](https://github.com/hatayama/unity-cli-loop/issues/3478)) ([017603b](https://github.com/hatayama/unity-cli-loop/commit/017603bdc868d71525899a3fac57bfce9db6b3e2))
+
 ## [3.15.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.2...dispatcher-v3.15.0) (2026-11-09)
 
 
