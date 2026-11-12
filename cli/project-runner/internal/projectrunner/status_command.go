@@ -153,8 +153,9 @@ func runStatusCommandWithDeps(
 	return 1
 }
 
-// probeEditorStatus asks the Editor once, and asks once more only when the first answer reads
-// as a blocked main thread. A stalled main thread then gets a look at Unity's windows for a dialog.
+// probeEditorStatus asks the Editor once, and asks once more when the first answer reads as a
+// blocked main thread or as a main thread that has been still for a short while. A main thread
+// that stayed still across both answers then gets a look at Unity's windows for a dialog.
 func probeEditorStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -164,20 +165,33 @@ func probeEditorStatus(
 	if response == nil {
 		return report, err
 	}
-	if classifyEditorState(*response) == statusStateMainThreadBlocked {
-		// The first probe woke the Editor loop (SignalTick). A loop that was only sleeping runs
-		// within the delay, so the second reading tells sleeping from blocked.
-		select {
-		case <-ctx.Done():
-			return statusReport{}, ctx.Err()
-		case <-time.After(deps.reprobeDelay):
-		}
-		response, report, err = readEditorStatus(ctx, connection, deps)
+	state := classifyEditorState(*response)
+	if needsEarlyDialogInspection(state, *response) {
+		return probeAfterShortStall(ctx, connection, *response, deps)
+	}
+	if state == statusStateMainThreadBlocked {
+		response, report, err = reprobeEditorStatus(ctx, connection, deps)
 		if response == nil {
 			return report, err
 		}
 	}
 	return withDialogInspection(ctx, connection.ProjectRoot, *response, reportFromEditorResponse(*response), deps), nil
+}
+
+// reprobeEditorStatus waits reprobeDelay and reads the Editor's status again.
+// Why wait: the first probe woke the Editor loop (SignalTick). A loop that was only sleeping runs
+// within the delay, so the second reading tells sleeping from blocked.
+func reprobeEditorStatus(
+	ctx context.Context,
+	connection unityipc.Connection,
+	deps statusCommandDeps,
+) (*editorStatusResponse, statusReport, error) {
+	select {
+	case <-ctx.Done():
+		return nil, statusReport{}, ctx.Err()
+	case <-time.After(deps.reprobeDelay):
+	}
+	return readEditorStatus(ctx, connection, deps)
 }
 
 // readEditorStatus makes one get-editor-status round trip with its own timeout. A nil response

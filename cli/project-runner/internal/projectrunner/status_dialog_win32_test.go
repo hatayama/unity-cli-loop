@@ -594,18 +594,20 @@ func TestDialogInspectorOnWindowsReportsCancellation(t *testing.T) {
 	}
 }
 
-// Verifies the hint about a failed look explains Accessibility access only on macOS; elsewhere it
-// only asks to look at Unity, because Windows needs no permission to read another window.
+// Verifies the hint about a failed look names the macOS permissions, Accessibility and Automation
+// of System Events, only on macOS; elsewhere it only asks to look at Unity, because Windows needs
+// no permission to read another window.
 func TestDialogInspectorCheckFailedNextActionDiffersByOperatingSystem(t *testing.T) {
 	const askTheUser = "ask the user to look at Unity"
 
 	macOS := dialogInspector{goos: "darwin"}.checkFailedNextAction()
-	if !strings.Contains(macOS, askTheUser) || !strings.Contains(macOS, "Accessibility access") {
-		t.Fatalf("macOS hint = %q, want it to ask the user and explain Accessibility access", macOS)
+	if !strings.Contains(macOS, askTheUser) || !strings.Contains(macOS, "Accessibility and Automation (System Events)") {
+		t.Fatalf("macOS hint = %q, want it to ask the user and name both permissions", macOS)
 	}
 
 	windows := dialogInspector{goos: "windows"}.checkFailedNextAction()
-	if !strings.Contains(windows, askTheUser) || strings.Contains(windows, "Accessibility") || strings.Contains(windows, "macOS") {
+	if !strings.Contains(windows, askTheUser) || strings.Contains(windows, "Accessibility") ||
+		strings.Contains(windows, "Automation") || strings.Contains(windows, "macOS") {
 		t.Fatalf("Windows hint = %q, want it to ask the user without the macOS permission", windows)
 	}
 }

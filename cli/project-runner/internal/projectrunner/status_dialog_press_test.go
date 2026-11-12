@@ -212,12 +212,13 @@ func assertPressNotStarted(t *testing.T, err error, want bool) {
 	}
 }
 
-// Verifies the hint added to a failed press names the macOS Accessibility setting without
-// describing a failed look, and is empty where no permission is involved.
-func TestDialogInspectorAnswerFailedHintNamesTheAccessibilitySetting(t *testing.T) {
+// Verifies the hint added to a failed press names both macOS permissions, Accessibility and
+// Automation of System Events, without describing a failed look, and is empty where no permission
+// is involved.
+func TestDialogInspectorAnswerFailedHintNamesBothMacPermissions(t *testing.T) {
 	macOS := dialogInspector{goos: "darwin"}.answerFailedHint()
-	if !strings.Contains(macOS, "Accessibility access") || strings.Contains(macOS, "could not look") {
-		t.Fatalf("macOS hint = %q, want the Accessibility setting without the look failure", macOS)
+	if !strings.Contains(macOS, "Accessibility and Automation (System Events)") || strings.Contains(macOS, "could not look") {
+		t.Fatalf("macOS hint = %q, want both permissions without the look failure", macOS)
 	}
 	if windows := (dialogInspector{goos: "windows"}).answerFailedHint(); windows != "" {
 		t.Fatalf("Windows hint = %q, want none", windows)

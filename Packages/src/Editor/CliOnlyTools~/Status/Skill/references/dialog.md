@@ -69,5 +69,5 @@ Press a button only when it clearly fits what the user asked for. Ask the user f
 ## Supported Systems
 
 - Listing and pressing: macOS and Windows.
-- On macOS, both need Accessibility access for the app that runs uloop (System Settings > Privacy & Security > Accessibility). On Windows, neither needs a permission.
+- On macOS, both need Accessibility and Automation (System Events) access for the app that runs uloop (System Settings > Privacy & Security > Accessibility and > Automation). On Windows, neither needs a permission.
 - Not a Unity Editor started as administrator on Windows while uloop runs as a standard user: uloop cannot tell which project that Editor has open, so `get-dialogs` returns `DIALOG_CHECK_FAILED` and `press-dialog-button` returns `DIALOG_ANSWER_FAILED` with `SafeToRetry: true`. Nothing is pressed; ask the user to answer the dialog.
