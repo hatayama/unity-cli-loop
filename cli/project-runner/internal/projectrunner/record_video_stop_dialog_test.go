@@ -14,12 +14,14 @@ import (
 // started and goes on, not as a record-video that was not run: retrying would start a second
 // recording, so it is not safe to retry, and the last step says how to stop the one that runs.
 // Covers both forms a stop can meet: the dialog found while waiting for the server (not sent) and
-// Unity's main_thread_blocked answer (not run).
+// Unity's main_thread_blocked answer (not run), whose stall details are kept.
 func TestRunRecordVideoOneShotReportsTheRunningRecordingWhenADialogBlocksStop(t *testing.T) {
 	dialogs := []statusDialog{commandDialogPlayerStoppedDialog()}
 	cases := []struct {
 		name string
 		err  error
+		// wantStall is whether Unity's main_thread_blocked details, such as StallSeconds, carry over.
+		wantStall bool
 	}{
 		{name: "not sent", err: notSentBlockedByDialog(tooldocs.RecordVideoCommandName, dialogs, true)},
 		{name: "not run", err: blockedByDialogError{
@@ -27,7 +29,7 @@ func TestRunRecordVideoOneShotReportsTheRunningRecordingWhenADialogBlocksStop(t 
 			dialogs:  dialogs,
 			canPress: true,
 			notRun:   commandDialogMainThreadBlockedRPCError(tooldocs.RecordVideoCommandName),
-		}},
+		}, wantStall: true},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -57,6 +59,9 @@ func TestRunRecordVideoOneShotReportsTheRunningRecordingWhenADialogBlocksStop(t 
 			}
 			if _, present := cliError.Details["Dialogs"]; !present {
 				t.Fatalf("Details = %#v, want Dialogs", cliError.Details)
+			}
+			if _, present := cliError.Details["StallSeconds"]; present != testCase.wantStall {
+				t.Fatalf("Details = %#v, want StallSeconds present = %v", cliError.Details, testCase.wantStall)
 			}
 		})
 	}
