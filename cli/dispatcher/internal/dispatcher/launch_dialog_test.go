@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -107,10 +108,15 @@ func assertLaunchBlockedByDialogRetry(t *testing.T, run launchBlockedRun, dialog
 	return cliError
 }
 
+// assertPressGuidance checks the steps point at press-dialog-button first and, right after it, say
+// what to do when the project's package has no such command.
 func assertPressGuidance(t *testing.T, cliError clierrors.CLIError) {
 	t.Helper()
 	if !strings.Contains(cliError.NextActions[0], `uloop press-dialog-button --label "<button>"`) {
 		t.Fatalf("NextActions = %q, want the first one to point at press-dialog-button", cliError.NextActions)
+	}
+	if len(cliError.NextActions) < 2 || cliError.NextActions[1] != launchOldPackageNextAction {
+		t.Fatalf("NextActions = %q, want the second one to be %q", cliError.NextActions, launchOldPackageNextAction)
 	}
 }
 
@@ -120,6 +126,9 @@ func assertManualCloseGuidance(t *testing.T, cliError clierrors.CLIError) {
 	t.Helper()
 	if !strings.Contains(cliError.NextActions[0], "ask them to answer it in Unity") {
 		t.Fatalf("NextActions = %q, want the first one to ask the user", cliError.NextActions)
+	}
+	if slices.Contains(cliError.NextActions, launchOldPackageNextAction) {
+		t.Fatalf("NextActions = %q, want no step about an old package without a press to make", cliError.NextActions)
 	}
 	for _, step := range cliError.NextActions {
 		if strings.Contains(step, "press-dialog-button") || strings.Contains(step, "get-dialogs") {
@@ -188,6 +197,18 @@ func TestRunLaunchAsksTheUserToCloseADialogWithoutButtons(t *testing.T) {
 	dialog := unitydialog.Dialog{Title: "Importing", Message: "Please wait", Buttons: []string{}}
 
 	run := runFreshLaunch(t, projectRoot, freshV3LaunchDeps(t, blockedReadiness(dialog)))
+
+	assertManualCloseGuidance(t, assertLaunchBlockedByDialog(t, run, 1))
+}
+
+// Verifies a dialog with buttons is reported with steps that ask the user to close it where uloop
+// cannot press a button on this operating system.
+func TestRunLaunchAsksTheUserToCloseADialogWhereUloopCannotPress(t *testing.T) {
+	projectRoot := createLaunchTestProject(t)
+	deps := freshV3LaunchDeps(t, blockedReadiness(launchTestDialog()))
+	deps.canPressDialogs = false
+
+	run := runFreshLaunch(t, projectRoot, deps)
 
 	assertManualCloseGuidance(t, assertLaunchBlockedByDialog(t, run, 1))
 }

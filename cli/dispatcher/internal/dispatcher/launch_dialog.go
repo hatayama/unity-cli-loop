@@ -13,6 +13,15 @@ import (
 
 const launchDialogClosedNextAction = "After the dialog is closed, run uloop launch again to wait for the Editor."
 
+// launchOldPackageNextAction follows the press guidance of launch only.
+// Why launch needs it and the project runner's commands do not: launch runs in the dispatcher, which
+// updates itself, while press-dialog-button comes from the project runner the project's Unity package
+// pins, and a package from before the dialog commands pins a runner that does not have it. Why not
+// decided from the pin: the first runner version with the dialog commands is not known before it is
+// released.
+const launchOldPackageNextAction = "If uloop answers press-dialog-button as an unknown command, this project's Unity " +
+	"package predates the dialog commands: ask the user to press the button in the Unity window, and to update the package."
+
 // launchDialogFinder is the dialog look a launch hands its readiness wait: it reads the windows of the
 // Editor lookupProcess finds in projectRoot. A look that cannot find the Editor, or runs where uloop
 // cannot read windows, fails, and the wait goes on as without it.
@@ -91,7 +100,7 @@ func (err launchBlockedByDialogError) ToCLIError(context clierrors.ErrorContext)
 		SafeToRetry: !err.restart,
 		ProjectRoot: clicore.FirstNonEmpty(context.ProjectRoot, err.projectRoot),
 		Command:     context.Command,
-		NextActions: clicore.DialogAnswerNextActions(err.dialogs, err.canPress, launchDialogClosedNextAction),
+		NextActions: err.nextActions(),
 		Details:     details,
 	}
 }
@@ -107,4 +116,15 @@ func launchBlockedByDialogMessage(dialogs []unitydialog.Dialog) string {
 		return "Unity is running, but a modal dialog is open; Unity waits until it is closed." + stopped
 	}
 	return fmt.Sprintf("Unity is running, but a modal dialog %q is open; Unity waits until it is closed.", dialogs[0].Title) + stopped
+}
+
+// nextActions are the steps uloop status gives for the dialogs, with the step for an old package
+// right after the press guidance when there is one.
+func (err launchBlockedByDialogError) nextActions() []string {
+	steps := clicore.DialogAnswerNextActions(err.dialogs, err.canPress, launchDialogClosedNextAction)
+	// Why the same condition DialogAnswerNextActions presses on: the step only makes sense after a press.
+	if !err.canPress || len(err.dialogs[0].Buttons) == 0 {
+		return steps
+	}
+	return append([]string{steps[0], launchOldPackageNextAction}, steps[1:]...)
 }
