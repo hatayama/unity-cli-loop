@@ -45,17 +45,27 @@ type launchBlockedByDialogError struct {
 	dialogs []unitydialog.Dialog
 	// canPress is whether uloop press-dialog-button can answer the dialog for this project.
 	canPress bool
+	// restart is whether launch ran with --restart, which a second run repeats by quitting the Editor.
+	restart bool
+	// cause is the failure the wait saw last before it found the dialog; nil when it saw none.
+	cause error
 }
 
 // asLaunchDialogError turns a wait that stopped at a dialog into launchBlockedByDialogError and
 // returns any other err unchanged. canPress is false for a V2 project, whose commands go to the V2
-// CLI, which has no dialog commands.
-func asLaunchDialogError(err error, projectRoot string, canPress bool) error {
+// CLI, which has no dialog commands. restart is whether launch ran with --restart.
+func asLaunchDialogError(err error, projectRoot string, canPress bool, restart bool) error {
 	var blocked clicore.ToolReadinessBlockedByDialogError
 	if !errors.As(err, &blocked) {
 		return err
 	}
-	return launchBlockedByDialogError{projectRoot: projectRoot, dialogs: blocked.Dialogs, canPress: canPress}
+	return launchBlockedByDialogError{
+		projectRoot: projectRoot,
+		dialogs:     blocked.Dialogs,
+		canPress:    canPress,
+		restart:     restart,
+		cause:       blocked.Cause,
+	}
 }
 
 // Error leaves out the dialog's text on purpose: the transport checks read words such as "EOF" in
@@ -65,18 +75,24 @@ func (err launchBlockedByDialogError) Error() string {
 }
 
 // ToCLIError reports the dialogs the way uloop status does, with the last step pointing back at
-// uloop launch. Safe to retry: launch started nothing that a second run would repeat.
+// plain uloop launch.
+// Why a restart is not safe to retry: running it again quits the Editor the dialog holds, and an
+// Editor that cannot quit for the dialog is killed. A plain launch repeats nothing.
 func (err launchBlockedByDialogError) ToCLIError(context clierrors.ErrorContext) clierrors.CLIError {
+	details := map[string]any{"Dialogs": err.dialogs}
+	if err.cause != nil {
+		details["Cause"] = err.cause.Error()
+	}
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeBlockedByDialog,
 		Phase:       clierrors.ErrorPhaseConnection,
 		Message:     launchBlockedByDialogMessage(err.dialogs),
 		Retryable:   true,
-		SafeToRetry: true,
+		SafeToRetry: !err.restart,
 		ProjectRoot: clicore.FirstNonEmpty(context.ProjectRoot, err.projectRoot),
 		Command:     context.Command,
 		NextActions: clicore.DialogAnswerNextActions(err.dialogs, err.canPress, launchDialogClosedNextAction),
-		Details:     map[string]any{"Dialogs": err.dialogs},
+		Details:     details,
 	}
 }
 

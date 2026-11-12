@@ -257,7 +257,7 @@ func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid
 	spinner := ui.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
+	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -324,7 +324,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 	if isV2 {
-		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, previousStop, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
+		return waitForV2ProjectOpened(ctx, projectRoot, options.restart, runningProcess, previousStop, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
 	}
 	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
@@ -332,7 +332,7 @@ func startUnityAndWaitForReadiness(
 	}
 	logLaunchFreshFocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
+	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, options.restart, deps); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}

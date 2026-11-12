@@ -79,16 +79,23 @@ func blockedReadiness(dialogs ...unitydialog.Dialog) error {
 }
 
 // assertLaunchBlockedByDialog checks the parts every launch stopped by a dialog shares: the code,
-// the exit code, the phase, both retry flags, the dialogs in Details, and the last step.
+// the exit code, the phase, both retry flags of a plain launch, the dialogs in Details, and the last
+// step.
 func assertLaunchBlockedByDialog(t *testing.T, run launchBlockedRun, dialogCount int) clierrors.CLIError {
+	t.Helper()
+	return assertLaunchBlockedByDialogRetry(t, run, dialogCount, true)
+}
+
+// assertLaunchBlockedByDialogRetry is assertLaunchBlockedByDialog with the SafeToRetry to expect.
+func assertLaunchBlockedByDialogRetry(t *testing.T, run launchBlockedRun, dialogCount int, wantSafeToRetry bool) clierrors.CLIError {
 	t.Helper()
 	cliError := run.envelope.Error
 	if run.code != 1 || cliError.ErrorCode != clierrors.ErrorCodeBlockedByDialog {
 		t.Fatalf("exit code = %d, ErrorCode = %q, want 1 and %s\n%s", run.code, cliError.ErrorCode, clierrors.ErrorCodeBlockedByDialog, run.stderr)
 	}
-	if cliError.Phase != clierrors.ErrorPhaseConnection || !cliError.Retryable || !cliError.SafeToRetry {
-		t.Fatalf("Phase = %q, Retryable = %v, SafeToRetry = %v, want connection, true, true",
-			cliError.Phase, cliError.Retryable, cliError.SafeToRetry)
+	if cliError.Phase != clierrors.ErrorPhaseConnection || !cliError.Retryable || cliError.SafeToRetry != wantSafeToRetry {
+		t.Fatalf("Phase = %q, Retryable = %v, SafeToRetry = %v, want connection, true, %v",
+			cliError.Phase, cliError.Retryable, cliError.SafeToRetry, wantSafeToRetry)
 	}
 	dialogs, ok := cliError.Details["Dialogs"].([]any)
 	if !ok || len(dialogs) != dialogCount {
@@ -135,6 +142,44 @@ func TestRunLaunchReportsADialogThatHoldsAFreshEditor(t *testing.T) {
 		t.Fatalf("Message = %q, want %q", cliError.Message, wantMessage)
 	}
 	assertPressGuidance(t, cliError)
+	if cause := cliError.Details["Cause"]; cause != "connection refused" {
+		t.Fatalf("Details.Cause = %#v, want the failure the wait saw last", cause)
+	}
+}
+
+// Verifies a launch with --restart that stopped at a dialog is not safe to run again as it was, since
+// a second restart would quit, and could kill, the Editor the dialog holds; its last step still runs
+// plain uloop launch (V3 and V2).
+func TestRunLaunchWithRestartStoppedAtADialogIsNotSafeToRetry(t *testing.T) {
+	restart := func(t *testing.T, projectRoot string, deps launchDeps) launchBlockedRun {
+		t.Helper()
+		var stderr bytes.Buffer
+		code := runLaunchWithDeps(
+			context.Background(),
+			launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1", restart: true},
+			projectRoot,
+			io.Discard,
+			&stderr,
+			deps,
+		)
+		return decodeLaunchErrorEnvelope(t, code, stderr.String())
+	}
+	t.Run("v3", func(t *testing.T) {
+		projectRoot := createLaunchTestProject(t)
+
+		run := restart(t, projectRoot, freshV3LaunchDeps(t, blockedReadiness(launchTestDialog())))
+
+		_ = assertLaunchBlockedByDialogRetry(t, run, 1, false)
+	})
+	t.Run("v2", func(t *testing.T) {
+		projectRoot := createV2LaunchTestProject(t)
+		deps, _ := v2LaunchDeps(t, []unitydialog.Dialog{launchTestDialog()}, 3*time.Second)
+		deps.findRunningUnityProcess = func(context.Context, string) (*unityprocess.UnityProcess, error) { return nil, nil }
+
+		run := restart(t, projectRoot, deps)
+
+		_ = assertLaunchBlockedByDialogRetry(t, run, 1, false)
+	})
 }
 
 // Verifies a dialog without buttons is reported with steps that ask the user to close it (#10).
@@ -350,7 +395,11 @@ func TestRunLaunchForV2ProjectStopsAtADialog(t *testing.T) {
 
 	run := runFreshLaunch(t, projectRoot, deps)
 
-	assertManualCloseGuidance(t, assertLaunchBlockedByDialog(t, run, 1))
+	cliError := assertLaunchBlockedByDialog(t, run, 1)
+	assertManualCloseGuidance(t, cliError)
+	if _, ok := cliError.Details["Cause"]; ok {
+		t.Fatalf("Details.Cause = %#v, want none when the wait saw no failure", cliError.Details["Cause"])
+	}
 	if len(*lookedPids) != 1 || (*lookedPids)[0] <= 0 {
 		t.Fatalf("looked at pids %v, want one look at the started Editor", *lookedPids)
 	}
@@ -400,7 +449,7 @@ func TestLaunchDialogErrorLeavesTheDialogOutOfItsText(t *testing.T) {
 		return blockedReadiness(unitydialog.Dialog{Title: "Unexpected EOF", Buttons: []string{"OK"}})
 	}
 
-	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), deps)
+	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), false, deps)
 
 	if err == nil || strings.Contains(err.Error(), "EOF") || clierrors.IsTransportDisconnectError(err) {
 		t.Fatalf("err = %v, want an error that names no dialog and is no lost connection", err)

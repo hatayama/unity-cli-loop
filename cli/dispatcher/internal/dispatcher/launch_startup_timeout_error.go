@@ -26,14 +26,16 @@ func (err launchStartupTimeoutError) Unwrap() error {
 	return err.cause
 }
 
-func waitForLaunchReadinessWithDeps(ctx context.Context, projectRoot string, deps launchDeps) error {
+// waitForLaunchReadinessWithDeps waits for the Editor launch opened or found; restart is whether launch
+// ran with --restart.
+func waitForLaunchReadinessWithDeps(ctx context.Context, projectRoot string, restart bool, deps launchDeps) error {
 	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout, v3LaunchDialogFinder(projectRoot, deps))
 	if err == nil {
 		return nil
 	}
 	var blocked clicore.ToolReadinessBlockedByDialogError
 	if errors.As(err, &blocked) {
-		return asLaunchDialogError(err, projectRoot, deps.canPressDialogs)
+		return asLaunchDialogError(err, projectRoot, deps.canPressDialogs, restart)
 	}
 	if ctx.Err() != nil || clicore.IsReadinessCLIUpdateRequiredError(err) {
 		return err

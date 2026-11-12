@@ -77,6 +77,7 @@ func waitForFreshUnityLockfile(
 func waitForV2ProjectOpened(
 	ctx context.Context,
 	projectRoot string,
+	restart bool,
 	runningProcess *unityprocess.UnityProcess,
 	previousStop launchStopMethod,
 	currentPid int,
@@ -102,7 +103,7 @@ func waitForV2ProjectOpened(
 	writeLaunchReadinessWait(stdout, spinner)
 	lookout := v2LaunchDialogLookout(projectRoot, currentPid, deps)
 	if err := deps.waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, lookout, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
-		err = asLaunchDialogError(err, projectRoot, false)
+		err = asLaunchDialogError(err, projectRoot, false, restart)
 		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
