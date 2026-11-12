@@ -216,7 +216,7 @@ func TestRunLaunchRestartReportsHowThePreviousEditorStopped(t *testing.T) {
 	fakeUnityPath := fakeUnityExecutablePath(t)
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityPath, nil }
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return nil }
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error { return nil }
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error { return nil }
 	deps.focusUnityProcess = func(context.Context, int) error { return nil }
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer

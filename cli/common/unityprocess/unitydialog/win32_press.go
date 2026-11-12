@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -12,30 +12,30 @@ import (
 // sent to the dialog.
 // Why a disabled button is not pressed: the dialog would act on the click all the same, and uloop
 // must not do what the dialog does not let the user do.
-func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, label string) (dialogPressResult, error) {
+func (inspector Inspector) pressWin32Button(ctx context.Context, pid int, label string) (PressResult, error) {
 	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
 	windows, err := inspector.listWindows(pressCtx, pid)
 	// Why before err: a stopped listing returns the context's error, which hides why it stopped.
 	if stopErr := inspector.stoppedLookError(ctx, pressCtx, "reading Unity's windows did not finish"); stopErr != nil {
-		return dialogPressResult{}, dialogPressNotStartedError{err: stopErr}
+		return PressResult{}, PressNotStartedError{Err: stopErr}
 	}
 	if err != nil {
-		return dialogPressResult{}, dialogPressNotStartedError{err: fmt.Errorf("could not read Unity's windows: %w", err)}
+		return PressResult{}, PressNotStartedError{Err: fmt.Errorf("could not read Unity's windows: %w", err)}
 	}
 
 	target := win32PressTarget(windows, label)
-	result := dialogPressResult{DialogFound: target.DialogFound, Dialog: target.Dialog}
+	result := PressResult{DialogFound: target.DialogFound, Dialog: target.Dialog}
 	if !target.ButtonFound {
 		return result, nil
 	}
 	if target.ButtonDisabled {
-		return dialogPressResult{}, dialogPressNotStartedError{
-			err: fmt.Errorf("the button %q is disabled in the dialog %q", label, target.Dialog.Title),
+		return PressResult{}, PressNotStartedError{
+			Err: fmt.Errorf("the button %q is disabled in the dialog %q", label, target.Dialog.Title),
 		}
 	}
 	if err := inspector.pressWindowButton(pressCtx, target); err != nil {
-		return dialogPressResult{}, inspector.win32PressFailure(ctx, pressCtx, err)
+		return PressResult{}, inspector.win32PressFailure(ctx, pressCtx, err)
 	}
 	result.Pressed = true
 	return result, nil
@@ -49,11 +49,11 @@ func (inspector dialogInspector) pressWin32Button(ctx context.Context, pid int, 
 // opened next.
 // Why the stop is looked at before err: a stopped press fails with whatever the press saw last,
 // which hides why it stopped.
-func (inspector dialogInspector) win32PressFailure(ctx context.Context, pressCtx context.Context, err error) error {
-	var notStarted dialogPressNotStartedError
+func (inspector Inspector) win32PressFailure(ctx context.Context, pressCtx context.Context, err error) error {
+	var notStarted PressNotStartedError
 	if errors.As(err, &notStarted) {
 		if stopErr := inspector.stoppedLookError(ctx, pressCtx, "the press did not start"); stopErr != nil {
-			return dialogPressNotStartedError{err: stopErr}
+			return PressNotStartedError{Err: stopErr}
 		}
 		return notStarted
 	}
@@ -72,7 +72,7 @@ type win32PressTargetResult struct {
 	DialogFound    bool
 	ButtonFound    bool
 	ButtonDisabled bool
-	Dialog         statusDialog
+	Dialog         Dialog
 	DialogHandle   uintptr
 	ButtonHandle   uintptr
 	ButtonID       int

@@ -10,6 +10,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
 // steppingClock is the dialog watch's clock: every reading moves it forward by step, so a wait
@@ -208,25 +209,18 @@ func TestSendWithTransientConnectionRetryLooksAtMostOncePerTenSeconds(t *testing
 }
 
 // Verifies the server wait's look does not look at Unity's windows on Linux, where uloop cannot: the
-// status probe it uses reports no dialog without starting a process scan or osascript.
+// status probe it uses reports no dialog without starting a process scan, which comes before any
+// look at the windows.
 func TestServerWaitLookDoesNotInspectWindowsOnLinux(t *testing.T) {
-	lookups, commands := 0, 0
-	inspector := dialogInspector{
-		goos:    "linux",
-		timeout: time.Second,
-		lookupProcess: func(context.Context, string) (*clicore.UnityProcess, error) {
-			lookups++
-			return &clicore.UnityProcess{Pid: 123}, nil
-		},
-		runCommand: func(context.Context, string, ...string) ([]byte, error) {
-			commands++
-			return nil, nil
-		},
-	}
+	lookups := 0
+	inspector := unitydialog.NewInspector("linux", func(context.Context, string) (*clicore.UnityProcess, error) {
+		lookups++
+		return &clicore.UnityProcess{Pid: 123}, nil
+	})
 	statusDeps := statusCommandDeps{
 		probeTimeout:          time.Second,
 		isUnityProcessRunning: func(context.Context, string) (bool, error) { return true, nil },
-		inspectDialogs:        inspector.inspect,
+		inspectDialogs:        inspector.Inspect,
 	}
 	clock := newSteppingClock(time.Second)
 	deps := serverWaitDeps(&serverWaitProbe{clock: clock}, true, 50*time.Millisecond)
@@ -239,8 +233,8 @@ func TestServerWaitLookDoesNotInspectWindowsOnLinux(t *testing.T) {
 	if code := classifyServerWaitError(err).ErrorCode; code == clierrors.ErrorCodeBlockedByDialog {
 		t.Fatalf("ErrorCode = %q, want the wait to end as without a dialog", code)
 	}
-	if lookups != 0 || commands != 0 {
-		t.Fatalf("process lookups = %d, commands = %d, want 0 and 0", lookups, commands)
+	if lookups != 0 {
+		t.Fatalf("process lookups = %d, want 0", lookups)
 	}
 }
 

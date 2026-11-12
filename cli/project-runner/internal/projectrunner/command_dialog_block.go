@@ -207,7 +207,7 @@ func (err blockedByDialogError) ToCLIError(context clierrors.ErrorContext) clier
 		SafeToRetry: safeToRetry,
 		ProjectRoot: context.ProjectRoot,
 		Command:     context.Command,
-		NextActions: dialogAnswerNextActions(err.dialogs, err.canPress, closedNextAction),
+		NextActions: clicore.DialogAnswerNextActions(err.dialogs, err.canPress, closedNextAction),
 		Details:     details,
 	}
 }

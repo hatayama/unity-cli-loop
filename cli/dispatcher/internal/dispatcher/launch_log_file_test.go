@@ -89,7 +89,7 @@ func TestRunLaunchRequiresRestartForLogFileWithExistingUnityProcess(t *testing.T
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
 		readinessChecked = true
 		return nil
 	}
@@ -261,7 +261,7 @@ func TestRunLaunchReportsTheRequestedLogFile(t *testing.T) {
 			deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 				return nil
 			}
-			deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+			deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
 				return nil
 			}
 			deps.focusUnityProcess = func(context.Context, int) error {

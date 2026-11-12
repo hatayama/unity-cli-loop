@@ -188,7 +188,7 @@ func TestWaitForToolReadinessReturnsCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := WaitForToolReadiness(ctx, t.TempDir())
+	err := WaitForToolReadiness(ctx, t.TempDir(), nil)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation, got %v", err)

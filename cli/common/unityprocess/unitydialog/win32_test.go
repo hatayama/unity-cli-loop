@@ -1,4 +1,4 @@
-package projectrunner
+package unitydialog
 
 import (
 	"context"
@@ -118,7 +118,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 	cases := []struct {
 		name    string
 		windows []win32Window
-		want    []statusDialog
+		want    []Dialog
 	}{
 		{
 			name: "message box with three buttons",
@@ -127,14 +127,14 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 				win32DisabledMainWindow,
 				win32InputMethodWindow,
 			},
-			want: []statusDialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "No", "Later"}}},
+			want: []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "No", "Later"}}},
 		},
 		{
 			name: "message line break arrives as CRLF",
 			windows: []win32Window{
 				win32ModalWindow("#32770", "Probe title", win32ComplexDialogControls("Line one\r\nLine two")...),
 			},
-			want: []statusDialog{{Title: "Probe title", Message: "Line one\nLine two", Buttons: []string{"Yes", "No", "Later"}}},
+			want: []Dialog{{Title: "Probe title", Message: "Line one\nLine two", Buttons: []string{"Yes", "No", "Later"}}},
 		},
 		{
 			name: "modal Editor window with only a title",
@@ -143,7 +143,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 					win32Control{ClassName: "UnityGUIViewWndClass", Text: "UnityEditor.EditorWindow", Visible: true}),
 				win32DisabledMainWindow,
 			},
-			want: []statusDialog{{Title: "Probe modal", Message: "", Buttons: []string{}}},
+			want: []Dialog{{Title: "Probe modal", Message: "", Buttons: []string{}}},
 		},
 		{
 			name: "message box without an owner while the Editor starts",
@@ -152,7 +152,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 				{ClassName: "UnitySplashWindow", Title: "Compiling Scripts", Visible: false, Enabled: true},
 				win32InputMethodWindow,
 			},
-			want: []statusDialog{{
+			want: []Dialog{{
 				Title:   "Enter Safe Mode?",
 				Message: "The project has compilation errors.\n\nEnter Safe Mode?",
 				Buttons: []string{"Enter Safe Mode", "Quit", "Ignore"},
@@ -167,7 +167,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 				win32ModalWindow("UnityContainerWndClass", "Second"),
 				win32DisabledMainWindow,
 			},
-			want: []statusDialog{
+			want: []Dialog{
 				{Title: "First", Message: "First body", Buttons: []string{"OK"}},
 				{Title: "Second", Message: "", Buttons: []string{}},
 			},
@@ -184,7 +184,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 					win32Control{ClassName: "Button", Text: "&Remember my choice", ID: 4, Style: 0x50010003, Visible: true},
 					win32Control{ClassName: "Button", Text: "&OK", ID: 3, Visible: true}),
 			},
-			want: []statusDialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
+			want: []Dialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
 		},
 		{
 			name: "static and edit texts are joined in order",
@@ -194,7 +194,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 					win32Control{ClassName: "Edit", Text: "Detail", Style: win32EditStyleReadOnly, Visible: true},
 					win32Control{ClassName: "Button", Text: "OK", ID: 1, Visible: true}),
 			},
-			want: []statusDialog{{Title: "Native", Message: "Heading\nDetail", Buttons: []string{"OK"}}},
+			want: []Dialog{{Title: "Native", Message: "Heading\nDetail", Buttons: []string{"OK"}}},
 		},
 		{
 			name: "class names compare without case",
@@ -203,7 +203,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 					win32Control{ClassName: "EDIT", Text: "Body", Style: win32EditStyleReadOnly, Visible: true},
 					win32Control{ClassName: "button", Text: "&OK", ID: 1, Visible: true}),
 			},
-			want: []statusDialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
+			want: []Dialog{{Title: "Title", Message: "Body", Buttons: []string{"OK"}}},
 		},
 		{
 			name: "mnemonic marker inside a label and a literal ampersand",
@@ -213,7 +213,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 					win32Control{ClassName: "Button", Text: "O&K - Do not show me this message again for this session.", ID: 3, Visible: true},
 					win32Control{ClassName: "Button", Text: "Tom & Jerry", ID: 2, Visible: true}),
 			},
-			want: []statusDialog{{Title: "Title", Message: "", Buttons: []string{
+			want: []Dialog{{Title: "Title", Message: "", Buttons: []string{
 				"Save & Quit", "Tom & Jerry", "OK - Do not show me this message again for this session.",
 			}}},
 		},
@@ -251,7 +251,7 @@ func TestDialogsFromWin32WindowsListsAFilePickerWithoutButtons(t *testing.T) {
 
 			got := dialogsFromWin32Windows(windows)
 
-			want := []statusDialog{{Title: "Probe picker", Message: "File &name:", Buttons: []string{}}}
+			want := []Dialog{{Title: "Probe picker", Message: "File &name:", Buttons: []string{}}}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("dialogs = %#v, want %#v", got, want)
 			}
@@ -279,7 +279,7 @@ func TestDialogsFromWin32WindowsListsButtonsOnlyForADialogBuiltLikeAMessageBox(t
 
 			got := dialogsFromWin32Windows(windows)
 
-			want := []statusDialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{}}}
+			want := []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{}}}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("dialogs = %#v, want %#v", got, want)
 			}
@@ -344,9 +344,9 @@ func TestWin32DialogWithAnEditableTextBoxHasNoButtonToPress(t *testing.T) {
 			listed := dialogsFromWin32Windows(windows)
 			target := win32PressTarget(windows, "OK")
 
-			wantDialog := statusDialog{Title: "Probe title", Message: testCase.wantMessage, Buttons: testCase.wantButtons}
-			if !reflect.DeepEqual(listed, []statusDialog{wantDialog}) {
-				t.Fatalf("dialogs = %#v, want %#v", listed, []statusDialog{wantDialog})
+			wantDialog := Dialog{Title: "Probe title", Message: testCase.wantMessage, Buttons: testCase.wantButtons}
+			if !reflect.DeepEqual(listed, []Dialog{wantDialog}) {
+				t.Fatalf("dialogs = %#v, want %#v", listed, []Dialog{wantDialog})
 			}
 			wantTarget := win32PressTargetResult{DialogFound: true, Dialog: wantDialog, DialogHandle: dialogHandle}
 			if testCase.wantOK {
@@ -471,7 +471,7 @@ func TestDialogsFromWin32WindowsReportsOnlyTheDialogAboveADisabledUtilityWindow(
 
 	got := dialogsFromWin32Windows(windows)
 
-	want := []statusDialog{{Title: "Probe modal", Message: "", Buttons: []string{}}}
+	want := []Dialog{{Title: "Probe modal", Message: "", Buttons: []string{}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("dialogs = %#v, want %#v", got, want)
 	}
@@ -485,7 +485,7 @@ func TestDialogInspectorOnWindowsFailsWhenProcessLookupFails(t *testing.T) {
 	}
 	inspector := win32DialogInspectorForTest(t, lookup, failingWindowList(t))
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "process list refused") {
 		t.Fatalf("error = %v, want the lookup failure", err)
@@ -499,7 +499,7 @@ func TestDialogInspectorOnWindowsFailsWhenUnityIsNotRunning(t *testing.T) {
 	}
 	inspector := win32DialogInspectorForTest(t, lookup, failingWindowList(t))
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "no Unity process runs for this project") {
 		t.Fatalf("error = %v, want one saying Unity is not running", err)
@@ -513,7 +513,7 @@ func TestDialogInspectorOnWindowsFailsWhenWindowListingFails(t *testing.T) {
 	}
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "EnumWindows failed: access is denied") {
 		t.Fatalf("error = %v, want the listing failure", err)
@@ -533,14 +533,14 @@ func TestDialogInspectorOnWindowsReadsDialogsFromWindows(t *testing.T) {
 	}
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
 
-	dialogs, err := inspector.inspect(context.Background(), "/project")
+	dialogs, err := inspector.Inspect(context.Background(), "/project")
 	if err != nil {
 		t.Fatalf("inspect returned error: %v", err)
 	}
 	if gotPID != 4242 {
 		t.Fatalf("listed process ID = %d, want 4242", gotPID)
 	}
-	want := []statusDialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "No", "Later"}}}
+	want := []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "No", "Later"}}}
 	if !reflect.DeepEqual(dialogs, want) {
 		t.Fatalf("dialogs = %#v, want %#v", dialogs, want)
 	}
@@ -553,7 +553,7 @@ func TestDialogInspectorOnWindowsReturnsNoDialogs(t *testing.T) {
 	}
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
 
-	dialogs, err := inspector.inspect(context.Background(), "/project")
+	dialogs, err := inspector.Inspect(context.Background(), "/project")
 
 	if err != nil || dialogs == nil || len(dialogs) != 0 {
 		t.Fatalf("dialogs = %#v, %v; want an empty non-nil slice and no error", dialogs, err)
@@ -570,7 +570,7 @@ func TestDialogInspectorOnWindowsFailsWhenWindowListingTimesOut(t *testing.T) {
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
 	inspector.timeout = 50 * time.Millisecond
 
-	_, err := inspector.inspect(context.Background(), "/project")
+	_, err := inspector.Inspect(context.Background(), "/project")
 
 	if err == nil || !strings.Contains(err.Error(), "reading Unity's windows did not finish within 50ms") {
 		t.Fatalf("error = %v, want a timeout error", err)
@@ -587,27 +587,9 @@ func TestDialogInspectorOnWindowsReportsCancellation(t *testing.T) {
 	}
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(4242), listWindows)
 
-	_, err := inspector.inspect(ctx, "/project")
+	_, err := inspector.Inspect(ctx, "/project")
 
 	if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "did not finish") {
 		t.Fatalf("error = %v, want a cancellation", err)
-	}
-}
-
-// Verifies the hint about a failed look names the macOS permissions, Accessibility and Automation
-// of System Events, only on macOS; elsewhere it only asks to look at Unity, because Windows needs
-// no permission to read another window.
-func TestDialogInspectorCheckFailedNextActionDiffersByOperatingSystem(t *testing.T) {
-	const askTheUser = "ask the user to look at Unity"
-
-	macOS := dialogInspector{goos: "darwin"}.checkFailedNextAction()
-	if !strings.Contains(macOS, askTheUser) || !strings.Contains(macOS, "Accessibility and Automation (System Events)") {
-		t.Fatalf("macOS hint = %q, want it to ask the user and name both permissions", macOS)
-	}
-
-	windows := dialogInspector{goos: "windows"}.checkFailedNextAction()
-	if !strings.Contains(windows, askTheUser) || strings.Contains(windows, "Accessibility") ||
-		strings.Contains(windows, "Automation") || strings.Contains(windows, "macOS") {
-		t.Fatalf("Windows hint = %q, want it to ask the user without the macOS permission", windows)
 	}
 }

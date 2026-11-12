@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"slices"
 	"strconv"
 	"time"
@@ -65,9 +66,9 @@ func defaultStatusCommandDeps() statusCommandDeps {
 			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
-		inspectDialogs:        inspector.inspect,
-		dialogCheckNextAction: inspector.checkFailedNextAction(),
-		canAnswerDialogs:      inspector.canPress(),
+		inspectDialogs:        inspector.Inspect,
+		dialogCheckNextAction: dialogCheckFailedNextActionFor(runtime.GOOS),
+		canAnswerDialogs:      inspector.CanPress(),
 	}
 }
 
@@ -430,7 +431,7 @@ func statusNextActions(state string) []string {
 	case statusStateBlockedByDialog:
 		// Why the guidance for a dialog uloop cannot press: a report that skipped
 		// withDialogAnswerGuidance must not send the reader to a press that cannot work.
-		return unanswerableDialogNextActions(dialogClosedNextAction)
+		return clicore.DialogAnswerNextActions(nil, false, dialogClosedNextAction)
 	case statusStateBusy:
 		return []string{
 			"Wait for the running command to finish, then run uloop status again.",
