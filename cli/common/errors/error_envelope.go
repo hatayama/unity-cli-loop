@@ -19,7 +19,7 @@ const (
 	ErrorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
 	ErrorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
-	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
+	ErrorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
 	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
 	errorCodeUnityEditorUnresponsive         = "UNITY_EDITOR_UNRESPONSIVE"
 	errorCodeUnityRPCError                   = "UNITY_RPC_ERROR"
@@ -238,7 +238,7 @@ func disconnectedAfterAcceptError(err error, context ErrorContext) CLIError {
 	}
 
 	return CLIError{
-		ErrorCode:   errorCodeUnityDisconnectedAfterAccept,
+		ErrorCode:   ErrorCodeUnityDisconnectedAfterAccept,
 		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity disconnected after accepting the request.",
 		Retryable:   true,

@@ -67,6 +67,12 @@ func runExecuteDynamicCodeWithDomainReloadWaitWithDeps(
 				})
 				return 1
 			}
+			if outcome.RequestAccepted {
+				spinner.Stop()
+				writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
+				clierrors.WriteErrorEnvelope(stderr, reloadedBeforeAnswerError(err, connection.ProjectRoot))
+				return 1
+			}
 		}
 		spinner.Stop()
 		writeDebugTiming(stderr, clicore.ExecuteDynamicCodeCommandName, time.Since(startedAt), outcome)
@@ -203,4 +209,31 @@ func neutralReloadWaitBlockedByDialog(
 	original := clierrors.ClassifyError(replaced, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: clicore.ExecuteDynamicCodeCommandName})
 	original.SafeToRetry = false
 	return neutralBlockedByDialog(clicore.ExecuteDynamicCodeCommandName, dialogs, deps.canPressDialogs, original)
+}
+
+// reloadedBeforeAnswerError reports a snippet that Unity accepted and that lost its answer when the
+// Editor reloaded its scripts or restarted its server, after which the Editor became ready again.
+// Why not a success: uloop cannot tell whether the snippet ran to the end or was cut short by the
+// reload, because Unity's answer for either case is lost with the connection.
+// Why not safe to retry and no advice to retry: the snippet may already have changed the project,
+// and a snippet that asks for the reload itself ends this way on every run.
+func reloadedBeforeAnswerError(err error, projectRoot string) clierrors.CLIError {
+	return clierrors.CLIError{
+		ErrorCode: clierrors.ErrorCodeUnityDisconnectedAfterAccept,
+		Phase:     clierrors.ErrorPhaseResponseWaiting,
+		Message: "Unity reloaded its scripts or restarted its server before it answered, and is ready again. " +
+			"The snippet was sent and may have run; its result is not available.",
+		Retryable:   true,
+		SafeToRetry: false,
+		ProjectRoot: projectRoot,
+		Command:     clicore.ExecuteDynamicCodeCommandName,
+		NextActions: []string{
+			"Before running the snippet again, check whether it took effect, for example with `uloop get-logs` or a snippet that reads the state it changed.",
+			"A snippet that asks Unity to reload scripts, such as one calling `EditorUtility.RequestScriptReload`, ends this way on every run. " +
+				"Do not run it again to get its result; if you need a value, return it from a separate snippet after the reload.",
+		},
+		Details: map[string]any{
+			"Cause": err.Error(),
+		},
+	}
 }
