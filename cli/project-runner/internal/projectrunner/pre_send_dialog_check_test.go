@@ -60,7 +60,7 @@ func assertNoRequestReached(t *testing.T, server fakeUnityServer) {
 	}
 }
 
-func assertRefusedBeforeSend(t *testing.T, run preSendRun, command string, wantTitle string) clierrors.CLIError {
+func assertRefusedBeforeSend(t *testing.T, run preSendRun, command string, wantTitle string) {
 	t.Helper()
 	if run.code != 1 {
 		t.Fatalf("exit code = %d, want 1\nstderr=%s", run.code, run.stderr)
@@ -86,7 +86,6 @@ func assertRefusedBeforeSend(t *testing.T, run preSendRun, command string, wantT
 	if _, present := cliError.Details["StallSeconds"]; present {
 		t.Fatalf("Details = %#v, want no StallSeconds for a command that was never sent", cliError.Details)
 	}
-	return cliError
 }
 
 // Verifies a command sent while the Editor reports a dialog uloop can answer is not sent at all and
@@ -100,7 +99,8 @@ func TestRunProjectCommandRefusesACommandWhileADialogIsOpen(t *testing.T) {
 	run := runProjectCommandWithProbe(t, server.connection, commandDialogBlockCommand, nil, probe.deps(true))
 
 	assertNoRequestReached(t, server)
-	cliError := assertRefusedBeforeSend(t, run, commandDialogBlockCommand, commandDialogPlayerStoppedDialog().Title)
+	assertRefusedBeforeSend(t, run, commandDialogBlockCommand, commandDialogPlayerStoppedDialog().Title)
+	cliError := run.cliError(t)
 	if !strings.Contains(cliError.NextActions[0], "press-dialog-button") {
 		t.Fatalf("first NextAction = %q, want the press-dialog-button step", cliError.NextActions[0])
 	}
@@ -119,7 +119,8 @@ func TestRunProjectCommandRefusesWithTheUserStepForADialogWithoutButtons(t *test
 	run := runProjectCommandWithProbe(t, server.connection, commandDialogBlockCommand, nil, probe.deps(true))
 
 	assertNoRequestReached(t, server)
-	cliError := assertRefusedBeforeSend(t, run, commandDialogBlockCommand, preSendDialogWithoutButtons().Title)
+	assertRefusedBeforeSend(t, run, commandDialogBlockCommand, preSendDialogWithoutButtons().Title)
+	cliError := run.cliError(t)
 	if !strings.Contains(cliError.NextActions[0], "uloop cannot press a button in this dialog") {
 		t.Fatalf("first NextAction = %q, want the step that asks the user", cliError.NextActions[0])
 	}
