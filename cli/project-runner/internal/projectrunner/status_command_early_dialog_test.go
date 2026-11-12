@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -244,4 +245,24 @@ func TestRunStatusCommandStartsTheEarlyLookAtOneSecond(t *testing.T) {
 		assertStatusRequestCount(t, server, 2)
 		assertDialogInspections(t, inspector, 1)
 	})
+}
+
+// Verifies a caller that cancels while status looks in Unity's windows after a short stall gets
+// the cancellation as an error, not the second answer's Ready with exit code 0.
+func TestRunStatusCommandReportsCancellationDuringTheEarlyLook(t *testing.T) {
+	projectRoot := writeFakeUnityProject(t)
+	server := startEarlyStallStatusServer(t, projectRoot, 2.0, editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{
+		"SecondsSinceLastMainThreadTick": 2.6,
+	})))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := statusTestDeps(t)
+	deps.inspectDialogs = func(lookCtx context.Context, _ string) ([]statusDialog, error) {
+		cancel()
+		return nil, fmt.Errorf("looking for dialogs was cancelled: %w", lookCtx.Err())
+	}
+
+	run := runStatusForTest(ctx, server.connection, nil, deps)
+
+	assertStatusError(t, run, "context canceled")
 }

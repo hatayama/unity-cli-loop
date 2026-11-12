@@ -49,6 +49,11 @@ func probeAfterShortStall(
 		return withDialogInspection(ctx, connection.ProjectRoot, *second, secondReport, deps), nil
 	}
 	dialogs, err := deps.inspectDialogs(ctx, connection.ProjectRoot)
+	// Why before the quiet failure below: a cancelled caller must not get the second answer's
+	// Ready and exit code 0.
+	if ctx.Err() != nil {
+		return statusReport{}, ctx.Err()
+	}
 	// Why a failed look adds no hint: without the permission it would fail every time the Editor
 	// hesitates for a second, while the five-second look still explains its failure.
 	if err != nil || len(dialogs) == 0 {
