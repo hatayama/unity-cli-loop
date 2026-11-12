@@ -177,7 +177,11 @@ func explainReadinessFailureByDialog(
 	if errors.As(err, &blockedWait) {
 		// Why a server that does not answer: the wait stopped before its timeout, and with Unity held
 		// by a dialog, the timeout would have ended it as one.
-		notResponding := clierrors.UnityServerNotRespondingError{ProjectRoot: connection.ProjectRoot, Cause: blockedWait.Cause}
+		notResponding := clierrors.UnityServerNotRespondingError{
+			ProjectRoot: connection.ProjectRoot,
+			Endpoint:    connection.Endpoint.Address,
+			Cause:       blockedWait.Cause,
+		}
 		return neutralReloadWaitBlockedByDialog(connection, notResponding, blockedWait.Dialogs, deps)
 	}
 	dialogs := findBlockingDialogs(ctx, connection, deps)

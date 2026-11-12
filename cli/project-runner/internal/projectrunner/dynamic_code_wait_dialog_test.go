@@ -64,8 +64,8 @@ func blockedReloadWait(context.Context, string, clicore.DialogFinder) error {
 
 // Verifies a reload wait stopped at a dialog, after the snippet's connection dropped or after the
 // snippet returned and asked for the wait, reports BLOCKED_BY_DIALOG in the neutral form: it does not
-// say whether the snippet ran, is not safe to retry, and keeps the phase of a server that does not
-// answer (#14, #15).
+// say whether the snippet ran, is not safe to retry, and keeps the phase and endpoint of a server
+// that does not answer (#14, #15).
 func TestExecuteDynamicCodeReloadWaitReportsADialogInTheNeutralForm(t *testing.T) {
 	cases := map[string]string{
 		"connection lost after the snippet was accepted": dynamicCodeAcceptedThenLostResponse,
@@ -85,6 +85,9 @@ func TestExecuteDynamicCodeReloadWaitReportsADialogInTheNeutralForm(t *testing.T
 			if cliError.Message != wantMessage || cliError.SafeToRetry || cliError.Phase != clierrors.ErrorPhaseConnection {
 				t.Fatalf("Message = %q, SafeToRetry = %v, Phase = %q, want the neutral form in the connection phase, not safe to retry",
 					cliError.Message, cliError.SafeToRetry, cliError.Phase)
+			}
+			if endpoint, _ := cliError.Details["Endpoint"].(string); endpoint == "" {
+				t.Fatalf("Details.Endpoint = %#v, want the endpoint the wait polled", cliError.Details["Endpoint"])
 			}
 			if last := cliError.NextActions[len(cliError.NextActions)-1]; last != startedCommandDialogClosedNextAction {
 				t.Fatalf("last step = %q, want %q", last, startedCommandDialogClosedNextAction)
