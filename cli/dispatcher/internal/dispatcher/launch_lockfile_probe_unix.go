@@ -27,6 +27,12 @@ func isUnityLockfileHeld(lockfilePath string) (bool, error) {
 	return hasConflictingFlock(lockfile)
 }
 
+// isLockfileDeleteRefusedForOpenHandle always reports false outside Windows: a file another process
+// has open can still be unlinked here, so the lock probe above is what finds a running Editor.
+func isLockfileDeleteRefusedForOpenHandle(error) bool {
+	return false
+}
+
 // hasConflictingRecordLock asks which lock would block a write lock, without taking one.
 func hasConflictingRecordLock(lockfile *os.File) (bool, error) {
 	query := unix.Flock_t{Type: unix.F_WRLCK, Whence: 0, Start: 0, Len: 0}
