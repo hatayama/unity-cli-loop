@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,9 +48,19 @@ func cleanStaleUnityTemp(ctx context.Context, projectRoot string, deps launchDep
 	}
 
 	removeLockfile := func() error {
-		return deps.removePath(lockfilePath)
+		err := deps.removePath(lockfilePath)
+		// Why it is not retried: a running Editor keeps the lockfile open for as long as it runs, so
+		// waiting only delays the report. A restart has already waited for its Editor to exit by now.
+		if isLockfileDeleteRefusedForOpenHandle(err) {
+			return unretryableTempError{cause: heldUnityLockfileError{lockfilePath: lockfilePath}}
+		}
+		return err
 	}
 	if err := retryWhileTempFileIsHeld(ctx, deps, removeLockfile); err != nil {
+		var heldError heldUnityLockfileError
+		if errors.As(err, &heldError) {
+			return staleUnityTempCleanupResult{}, heldError
+		}
 		return staleUnityTempCleanupResult{}, staleUnityLockfileError("delete", err)
 	}
 
@@ -112,14 +123,32 @@ func staleUnityLockfileExists(ctx context.Context, lockfilePath string, deps lau
 	return lockfileExists, nil
 }
 
-// retryWhileTempFileIsHeld repeats operation until it succeeds or the retry budget runs out,
-// so every Temp operation shares one retry policy.
+// unretryableTempError marks a Temp operation failure that waiting cannot clear, so
+// retryWhileTempFileIsHeld returns its cause at once.
+type unretryableTempError struct {
+	cause error
+}
+
+func (err unretryableTempError) Error() string {
+	return err.cause.Error()
+}
+
+func (err unretryableTempError) Unwrap() error {
+	return err.cause
+}
+
+// retryWhileTempFileIsHeld repeats operation until it succeeds, it fails with an
+// unretryableTempError, or the retry budget runs out, so every Temp operation shares one retry policy.
 func retryWhileTempFileIsHeld(ctx context.Context, deps launchDeps, operation func() error) error {
 	deadline := deps.now().Add(launchTempLockfileRetryTimeout)
 	for {
 		operationError := operation()
 		if operationError == nil {
 			return nil
+		}
+		var unretryable unretryableTempError
+		if errors.As(operationError, &unretryable) {
+			return unretryable.cause
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
