@@ -44,8 +44,8 @@ opened took 32.5 seconds to answer on macOS.
 
 - A command sent just after a dialog opens answers `BLOCKED_BY_DIALOG` (`was not run`) about 6
   seconds after sending (measured on macOS) instead of after about 30.
-- `compile`, and `run-tests` that compiles first, keep their earlier behavior: the compile has
-  already started and goes on once the dialog closes.
+- `compile`, and `run-tests` that compiles first, keep their earlier behavior: uloop does not
+  report a dialog for their compile, so they answer as they did before this decision.
 - An older Unity package answers the report with an error; the CLI then stops reporting for that
   request, and the request keeps the 30-second answer.
 - On Linux before Unity 6000.7 the CLI cannot look at Unity's windows, so it keeps the 30-second
