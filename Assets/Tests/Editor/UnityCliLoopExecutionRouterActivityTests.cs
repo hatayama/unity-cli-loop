@@ -156,6 +156,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies the editor status answer carries this Editor's own process ID, so uloop status can
+        /// read its windows without searching the process list.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_EditorStatus_ReportsTheEditorProcessId()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                new JObject(),
+                CancellationToken.None);
+
+            GetEditorStatusResponse status = (GetEditorStatusResponse)response;
+            using (System.Diagnostics.Process editorProcess = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                Assert.That(status.ProcessId, Is.EqualTo(editorProcess.Id));
+            }
+        }
+
+        /// <summary>
         /// Verifies the cancel-running-tool answer starts no activity, because it must answer while a
         /// tool blocks the Editor main thread.
         /// </summary>

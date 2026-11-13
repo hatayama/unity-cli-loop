@@ -48,7 +48,7 @@ func probeAfterShortStall(
 		!needsEarlyDialogInspection(secondReport.State, *second) {
 		return withDialogInspection(ctx, connection.ProjectRoot, *second, secondReport, deps), nil
 	}
-	dialogs, err := deps.inspectDialogs(ctx, connection.ProjectRoot)
+	dialogs, err := deps.inspectDialogs(ctx, connection.ProjectRoot, second.ProcessId)
 	// Why before the quiet failure below: a cancelled caller must not get the second answer's
 	// Ready and exit code 0.
 	if ctx.Err() != nil {

@@ -622,7 +622,7 @@ func statusTestDeps(t *testing.T) statusCommandDeps {
 			t.Error("status must not look up the Unity process for this outcome")
 			return false, errors.New("unexpected Unity process lookup")
 		},
-		inspectDialogs: func(context.Context, string) ([]statusDialog, error) {
+		inspectDialogs: func(context.Context, string, int) ([]statusDialog, error) {
 			return nil, unitydialog.ErrInspectionUnsupported
 		},
 		dialogCheckNextAction: statusTestDialogCheckNextAction,

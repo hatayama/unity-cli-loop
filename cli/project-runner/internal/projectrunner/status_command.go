@@ -46,8 +46,9 @@ type statusCommandDeps struct {
 	// How long to wait before asking again when the first answer reads as a blocked main thread.
 	reprobeDelay          time.Duration
 	isUnityProcessRunning func(ctx context.Context, projectRoot string) (bool, error)
-	// Looks for modal dialogs in Unity's windows when the main thread has stalled.
-	inspectDialogs func(ctx context.Context, projectRoot string) ([]statusDialog, error)
+	// Looks for modal dialogs in Unity's windows. editorProcessID is the process ID the Editor
+	// reported, or zero when it did not, in which case the look finds the process itself.
+	inspectDialogs func(ctx context.Context, projectRoot string, editorProcessID int) ([]statusDialog, error)
 	// The hint added to NextActions when that look fails; it differs by operating system.
 	dialogCheckNextAction string
 	// Whether uloop press-dialog-button can press a button on this operating system.
@@ -66,7 +67,7 @@ func defaultStatusCommandDeps() statusCommandDeps {
 			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
-		inspectDialogs:        inspector.Inspect,
+		inspectDialogs:        inspector.InspectEditor,
 		dialogCheckNextAction: dialogCheckFailedNextActionFor(runtime.GOOS),
 		canAnswerDialogs:      inspector.CanPress(),
 	}
@@ -87,6 +88,8 @@ type editorStatusResponse struct {
 	SecondsSinceLastMainThreadTick float64 `json:"SecondsSinceLastMainThreadTick"`
 	// Only Unity 6000.7 and later report dialogs; a package that predates the field leaves it nil.
 	OpenDialogs []statusDialog `json:"OpenDialogs"`
+	// The Editor's own process ID; a package that predates the field leaves it zero.
+	ProcessId int `json:"ProcessId"`
 }
 
 // statusReport is what uloop status prints. Fields that do not apply to the state are left out.

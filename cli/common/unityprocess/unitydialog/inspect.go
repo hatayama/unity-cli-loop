@@ -68,16 +68,28 @@ func NewInspector(goos string, lookupProcess ProcessLookup) Inspector {
 	}
 }
 
-// inspect returns the dialogs open in this project's Editor, or ErrInspectionUnsupported
+// Inspect returns the dialogs open in this project's Editor, or ErrInspectionUnsupported
 // where it cannot look.
 func (inspector Inspector) Inspect(ctx context.Context, projectRoot string) ([]Dialog, error) {
+	return inspector.InspectEditor(ctx, projectRoot, 0)
+}
+
+// InspectEditor is Inspect for an Editor that may have reported its own process ID. A positive
+// processID is the process whose windows are read; zero looks the process up as Inspect does.
+// Why: on Windows the lookup starts PowerShell, which takes about as long as the rest of status, so
+// an Editor that names itself lets status look at its windows on every answer.
+func (inspector Inspector) InspectEditor(ctx context.Context, projectRoot string, processID int) ([]Dialog, error) {
 	// Why before the lookup: other operating systems must not start a process scan for nothing.
 	if inspector.goos != "darwin" && inspector.goos != "windows" {
 		return nil, ErrInspectionUnsupported
 	}
-	pid, err := inspector.unityPid(ctx, projectRoot)
-	if err != nil {
-		return nil, err
+	pid := processID
+	if pid <= 0 {
+		foundPID, err := inspector.unityPid(ctx, projectRoot)
+		if err != nil {
+			return nil, err
+		}
+		pid = foundPID
 	}
 	if inspector.goos == "windows" {
 		return inspector.inspectWin32Windows(ctx, pid)

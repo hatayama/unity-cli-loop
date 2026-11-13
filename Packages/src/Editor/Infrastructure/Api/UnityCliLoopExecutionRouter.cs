@@ -23,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly EditorExecutionActivity _executionActivity;
         private readonly EditorDialogTracker _dialogTracker;
+        // Why read here: the router is built once when the server starts, and get-editor-status must
+        // stay cheap because it answers while the main thread is blocked.
+        private readonly int _editorProcessId;
 
         internal UnityCliLoopExecutionRouter(
             UnityCliLoopToolRegistrarService toolRegistrarService,
@@ -39,6 +42,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ?? throw new ArgumentNullException(nameof(executionActivity));
             _dialogTracker = dialogTracker
                 ?? throw new ArgumentNullException(nameof(dialogTracker));
+            using (System.Diagnostics.Process editorProcess = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                _editorProcessId = editorProcess.Id;
+            }
         }
 
         /// <summary>
@@ -66,7 +73,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return EditorStatusBridgeCommand.Execute(
                     _toolRegistrarService,
                     EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
-                    _dialogTracker.GetOpenDialogs());
+                    _dialogTracker.GetOpenDialogs(),
+                    _editorProcessId);
             }
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_CANCEL_RUNNING_TOOL)

@@ -263,6 +263,32 @@ func TestRunStatusCommandKeepsMainThreadBlockedWhenNoDialogIsFound(t *testing.T)
 	assertDialogInspections(t, inspector, 1)
 }
 
+// Verifies the look at Unity's windows is given the process ID the Editor reported, so it can skip
+// searching the process list, and zero from an Editor that did not report one.
+func TestRunStatusCommandLooksWithTheProcessIDTheEditorReported(t *testing.T) {
+	cases := map[string]struct {
+		overrides map[string]any
+		want      int
+	}{
+		"reported":     {overrides: map[string]any{"SecondsSinceLastMainThreadTick": 31, "ProcessId": 4242}, want: 4242},
+		"not reported": {overrides: map[string]any{"SecondsSinceLastMainThreadTick": 31}, want: 0},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			projectRoot := writeFakeUnityProject(t)
+			server := startBlockedMainThreadStatusServer(t, projectRoot, editorStatusResultJSON(t, testCase.overrides))
+			inspector := &fakeDialogInspector{dialogs: []statusDialog{}}
+
+			run := runStatusForTest(context.Background(), server.connection, nil, withDialogInspector(statusTestDeps(t), inspector))
+
+			assertStatusReport(t, run, "MainThreadBlocked")
+			if len(inspector.processIDs) != 1 || inspector.processIDs[0] != testCase.want {
+				t.Fatalf("looked with process IDs %v, want [%d]", inspector.processIDs, testCase.want)
+			}
+		})
+	}
+}
+
 // Verifies a blocked main thread stays MainThreadBlocked when Unity's windows cannot be read,
 // with the reason and how to grant Accessibility access added.
 func TestRunStatusCommandReportsDialogCheckErrorWhenMainThreadIsBlocked(t *testing.T) {
@@ -359,15 +385,18 @@ func TestRunStatusCommandDoesNotInspectWhenUnityIsNotRunning(t *testing.T) {
 	assertDialogInspections(t, inspector, 0)
 }
 
-// fakeDialogInspector returns fixed dialogs or an error and counts how often status looked.
+// fakeDialogInspector returns fixed dialogs or an error, counts how often status looked, and
+// records the Editor process ID each look was given.
 type fakeDialogInspector struct {
-	dialogs []statusDialog
-	err     error
-	calls   int
+	dialogs    []statusDialog
+	err        error
+	calls      int
+	processIDs []int
 }
 
-func (inspector *fakeDialogInspector) inspect(context.Context, string) ([]statusDialog, error) {
+func (inspector *fakeDialogInspector) inspect(_ context.Context, _ string, processID int) ([]statusDialog, error) {
 	inspector.calls++
+	inspector.processIDs = append(inspector.processIDs, processID)
 	return inspector.dialogs, inspector.err
 }
 

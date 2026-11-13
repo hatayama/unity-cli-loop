@@ -257,7 +257,7 @@ func TestRunStatusCommandReportsCancellationDuringTheEarlyLook(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	deps := statusTestDeps(t)
-	deps.inspectDialogs = func(lookCtx context.Context, _ string) ([]statusDialog, error) {
+	deps.inspectDialogs = func(lookCtx context.Context, _ string, _ int) ([]statusDialog, error) {
 		cancel()
 		return nil, fmt.Errorf("looking for dialogs was cancelled: %w", lookCtx.Err())
 	}
