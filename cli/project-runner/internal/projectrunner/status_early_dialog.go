@@ -13,6 +13,16 @@ import (
 // would otherwise be reported Ready for the first five seconds a dialog is open.
 const editorStatusEarlyStallSeconds = 1.0
 
+// windowsQuickLookStallSeconds is how long the main thread must be still before status on Windows
+// looks at Unity's windows for an answer that would let the reader send a command.
+// Why not zero: a window built like a message box with no owner, such as one another thread opened,
+// passes for a dialog without holding the main thread, and every command would then be refused. A
+// still main thread is what shows a dialog holds it.
+// Why 0.3 seconds: the Editor loop is ticked at 6Hz or more, so a running main thread is never still
+// for much over 0.17 seconds; 0.3 leaves room for that and still finds a dialog within a third of a
+// second of its opening.
+const windowsQuickLookStallSeconds = 0.3
+
 // letsReaderSend reports whether the state tells the reader it may send a command, which a dialog the Editor
 // cannot report would make wrong.
 // Why not Busy: it never tells the reader to send a command, so a late look cannot make it wrong.
@@ -32,12 +42,20 @@ func needsEarlyDialogInspection(state string, response editorStatusResponse) boo
 	return letsReaderSend(state) && response.SecondsSinceLastMainThreadTick >= editorStatusEarlyStallSeconds
 }
 
-// looksOnEveryAnswer reports whether status looks at Unity's windows on every answer that would
-// let the reader send a command, instead of only after a short stall.
+// needsQuickDialogInspection reports whether an answer that would let the reader send a command
+// has a main thread still long enough for a dialog to be what holds it, so that status on Windows
+// looks at Unity's windows at once.
+func needsQuickDialogInspection(state string, response editorStatusResponse) bool {
+	return letsReaderSend(state) && response.SecondsSinceLastMainThreadTick >= windowsQuickLookStallSeconds
+}
+
+// looksAfterBriefStall reports whether status looks at Unity's windows as soon as the main thread
+// has been still for windowsQuickLookStallSeconds, without asking the Editor again, instead of only
+// after a short stall that a second answer confirms.
 // Why Windows only: listing a process's windows there is a few milliseconds and needs no
 // permission, so the second of Ready a dialog would otherwise get is not worth saving. On macOS
 // the look starts osascript and needs a permission that may be missing.
-func looksOnEveryAnswer(goos string) bool {
+func looksAfterBriefStall(goos string) bool {
 	return goos == "windows"
 }
 

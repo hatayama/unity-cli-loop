@@ -167,7 +167,8 @@ func runStatusCommandWithDeps(
 // probeEditorStatus asks the Editor once, and asks once more when the first answer reads as a
 // blocked main thread or as a main thread that has been still for a short while. A main thread
 // that stayed still across both answers then gets a look at Unity's windows for a dialog. On
-// Windows an answer that would let the reader send a command gets that look at once instead.
+// Windows an answer that would let the reader send a command gets that look at once instead, once
+// the main thread has been still for a brief moment.
 func probeEditorStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -179,7 +180,7 @@ func probeEditorStatus(
 	}
 	state := classifyEditorState(*response)
 	// Why no second question here: the look itself tells whether a dialog holds the main thread.
-	if looksOnEveryAnswer(deps.goos) && letsReaderSend(state) {
+	if looksAfterBriefStall(deps.goos) && needsQuickDialogInspection(state, *response) {
 		return reportAfterQuietDialogLook(ctx, connection.ProjectRoot, *response, deps)
 	}
 	if needsEarlyDialogInspection(state, *response) {
