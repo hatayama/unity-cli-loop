@@ -64,9 +64,10 @@ opened took 32.5 seconds to answer on macOS.
   about 3 seconds after sending, and about 7 seconds when they reattach to an earlier compile
   (measured on macOS), instead of 13 to 23 seconds.
 - An older Unity package answers the report with an error; the CLI then stops reporting for that
-  request, and the request keeps the 30-second answer.
-- On Linux before Unity 6000.7 the CLI cannot look at Unity's windows, so it keeps the 30-second
-  answer.
+  request, and the request keeps the 30-second answer. `compile` needs nothing from the package and
+  answers early with it too.
+- On Linux before Unity 6000.7 the CLI cannot look at Unity's windows, so other commands keep the
+  30-second answer and `compile` keeps its earlier answer.
 - When the main thread stops for 1 second or more right after a dialog closes, for some other work,
   a request that was waiting may fail once; `SafeToRetry` says it can be run again.
 - `report-blocking-dialog` is a new internal bridge command, so the protocol version does not change.
