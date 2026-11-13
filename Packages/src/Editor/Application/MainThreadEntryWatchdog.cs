@@ -27,25 +27,28 @@ namespace io.github.hatayama.UnityCliLoop.Application
 
         private readonly IMainThreadLivenessPort _liveness;
         private readonly Func<CancellationToken, Task> _waitOnePoll;
-        private readonly Func<long> _getTimestamp;
-        private long _dialogReportedTimestamp = NoDialogReport;
+        // Why the wall clock and not a monotonic one: the stall comes from
+        // EditorMainThreadLivenessTracker, which reads DateTime.UtcNow. Taking the report's age from the
+        // same clock keeps "stall >= age" meaning "no tick since the report" even when the clock jumps.
+        private readonly Func<long> _getUtcTicks;
+        private long _dialogReportedUtcTicks = NoDialogReport;
 
         internal MainThreadEntryWatchdog(
             IMainThreadLivenessPort liveness,
             Func<CancellationToken, Task> waitOnePoll,
-            Func<long> getTimestamp = null)
+            Func<long> getUtcTicks = null)
         {
             Debug.Assert(liveness != null, "liveness must not be null");
             Debug.Assert(waitOnePoll != null, "waitOnePoll must not be null");
 
             _liveness = liveness ?? throw new ArgumentNullException(nameof(liveness));
             _waitOnePoll = waitOnePoll ?? throw new ArgumentNullException(nameof(waitOnePoll));
-            _getTimestamp = getTimestamp ?? Stopwatch.GetTimestamp;
+            _getUtcTicks = getUtcTicks ?? (() => DateTime.UtcNow.Ticks);
         }
 
         public void ReportBlockingDialog()
         {
-            Interlocked.Exchange(ref _dialogReportedTimestamp, _getTimestamp());
+            Interlocked.Exchange(ref _dialogReportedUtcTicks, _getUtcTicks());
         }
 
         // Returns true when the lease was cancelled for a blocked main thread.
@@ -67,13 +70,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
         // after the report means the dialog closed, and whatever stalls the main thread later is not it.
         private bool IsStalledByReportedDialog(double stallSeconds)
         {
-            long reportedTimestamp = Interlocked.Read(ref _dialogReportedTimestamp);
-            if (reportedTimestamp == NoDialogReport || stallSeconds < DialogReportedStallSeconds)
+            long reportedUtcTicks = Interlocked.Read(ref _dialogReportedUtcTicks);
+            if (reportedUtcTicks == NoDialogReport || stallSeconds < DialogReportedStallSeconds)
             {
                 return false;
             }
 
-            double secondsSinceReport = (_getTimestamp() - reportedTimestamp) / (double)Stopwatch.Frequency;
+            double secondsSinceReport = (_getUtcTicks() - reportedUtcTicks) / (double)TimeSpan.TicksPerSecond;
             return stallSeconds >= secondsSinceReport;
         }
 

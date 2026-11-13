@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionLease lease = new ToolExecutionSession().TryEnter("tool").Lease;
             ManualClock clock = new ManualClock();
             MainThreadEntryWatchdog watchdog =
-                new MainThreadEntryWatchdog(new ScriptedLiveness(3.5), new ManualPolls().WaitOnePoll, clock.GetTimestamp);
+                new MainThreadEntryWatchdog(new ScriptedLiveness(3.5), new ManualPolls().WaitOnePoll, clock.GetUtcTicks);
 
             watchdog.ReportBlockingDialog();
             clock.AdvanceSeconds(1.5);
@@ -79,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionLease lease = new ToolExecutionSession().TryEnter("tool").Lease;
             ManualClock clock = new ManualClock();
             MainThreadEntryWatchdog watchdog =
-                new MainThreadEntryWatchdog(new ScriptedLiveness(4), new ManualPolls().WaitOnePoll, clock.GetTimestamp);
+                new MainThreadEntryWatchdog(new ScriptedLiveness(4), new ManualPolls().WaitOnePoll, clock.GetUtcTicks);
 
             watchdog.ReportBlockingDialog();
             clock.AdvanceSeconds(10);
@@ -99,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionLease lease = new ToolExecutionSession().TryEnter("tool").Lease;
             ManualClock clock = new ManualClock();
             MainThreadEntryWatchdog watchdog =
-                new MainThreadEntryWatchdog(new ScriptedLiveness(0.9), new ManualPolls().WaitOnePoll, clock.GetTimestamp);
+                new MainThreadEntryWatchdog(new ScriptedLiveness(0.9), new ManualPolls().WaitOnePoll, clock.GetUtcTicks);
 
             watchdog.ReportBlockingDialog();
             clock.AdvanceSeconds(0.5);
@@ -210,19 +210,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
     }
 
-    // Stands in for the monotonic clock, so a test decides how long ago a dialog was reported.
+    // Stands in for the watchdog's UTC clock, so a test decides how long ago a dialog was reported.
     internal sealed class ManualClock
     {
-        private long _timestamp = System.Diagnostics.Stopwatch.Frequency;
+        private long _utcTicks = System.TimeSpan.TicksPerSecond;
 
-        internal long GetTimestamp()
+        internal long GetUtcTicks()
         {
-            return _timestamp;
+            return _utcTicks;
         }
 
         internal void AdvanceSeconds(double seconds)
         {
-            _timestamp += (long)(seconds * System.Diagnostics.Stopwatch.Frequency);
+            _utcTicks += (long)(seconds * System.TimeSpan.TicksPerSecond);
         }
     }
 
