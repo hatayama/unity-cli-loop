@@ -38,7 +38,7 @@ type earlyDialogReportDeps struct {
 
 func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
 	return earlyDialogReportDeps{
-		probeEditorStatus:    probeEditorStatusBeforeSend,
+		probeEditorStatus:    probeEditorStatusWhileUnanswered,
 		reportBlockingDialog: sendReportBlockingDialog,
 		waitFor:              time.After,
 	}
@@ -111,4 +111,44 @@ func sendReportBlockingDialog(ctx context.Context, connection unityipc.Connectio
 		reportBlockingDialogBridgeCommandName,
 		map[string]any{})
 	return err
+}
+
+// waitingForMainThreadPhase is the RunningToolPhase of a command that holds the slot but waits for
+// the Editor's main thread to start its tool code.
+const waitingForMainThreadPhase = "WaitingForMainThread"
+
+func probeEditorStatusWhileUnanswered(ctx context.Context, connection unityipc.Connection) (statusReport, error) {
+	return probeEditorStatusWhileUnansweredWithDeps(ctx, connection, preSendStatusDeps(defaultStatusCommandDeps()))
+}
+
+// probeEditorStatusWhileUnansweredWithDeps reads the Editor the way the check before sending does,
+// and also looks at Unity's windows when a command waits for a main thread that has been still for a
+// second. Either way one probe looks at Unity's windows at most once.
+// Why: the sent request itself holds the slot, so the Editor answers Busy, and uloop status looks
+// behind Busy only from a five-second stall. The early report must find the dialog well before that.
+func probeEditorStatusWhileUnansweredWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	deps statusCommandDeps,
+) (statusReport, error) {
+	response, report, err := readEditorStatus(ctx, connection, deps)
+	if response == nil {
+		return report, err
+	}
+	if classifyEditorState(*response) != statusStateBusy || !isWaitingForStillMainThread(*response) {
+		return probeEditorStatusFromResponse(ctx, connection, *response, deps)
+	}
+	// Why no second question to tell sleeping from blocked: the waiting request keeps waking the
+	// Editor loop, and Unity checks again that the main thread has not run since the report.
+	return inspectForDialogs(ctx, connection.ProjectRoot, response.ProcessId, reportFromEditorResponse(*response), deps,
+		func(dialogs []statusDialog) statusReport {
+			return blockedByDialogReport(*response, dialogs)
+		}), nil
+}
+
+// isWaitingForStillMainThread reports whether a command waits for a main thread that has been still
+// for a second.
+func isWaitingForStillMainThread(response editorStatusResponse) bool {
+	return response.RunningToolPhase == waitingForMainThreadPhase &&
+		response.SecondsSinceLastMainThreadTick >= editorStatusEarlyStallSeconds
 }
