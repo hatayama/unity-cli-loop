@@ -20,9 +20,11 @@ const (
 // Why a message to the dialog and not a click on the button: the dialog acts on the message
 // without being the active window. A real Editor closed its message box this way, and returned
 // the pressed button to the script, while another application was in front.
-// Why the dialog is checked first: it may have closed since its windows were read, and a handle
-// that no longer names a visible window must not be sent a press. It may also have been disabled
-// by a nested modal dialog opened over it, and WM_COMMAND would still make it act.
+// Why the dialog is checked first, by the rule the listing uses: it may have closed since its
+// windows were read, or stopped holding Unity, as when its owner was enabled again, and such a
+// handle must not be sent a press. A dialog hidden only with its minimized owner still passes, as it
+// does in the listing. It may also have been disabled by a nested modal dialog opened over it, and
+// WM_COMMAND would still make it act.
 // Why the button is checked as well: it may have been closed, hidden, or disabled since the
 // windows were read, and WM_COMMAND makes the dialog act even for a button that is disabled.
 // Why a failure before the click is sent is a press that did not start: nothing reached the
@@ -30,13 +32,13 @@ const (
 func pressWin32WindowButton(ctx context.Context, target win32PressTargetResult) error {
 	api := newWin32WindowAPI()
 	dialog := windows.HWND(target.DialogHandle)
-	if !api.isWindow(dialog) || !windows.IsWindowVisible(dialog) || !api.isEnabled(dialog) {
+	if !api.isWindow(dialog) || !api.describeWindow(dialog).mayBeModal() {
 		return PressNotStartedError{
-			Err: errors.New("the dialog closed, was hidden, or was disabled before its button was pressed"),
+			Err: errors.New("the dialog closed, was hidden or disabled, or stopped holding Unity before its button was pressed"),
 		}
 	}
 	button := windows.HWND(target.ButtonHandle)
-	if !api.isWindow(button) || !windows.IsWindowVisible(button) || !api.isEnabled(button) {
+	if !api.isWindow(button) || !isWin32StyleVisible(api.style(button)) || !api.isEnabled(button) {
 		return PressNotStartedError{
 			Err: errors.New("the button was closed, hidden, or disabled before it was pressed"),
 		}

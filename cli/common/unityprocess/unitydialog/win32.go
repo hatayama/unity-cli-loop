@@ -32,12 +32,17 @@ type win32Window struct {
 	Handle    uintptr
 	ClassName string
 	Title     string
-	Visible   bool
-	Enabled   bool
-	HasOwner  bool
+	// The thread that made the window; zero when Windows did not say.
+	ThreadID uint32
+	Visible  bool
+	Enabled  bool
+	HasOwner bool
 	// Meaningful only when HasOwner is true.
 	OwnerEnabled bool
-	Controls     []win32Control
+	// Meaningful only when HasOwner is true: whether the owner is minimized, which hides the
+	// windows it owns.
+	OwnerMinimized bool
+	Controls       []win32Control
 }
 
 // win32Control is one child window of a window that may be modal: a label, a text box, a button,
@@ -49,11 +54,18 @@ type win32Control struct {
 	Text      string
 	ID        int
 	Style     uint32
-	Visible   bool
+	// Whether the control itself is shown, whether or not its dialog is.
+	Visible bool
+	// Where the control is drawn, in screen coordinates. Meaningful only when HasPosition is true.
+	Left int32
+	Top  int32
+	// Whether Windows said where the control is drawn.
+	HasPosition bool
 }
 
 const (
 	win32DialogClassName      = "#32770"
+	win32UnityWindowClassName = "UnityContainerWndClass"
 	win32StaticClassName      = "Static"
 	win32EditClassName        = "Edit"
 	win32ButtonClassName      = "Button"
@@ -90,13 +102,52 @@ func (window win32Window) isModal() bool {
 // mayBeModal reports what the window alone tells, before its controls are read: whether it can
 // be modal. It is what decides which windows have their controls read.
 func (window win32Window) mayBeModal() bool {
-	if !window.Visible || !window.Enabled {
+	if !window.isShown() || !window.Enabled {
 		return false
 	}
 	if window.HasOwner {
 		return !window.OwnerEnabled
 	}
 	return isWin32Class(window.ClassName, win32DialogClassName)
+}
+
+// isShown reports whether the window is on the screen, or would be once Unity is restored.
+// Why a hidden dialog can count: Windows hides the windows a minimized window owns, so a message
+// box Unity's window was minimized under is hidden while it still holds the main thread. Windows
+// shows it again with its owner, and it acts on a press while hidden.
+// Why only a dialog: what a real Editor showed hidden that way was a message box, and a hidden
+// window of Unity's own class can be one of its windows that a dialog keeps from taking input.
+func (window win32Window) isShown() bool {
+	if window.Visible {
+		return true
+	}
+	return window.HasOwner && window.OwnerMinimized && isWin32Class(window.ClassName, win32DialogClassName)
+}
+
+// unityMainThreads returns the threads that made the windows of Unity's own class. Unity makes
+// them, and the dialogs that hold them, on its main thread.
+func unityMainThreads(windows []win32Window) map[uint32]bool {
+	threads := make(map[uint32]bool)
+	for _, window := range windows {
+		if window.ThreadID != 0 && isWin32Class(window.ClassName, win32UnityWindowClassName) {
+			threads[window.ThreadID] = true
+		}
+	}
+	return threads
+}
+
+// isOnMainThread reports whether the window was made by Unity's main thread, the only thread whose
+// windows can hold it.
+// Why it is asked: a message box another thread of the process opens is built like Unity's own,
+// with no owner, but it waits on that thread and leaves the main thread running. Counted, it made
+// every command be refused while the Editor could run them.
+// Why a window counts when the main thread is not known: a prompt shown while the Editor starts
+// opens before Unity's first window, and leaving it out would hide what holds the Editor.
+func (window win32Window) isOnMainThread(mainThreads map[uint32]bool) bool {
+	if len(mainThreads) == 0 || window.ThreadID == 0 {
+		return true
+	}
+	return mainThreads[window.ThreadID]
 }
 
 // isMessageBox tells a message box from a progress window, by the controls of a dialog that has
@@ -165,9 +216,10 @@ func dialogsFromWin32Windows(windows []win32Window) []Dialog {
 // win32ModalWindows keeps the windows that hold Unity's main thread, in the order given. Both the
 // listing and the press take their dialogs from here, so they agree on which window is one.
 func win32ModalWindows(windows []win32Window) []win32Window {
+	mainThreads := unityMainThreads(windows)
 	modalWindows := make([]win32Window, 0)
 	for _, window := range windows {
-		if window.isModal() {
+		if window.isModal() && window.isOnMainThread(mainThreads) {
 			modalWindows = append(modalWindows, window)
 		}
 	}
@@ -213,10 +265,16 @@ func win32ButtonLabels(buttons []win32Control) []string {
 	return labels
 }
 
-// win32PushButtons returns a dialog's visible push buttons.
-// Why sorted by control ID and not left to right: Unity numbers the buttons OK, Cancel, Alt, which
-// is the order the macOS look gives, while Windows draws Alt in the middle. The Editor's own dialog
-// report on Windows (Unity 6000.7) lists them as drawn, OK, Alt, Cancel, so the two orders can differ.
+// win32PushButtons returns a dialog's visible push buttons in the order they are drawn: left to
+// right, then top to bottom, and by control ID where they are drawn at the same place.
+// Why as drawn and not by control ID: the Editor's own dialog report on Windows (Unity 6000.7)
+// lists the buttons as drawn, OK, Alt, Cancel, while Unity numbers them OK, Cancel, Alt, so
+// `uloop status` and `uloop get-dialogs` gave the same dialog's buttons in two orders. As drawn is
+// also the order the user sees. It differs from the macOS look, which gives OK, Cancel, Alt.
+// Why not the order Windows lists the controls in: that is the order they were made in, which
+// Windows does not promise to be where they are drawn.
+// Why by control ID when the position of any button is not known: an unread position is not a
+// place on the screen, and mixing it with real ones would put that button first.
 func win32PushButtons(controls []win32Control) []win32Control {
 	buttons := make([]win32Control, 0, len(controls))
 	for _, control := range controls {
@@ -224,10 +282,36 @@ func win32PushButtons(controls []win32Control) []win32Control {
 			buttons = append(buttons, control)
 		}
 	}
+	positionsKnown := win32PositionsKnown(buttons)
 	sort.SliceStable(buttons, func(i int, j int) bool {
-		return buttons[i].ID < buttons[j].ID
+		if !positionsKnown {
+			return buttons[i].ID < buttons[j].ID
+		}
+		return buttons[i].isDrawnBefore(buttons[j])
 	})
 	return buttons
+}
+
+// win32PositionsKnown reports whether Windows said where every one of the controls is drawn.
+func win32PositionsKnown(controls []win32Control) bool {
+	for _, control := range controls {
+		if !control.HasPosition {
+			return false
+		}
+	}
+	return true
+}
+
+// isDrawnBefore reports whether the control comes before other in reading a row of buttons: the one
+// further left first, then the one higher up, then the one with the lower control ID.
+func (control win32Control) isDrawnBefore(other win32Control) bool {
+	if control.Left != other.Left {
+		return control.Left < other.Left
+	}
+	if control.Top != other.Top {
+		return control.Top < other.Top
+	}
+	return control.ID < other.ID
 }
 
 func (control win32Control) hasClass(className string) bool {

@@ -24,6 +24,13 @@ var accessibilityPressProbeDialog = Dialog{
 	Buttons: []string{"Yes", "No", "Later"},
 }
 
+// The same dialog read on Windows, which lists the buttons as Windows draws them.
+var win32PressProbeDialog = Dialog{
+	Title:   "Probe title",
+	Message: "Line one. Line two.",
+	Buttons: []string{"Yes", "Later", "No"},
+}
+
 func assertPressResult(t *testing.T, got PressResult, err error, want PressResult) {
 	t.Helper()
 	if err != nil {
@@ -249,7 +256,7 @@ func TestDialogPressOnWindowsPressesTheLabeledButton(t *testing.T) {
 
 	got, err := inspector.Press(context.Background(), "/project", "Later")
 
-	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: true, Dialog: accessibilityPressProbeDialog})
+	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: true, Dialog: win32PressProbeDialog})
 	if listedPID != 4242 {
 		t.Fatalf("listed process ID = %d, want 4242", listedPID)
 	}
@@ -276,7 +283,7 @@ func TestDialogPressOnWindowsPressesNothingWithoutAMatch(t *testing.T) {
 			name:    "label the dialog lacks",
 			windows: win32ProbeDialogWindows(),
 			label:   "later",
-			want:    PressResult{DialogFound: true, Pressed: false, Dialog: accessibilityPressProbeDialog},
+			want:    PressResult{DialogFound: true, Pressed: false, Dialog: win32PressProbeDialog},
 		},
 		{
 			name:    "no dialog",

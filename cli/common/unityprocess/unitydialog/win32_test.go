@@ -13,14 +13,15 @@ import (
 
 // The controls of EditorUtility.DisplayDialogComplex("Probe title", ..., "Yes", "No", "Later") in
 // the order a real Editor on Windows listed them: the icon, the message, then the buttons from
-// left to right, which is not the order of their IDs.
+// left to right, which is not the order of their IDs. The positions are made up; only their order
+// is the one the Editor drew.
 func win32ComplexDialogControls(message string) []win32Control {
 	return []win32Control{
-		{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true},
-		{ClassName: "Edit", Text: message, ID: 1019, Style: 0x50000804, Visible: true},
-		{ClassName: "Button", Text: "&Yes", ID: 1, Style: 0x50010001, Visible: true},
-		{ClassName: "Button", Text: "&Later", ID: 3, Style: 0x50010000, Visible: true},
-		{ClassName: "Button", Text: "&No", ID: 2, Style: 0x50010000, Visible: true},
+		{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true, Left: 120, Top: 340, HasPosition: true},
+		{ClassName: "Edit", Text: message, ID: 1019, Style: 0x50000804, Visible: true, Left: 170, Top: 340, HasPosition: true},
+		{ClassName: "Button", Text: "&Yes", ID: 1, Style: 0x50010001, Visible: true, Left: 210, Top: 420, HasPosition: true},
+		{ClassName: "Button", Text: "&Later", ID: 3, Style: 0x50010000, Visible: true, Left: 300, Top: 420, HasPosition: true},
+		{ClassName: "Button", Text: "&No", ID: 2, Style: 0x50010000, Visible: true, Left: 390, Top: 420, HasPosition: true},
 	}
 }
 
@@ -56,9 +57,9 @@ func win32StartupMessageBox() win32Window {
 		Controls: []win32Control{
 			{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true},
 			{ClassName: "Edit", Text: "The project has compilation errors.\r\n\r\nEnter Safe Mode?", ID: 1019, Style: 0x50000804, Visible: true},
-			{ClassName: "Button", Text: "&Enter Safe Mode", ID: 1, Style: 0x50010001, Visible: true},
-			{ClassName: "Button", Text: "&Ignore", ID: 3, Style: 0x50010000, Visible: true},
-			{ClassName: "Button", Text: "&Quit", ID: 2, Style: 0x50010000, Visible: true},
+			{ClassName: "Button", Text: "&Enter Safe Mode", ID: 1, Style: 0x50010001, Visible: true, Left: 210, Top: 420, HasPosition: true},
+			{ClassName: "Button", Text: "&Ignore", ID: 3, Style: 0x50010000, Visible: true, Left: 330, Top: 420, HasPosition: true},
+			{ClassName: "Button", Text: "&Quit", ID: 2, Style: 0x50010000, Visible: true, Left: 420, Top: 420, HasPosition: true},
 		},
 	}
 }
@@ -113,7 +114,7 @@ var win32EnabledMainWindow = win32Window{ClassName: "UnityContainerWndClass", Ti
 var win32InputMethodWindow = win32Window{ClassName: "IME", Title: "Default IME", HasOwner: true, OwnerEnabled: true}
 
 // Verifies each modal window shape read from Unity's windows on Windows becomes a title, a
-// message, and the push buttons in the order of their control IDs with the mnemonic marker removed.
+// message, and the push buttons in the order they are drawn with the mnemonic marker removed.
 func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -127,14 +128,14 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 				win32DisabledMainWindow,
 				win32InputMethodWindow,
 			},
-			want: []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "No", "Later"}}},
+			want: []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "Later", "No"}}},
 		},
 		{
 			name: "message line break arrives as CRLF",
 			windows: []win32Window{
 				win32ModalWindow("#32770", "Probe title", win32ComplexDialogControls("Line one\r\nLine two")...),
 			},
-			want: []Dialog{{Title: "Probe title", Message: "Line one\nLine two", Buttons: []string{"Yes", "No", "Later"}}},
+			want: []Dialog{{Title: "Probe title", Message: "Line one\nLine two", Buttons: []string{"Yes", "Later", "No"}}},
 		},
 		{
 			name: "modal Editor window with only a title",
@@ -155,7 +156,7 @@ func TestDialogsFromWin32WindowsReadsModalWindows(t *testing.T) {
 			want: []Dialog{{
 				Title:   "Enter Safe Mode?",
 				Message: "The project has compilation errors.\n\nEnter Safe Mode?",
-				Buttons: []string{"Enter Safe Mode", "Quit", "Ignore"},
+				Buttons: []string{"Enter Safe Mode", "Ignore", "Quit"},
 			}},
 		},
 		{
@@ -445,6 +446,16 @@ func TestDialogsFromWin32WindowsIgnoresWindowsThatAreNotModal(t *testing.T) {
 				win32DisabledMainWindow,
 			},
 		},
+		{
+			name: "modal Editor window hidden with its minimized owner",
+			windows: []win32Window{
+				{
+					ClassName: "UnityContainerWndClass", Title: "Probe modal", Visible: false, Enabled: true,
+					HasOwner: true, OwnerEnabled: false, OwnerMinimized: true,
+				},
+				win32DisabledMainWindow,
+			},
+		},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -540,7 +551,7 @@ func TestDialogInspectorOnWindowsReadsDialogsFromWindows(t *testing.T) {
 	if gotPID != 4242 {
 		t.Fatalf("listed process ID = %d, want 4242", gotPID)
 	}
-	want := []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "No", "Later"}}}
+	want := []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "Later", "No"}}}
 	if !reflect.DeepEqual(dialogs, want) {
 		t.Fatalf("dialogs = %#v, want %#v", dialogs, want)
 	}
@@ -591,5 +602,124 @@ func TestDialogInspectorOnWindowsReportsCancellation(t *testing.T) {
 
 	if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "did not finish") {
 		t.Fatalf("error = %v, want a cancellation", err)
+	}
+}
+
+// Verifies only a window of the thread that made Unity's own windows can hold the main thread, and
+// that a window is still counted when that thread is not known.
+func TestDialogsFromWin32WindowsCountsOnlyWindowsOfUnitysMainThread(t *testing.T) {
+	const mainThread uint32 = 100
+	const otherThread uint32 = 200
+	onThread := func(window win32Window, threadID uint32) win32Window {
+		window.ThreadID = threadID
+		return window
+	}
+	startupDialog := Dialog{
+		Title:   "Enter Safe Mode?",
+		Message: "The project has compilation errors.\n\nEnter Safe Mode?",
+		Buttons: []string{"Enter Safe Mode", "Ignore", "Quit"},
+	}
+	cases := []struct {
+		name    string
+		windows []win32Window
+		want    []Dialog
+	}{
+		{
+			name: "message box with no owner opened by another thread",
+			windows: []win32Window{
+				onThread(win32StartupMessageBox(), otherThread),
+				onThread(win32EnabledMainWindow, mainThread),
+				onThread(win32InputMethodWindow, mainThread),
+			},
+			want: []Dialog{},
+		},
+		{
+			name: "window owned by the disabled main window opened by another thread",
+			windows: []win32Window{
+				onThread(win32ModalWindow("#32770", "Probe title", win32ComplexDialogControls("Body")...), otherThread),
+				onThread(win32DisabledMainWindow, mainThread),
+			},
+			want: []Dialog{},
+		},
+		{
+			name: "message box with no owner opened by the main thread",
+			windows: []win32Window{
+				onThread(win32StartupMessageBox(), mainThread),
+				onThread(win32EnabledMainWindow, mainThread),
+			},
+			want: []Dialog{startupDialog},
+		},
+		{
+			name: "prompt shown before Unity's first window",
+			windows: []win32Window{
+				onThread(win32StartupMessageBox(), otherThread),
+				{ClassName: "UnitySplashWindow", Title: "Compiling Scripts", ThreadID: mainThread, Enabled: true},
+			},
+			want: []Dialog{startupDialog},
+		},
+		{
+			name: "message box whose thread was not read",
+			windows: []win32Window{
+				onThread(win32StartupMessageBox(), 0),
+				onThread(win32EnabledMainWindow, mainThread),
+			},
+			want: []Dialog{startupDialog},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := dialogsFromWin32Windows(testCase.windows)
+			if !reflect.DeepEqual(got, testCase.want) {
+				t.Fatalf("dialogs = %#v, want %#v", got, testCase.want)
+			}
+		})
+	}
+}
+
+// Verifies a message box that Windows hid because Unity was minimized after it opened is still
+// listed with its message and buttons, since it still holds the main thread.
+func TestDialogsFromWin32WindowsReadsAMessageBoxHiddenWithItsMinimizedOwner(t *testing.T) {
+	dialog := win32ModalWindow("#32770", "Probe title", win32ComplexDialogControls("Line one. Line two.")...)
+	dialog.Visible = false
+	dialog.OwnerMinimized = true
+
+	got := dialogsFromWin32Windows([]win32Window{dialog, win32DisabledMainWindow, win32InputMethodWindow})
+
+	want := []Dialog{{Title: "Probe title", Message: "Line one. Line two.", Buttons: []string{"Yes", "Later", "No"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dialogs = %#v, want %#v", got, want)
+	}
+}
+
+// Verifies buttons are listed where they are drawn, left to right and then top to bottom, whatever
+// order Windows lists them in and whatever their control IDs are.
+func TestDialogsFromWin32WindowsListsButtonsAsDrawn(t *testing.T) {
+	dialog := win32ModalWindow("#32770", "Probe title",
+		win32Control{ClassName: "Button", Text: "&No", ID: 2, Visible: true, Left: 390, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Below", ID: 1, Visible: true, Left: 210, Top: 460, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Yes", ID: 4, Visible: true, Left: 210, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Visible: true, Left: 300, Top: 420, HasPosition: true})
+
+	got := dialogsFromWin32Windows([]win32Window{dialog, win32DisabledMainWindow})
+
+	want := []Dialog{{Title: "Probe title", Message: "", Buttons: []string{"Yes", "Below", "Later", "No"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dialogs = %#v, want %#v", got, want)
+	}
+}
+
+// Verifies buttons fall back to control ID order when the position of any of them was not read,
+// so an unread position is not taken for the top-left corner of the screen.
+func TestDialogsFromWin32WindowsListsButtonsByControlIDWhenAPositionIsUnknown(t *testing.T) {
+	dialog := win32ModalWindow("#32770", "Probe title",
+		win32Control{ClassName: "Button", Text: "&Yes", ID: 1, Visible: true, Left: 210, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Visible: true},
+		win32Control{ClassName: "Button", Text: "&No", ID: 2, Visible: true, Left: 390, Top: 420, HasPosition: true})
+
+	got := dialogsFromWin32Windows([]win32Window{dialog, win32DisabledMainWindow})
+
+	want := []Dialog{{Title: "Probe title", Message: "", Buttons: []string{"Yes", "No", "Later"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dialogs = %#v, want %#v", got, want)
 	}
 }
