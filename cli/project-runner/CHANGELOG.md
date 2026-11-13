@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.8...uloop-project-runner-v3.13.0) (2026-11-13)
+
+
+### Features
+
+* uloop status reports the dialog that blocks Unity, and uloop press-dialog-button presses one of its buttons ([#3470](https://github.com/hatayama/unity-cli-loop/issues/3470)) ([1a6e99a](https://github.com/hatayama/unity-cli-loop/commit/1a6e99a4b0158571f92298c09baaab55a837095b))
+
 ## [3.12.8](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.7...uloop-project-runner-v3.12.8) (2026-11-12)
 
 
