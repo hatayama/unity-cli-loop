@@ -14,10 +14,6 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-// dynamicCodeAcceptedThenLostResponse is Unity accepting the snippet and then dropping the connection
-// before it answers, as when the snippet asks for a script reload.
-const dynamicCodeAcceptedThenLostResponse = `{"jsonrpc":"2.0","id":1,"uloop":{"phase":"accepted"}}`
-
 // startDynamicCodeDroppingServer reads one execute-dynamic-code request and closes the connection
 // without a word, so the request was sent but never accepted.
 func startDynamicCodeDroppingServer(t *testing.T, projectRoot string) unityipc.Connection {
@@ -48,10 +44,15 @@ func runDynamicCodeReloadWaitForTest(t *testing.T, connection unityipc.Connectio
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	waits := 0
-	deps := dynamicCodeWaitDeps{waitForToolReadiness: func(context.Context, string) error {
-		waits++
-		return waitErr
-	}}
+	// Why no dialog look: these runs are about the report after the wait, and an empty watch makes the
+	// look after a failed wait find nothing, so that failure is reported unchanged.
+	deps := dynamicCodeWaitDeps{
+		waitForToolReadiness: func(context.Context, string, clicore.DialogFinder) error {
+			waits++
+			return waitErr
+		},
+		dialogWatch: dialogWatchDeps{},
+	}
 
 	code := runExecuteDynamicCodeWithDomainReloadWaitWithDeps(
 		context.Background(),

@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
             PendingTool tool = new PendingTool(api);
-            UnityCliLoopExecutionRouter router = CreateRouter(api, tool);
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker(), tool);
 
             Task<UnityCliLoopToolResponse> run = router.ExecuteAsync(
                 PendingTool.Name,
@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteAsync_ToolThrows_ReleasesTheActivity_AndRethrows()
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
-            UnityCliLoopExecutionRouter router = CreateRouter(api, new ThrowingTool());
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker(), new ThrowingTool());
 
             Exception caught = null;
             try
@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteAsync_InternalCommandCanceledBeforeItStarts_ReleasesTheActivity()
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
-            UnityCliLoopExecutionRouter router = CreateRouter(api);
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
 
             // Why the exception is caught into a variable: a test that ends Canceled is recorded as passed.
             Exception caught = null;
@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteAsync_EditorStatus_DoesNotBeginAnActivity()
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
-            UnityCliLoopExecutionRouter router = CreateRouter(api);
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
 
             UnityCliLoopToolResponse response = await router.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
@@ -132,6 +132,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies the editor status answer carries the dialogs the tracker recorded as open, with each
+        /// dialog's title, message, and buttons, so uloop status can name the dialog that blocks Unity.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_EditorStatus_ReturnsTheDialogsTheTrackerRecordedAsOpen()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            EditorDialogTracker dialogTracker = new EditorDialogTracker();
+            dialogTracker.RecordShown(1, "Save scene?", "Your changes will be lost.", new[] { "Save", "Cancel" });
+            UnityCliLoopExecutionRouter router = CreateRouter(api, dialogTracker);
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                new JObject(),
+                CancellationToken.None);
+
+            GetEditorStatusResponse status = (GetEditorStatusResponse)response;
+            Assert.That(status.OpenDialogs.Length, Is.EqualTo(1));
+            Assert.That(status.OpenDialogs[0].Title, Is.EqualTo("Save scene?"));
+            Assert.That(status.OpenDialogs[0].Message, Is.EqualTo("Your changes will be lost."));
+            Assert.That(status.OpenDialogs[0].Buttons, Is.EqualTo(new[] { "Save", "Cancel" }));
+        }
+
+        /// <summary>
+        /// Verifies the editor status answer carries this Editor's own process ID, so uloop status can
+        /// read its windows without searching the process list.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_EditorStatus_ReportsTheEditorProcessId()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                new JObject(),
+                CancellationToken.None);
+
+            GetEditorStatusResponse status = (GetEditorStatusResponse)response;
+            using (System.Diagnostics.Process editorProcess = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                Assert.That(status.ProcessId, Is.EqualTo(editorProcess.Id));
+            }
+        }
+
+        /// <summary>
         /// Verifies the cancel-running-tool answer starts no activity, because it must answer while a
         /// tool blocks the Editor main thread.
         /// </summary>
@@ -139,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteAsync_CancelRunningTool_DoesNotBeginAnActivity()
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
-            UnityCliLoopExecutionRouter router = CreateRouter(api);
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
 
             UnityCliLoopToolResponse response = await router.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_CANCEL_RUNNING_TOOL,
@@ -157,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task ExecuteAsync_InternalCommand_HoldsAndReleasesAnActivity()
         {
             RecordingProcessActivityApi api = new RecordingProcessActivityApi();
-            UnityCliLoopExecutionRouter router = CreateRouter(api);
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
 
             UnityCliLoopToolResponse response = await router.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_GET_VERSION,
@@ -172,6 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static UnityCliLoopExecutionRouter CreateRouter(
             RecordingProcessActivityApi api,
+            EditorDialogTracker dialogTracker,
             params IUnityCliLoopTool[] tools)
         {
             UnityCliLoopToolRegistrarService registrarService = new UnityCliLoopToolRegistrarService(
@@ -179,7 +226,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new AlwaysEnabledToolSettingsPort(),
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 () => tools);
-            return new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(api));
+            return new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(api), dialogTracker);
         }
 
         /// <summary>

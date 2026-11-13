@@ -29,6 +29,9 @@ type connectionRetryDeps struct {
 	// retryPoll. Hot reload sets it because it waits for the busy slot to free on the Editor
 	// status: resending here would only delay that wait.
 	returnBusyWithoutRetry bool
+	// dialogWatch looks for the dialog that holds Unity's main thread when the response waits on a
+	// long stall, and when the send ends in main_thread_blocked or after the five-minute stall.
+	dialogWatch dialogWatchDeps
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
@@ -37,6 +40,7 @@ func defaultConnectionRetryDeps() connectionRetryDeps {
 		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
+		dialogWatch:             defaultDialogWatchDeps(),
 	}
 }
 
@@ -226,7 +230,25 @@ func sendWithTransientConnectionRetryAndResponseTimeout(
 	)
 }
 
+// sendWithTransientConnectionRetryWithDeps sends one tool request, retrying the failures that mean
+// it never ran, and names the dialog when one kept it from running.
+// Why the dialog is looked up here: every tool path (plain tools, compile, execute-dynamic-code,
+// control-play-mode, run-tests, hot-reload) sends through this function but writes its own failure,
+// so this is the one place that covers them all.
 func sendWithTransientConnectionRetryWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	params map[string]any,
+	progress unityipc.ProgressFunc,
+	responseTimeout time.Duration,
+	deps connectionRetryDeps,
+) (unityipc.UnitySendOutcome, error) {
+	outcome, err := sendWithTransientConnectionRetryAttempts(ctx, connection, method, params, progress, responseTimeout, deps)
+	return outcome, explainBlockedByDialog(ctx, connection, method, err, deps.dialogWatch)
+}
+
+func sendWithTransientConnectionRetryAttempts(
 	ctx context.Context,
 	connection unityipc.Connection,
 	method string,
@@ -248,18 +270,31 @@ func sendWithTransientConnectionRetryWithDeps(
 		focusController.restore(restoreContext)
 	}()
 
+	dialogWatch := newHeartbeatDialogWatch(ctx, connection, method, deps.dialogWatch)
+	defer dialogWatch.release()
+	// serverWaitDialogWatch looks for a dialog while the server stays unreachable with Unity running.
+	// Why: a dialog Unity shows while it starts keeps its server from starting, so the wait below
+	// would last its whole window and end in a "wait and retry" error that never names the dialog.
+	serverWaitDialogWatch := newDialogBlockWatch(connection, deps.dialogWatch, dialogWatchInterval, dialogWatchStallThresholdSeconds)
+
 	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
 	for {
 		client := newConnectionRetryClient(connection, method, responseTimeout, func(stallSeconds float64) {
 			focusController.handleMainThreadStall(ctx, stallSeconds)
+			dialogWatch.observeStall(stallSeconds)
 		})
 		// Each attempt keeps the base accept bound: a dispatched request that never gets
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
 		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
-		outcome, err := client.SendWithProgressOutcomeAcceptContext(ctx, attemptContext, method, params, progress)
+		outcome, err := client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, progress)
 		cancelAttempt()
+		// Why Unity's answer first, a result or an error: it can arrive while the watch looks, and a
+		// command that finished must report how it ended rather than a dialog that no longer stops it.
+		if blockedErr := dialogWatch.blockedError(); blockedErr != nil && err != nil && !isUnityAnswerError(err) {
+			return outcome, blockedErr
+		}
 		if isUnityServerBusyRPCError(err) {
 			if deps.returnBusyWithoutRetry {
 				return outcome, err
@@ -329,6 +364,12 @@ func sendWithTransientConnectionRetryWithDeps(
 			focusReasonUndispatchedConnectionFailure,
 			err,
 		)
+		// Safe to report as not run: no attempt reached Unity. Why in step with the dial loop: the
+		// look takes about a second once per interval, and a server that came up meanwhile gets the
+		// command on the next attempt.
+		if dialogs := serverWaitDialogWatch.observePoll(retryContext, false); dialogs != nil {
+			return outcome, notSentBlockedByDialog(method, dialogs, deps.dialogWatch.canPressDialogs)
+		}
 
 		lastOutcome = outcome
 		lastErr = err
@@ -360,6 +401,16 @@ func isUnityServerBusyRPCError(err error) bool {
 		return false
 	}
 	return clierrors.RPCDataType(rpcErr.Data) == "server_busy"
+}
+
+// isMainThreadBlockedRPCError reports whether Unity gave up waiting for its blocked main thread
+// before the tool's code ran.
+func isMainThreadBlockedRPCError(err error) bool {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) {
+		return false
+	}
+	return clierrors.RPCDataType(rpcErr.Data) == "main_thread_blocked"
 }
 
 func connectionRetryFocusReasonForError(

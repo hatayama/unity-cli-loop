@@ -117,7 +117,7 @@ func TestRunLaunchReportsV2ReadinessFailures(t *testing.T) {
 		deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 			return &clicore.UnityProcess{Pid: 4242}, nil
 		}
-		deps.waitForV2ServerReady = func(context.Context, string, string, time.Duration, time.Duration) error {
+		deps.waitForV2ServerReady = func(context.Context, string, string, *clicore.DialogLookout, time.Duration, time.Duration) error {
 			return errors.New("v2 server not ready")
 		}
 		projectRoot := createV2LaunchTestProject(t)

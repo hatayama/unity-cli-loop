@@ -94,6 +94,17 @@ type waitForPausePointOptions struct {
 	// first status query, and a real hit can race into that window on continuous/trace markers.
 	// Baselining that hit would demand a later sequence that never comes (continuous pauses on hit).
 	markerJustEnabled bool
+
+	// dialogWatch ends the wait when its polls go unanswered because a modal dialog holds Unity.
+	dialogWatch dialogWatchDeps
+}
+
+// commandName is the command whose wait this is, as the user typed it.
+func (options waitForPausePointOptions) commandName() string {
+	if options.markerJustEnabled {
+		return pausePointEnableCommandName
+	}
+	return clicore.PausePointAwaitCommandName
 }
 
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
@@ -385,6 +396,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		timeout:               time.Duration(pausePointDefaultTimeoutSeconds) * time.Second,
 		matchingLogsMaxCount:  pausePointDefaultLogsMaxCount,
 		capturedVariablesMode: pausePointCapturedVariablesModeFull,
+		dialogWatch:           defaultDialogWatchDeps(),
 	}
 
 	for index := 0; index < len(args); index++ {

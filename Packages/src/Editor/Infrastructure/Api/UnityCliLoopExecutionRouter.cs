@@ -22,18 +22,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly EditorExecutionActivity _executionActivity;
+        private readonly EditorDialogTracker _dialogTracker;
+        // Why read here: the router is built once when the server starts, and get-editor-status must
+        // stay cheap because it answers while the main thread is blocked.
+        private readonly int _editorProcessId;
 
         internal UnityCliLoopExecutionRouter(
             UnityCliLoopToolRegistrarService toolRegistrarService,
-            EditorExecutionActivity executionActivity)
+            EditorExecutionActivity executionActivity,
+            EditorDialogTracker dialogTracker)
         {
             System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             System.Diagnostics.Debug.Assert(executionActivity != null, "executionActivity must not be null");
+            System.Diagnostics.Debug.Assert(dialogTracker != null, "dialogTracker must not be null");
 
             _toolRegistrarService = toolRegistrarService
                 ?? throw new ArgumentNullException(nameof(toolRegistrarService));
             _executionActivity = executionActivity
                 ?? throw new ArgumentNullException(nameof(executionActivity));
+            _dialogTracker = dialogTracker
+                ?? throw new ArgumentNullException(nameof(dialogTracker));
+            using (System.Diagnostics.Process editorProcess = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                _editorProcessId = editorProcess.Id;
+            }
         }
 
         /// <summary>
@@ -60,7 +72,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 EditorApplicationTickBridge.SignalTick();
                 return EditorStatusBridgeCommand.Execute(
                     _toolRegistrarService,
-                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick());
+                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
+                    _dialogTracker.GetOpenDialogs(),
+                    _editorProcessId);
             }
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_CANCEL_RUNNING_TOOL)

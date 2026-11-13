@@ -39,6 +39,14 @@ func runnerNativeCLIOnlyOptions(command string) []tooldocs.PausePointCLIOnlyOpti
 				Description: "Also set the machine-wide startup preference to Debug",
 			},
 		}
+	case clicore.PressDialogButtonCommandName:
+		return []tooldocs.PausePointCLIOnlyOption{
+			{
+				FlagName:    "label",
+				Type:        "string",
+				Description: "Press the button with this exact label in the frontmost dialog",
+			},
+		}
 	default:
 		return nil
 	}

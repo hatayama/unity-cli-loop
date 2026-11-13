@@ -18,6 +18,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 	"github.com/hatayama/unity-cli-loop/common/unityprocess"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
 const statusTestAcceptedResponse = `{"jsonrpc":"2.0","id":1,"uloop":{"phase":"accepted"}}`
@@ -47,16 +48,19 @@ func TestRunStatusCommandRejectsExtraArguments(t *testing.T) {
 }
 
 // Verifies an idle Editor with its state recorded is Ready with exit code 0 and an empty
-// NextActions array, and that no connection or process fields are printed.
+// NextActions array, that no connection or process fields are printed, and that Unity's windows
+// are not searched for a dialog.
 func TestRunStatusCommandReportsReady(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
 	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, nil))
+	inspector := &fakeDialogInspector{dialogs: []statusDialog{statusTestSaveSceneDialog}}
 
-	run := runStatusForTest(context.Background(), server.connection, nil, statusTestDeps(t))
+	run := runStatusForTest(context.Background(), server.connection, nil, withDialogInspector(statusTestDeps(t), inspector))
 
 	report := assertStatusReport(t, run, "Ready")
 	assertStatusFields(t, report, statusTestEditorStateFields...)
 	assertStatusMessage(t, report, "Unity is idle and can take a command now.")
+	assertDialogInspections(t, inspector, 0)
 	if !strings.Contains(run.stdout, `"NextActions": []`) {
 		t.Fatalf("Ready must print NextActions as an empty array, not null:\n%s", run.stdout)
 	}
@@ -187,12 +191,14 @@ func TestRunStatusCommandReportsStartingBeforeMainThreadBlocked(t *testing.T) {
 		"HasEditorState":                 false,
 		"SecondsSinceLastMainThreadTick": 30,
 	}))
+	inspector := &fakeDialogInspector{dialogs: []statusDialog{statusTestSaveSceneDialog}}
 
-	run := runStatusForTest(context.Background(), server.connection, nil, statusTestDeps(t))
+	run := runStatusForTest(context.Background(), server.connection, nil, withDialogInspector(statusTestDeps(t), inspector))
 
 	report := assertStatusReport(t, run, "Starting")
 	assertStatusFields(t, report, "SecondsSinceLastMainThreadTick")
 	assertStatusRequestCount(t, server, 1)
+	assertDialogInspections(t, inspector, 0)
 }
 
 // Verifies a stall of exactly the threshold sends a second probe, and a second answer still at
@@ -221,13 +227,15 @@ func TestRunStatusCommandReportsReadyWhenSecondProbeShowsTheLoopWoke(t *testing.
 		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 30})),
 		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 0.2})),
 	)
+	inspector := &fakeDialogInspector{}
 
-	run := runStatusForTest(context.Background(), server.connection, nil, statusTestDeps(t))
+	run := runStatusForTest(context.Background(), server.connection, nil, withDialogInspector(statusTestDeps(t), inspector))
 
 	report := assertStatusReport(t, run, "Ready")
 	assertStatusFields(t, report, statusTestEditorStateFields...)
 	assertStatusValue(t, report, "SecondsSinceLastMainThreadTick", 0.2)
 	assertStatusRequestCount(t, server, 2)
+	assertDialogInspections(t, inspector, 0)
 }
 
 // Verifies the second answer is classified from all of its values, not only its stall seconds.
@@ -297,18 +305,20 @@ func TestRunStatusCommandStopsWhenCancelledBeforeSecondProbe(t *testing.T) {
 	assertServerDidNotFail(t, server.serverErr)
 }
 
-// Verifies a stall just under the threshold is Ready without a second probe.
+// Verifies a stall just under the blocked threshold is not MainThreadBlocked: once the main thread
+// runs before the second probe, the answer is Ready.
 func TestRunStatusCommandTreatsShortStallAsReady(t *testing.T) {
 	projectRoot := writeFakeUnityProject(t)
-	server := startFakeUnityResultServer(t, projectRoot, editorStatusBridgeCommandName, editorStatusResultJSON(t, map[string]any{
-		"SecondsSinceLastMainThreadTick": 4.9,
-	}))
+	server := startFakeEditorStatusSequenceServer(t, projectRoot,
+		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 4.9})),
+		editorStatusRPCResponse(editorStatusResultJSON(t, map[string]any{"SecondsSinceLastMainThreadTick": 0.2})),
+	)
 
 	run := runStatusForTest(context.Background(), server.connection, nil, statusTestDeps(t))
 
 	report := assertStatusReport(t, run, "Ready")
 	assertStatusFields(t, report, statusTestEditorStateFields...)
-	assertStatusRequestCount(t, server, 1)
+	assertStatusRequestCount(t, server, 2)
 }
 
 // Verifies compiling is decided before importing when Unity reports both.
@@ -602,17 +612,28 @@ func runStatusForTest(ctx context.Context, connection unityipc.Connection, args 
 
 // statusTestDeps answers fast: a fake server replies at once, so a 2s probe timeout only runs
 // out when a probe nobody expected was sent. The process lookup fails the test unless a test
-// replaces it, because most outcomes must not look Unity up.
+// replaces it, because most outcomes must not look Unity up. The dialog inspector reports that it
+// cannot look, as on Linux, so outcomes stay what they were before uloop looked for dialogs. The
+// operating system is macOS, where status looks only after a stall; Windows tests set it.
 func statusTestDeps(t *testing.T) statusCommandDeps {
 	return statusCommandDeps{
+		goos:         "darwin",
 		probeTimeout: 2 * time.Second,
 		reprobeDelay: 0,
 		isUnityProcessRunning: func(context.Context, string) (bool, error) {
 			t.Error("status must not look up the Unity process for this outcome")
 			return false, errors.New("unexpected Unity process lookup")
 		},
+		inspectDialogs: func(context.Context, string, int) ([]statusDialog, error) {
+			return nil, unitydialog.ErrInspectionUnsupported
+		},
+		dialogCheckNextAction: statusTestDialogCheckNextAction,
+		canAnswerDialogs:      true,
 	}
 }
+
+// The hint status appends when the look for dialogs fails; the real one differs by operating system.
+const statusTestDialogCheckNextAction = "hint about the failed look for dialogs"
 
 func fakeUnityProcessLookup(
 	t *testing.T,
@@ -628,6 +649,10 @@ func fakeUnityProcessLookup(
 	}
 }
 
+// omittedEditorStatusField, given as an override, leaves the field out of the result, as a
+// package that predates the field does.
+type omittedEditorStatusField struct{}
+
 // editorStatusResultJSON returns a get-editor-status result for an idle Editor that has recorded
 // its state, with the given fields replaced. Names are spelled the way the Editor sends them.
 func editorStatusResultJSON(t *testing.T, overrides map[string]any) string {
@@ -641,8 +666,13 @@ func editorStatusResultJSON(t *testing.T, overrides map[string]any) string {
 		"IsCompiling":                    false,
 		"IsUpdating":                     false,
 		"SecondsSinceLastMainThreadTick": 0.1,
+		"OpenDialogs":                    []any{},
 	}
 	for name, value := range overrides {
+		if _, omit := value.(omittedEditorStatusField); omit {
+			delete(result, name)
+			continue
+		}
 		result[name] = value
 	}
 	encoded, err := json.Marshal(result)

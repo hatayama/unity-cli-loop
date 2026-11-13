@@ -42,6 +42,9 @@ type hotReloadEditorReadyWaitOptions struct {
 	// busyResendInterval is how often the busy wait sends the request again while a cancelled
 	// execute-dynamic-code request holds the Editor.
 	busyResendInterval time.Duration
+	// dialogWatch ends a wait that a modal dialog holds: the dialogs the Editor reports, or on an
+	// Editor older than Unity 6000.7 a look at Unity's windows once the main thread stalled.
+	dialogWatch dialogWatchDeps
 }
 
 // Why a package variable: the fallback tests already swap hotReloadFallbackCompile, so the tests
@@ -52,6 +55,7 @@ var hotReloadEditorReadyWaitDefaults = hotReloadEditorReadyWaitOptions{
 	probeTimeout: 5 * time.Second,
 	// The Editor's grace period before it takes back a cancelled request's slot.
 	busyResendInterval: 5 * time.Second,
+	dialogWatch:        defaultDialogWatchDeps(),
 }
 
 // hotReloadEditorReadyRetryOutcome is what the retry leaves for the fallback decision.
@@ -200,7 +204,7 @@ func hotReloadRetryParams(params map[string]any, selectedFiles []string) map[str
 }
 
 // waitForEditorReady polls the Editor status until the Editor answers and is ready, the budget
-// runs out, the Editor exits, or ctx is cancelled.
+// runs out, the Editor exits, the Editor reports a modal dialog, or ctx is cancelled.
 // Why every other probe error counts as "not yet": the domain reload that follows Unity's compile
 // takes the server down and brings it back.
 func waitForEditorReady(
@@ -211,6 +215,7 @@ func waitForEditorReady(
 ) (time.Duration, bool, error) {
 	startedAt := time.Now()
 	deadline := startedAt.Add(options.budget)
+	dialogWatch := newHotReloadDialogWatch(connection, options)
 	for {
 		status, probeErr := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
 		if probeErr == nil && classifyEditorState(status) == statusStateReady {
@@ -218,6 +223,9 @@ func waitForEditorReady(
 		}
 		if exitErr := exitWatch.Observe(ctx, probeErr); exitErr != nil {
 			return time.Since(startedAt), false, exitErr
+		}
+		if dialogErr := dialogWatch.hotReloadBlock(ctx, status, probeErr == nil); dialogErr != nil {
+			return time.Since(startedAt), false, dialogErr
 		}
 		if !time.Now().Before(deadline) {
 			return time.Since(startedAt), false, nil
@@ -246,11 +254,7 @@ func probeHotReloadEditorStatus(
 	if err != nil {
 		return editorStatusResponse{}, err
 	}
-	var response editorStatusResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return editorStatusResponse{}, err
-	}
-	return response, nil
+	return decodeEditorStatusResponse(raw)
 }
 
 // composeHotReloadEditorReadyNote appends sentence to the note an earlier wait in this command left

@@ -933,6 +933,7 @@ func TestWaitForControlPlayModeStateTimesOutWithLastError(t *testing.T) {
 		"Play",
 		20*time.Millisecond,
 		clicore.NewUnityExitWatch(connection.ProjectRoot, "", runningUnityProcessLookup, nil),
+		dialogWatchDeps{},
 	)
 
 	if completed || err == nil {

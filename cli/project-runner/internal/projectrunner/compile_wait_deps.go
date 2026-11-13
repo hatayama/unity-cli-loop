@@ -38,6 +38,8 @@ type compileWaitDeps struct {
 	focusUnityProcess func(context.Context, int) (unityprocess.RestoreFocusFunc, error)
 	// readHeldMouseButtons reads the OS mouse-button state recorded in a COMPILE_NOT_STARTED result.
 	readHeldMouseButtons func() ([]string, bool)
+	// dialogWatch ends a status wait whose polls go unanswered because a modal dialog holds Unity.
+	dialogWatch dialogWatchDeps
 }
 
 // newCompileUnityExitWatch creates the exit watch for one compile status wait, on the wait's clock.
@@ -73,5 +75,16 @@ func defaultCompileWaitDeps() compileWaitDeps {
 		findRunningUnityProcess: unityProcessLookup,
 		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
 		readHeldMouseButtons:    unityprocess.HeldMouseButtons,
+		dialogWatch:             defaultDialogWatchDeps(),
 	}
+}
+
+func newCompileDialogWatch(connection unityipc.Connection, deps compileWaitDeps) *dialogBlockWatch {
+	return newDialogBlockWatch(connection, deps.dialogWatch, dialogWatchInterval, dialogWatchStallThresholdSeconds)
+}
+
+// compileBlockedByDialog is safe to retry: a new uloop compile reattaches to the running compile
+// instead of starting another.
+func compileBlockedByDialog(dialogs []statusDialog, deps compileWaitDeps) error {
+	return startedCommandBlockedByDialog(clicore.CompileCommandName, dialogs, deps.dialogWatch.canPressDialogs, true)
 }

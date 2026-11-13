@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
+	"slices"
 	"strconv"
 	"time"
 
@@ -24,6 +26,7 @@ const editorStatusBridgeCommandName = "get-editor-status"
 const editorStatusMainThreadStallThresholdSeconds = 5.0
 
 const (
+	statusStateBlockedByDialog   = "BlockedByDialog"
 	statusStateReady             = "Ready"
 	statusStateBusy              = "Busy"
 	statusStateStarting          = "Starting"
@@ -39,20 +42,38 @@ const (
 // Dependencies that tests replace. A struct instead of package variables, so tests that run in
 // parallel cannot see each other's fakes.
 type statusCommandDeps struct {
+	// The operating system status runs on, a runtime.GOOS value; it decides when status looks at
+	// Unity's windows.
+	goos         string
 	probeTimeout time.Duration
 	// How long to wait before asking again when the first answer reads as a blocked main thread.
 	reprobeDelay          time.Duration
 	isUnityProcessRunning func(ctx context.Context, projectRoot string) (bool, error)
+	// Looks for modal dialogs in Unity's windows. editorProcessID is the process ID the Editor
+	// reported, or zero when it did not, in which case the look finds the process itself.
+	inspectDialogs func(ctx context.Context, projectRoot string, editorProcessID int) ([]statusDialog, error)
+	// The hint added to NextActions when that look fails; it differs by operating system.
+	dialogCheckNextAction string
+	// Whether uloop press-dialog-button can press a button on this operating system.
+	canAnswerDialogs bool
+	// returnUnreachableAsError hands a failed round trip back as its error instead of reading the
+	// process list and Unity's windows to describe it. The check before a command is sent sets it.
+	returnUnreachableAsError bool
 }
 
 func defaultStatusCommandDeps() statusCommandDeps {
+	inspector := defaultDialogInspector()
 	return statusCommandDeps{
+		goos:         runtime.GOOS,
 		probeTimeout: 5 * time.Second,
 		reprobeDelay: 1 * time.Second,
 		isUnityProcessRunning: func(ctx context.Context, projectRoot string) (bool, error) {
 			process, err := unityProcessLookup(ctx, projectRoot)
 			return process != nil, err
 		},
+		inspectDialogs:        inspector.InspectEditor,
+		dialogCheckNextAction: dialogCheckFailedNextActionFor(runtime.GOOS),
+		canAnswerDialogs:      inspector.CanPress(),
 	}
 }
 
@@ -69,24 +90,30 @@ type editorStatusResponse struct {
 	IsCompiling                    bool    `json:"IsCompiling"`
 	IsUpdating                     bool    `json:"IsUpdating"`
 	SecondsSinceLastMainThreadTick float64 `json:"SecondsSinceLastMainThreadTick"`
+	// Only Unity 6000.7 and later report dialogs; a package that predates the field leaves it nil.
+	OpenDialogs []statusDialog `json:"OpenDialogs"`
+	// The Editor's own process ID; a package that predates the field leaves it zero.
+	ProcessId int `json:"ProcessId"`
 }
 
 // statusReport is what uloop status prints. Fields that do not apply to the state are left out.
 type statusReport struct {
-	State                          string   `json:"State"`
-	Ready                          bool     `json:"Ready"`
-	Message                        string   `json:"Message"`
-	UnityProcessRunning            *bool    `json:"UnityProcessRunning,omitempty"`
-	ConnectionError                string   `json:"ConnectionError,omitempty"`
-	RunningToolName                string   `json:"RunningToolName,omitempty"`
-	RunningToolElapsedSeconds      *int     `json:"RunningToolElapsedSeconds,omitempty"`
-	RunningToolPhase               string   `json:"RunningToolPhase,omitempty"`
-	IsPlaying                      *bool    `json:"IsPlaying,omitempty"`
-	IsPaused                       *bool    `json:"IsPaused,omitempty"`
-	IsCompiling                    *bool    `json:"IsCompiling,omitempty"`
-	IsUpdating                     *bool    `json:"IsUpdating,omitempty"`
-	SecondsSinceLastMainThreadTick *float64 `json:"SecondsSinceLastMainThreadTick,omitempty"`
-	NextActions                    []string `json:"NextActions"`
+	State                          string         `json:"State"`
+	Ready                          bool           `json:"Ready"`
+	Message                        string         `json:"Message"`
+	UnityProcessRunning            *bool          `json:"UnityProcessRunning,omitempty"`
+	ConnectionError                string         `json:"ConnectionError,omitempty"`
+	RunningToolName                string         `json:"RunningToolName,omitempty"`
+	RunningToolElapsedSeconds      *int           `json:"RunningToolElapsedSeconds,omitempty"`
+	RunningToolPhase               string         `json:"RunningToolPhase,omitempty"`
+	IsPlaying                      *bool          `json:"IsPlaying,omitempty"`
+	IsPaused                       *bool          `json:"IsPaused,omitempty"`
+	IsCompiling                    *bool          `json:"IsCompiling,omitempty"`
+	IsUpdating                     *bool          `json:"IsUpdating,omitempty"`
+	SecondsSinceLastMainThreadTick *float64       `json:"SecondsSinceLastMainThreadTick,omitempty"`
+	Dialogs                        []statusDialog `json:"Dialogs,omitempty"`
+	DialogCheckError               string         `json:"DialogCheckError,omitempty"`
+	NextActions                    []string       `json:"NextActions"`
 }
 
 func runStatusCommand(
@@ -124,6 +151,7 @@ func runStatusCommandWithDeps(
 		clierrors.WriteClassifiedError(stderr, err, errorContext)
 		return 1
 	}
+	report = withDialogAnswerGuidance(report, deps.canAnswerDialogs)
 	payload, err := json.Marshal(report)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, errorContext)
@@ -136,8 +164,11 @@ func runStatusCommandWithDeps(
 	return 1
 }
 
-// probeEditorStatus asks the Editor once, and asks once more only when the first answer reads
-// as a blocked main thread.
+// probeEditorStatus asks the Editor once, and asks once more when the first answer reads as a
+// blocked main thread or as a main thread that has been still for a short while. A main thread
+// that stayed still across both answers then gets a look at Unity's windows for a dialog. On
+// Windows an answer that would let the reader send a command gets that look at once instead, once
+// the main thread has been still for a brief moment.
 func probeEditorStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -147,22 +178,37 @@ func probeEditorStatus(
 	if response == nil {
 		return report, err
 	}
-	if classifyEditorState(*response) != statusStateMainThreadBlocked {
-		return reportFromEditorResponse(*response), nil
+	state := classifyEditorState(*response)
+	// Why no second question here: the look itself tells whether a dialog holds the main thread.
+	if looksAfterBriefStall(deps.goos) && needsQuickDialogInspection(state, *response) {
+		return reportAfterQuietDialogLook(ctx, connection.ProjectRoot, *response, deps)
 	}
+	if needsEarlyDialogInspection(state, *response) {
+		return probeAfterShortStall(ctx, connection, *response, deps)
+	}
+	if state == statusStateMainThreadBlocked {
+		response, report, err = reprobeEditorStatus(ctx, connection, deps)
+		if response == nil {
+			return report, err
+		}
+	}
+	return withDialogInspection(ctx, connection.ProjectRoot, *response, reportFromEditorResponse(*response), deps), nil
+}
 
-	// The first probe woke the Editor loop (SignalTick). A loop that was only sleeping runs
-	// within the delay, so the second reading tells sleeping from blocked.
+// reprobeEditorStatus waits reprobeDelay and reads the Editor's status again.
+// Why wait: the first probe woke the Editor loop (SignalTick). A loop that was only sleeping runs
+// within the delay, so the second reading tells sleeping from blocked.
+func reprobeEditorStatus(
+	ctx context.Context,
+	connection unityipc.Connection,
+	deps statusCommandDeps,
+) (*editorStatusResponse, statusReport, error) {
 	select {
 	case <-ctx.Done():
-		return statusReport{}, ctx.Err()
+		return nil, statusReport{}, ctx.Err()
 	case <-time.After(deps.reprobeDelay):
 	}
-	response, report, err = readEditorStatus(ctx, connection, deps)
-	if response == nil {
-		return report, err
-	}
-	return reportFromEditorResponse(*response), nil
+	return readEditorStatus(ctx, connection, deps)
 }
 
 // readEditorStatus makes one get-editor-status round trip with its own timeout. A nil response
@@ -182,6 +228,9 @@ func readEditorStatus(
 		map[string]any{},
 	)
 	if err != nil {
+		if deps.returnUnreachableAsError {
+			return nil, statusReport{}, err
+		}
 		// The process lookup gets the caller's ctx because probeCtx may already have run out.
 		report, reportErr := reportFromProbeError(ctx, connection.ProjectRoot, err, deps)
 		return nil, report, reportErr
@@ -189,8 +238,8 @@ func readEditorStatus(
 
 	// Why not through reportFromProbeError: its disconnect check also matches message text, so an
 	// unreadable answer could be mistaken for a dropped connection.
-	var response editorStatusResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
+	response, err := decodeEditorStatusResponse(raw)
+	if err != nil {
 		return nil, statusReport{}, fmt.Errorf("unexpected %s response: %w", editorStatusBridgeCommandName, err)
 	}
 	// The Busy message reads the elapsed seconds, and the Editor always sends them while a
@@ -264,6 +313,7 @@ func reportFromUnreachableServer(
 				"Unity is starting, reloading scripts, or was started in Safe Mode because of compile errors "+
 				"(uloop cannot run in Safe Mode).")
 		report.UnityProcessRunning = &running
+		report = withDialogInspectionBeforeServer(ctx, projectRoot, report, deps)
 	default:
 		report = notRunningStatusReport(projectRoot, probeErr)
 		report.UnityProcessRunning = &running
@@ -281,16 +331,26 @@ func notRunningStatusReport(projectRoot string, probeErr error) statusReport {
 	return report
 }
 
+// decodeEditorStatusResponse reads a get-editor-status answer, with OpenDialogs frontmost first as
+// uloop lists the dialogs it reads from the OS.
+// Why reversed: the Editor lists its dialogs in the order they opened, and a nested modal dialog
+// opens over the one before it, so the last one is in front.
+func decodeEditorStatusResponse(raw []byte) (editorStatusResponse, error) {
+	var response editorStatusResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return editorStatusResponse{}, err
+	}
+	slices.Reverse(response.OpenDialogs)
+	return response, nil
+}
+
 func reportFromEditorResponse(response editorStatusResponse) statusReport {
 	state := classifyEditorState(response)
-	report := newStatusReport(state, editorStateMessage(state, response))
-	report.SecondsSinceLastMainThreadTick = &response.SecondsSinceLastMainThreadTick
-	if response.HasEditorState {
-		report.IsPlaying = &response.IsPlaying
-		report.IsPaused = &response.IsPaused
-		report.IsCompiling = &response.IsCompiling
-		report.IsUpdating = &response.IsUpdating
+	if state == statusStateBlockedByDialog {
+		return blockedByDialogReport(response, response.OpenDialogs)
 	}
+	report := newStatusReport(state, editorStateMessage(state, response))
+	addEditorStateFields(&report, response)
 	if state == statusStateBusy {
 		report.RunningToolName = response.RunningToolName
 		report.RunningToolElapsedSeconds = response.RunningToolElapsedSeconds
@@ -311,10 +371,25 @@ func busyCancelNextActions(response editorStatusResponse) []string {
 	return []string{"If it does not finish, run `uloop cancel` to stop it."}
 }
 
+// addEditorStateFields copies the Editor's readings that every answered state prints.
+func addEditorStateFields(report *statusReport, response editorStatusResponse) {
+	report.SecondsSinceLastMainThreadTick = &response.SecondsSinceLastMainThreadTick
+	if response.HasEditorState {
+		report.IsPlaying = &response.IsPlaying
+		report.IsPaused = &response.IsPaused
+		report.IsCompiling = &response.IsCompiling
+		report.IsUpdating = &response.IsUpdating
+	}
+}
+
 // classifyEditorState picks the state of an Editor that answered. The order is the contract: a
-// running command explains a busy main thread, and the compile values are refreshed by the main
-// thread, so they are stale while it is blocked.
+// dialog the Editor reports comes first because it is what holds the main thread, even under a
+// running command; a running command explains a busy main thread; and the compile values are
+// refreshed by the main thread, so they are stale while it is blocked.
 func classifyEditorState(response editorStatusResponse) string {
+	if len(response.OpenDialogs) > 0 {
+		return statusStateBlockedByDialog
+	}
 	if response.IsBusy {
 		return statusStateBusy
 	}
@@ -366,6 +441,10 @@ func newStatusReport(state string, message string) statusReport {
 func statusNextActions(state string) []string {
 	const runAgainShortly = "Run uloop status again in a few seconds."
 	switch state {
+	case statusStateBlockedByDialog:
+		// Why the guidance for a dialog uloop cannot press: a report that skipped
+		// withDialogAnswerGuidance must not send the reader to a press that cannot work.
+		return clicore.DialogAnswerNextActions(nil, false, dialogClosedNextAction)
 	case statusStateBusy:
 		return []string{
 			"Wait for the running command to finish, then run uloop status again.",

@@ -167,6 +167,62 @@ func TestCancelHelpPrintsUsage(t *testing.T) {
 	}
 }
 
+// Verifies press-dialog-button --help prints its usage line, registry description, and the --label
+// option, and ends by pointing at the status skill that documents it.
+func TestPressDialogButtonHelpPrintsUsage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"press-dialog-button", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("press-dialog-button --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expected = "Usage:\n" +
+		"  uloop press-dialog-button [options]\n" +
+		"\n" +
+		"Press a button in the modal dialog that blocks the Unity Editor for this project\n" +
+		"\n" +
+		"Options:\n" +
+		"  --label <value>                    Press the button with this exact label in the frontmost dialog\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n" +
+		"\n" +
+		"Load the uloop-status skill for workflow rules and response fields that --help does not cover.\n"
+	if stdout.String() != expected {
+		t.Fatalf("press-dialog-button --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
+// Verifies get-dialogs --help prints its usage line and registry description with only the global
+// option, since get-dialogs takes no options of its own, and ends by pointing at the status skill
+// that documents it.
+func TestGetDialogsHelpPrintsUsage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"get-dialogs", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("get-dialogs --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expected = "Usage:\n" +
+		"  uloop get-dialogs\n" +
+		"\n" +
+		"List the modal dialogs that block the Unity Editor for this project\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n" +
+		"\n" +
+		"Load the uloop-status skill for workflow rules and response fields that --help does not cover.\n"
+	if stdout.String() != expected {
+		t.Fatalf("get-dialogs --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
 // Verifies list --help prints the complete names-only option contract, including the usage and
 // global options sections that callers need after the unknown-option recovery guidance.
 func TestRunProjectLocalListHelpOutput(t *testing.T) {
