@@ -192,9 +192,12 @@ func waitForCompileCompletionWithDeps(
 	options compileCompletionOptions,
 	deps compileWaitDeps,
 ) (json.RawMessage, bool, *compileStatusResponse, error) {
+	lookStartedAt := time.Now()
 	if err := compileDialogAfterUnansweredSend(ctx, options, deps); err != nil {
 		return nil, false, nil, err
 	}
+	// Why: --timeout-seconds bounds the whole wait, and a look that finds nothing can take seconds.
+	options.timeout -= time.Since(lookStartedAt)
 	return pollCompileCompletion(ctx, options, deps)
 }
 

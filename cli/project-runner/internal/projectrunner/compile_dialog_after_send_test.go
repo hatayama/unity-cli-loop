@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -112,5 +113,25 @@ func TestCompileSendWentUnanswered(t *testing.T) {
 				t.Fatalf("compileSendWentUnanswered = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// Verifies the first look counts against the wait's timeout: a look that uses up the timeout leaves
+// time for the one status query every wait makes, and no more.
+func TestCompileWaitCountsTheFirstLookAgainstItsTimeout(t *testing.T) {
+	deps := compileDialogWaitDeps(newFakeDialogLook(), true)
+	deps.findDialogAfterUnansweredSend = func(context.Context, unityipc.Connection) []statusDialog {
+		time.Sleep(300 * time.Millisecond)
+		return nil
+	}
+	queries := 0
+	countingCompileStatusQueries(&deps, &queries)
+	options := compileDialogWaitOptions(t)
+	options.sendWentUnanswered = true
+
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), options, deps)
+
+	if completed || err != nil || queries != 1 {
+		t.Fatalf("completed = %v, err = %v, status queries = %d, want the timeout after one query", completed, err, queries)
 	}
 }
