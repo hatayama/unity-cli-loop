@@ -24,7 +24,7 @@ uloop get-dialogs --project-path <path>
 - `Success`: `true`
 - `Dialogs`: each open modal dialog's `Title`, `Message`, and `Buttons`, frontmost first; an empty array when none is open
 
-The order of `Buttons` can differ from the one `uloop status` reports for the same dialog (seen on Windows with Unity 6000.7 and three buttons). The labels are the same; choose a button by its label, never by its position.
+On Windows, `Buttons` are in the order they are drawn, left to right. Choose a button by its label, never by its position: the order is not the same on every system.
 
 `press-dialog-button` presses the button and then looks again, up to 5 times, until the pressed dialog is gone:
 
@@ -58,7 +58,7 @@ Errors of `get-dialogs` and `press-dialog-button` go to stderr, nothing goes to 
 
 ## What It Can Press
 
-- Message boxes whose button labels uloop can read, such as `EditorUtility.DisplayDialog` prompts and the prompts Unity shows while it starts.
+- Message boxes whose button labels uloop can read, such as `EditorUtility.DisplayDialog` prompts and the prompts Unity shows while it starts. On Windows this includes one hidden because Unity's window was minimized after it opened.
 - Not modal Editor windows, file pickers, or (Windows) dialogs with an editable text box, shown or hidden: uloop lists no button for them, so `Buttons` is empty and `press-dialog-button` returns `DIALOG_NOT_ANSWERABLE`. Ask the user to answer those.
 - Not a button the dialog has disabled (Windows): it is listed in `Buttons`, but `press-dialog-button` presses nothing and returns `DIALOG_ANSWER_FAILED` with `SafeToRetry: true`.
 

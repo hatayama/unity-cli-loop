@@ -20,6 +20,9 @@ const (
 	win32MessageGetTextLength = 0x000E // WM_GETTEXTLENGTH
 	win32SendAbortIfHung      = 0x0002 // SMTO_ABORTIFHUNG
 
+	// WS_VISIBLE: the window itself is shown. A control keeps it while its dialog is hidden.
+	win32StyleVisible = 0x10000000
+
 	// The longest a window class name can be, plus the terminating zero.
 	win32ClassNameCapacity = 257
 
@@ -35,6 +38,8 @@ type win32WindowAPI struct {
 	getWindowText        *windows.LazyProc
 	getWindowTextLength  *windows.LazyProc
 	getDialogControlID   *windows.LazyProc
+	getWindowRect        *windows.LazyProc
+	isIconic             *windows.LazyProc
 	isWindowEnabled      *windows.LazyProc
 	isWindowProc         *windows.LazyProc
 	sendMessageTimeout   *windows.LazyProc
@@ -76,6 +81,8 @@ func newWin32WindowAPI() win32WindowAPI {
 		getWindowText:        dll.NewProc("GetWindowTextW"),
 		getWindowTextLength:  dll.NewProc("GetWindowTextLengthW"),
 		getDialogControlID:   dll.NewProc("GetDlgCtrlID"),
+		getWindowRect:        dll.NewProc("GetWindowRect"),
+		isIconic:             dll.NewProc("IsIconic"),
 		isWindowEnabled:      dll.NewProc("IsWindowEnabled"),
 		isWindowProc:         dll.NewProc("IsWindow"),
 		sendMessageTimeout:   dll.NewProc("SendMessageTimeoutW"),
@@ -126,16 +133,20 @@ func listUnityProcessWindows(ctx context.Context, pid int) ([]win32Window, error
 
 func (api win32WindowAPI) describeWindow(handle windows.HWND) win32Window {
 	owner := api.owner(handle)
+	// A failed read gives zero, which the listing takes as a thread it does not know.
+	threadID, _ := windows.GetWindowThreadProcessId(handle, nil)
 	window := win32Window{
 		Handle:    uintptr(handle),
 		ClassName: win32ClassName(handle),
 		Title:     api.windowText(handle),
+		ThreadID:  threadID,
 		Visible:   windows.IsWindowVisible(handle),
 		Enabled:   api.isEnabled(handle),
 		HasOwner:  owner != 0,
 	}
 	if owner != 0 {
 		window.OwnerEnabled = api.isEnabled(owner)
+		window.OwnerMinimized = api.isMinimized(owner)
 	}
 	return window
 }
@@ -148,12 +159,18 @@ func (api win32WindowAPI) controls(ctx context.Context, parent windows.HWND) []w
 
 	controls := make([]win32Control, 0, len(search.handles))
 	for _, handle := range search.handles {
+		style := api.style(handle)
+		rect := api.rect(handle)
 		control := win32Control{
 			Handle:    uintptr(handle),
 			ClassName: win32ClassName(handle),
 			ID:        api.controlID(handle),
-			Style:     api.style(handle),
-			Visible:   windows.IsWindowVisible(handle),
+			Style:     style,
+			// Why the control's own style and not IsWindowVisible: IsWindowVisible says no for every
+			// control of a dialog Windows hid with its minimized owner.
+			Visible: isWin32StyleVisible(style),
+			Left:    rect.Left,
+			Top:     rect.Top,
 		}
 		control.Text = api.controlText(ctx, handle, control)
 		controls = append(controls, control)
@@ -254,6 +271,28 @@ func win32SendTimeout(ctx context.Context) (time.Duration, bool) {
 func (api win32WindowAPI) owner(handle windows.HWND) windows.HWND {
 	owner, _, _ := api.getWindow.Call(uintptr(handle), win32GetWindowOwner)
 	return windows.HWND(owner)
+}
+
+// isWin32StyleVisible reports whether a style says the window itself is shown, whether or not the
+// window it sits in is.
+func isWin32StyleVisible(style uint32) bool {
+	return style&win32StyleVisible != 0
+}
+
+func (api win32WindowAPI) isMinimized(handle windows.HWND) bool {
+	minimized, _, _ := api.isIconic.Call(uintptr(handle))
+	return minimized != 0
+}
+
+// rect returns where the window is drawn, in screen coordinates; a zero rect when Windows does not
+// say, which leaves the control ID to order the buttons.
+func (api win32WindowAPI) rect(handle windows.HWND) windows.Rect {
+	var rect windows.Rect
+	succeeded, _, _ := api.getWindowRect.Call(uintptr(handle), uintptr(unsafe.Pointer(&rect)))
+	if succeeded == 0 {
+		return windows.Rect{}
+	}
+	return rect
 }
 
 func (api win32WindowAPI) isEnabled(handle windows.HWND) bool {

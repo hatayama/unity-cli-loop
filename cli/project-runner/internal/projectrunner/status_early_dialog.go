@@ -15,9 +15,9 @@ const editorStatusEarlyStallSeconds = 1.0
 
 // windowsQuickLookStallSeconds is how long the main thread must be still before status on Windows
 // looks at Unity's windows for an answer that would let the reader send a command.
-// Why not zero: a window built like a message box with no owner, such as one another thread opened,
-// passes for a dialog without holding the main thread, and every command would then be refused. A
-// still main thread is what shows a dialog holds it.
+// Why not zero: the look tells a dialog by how its window is built, and a window the main thread
+// opened that is built like a message box but does not wait for an answer would pass for one; every
+// command would then be refused. A still main thread is what shows a dialog holds it.
 // Why 0.3 seconds: the Editor loop is ticked at 6Hz or more, so a running main thread is never still
 // for much over 0.17 seconds; 0.3 leaves room for that and still finds a dialog within a third of a
 // second of its opening.
