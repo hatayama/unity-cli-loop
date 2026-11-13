@@ -18,9 +18,9 @@ func win32ProbeDialogWindows() []win32Window {
 	dialog := win32ModalWindow("#32770", "Probe title",
 		win32Control{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true, Handle: 0x1010},
 		win32Control{ClassName: "Edit", Text: "Line one. Line two.", ID: 1019, Style: 0x50000804, Visible: true, Handle: 0x1011},
-		win32Control{ClassName: "Button", Text: "&Yes", ID: 1, Style: 0x50010001, Visible: true, Handle: win32ProbeYesButtonHandle, Left: 210, Top: 420},
-		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Style: 0x50010000, Visible: true, Handle: win32ProbeLaterButtonHandle, Left: 300, Top: 420},
-		win32Control{ClassName: "Button", Text: "&No", ID: 2, Style: 0x50010000, Visible: true, Handle: win32ProbeNoButtonHandle, Left: 390, Top: 420})
+		win32Control{ClassName: "Button", Text: "&Yes", ID: 1, Style: 0x50010001, Visible: true, Handle: win32ProbeYesButtonHandle, Left: 210, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Style: 0x50010000, Visible: true, Handle: win32ProbeLaterButtonHandle, Left: 300, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&No", ID: 2, Style: 0x50010000, Visible: true, Handle: win32ProbeNoButtonHandle, Left: 390, Top: 420, HasPosition: true})
 	dialog.Handle = win32ProbeDialogHandle
 	return []win32Window{dialog, win32DisabledMainWindow, win32InputMethodWindow}
 }

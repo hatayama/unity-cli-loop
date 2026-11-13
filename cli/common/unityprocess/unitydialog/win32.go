@@ -56,9 +56,11 @@ type win32Control struct {
 	Style     uint32
 	// Whether the control itself is shown, whether or not its dialog is.
 	Visible bool
-	// Where the control is drawn, in screen coordinates.
+	// Where the control is drawn, in screen coordinates. Meaningful only when HasPosition is true.
 	Left int32
 	Top  int32
+	// Whether Windows said where the control is drawn.
+	HasPosition bool
 }
 
 const (
@@ -271,6 +273,8 @@ func win32ButtonLabels(buttons []win32Control) []string {
 // also the order the user sees. It differs from the macOS look, which gives OK, Cancel, Alt.
 // Why not the order Windows lists the controls in: that is the order they were made in, which
 // Windows does not promise to be where they are drawn.
+// Why by control ID when the position of any button is not known: an unread position is not a
+// place on the screen, and mixing it with real ones would put that button first.
 func win32PushButtons(controls []win32Control) []win32Control {
 	buttons := make([]win32Control, 0, len(controls))
 	for _, control := range controls {
@@ -278,10 +282,24 @@ func win32PushButtons(controls []win32Control) []win32Control {
 			buttons = append(buttons, control)
 		}
 	}
+	positionsKnown := win32PositionsKnown(buttons)
 	sort.SliceStable(buttons, func(i int, j int) bool {
+		if !positionsKnown {
+			return buttons[i].ID < buttons[j].ID
+		}
 		return buttons[i].isDrawnBefore(buttons[j])
 	})
 	return buttons
+}
+
+// win32PositionsKnown reports whether Windows said where every one of the controls is drawn.
+func win32PositionsKnown(controls []win32Control) bool {
+	for _, control := range controls {
+		if !control.HasPosition {
+			return false
+		}
+	}
+	return true
 }
 
 // isDrawnBefore reports whether the control comes before other in reading a row of buttons: the one

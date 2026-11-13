@@ -17,11 +17,11 @@ import (
 // is the one the Editor drew.
 func win32ComplexDialogControls(message string) []win32Control {
 	return []win32Control{
-		{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true, Left: 120, Top: 340},
-		{ClassName: "Edit", Text: message, ID: 1019, Style: 0x50000804, Visible: true, Left: 170, Top: 340},
-		{ClassName: "Button", Text: "&Yes", ID: 1, Style: 0x50010001, Visible: true, Left: 210, Top: 420},
-		{ClassName: "Button", Text: "&Later", ID: 3, Style: 0x50010000, Visible: true, Left: 300, Top: 420},
-		{ClassName: "Button", Text: "&No", ID: 2, Style: 0x50010000, Visible: true, Left: 390, Top: 420},
+		{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true, Left: 120, Top: 340, HasPosition: true},
+		{ClassName: "Edit", Text: message, ID: 1019, Style: 0x50000804, Visible: true, Left: 170, Top: 340, HasPosition: true},
+		{ClassName: "Button", Text: "&Yes", ID: 1, Style: 0x50010001, Visible: true, Left: 210, Top: 420, HasPosition: true},
+		{ClassName: "Button", Text: "&Later", ID: 3, Style: 0x50010000, Visible: true, Left: 300, Top: 420, HasPosition: true},
+		{ClassName: "Button", Text: "&No", ID: 2, Style: 0x50010000, Visible: true, Left: 390, Top: 420, HasPosition: true},
 	}
 }
 
@@ -57,9 +57,9 @@ func win32StartupMessageBox() win32Window {
 		Controls: []win32Control{
 			{ClassName: "Static", Text: "", ID: 1040, Style: 0x5000080E, Visible: true},
 			{ClassName: "Edit", Text: "The project has compilation errors.\r\n\r\nEnter Safe Mode?", ID: 1019, Style: 0x50000804, Visible: true},
-			{ClassName: "Button", Text: "&Enter Safe Mode", ID: 1, Style: 0x50010001, Visible: true, Left: 210, Top: 420},
-			{ClassName: "Button", Text: "&Ignore", ID: 3, Style: 0x50010000, Visible: true, Left: 330, Top: 420},
-			{ClassName: "Button", Text: "&Quit", ID: 2, Style: 0x50010000, Visible: true, Left: 420, Top: 420},
+			{ClassName: "Button", Text: "&Enter Safe Mode", ID: 1, Style: 0x50010001, Visible: true, Left: 210, Top: 420, HasPosition: true},
+			{ClassName: "Button", Text: "&Ignore", ID: 3, Style: 0x50010000, Visible: true, Left: 330, Top: 420, HasPosition: true},
+			{ClassName: "Button", Text: "&Quit", ID: 2, Style: 0x50010000, Visible: true, Left: 420, Top: 420, HasPosition: true},
 		},
 	}
 }
@@ -695,14 +695,30 @@ func TestDialogsFromWin32WindowsReadsAMessageBoxHiddenWithItsMinimizedOwner(t *t
 // order Windows lists them in and whatever their control IDs are.
 func TestDialogsFromWin32WindowsListsButtonsAsDrawn(t *testing.T) {
 	dialog := win32ModalWindow("#32770", "Probe title",
-		win32Control{ClassName: "Button", Text: "&No", ID: 2, Visible: true, Left: 390, Top: 420},
-		win32Control{ClassName: "Button", Text: "&Below", ID: 1, Visible: true, Left: 210, Top: 460},
-		win32Control{ClassName: "Button", Text: "&Yes", ID: 4, Visible: true, Left: 210, Top: 420},
-		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Visible: true, Left: 300, Top: 420})
+		win32Control{ClassName: "Button", Text: "&No", ID: 2, Visible: true, Left: 390, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Below", ID: 1, Visible: true, Left: 210, Top: 460, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Yes", ID: 4, Visible: true, Left: 210, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Visible: true, Left: 300, Top: 420, HasPosition: true})
 
 	got := dialogsFromWin32Windows([]win32Window{dialog, win32DisabledMainWindow})
 
 	want := []Dialog{{Title: "Probe title", Message: "", Buttons: []string{"Yes", "Below", "Later", "No"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dialogs = %#v, want %#v", got, want)
+	}
+}
+
+// Verifies buttons fall back to control ID order when the position of any of them was not read,
+// so an unread position is not taken for the top-left corner of the screen.
+func TestDialogsFromWin32WindowsListsButtonsByControlIDWhenAPositionIsUnknown(t *testing.T) {
+	dialog := win32ModalWindow("#32770", "Probe title",
+		win32Control{ClassName: "Button", Text: "&Yes", ID: 1, Visible: true, Left: 210, Top: 420, HasPosition: true},
+		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Visible: true},
+		win32Control{ClassName: "Button", Text: "&No", ID: 2, Visible: true, Left: 390, Top: 420, HasPosition: true})
+
+	got := dialogsFromWin32Windows([]win32Window{dialog, win32DisabledMainWindow})
+
+	want := []Dialog{{Title: "Probe title", Message: "", Buttons: []string{"Yes", "No", "Later"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("dialogs = %#v, want %#v", got, want)
 	}

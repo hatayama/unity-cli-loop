@@ -160,7 +160,7 @@ func (api win32WindowAPI) controls(ctx context.Context, parent windows.HWND) []w
 	controls := make([]win32Control, 0, len(search.handles))
 	for _, handle := range search.handles {
 		style := api.style(handle)
-		rect := api.rect(handle)
+		rect, hasRect := api.rect(handle)
 		control := win32Control{
 			Handle:    uintptr(handle),
 			ClassName: win32ClassName(handle),
@@ -168,9 +168,10 @@ func (api win32WindowAPI) controls(ctx context.Context, parent windows.HWND) []w
 			Style:     style,
 			// Why the control's own style and not IsWindowVisible: IsWindowVisible says no for every
 			// control of a dialog Windows hid with its minimized owner.
-			Visible: isWin32StyleVisible(style),
-			Left:    rect.Left,
-			Top:     rect.Top,
+			Visible:     isWin32StyleVisible(style),
+			Left:        rect.Left,
+			Top:         rect.Top,
+			HasPosition: hasRect,
 		}
 		control.Text = api.controlText(ctx, handle, control)
 		controls = append(controls, control)
@@ -284,15 +285,15 @@ func (api win32WindowAPI) isMinimized(handle windows.HWND) bool {
 	return minimized != 0
 }
 
-// rect returns where the window is drawn, in screen coordinates; a zero rect when Windows does not
-// say, which leaves the control ID to order the buttons.
-func (api win32WindowAPI) rect(handle windows.HWND) windows.Rect {
+// rect returns where the window is drawn, in screen coordinates. The second result is false when
+// Windows does not say, which leaves the control ID to order the buttons.
+func (api win32WindowAPI) rect(handle windows.HWND) (windows.Rect, bool) {
 	var rect windows.Rect
 	succeeded, _, _ := api.getWindowRect.Call(uintptr(handle), uintptr(unsafe.Pointer(&rect)))
 	if succeeded == 0 {
-		return windows.Rect{}
+		return windows.Rect{}, false
 	}
-	return rect
+	return rect, true
 }
 
 func (api win32WindowAPI) isEnabled(handle windows.HWND) bool {
