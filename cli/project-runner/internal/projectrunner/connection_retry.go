@@ -32,6 +32,8 @@ type connectionRetryDeps struct {
 	// dialogWatch looks for the dialog that holds Unity's main thread when the response waits on a
 	// long stall, and when the send ends in main_thread_blocked or after the five-minute stall.
 	dialogWatch dialogWatchDeps
+	// earlyDialogReport tells Unity about a dialog found while the request is still unanswered.
+	earlyDialogReport earlyDialogReportDeps
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
@@ -41,6 +43,7 @@ func defaultConnectionRetryDeps() connectionRetryDeps {
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
 		dialogWatch:             defaultDialogWatchDeps(),
+		earlyDialogReport:       defaultEarlyDialogReportDeps(),
 	}
 }
 
@@ -272,6 +275,7 @@ func sendWithTransientConnectionRetryAttempts(
 
 	dialogWatch := newHeartbeatDialogWatch(ctx, connection, method, deps.dialogWatch)
 	defer dialogWatch.release()
+	defer startEarlyDialogReport(ctx, connection, method, deps.earlyDialogReport)()
 	// serverWaitDialogWatch looks for a dialog while the server stays unreachable with Unity running.
 	// Why: a dialog Unity shows while it starts keeps its server from starting, so the wait below
 	// would last its whole window and end in a "wait and retry" error that never names the dialog.
