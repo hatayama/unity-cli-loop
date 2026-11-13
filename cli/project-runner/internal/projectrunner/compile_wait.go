@@ -185,7 +185,21 @@ func isSafeCompileRequestID(requestID string) bool {
 	return true
 }
 
+// waitForCompileCompletionWithDeps waits for a fresh compile's result, first looking once for a dialog
+// when the send went unanswered.
 func waitForCompileCompletionWithDeps(
+	ctx context.Context,
+	options compileCompletionOptions,
+	deps compileWaitDeps,
+) (json.RawMessage, bool, *compileStatusResponse, error) {
+	if err := compileDialogAfterUnansweredSend(ctx, options, deps); err != nil {
+		return nil, false, nil, err
+	}
+	return pollCompileCompletion(ctx, options, deps)
+}
+
+// pollCompileCompletion queries the compile status until a result, a stop condition, or the timeout.
+func pollCompileCompletion(
 	ctx context.Context,
 	options compileCompletionOptions,
 	deps compileWaitDeps,
@@ -205,9 +219,6 @@ func waitForCompileCompletionWithDeps(
 	dialogWatch := newCompileDialogWatch(options.connection, deps)
 	startPendingFocus := newCompileStartPendingFocus(options, deps)
 	defer startPendingFocus.finish()
-	if err := compileDialogAfterUnansweredSend(ctx, options, deps); err != nil {
-		return nil, false, nil, err
-	}
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
