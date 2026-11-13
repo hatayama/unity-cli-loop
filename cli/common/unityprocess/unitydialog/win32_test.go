@@ -696,8 +696,8 @@ func TestDialogsFromWin32WindowsReadsAMessageBoxHiddenWithItsMinimizedOwner(t *t
 func TestDialogsFromWin32WindowsListsButtonsAsDrawn(t *testing.T) {
 	dialog := win32ModalWindow("#32770", "Probe title",
 		win32Control{ClassName: "Button", Text: "&No", ID: 2, Visible: true, Left: 390, Top: 420},
-		win32Control{ClassName: "Button", Text: "&Below", ID: 4, Visible: true, Left: 210, Top: 460},
-		win32Control{ClassName: "Button", Text: "&Yes", ID: 1, Visible: true, Left: 210, Top: 420},
+		win32Control{ClassName: "Button", Text: "&Below", ID: 1, Visible: true, Left: 210, Top: 460},
+		win32Control{ClassName: "Button", Text: "&Yes", ID: 4, Visible: true, Left: 210, Top: 420},
 		win32Control{ClassName: "Button", Text: "&Later", ID: 3, Visible: true, Left: 300, Top: 420})
 
 	got := dialogsFromWin32Windows([]win32Window{dialog, win32DisabledMainWindow})
