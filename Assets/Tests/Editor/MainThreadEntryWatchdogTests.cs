@@ -50,6 +50,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a reported dialog fails the waiting request after a short stall when the main thread has not ticked since the report.
+        /// </summary>
+        [Test]
+        public void Observe_WhenADialogWasReportedAndTheMainThreadHasNotTickedSince_CancelsLeaseWithStallSeconds()
+        {
+            ToolExecutionLease lease = new ToolExecutionSession().TryEnter("tool").Lease;
+            ManualClock clock = new ManualClock();
+            MainThreadEntryWatchdog watchdog =
+                new MainThreadEntryWatchdog(new ScriptedLiveness(3.5), new ManualPolls().WaitOnePoll, clock.GetTimestamp);
+
+            watchdog.ReportBlockingDialog();
+            clock.AdvanceSeconds(1.5);
+            bool cancelled = watchdog.Observe(lease);
+
+            Assert.That(cancelled, Is.True);
+            Assert.That(lease.WasCancelledForBlockedMainThread, Is.True);
+            Assert.That(lease.BlockedMainThreadStallSeconds, Is.EqualTo(3.5));
+            lease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a report is spent once the main thread has ticked after it, so later work that is not a dialog waits for the full threshold.
+        /// </summary>
+        [Test]
+        public void Observe_WhenTheMainThreadTickedAfterTheReport_LeavesLeaseAlone()
+        {
+            ToolExecutionLease lease = new ToolExecutionSession().TryEnter("tool").Lease;
+            ManualClock clock = new ManualClock();
+            MainThreadEntryWatchdog watchdog =
+                new MainThreadEntryWatchdog(new ScriptedLiveness(4), new ManualPolls().WaitOnePoll, clock.GetTimestamp);
+
+            watchdog.ReportBlockingDialog();
+            clock.AdvanceSeconds(10);
+            bool cancelled = watchdog.Observe(lease);
+
+            Assert.That(cancelled, Is.False);
+            Assert.That(lease.ExecutionToken.IsCancellationRequested, Is.False);
+            lease.Dispose();
+        }
+
+        /// <summary>
+        /// Verifies a reported dialog does not fail a request while the stall is shorter than one poll, when the dialog may already have closed.
+        /// </summary>
+        [Test]
+        public void Observe_WhenADialogWasReportedButTheStallIsUnderOneSecond_LeavesLeaseAlone()
+        {
+            ToolExecutionLease lease = new ToolExecutionSession().TryEnter("tool").Lease;
+            ManualClock clock = new ManualClock();
+            MainThreadEntryWatchdog watchdog =
+                new MainThreadEntryWatchdog(new ScriptedLiveness(0.9), new ManualPolls().WaitOnePoll, clock.GetTimestamp);
+
+            watchdog.ReportBlockingDialog();
+            clock.AdvanceSeconds(0.5);
+            bool cancelled = watchdog.Observe(lease);
+
+            Assert.That(cancelled, Is.False);
+            Assert.That(lease.ExecutionToken.IsCancellationRequested, Is.False);
+            lease.Dispose();
+        }
+
+        /// <summary>
         /// Verifies the first stall check waits for one poll, so an idle Editor that only slept is never judged.
         /// </summary>
         [Test]
@@ -146,6 +207,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         internal void CompleteLatest()
         {
             _polls[_polls.Count - 1].SetResult(true);
+        }
+    }
+
+    // Stands in for the monotonic clock, so a test decides how long ago a dialog was reported.
+    internal sealed class ManualClock
+    {
+        private long _timestamp = System.Diagnostics.Stopwatch.Frequency;
+
+        internal long GetTimestamp()
+        {
+            return _timestamp;
+        }
+
+        internal void AdvanceSeconds(double seconds)
+        {
+            _timestamp += (long)(seconds * System.Diagnostics.Stopwatch.Frequency);
         }
     }
 

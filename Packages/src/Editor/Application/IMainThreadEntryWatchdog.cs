@@ -13,5 +13,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
     internal interface IMainThreadEntryWatchdog
     {
         Task GuardAsync(ToolExecutionLease lease, CancellationToken stop);
+
+        /// <summary>
+        /// Tells the guard that the CLI found a modal dialog holding the Editor main thread, so a
+        /// request that has not entered its tool code is failed without the full wait. Safe to call
+        /// from any thread, and does nothing for a request whose tool code has started.
+        /// </summary>
+        void ReportBlockingDialog();
     }
 }

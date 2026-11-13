@@ -197,6 +197,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies the report-blocking-dialog answer starts no activity, because it must answer while a
+        /// dialog holds the Editor main thread.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReportBlockingDialog_DoesNotBeginAnActivity()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
+                new JObject(),
+                CancellationToken.None);
+
+            Assert.That(response, Is.InstanceOf<ReportBlockingDialogResponse>());
+            Assert.That(api.BeginCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// Verifies an internal bridge command holds one activity and ends it when the command returns.
         /// </summary>
         [Test]

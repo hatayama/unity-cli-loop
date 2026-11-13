@@ -656,6 +656,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a reported dialog fails a waiting request as blocked before its tool runs, even one uloop cancel may not stop.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenADialogIsReportedWhileWaiting_ThrowsMainThreadBlockedWithoutRunningTheTool()
+        {
+            ToolExecutionSession session = new ToolExecutionSession();
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            ImmediateTool tool = new ImmediateTool(ImmediateTool.HolderName);
+            registry.RegisterTool(tool);
+            ManualPolls polls = new ManualPolls();
+            UnityCliLoopToolExecutionService executionService = CreateServiceWithWatchdog(session, new ScriptedLiveness(3), polls);
+
+            RunWithQueueingDispatcherAndNoContext(dispatcher =>
+            {
+                Task<UnityCliLoopToolResponse> task = executionService.ExecuteToolAsync(
+                    registry,
+                    ImmediateTool.HolderName,
+                    null,
+                    CancellationToken.None,
+                    cancellableByUser: false);
+
+                executionService.ReportBlockingDialog();
+                polls.CompleteLatest();
+
+                // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
+                Assert.That(task.IsFaulted, Is.True);
+                UnityCliLoopMainThreadBlockedException exception =
+                    Assert.ThrowsAsync<UnityCliLoopMainThreadBlockedException>(() => task);
+                Assert.That(exception.StallSeconds, Is.EqualTo(3));
+                dispatcher.RunQueued();
+                Assert.That(tool.ExecutionCount, Is.EqualTo(0));
+            });
+        }
+
+        /// <summary>
         /// Verifies a uloop cancel that reaches a waiting request before the watchdog keeps its cancelled outcome and stops the watchdog.
         /// </summary>
         [Test]
@@ -933,6 +968,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Lease = lease;
                 return _inner == null ? Task.CompletedTask : _inner.GuardAsync(lease, stop);
+            }
+
+            public void ReportBlockingDialog()
+            {
+                _inner?.ReportBlockingDialog();
             }
         }
 
