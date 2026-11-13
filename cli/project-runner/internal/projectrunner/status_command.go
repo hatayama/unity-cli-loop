@@ -42,6 +42,9 @@ const (
 // Dependencies that tests replace. A struct instead of package variables, so tests that run in
 // parallel cannot see each other's fakes.
 type statusCommandDeps struct {
+	// The operating system status runs on, a runtime.GOOS value; it decides when status looks at
+	// Unity's windows.
+	goos         string
 	probeTimeout time.Duration
 	// How long to wait before asking again when the first answer reads as a blocked main thread.
 	reprobeDelay          time.Duration
@@ -61,6 +64,7 @@ type statusCommandDeps struct {
 func defaultStatusCommandDeps() statusCommandDeps {
 	inspector := defaultDialogInspector()
 	return statusCommandDeps{
+		goos:         runtime.GOOS,
 		probeTimeout: 5 * time.Second,
 		reprobeDelay: 1 * time.Second,
 		isUnityProcessRunning: func(ctx context.Context, projectRoot string) (bool, error) {
@@ -162,7 +166,8 @@ func runStatusCommandWithDeps(
 
 // probeEditorStatus asks the Editor once, and asks once more when the first answer reads as a
 // blocked main thread or as a main thread that has been still for a short while. A main thread
-// that stayed still across both answers then gets a look at Unity's windows for a dialog.
+// that stayed still across both answers then gets a look at Unity's windows for a dialog. On
+// Windows an answer that would let the reader send a command gets that look at once instead.
 func probeEditorStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -173,6 +178,10 @@ func probeEditorStatus(
 		return report, err
 	}
 	state := classifyEditorState(*response)
+	// Why no second question here: the look itself tells whether a dialog holds the main thread.
+	if looksOnEveryAnswer(deps.goos) && letsReaderSend(state) {
+		return reportAfterQuietDialogLook(ctx, connection.ProjectRoot, *response, deps)
+	}
 	if needsEarlyDialogInspection(state, *response) {
 		return probeAfterShortStall(ctx, connection, *response, deps)
 	}
