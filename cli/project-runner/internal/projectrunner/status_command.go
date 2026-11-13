@@ -178,21 +178,33 @@ func probeEditorStatus(
 	if response == nil {
 		return report, err
 	}
-	state := classifyEditorState(*response)
+	return probeEditorStatusFromResponse(ctx, connection, *response, deps)
+}
+
+// probeEditorStatusFromResponse finishes probeEditorStatus from its first answer: it asks again or
+// looks at Unity's windows when that answer leaves room for a dialog.
+func probeEditorStatusFromResponse(
+	ctx context.Context,
+	connection unityipc.Connection,
+	response editorStatusResponse,
+	deps statusCommandDeps,
+) (statusReport, error) {
+	state := classifyEditorState(response)
 	// Why no second question here: the look itself tells whether a dialog holds the main thread.
-	if looksAfterBriefStall(deps.goos) && needsQuickDialogInspection(state, *response) {
-		return reportAfterQuietDialogLook(ctx, connection.ProjectRoot, *response, deps)
+	if looksAfterBriefStall(deps.goos) && needsQuickDialogInspection(state, response) {
+		return reportAfterQuietDialogLook(ctx, connection.ProjectRoot, response, deps)
 	}
-	if needsEarlyDialogInspection(state, *response) {
-		return probeAfterShortStall(ctx, connection, *response, deps)
+	if needsEarlyDialogInspection(state, response) {
+		return probeAfterShortStall(ctx, connection, response, deps)
 	}
 	if state == statusStateMainThreadBlocked {
-		response, report, err = reprobeEditorStatus(ctx, connection, deps)
-		if response == nil {
+		second, report, err := reprobeEditorStatus(ctx, connection, deps)
+		if second == nil {
 			return report, err
 		}
+		response = *second
 	}
-	return withDialogInspection(ctx, connection.ProjectRoot, *response, reportFromEditorResponse(*response), deps), nil
+	return withDialogInspection(ctx, connection.ProjectRoot, response, reportFromEditorResponse(response), deps), nil
 }
 
 // reprobeEditorStatus waits reprobeDelay and reads the Editor's status again.
