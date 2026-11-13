@@ -242,7 +242,7 @@ func waitForCompileCompletionWithDeps(
 			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
-		if dialogs := dialogWatch.observePoll(ctx, err == nil); dialogs != nil {
+		if dialogs := compileWaitDialogs(ctx, dialogWatch, err); dialogs != nil {
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), compileBlockedByDialog(dialogs, deps)
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
@@ -360,4 +360,18 @@ func compileDialogAfterUnansweredSend(ctx context.Context, options compileComple
 		return nil
 	}
 	return compileBlockedByDialog(dialogs, deps)
+}
+
+// compileWaitDialogs returns the dialogs holding Unity after one compile status query, or nil.
+// Why a status query Unity accepted but did not answer looks at once: the query is answered on the
+// main thread, so the main thread stayed still for the whole query timeout. Any other failure, such
+// as the connection a domain reload drops, still waits for the stall threshold, so a reload does not
+// look at Unity's windows.
+func compileWaitDialogs(ctx context.Context, watch *dialogBlockWatch, err error) []statusDialog {
+	if isUnansweredStatusProbe(err) {
+		if dialogs := watch.observeUnansweredProbe(ctx); dialogs != nil {
+			return dialogs
+		}
+	}
+	return watch.observePoll(ctx, err == nil)
 }

@@ -295,7 +295,7 @@ func waitForAttachedCompileCompletion(
 			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
-		if dialogs := dialogWatch.observePoll(ctx, err == nil); dialogs != nil {
+		if dialogs := compileWaitDialogs(ctx, dialogWatch, err); dialogs != nil {
 			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), compileBlockedByDialog(dialogs, deps)
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)
