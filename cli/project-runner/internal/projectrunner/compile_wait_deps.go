@@ -40,6 +40,9 @@ type compileWaitDeps struct {
 	readHeldMouseButtons func() ([]string, bool)
 	// dialogWatch ends a status wait whose polls go unanswered because a modal dialog holds Unity.
 	dialogWatch dialogWatchDeps
+	// findDialogAfterUnansweredSend looks once for a dialog when the compile request was accepted
+	// but not answered. Nil turns the look off.
+	findDialogAfterUnansweredSend func(context.Context, unityipc.Connection) []statusDialog
 }
 
 // newCompileUnityExitWatch creates the exit watch for one compile status wait, on the wait's clock.
@@ -68,14 +71,15 @@ func compileSendOrDefault(deps compileWaitDeps) compileSendFunc {
 
 func defaultCompileWaitDeps() compileWaitDeps {
 	return compileWaitDeps{
-		queryCompileStatus:      queryCompileStatusFromUnity,
-		attachProbeTimeout:      compileAttachProbeTimeout,
-		attachProbeInterval:     compileAttachProbeInterval,
-		attachWaitPollInterval:  compileWaitPollInterval,
-		findRunningUnityProcess: unityProcessLookup,
-		focusUnityProcess:       unityprocess.FocusUnityProcessWithRestore,
-		readHeldMouseButtons:    unityprocess.HeldMouseButtons,
-		dialogWatch:             defaultDialogWatchDeps(),
+		queryCompileStatus:            queryCompileStatusFromUnity,
+		attachProbeTimeout:            compileAttachProbeTimeout,
+		attachProbeInterval:           compileAttachProbeInterval,
+		attachWaitPollInterval:        compileWaitPollInterval,
+		findRunningUnityProcess:       unityProcessLookup,
+		focusUnityProcess:             unityprocess.FocusUnityProcessWithRestore,
+		readHeldMouseButtons:          unityprocess.HeldMouseButtons,
+		dialogWatch:                   defaultDialogWatchDeps(),
+		findDialogAfterUnansweredSend: findDialogWhileUnanswered,
 	}
 }
 

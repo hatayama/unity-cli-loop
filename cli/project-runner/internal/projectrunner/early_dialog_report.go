@@ -92,7 +92,7 @@ func runEarlyDialogReport(
 		case <-deps.waitFor(wait):
 		}
 		wait = interval
-		if !isBlockedByDialog(ctx, connection, deps) {
+		if len(findDialog(ctx, connection, deps.probeEditorStatus)) == 0 {
 			continue
 		}
 		// Why stop on a failed report: a Unity package older than this command answers it with an
@@ -103,9 +103,22 @@ func runEarlyDialogReport(
 	}
 }
 
-func isBlockedByDialog(ctx context.Context, connection unityipc.Connection, deps earlyDialogReportDeps) bool {
-	report, err := deps.probeEditorStatus(ctx, connection)
-	return err == nil && report.State == statusStateBlockedByDialog && len(report.Dialogs) > 0
+// findDialog returns the dialogs the probe reports holding Unity, or nil when it reports none or fails.
+func findDialog(
+	ctx context.Context,
+	connection unityipc.Connection,
+	probe func(context.Context, unityipc.Connection) (statusReport, error),
+) []statusDialog {
+	report, err := probe(ctx, connection)
+	if err != nil || report.State != statusStateBlockedByDialog {
+		return nil
+	}
+	return report.Dialogs
+}
+
+// findDialogWhileUnanswered looks for a dialog the way the early dialog report does.
+func findDialogWhileUnanswered(ctx context.Context, connection unityipc.Connection) []statusDialog {
+	return findDialog(ctx, connection, probeEditorStatusWhileUnanswered)
 }
 
 func sendReportBlockingDialog(ctx context.Context, connection unityipc.Connection) error {

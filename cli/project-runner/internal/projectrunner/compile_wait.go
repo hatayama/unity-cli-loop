@@ -55,6 +55,9 @@ type compileCompletionOptions struct {
 	resendBefore time.Time
 	// serverRestartSeen says the compile send already ended with the connection dropping.
 	serverRestartSeen bool
+	// sendWentUnanswered says Unity accepted the compile request but did not answer it before the
+	// send's response timeout.
+	sendWentUnanswered bool
 }
 
 type compileStatusResponse struct {
@@ -202,6 +205,9 @@ func waitForCompileCompletionWithDeps(
 	dialogWatch := newCompileDialogWatch(options.connection, deps)
 	startPendingFocus := newCompileStartPendingFocus(options, deps)
 	defer startPendingFocus.finish()
+	if err := compileDialogAfterUnansweredSend(ctx, options, deps); err != nil {
+		return nil, false, nil, err
+	}
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -339,4 +345,19 @@ func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bo
 		return true
 	}
 	return outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err)
+}
+
+// compileDialogAfterUnansweredSend looks once for a dialog before the first status query of a wait
+// whose send went unanswered, and returns the same BLOCKED_BY_DIALOG the status wait would.
+// Why: each status query waits up to its own timeout while a dialog holds Unity, so the status wait
+// finds the dialog only after several seconds; the unanswered send already says something holds it.
+func compileDialogAfterUnansweredSend(ctx context.Context, options compileCompletionOptions, deps compileWaitDeps) error {
+	if !options.sendWentUnanswered || deps.findDialogAfterUnansweredSend == nil {
+		return nil
+	}
+	dialogs := deps.findDialogAfterUnansweredSend(ctx, options.connection)
+	if len(dialogs) == 0 {
+		return nil
+	}
+	return compileBlockedByDialog(dialogs, deps)
 }
