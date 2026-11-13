@@ -220,7 +220,7 @@ func TestServerWaitLookDoesNotInspectWindowsOnLinux(t *testing.T) {
 	statusDeps := statusCommandDeps{
 		probeTimeout:          time.Second,
 		isUnityProcessRunning: func(context.Context, string) (bool, error) { return true, nil },
-		inspectDialogs:        inspector.Inspect,
+		inspectDialogs:        inspector.InspectEditor,
 	}
 	clock := newSteppingClock(time.Second)
 	deps := serverWaitDeps(&serverWaitProbe{clock: clock}, true, 50*time.Millisecond)

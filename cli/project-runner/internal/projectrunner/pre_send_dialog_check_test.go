@@ -324,7 +324,7 @@ func (counter *statusLookCounter) deps() statusCommandDeps {
 			counter.processLookups++
 			return true, nil
 		},
-		inspectDialogs: func(context.Context, string) ([]statusDialog, error) {
+		inspectDialogs: func(context.Context, string, int) ([]statusDialog, error) {
 			counter.windowLooks++
 			return nil, nil
 		},

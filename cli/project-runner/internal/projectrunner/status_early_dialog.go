@@ -13,17 +13,50 @@ import (
 // would otherwise be reported Ready for the first five seconds a dialog is open.
 const editorStatusEarlyStallSeconds = 1.0
 
-// needsEarlyDialogInspection reports whether an answer that would let the reader send a command
-// has a main thread still long enough that a dialog the Editor cannot report may hold it.
+// windowsQuickLookStallSeconds is how long the main thread must be still before status on Windows
+// looks at Unity's windows for an answer that would let the reader send a command.
+// Why not zero: a window built like a message box with no owner, such as one another thread opened,
+// passes for a dialog without holding the main thread, and every command would then be refused. A
+// still main thread is what shows a dialog holds it.
+// Why 0.3 seconds: the Editor loop is ticked at 6Hz or more, so a running main thread is never still
+// for much over 0.17 seconds; 0.3 leaves room for that and still finds a dialog within a third of a
+// second of its opening.
+const windowsQuickLookStallSeconds = 0.3
+
+// letsReaderSend reports whether the state tells the reader it may send a command, which a dialog the Editor
+// cannot report would make wrong.
 // Why not Busy: it never tells the reader to send a command, so a late look cannot make it wrong.
 // Why not Starting: its stall seconds do not describe a running main thread yet.
-func needsEarlyDialogInspection(state string, response editorStatusResponse) bool {
+func letsReaderSend(state string) bool {
 	switch state {
 	case statusStateReady, statusStateCompiling, statusStateImportingAssets:
-		return response.SecondsSinceLastMainThreadTick >= editorStatusEarlyStallSeconds
+		return true
 	default:
 		return false
 	}
+}
+
+// needsEarlyDialogInspection reports whether an answer that would let the reader send a command
+// has a main thread still long enough that a dialog the Editor cannot report may hold it.
+func needsEarlyDialogInspection(state string, response editorStatusResponse) bool {
+	return letsReaderSend(state) && response.SecondsSinceLastMainThreadTick >= editorStatusEarlyStallSeconds
+}
+
+// needsQuickDialogInspection reports whether an answer that would let the reader send a command
+// has a main thread still long enough for a dialog to be what holds it, so that status on Windows
+// looks at Unity's windows at once.
+func needsQuickDialogInspection(state string, response editorStatusResponse) bool {
+	return letsReaderSend(state) && response.SecondsSinceLastMainThreadTick >= windowsQuickLookStallSeconds
+}
+
+// looksAfterBriefStall reports whether status looks at Unity's windows as soon as the main thread
+// has been still for windowsQuickLookStallSeconds, without asking the Editor again, instead of only
+// after a short stall that a second answer confirms.
+// Why Windows only: listing a process's windows there is a few milliseconds and needs no
+// permission, so the second of Ready a dialog would otherwise get is not worth saving. On macOS
+// the look starts osascript and needs a permission that may be missing.
+func looksAfterBriefStall(goos string) bool {
+	return goos == "windows"
 }
 
 // probeAfterShortStall asks the Editor again after a short stall and looks at Unity's windows
@@ -40,24 +73,35 @@ func probeAfterShortStall(
 	if second == nil {
 		return report, err
 	}
-	secondReport := reportFromEditorResponse(*second)
 	// A smaller stall means the main thread ran between the probes, so it was only sleeping. An
 	// answer that changed state, such as one now reporting a dialog or a blocked main thread, takes
 	// the usual path.
 	if second.SecondsSinceLastMainThreadTick < first.SecondsSinceLastMainThreadTick ||
-		!needsEarlyDialogInspection(secondReport.State, *second) {
-		return withDialogInspection(ctx, connection.ProjectRoot, *second, secondReport, deps), nil
+		!needsEarlyDialogInspection(classifyEditorState(*second), *second) {
+		return withDialogInspection(ctx, connection.ProjectRoot, *second, reportFromEditorResponse(*second), deps), nil
 	}
-	dialogs, err := deps.inspectDialogs(ctx, connection.ProjectRoot)
-	// Why before the quiet failure below: a cancelled caller must not get the second answer's
-	// Ready and exit code 0.
+	return reportAfterQuietDialogLook(ctx, connection.ProjectRoot, *second, deps)
+}
+
+// reportAfterQuietDialogLook looks at Unity's windows once for an answer that would let the reader
+// send a command: a dialog found makes it BlockedByDialog, and anything else keeps the answer's
+// usual report.
+// Why a failed look adds no hint: without the permission it would fail every time it runs, while
+// the five-second look still explains its failure.
+func reportAfterQuietDialogLook(
+	ctx context.Context,
+	projectRoot string,
+	response editorStatusResponse,
+	deps statusCommandDeps,
+) (statusReport, error) {
+	dialogs, err := deps.inspectDialogs(ctx, projectRoot, response.ProcessId)
+	// Why before the quiet failure below: a cancelled caller must not get the answer's Ready and
+	// exit code 0.
 	if ctx.Err() != nil {
 		return statusReport{}, ctx.Err()
 	}
-	// Why a failed look adds no hint: without the permission it would fail every time the Editor
-	// hesitates for a second, while the five-second look still explains its failure.
 	if err != nil || len(dialogs) == 0 {
-		return secondReport, nil
+		return reportFromEditorResponse(response), nil
 	}
-	return blockedByDialogReport(*second, dialogs), nil
+	return blockedByDialogReport(response, dialogs), nil
 }

@@ -63,21 +63,23 @@ func withDialogInspection(
 	if !needsDialogInspection(report.State, response) {
 		return report
 	}
-	return inspectForDialogs(ctx, projectRoot, report, deps, func(dialogs []statusDialog) statusReport {
+	return inspectForDialogs(ctx, projectRoot, response.ProcessId, report, deps, func(dialogs []statusDialog) statusReport {
 		return blockedByDialogReport(response, dialogs)
 	})
 }
 
-// inspectForDialogs looks at Unity's windows and returns blocked(dialogs) when it finds a dialog.
-// A failed look keeps the report and says why.
+// inspectForDialogs looks at the windows of Unity, whose process ID is editorProcessID or zero when
+// not known, and returns blocked(dialogs) when it finds a dialog. A failed look keeps the report and
+// says why.
 func inspectForDialogs(
 	ctx context.Context,
 	projectRoot string,
+	editorProcessID int,
 	report statusReport,
 	deps statusCommandDeps,
 	blocked func(dialogs []statusDialog) statusReport,
 ) statusReport {
-	dialogs, err := deps.inspectDialogs(ctx, projectRoot)
+	dialogs, err := deps.inspectDialogs(ctx, projectRoot, editorProcessID)
 	// Where uloop cannot look, the report stays what it was before uloop looked for dialogs.
 	if errors.Is(err, unitydialog.ErrInspectionUnsupported) {
 		return report
@@ -102,7 +104,8 @@ func withDialogInspectionBeforeServer(
 	report statusReport,
 	deps statusCommandDeps,
 ) statusReport {
-	return inspectForDialogs(ctx, projectRoot, report, deps, func(dialogs []statusDialog) statusReport {
+	// Why zero: without an answer there is no reported process ID, so the look finds the process.
+	return inspectForDialogs(ctx, projectRoot, 0, report, deps, func(dialogs []statusDialog) statusReport {
 		blockedReport := newStatusReport(statusStateBlockedByDialog, blockedByDialogMessage(dialogs))
 		blockedReport.Dialogs = dialogs
 		blockedReport.UnityProcessRunning = report.UnityProcessRunning
