@@ -50,13 +50,18 @@ func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
 // its tool code has not started, and leaves it alone if it has.
 // Why uloop never ends the wait itself here: hanging up on a request Unity has not started does not
 // stop it, because compile and some run-tests requests still run after the client is gone.
+// Why a send with a responseTimeout is not watched: it hangs up when the timeout ends and moves on
+// to another wait, while its request stays in Unity and runs once the dialog closes. A report then
+// would make Unity drop the request as not run while uloop says it keeps running.
 func startEarlyDialogReport(
 	ctx context.Context,
 	connection unityipc.Connection,
 	method string,
+	responseTimeout time.Duration,
 	deps earlyDialogReportDeps,
 ) func() {
-	if deps.probeEditorStatus == nil || deps.reportBlockingDialog == nil || internalBridgeMethods[method] {
+	if deps.probeEditorStatus == nil || deps.reportBlockingDialog == nil || internalBridgeMethods[method] ||
+		responseTimeout > 0 {
 		return func() {}
 	}
 	watchCtx, cancel := context.WithCancel(ctx)

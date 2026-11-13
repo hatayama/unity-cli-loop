@@ -275,7 +275,7 @@ func sendWithTransientConnectionRetryAttempts(
 
 	dialogWatch := newHeartbeatDialogWatch(ctx, connection, method, deps.dialogWatch)
 	defer dialogWatch.release()
-	defer startEarlyDialogReport(ctx, connection, method, deps.earlyDialogReport)()
+	defer startEarlyDialogReport(ctx, connection, method, responseTimeout, deps.earlyDialogReport)()
 	// serverWaitDialogWatch looks for a dialog while the server stays unreachable with Unity running.
 	// Why: a dialog Unity shows while it starts keeps its server from starting, so the wait below
 	// would last its whole window and end in a "wait and retry" error that never names the dialog.

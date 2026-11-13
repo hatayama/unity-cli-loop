@@ -136,12 +136,26 @@ func TestStartEarlyDialogReportDoesNotLookWhenOffOrAnswered(t *testing.T) {
 	never := script.deps()
 	never.waitFor = func(time.Duration) <-chan time.Time { return make(chan time.Time) }
 
-	startEarlyDialogReport(context.Background(), unityipc.Connection{}, compileStatusCommandName, script.deps())()
-	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", earlyDialogReportDeps{})()
-	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", never)()
+	startEarlyDialogReport(context.Background(), unityipc.Connection{}, compileStatusCommandName, 0, script.deps())()
+	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, earlyDialogReportDeps{})()
+	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, never)()
 
 	if script.probes != 0 || script.sent != 0 {
 		t.Fatalf("probes = %d, reports sent = %d, want none", script.probes, script.sent)
+	}
+}
+
+// Verifies a send that ends its own wait for the answer, as compile does, never starts the watch:
+// Unity would fail a request that runs later while uloop says it keeps running.
+func TestStartEarlyDialogReportDoesNotWatchASendThatEndsItsOwnWait(t *testing.T) {
+	script := &earlyDialogReportScript{reports: []statusReport{blockedByDialogStatusReport(commandDialogPlayerStoppedDialog())}}
+
+	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "compile", 2*time.Second, script.deps())()
+
+	// Why waits: the watch asks for its first wait before it can be cancelled, so a started watch
+	// always records one, while a probe may lose the race with the stop.
+	if len(script.waits) != 0 || script.probes != 0 || script.sent != 0 {
+		t.Fatalf("waits = %v, probes = %d, reports sent = %d, want none", script.waits, script.probes, script.sent)
 	}
 }
 
