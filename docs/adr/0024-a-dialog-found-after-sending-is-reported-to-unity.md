@@ -16,11 +16,27 @@ command `report-blocking-dialog`.
 - The CLI never hangs up on the request itself. It keeps waiting on the same connection for Unity's
   answer.
 - A send that ends its own wait for the answer (`compile`, which hangs up after 2 seconds and then
-  waits on the compile state) is not watched.
+  waits on the compile state) is not watched; see the compile section below.
 - While the request holds the command slot, the Editor answers `Busy`. The CLI looks at Unity's
   windows behind that `Busy` once the request has waited for a main thread still for 1 second,
   instead of from the 5-second stall that `uloop status` uses.
 - The 30-second limit of ADR 0020 does not change. It still applies when no dialog is reported.
+
+### Compile
+
+`compile` is never reported to Unity: its request stays in Unity after the send hangs up and runs
+once the dialog closes, so a report would make Unity drop a compile that uloop says keeps running.
+It finds the dialog earlier instead, and still answers with the `had already started` form that the
+next `uloop compile` reattaches to:
+
+- When Unity accepted the compile but did not answer within the send's 2 seconds, uloop looks for a
+  dialog once before its first compile status query.
+- In the compile status wait, fresh or reattached, a status query Unity accepted but did not answer
+  makes uloop look at once instead of after a 5-second stall. A query that fails to connect, as
+  during a domain reload, still waits for the stall, so a reload does not look at Unity's windows.
+- Before reattaching, the probe of the earlier compile looks after such an unanswered query, at most
+  once per dialog-check interval. Without a dialog it keeps retrying, so its last answer still
+  decides between waiting and sending a new compile.
 
 ## Context
 
@@ -44,8 +60,9 @@ opened took 32.5 seconds to answer on macOS.
 
 - A command sent just after a dialog opens answers `BLOCKED_BY_DIALOG` (`was not run`) about 6
   seconds after sending (measured on macOS) instead of after about 30.
-- `compile`, and `run-tests` that compiles first, keep their earlier behavior: uloop does not
-  report a dialog for their compile, so they answer as they did before this decision.
+- `compile`, and `run-tests` that compiles first, answer `BLOCKED_BY_DIALOG` (`had already started`)
+  about 3 seconds after sending, and about 7 seconds when they reattach to an earlier compile
+  (measured on macOS), instead of 13 to 23 seconds.
 - An older Unity package answers the report with an error; the CLI then stops reporting for that
   request, and the request keeps the 30-second answer.
 - On Linux before Unity 6000.7 the CLI cannot look at Unity's windows, so it keeps the 30-second
