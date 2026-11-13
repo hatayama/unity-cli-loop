@@ -60,3 +60,6 @@ printed in between; without anyone dismissing the dialog it would have waited fo
 - (b) The main complaint is that dialogs are detected too late: lower it.
 
 Both are the single constant `MainThreadEntryWatchdog.BlockedStallSeconds`.
+
+The 30 seconds is the answer when no dialog is reported. ADR 0024 fails the waiting command within
+seconds once the CLI finds a dialog and reports it to Unity.
