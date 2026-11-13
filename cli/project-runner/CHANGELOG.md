@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.12.8](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.7...uloop-project-runner-v3.12.8) (2026-11-12)
+
+
+### Bug Fixes
+
+* execute-dynamic-code no longer tells you to retry a snippet that reloaded scripts before Unity could answer ([#3491](https://github.com/hatayama/unity-cli-loop/issues/3491)) ([20868bf](https://github.com/hatayama/unity-cli-loop/commit/20868bf64960665914f3e663359a909110a0c71d))
+* uloop no longer mistakes Unity Hub's helper for an Editor on Windows, and counts an Editor it cannot read as one it cannot identify ([#3478](https://github.com/hatayama/unity-cli-loop/issues/3478)) ([017603b](https://github.com/hatayama/unity-cli-loop/commit/017603bdc868d71525899a3fac57bfce9db6b3e2))
+
 ## [3.12.7](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.6...uloop-project-runner-v3.12.7) (2026-11-08)
 
 
