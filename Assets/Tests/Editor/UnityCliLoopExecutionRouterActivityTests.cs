@@ -197,6 +197,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies the report-blocking-dialog answer starts no activity, because it must answer while a
+        /// dialog holds the Editor main thread.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReportBlockingDialog_DoesNotBeginAnActivity()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            UnityCliLoopExecutionRouter router = CreateRouter(api, new EditorDialogTracker());
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
+                new JObject(),
+                CancellationToken.None);
+
+            Assert.That(response, Is.InstanceOf<ReportBlockingDialogResponse>());
+            Assert.That(api.BeginCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the report-blocking-dialog answer reaches the main-thread watchdog once, through the
+        /// registrar and the execution service, with the command name the CLI sent. Without it Unity
+        /// silently keeps its 30-second answer.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReportBlockingDialog_TellsTheWatchdogOnce()
+        {
+            CountingWatchdog watchdog = new CountingWatchdog();
+            UnityCliLoopToolRegistrarService registrarService = new UnityCliLoopToolRegistrarService(
+                new EmptyInternalToolNameProvider(),
+                new AlwaysEnabledToolSettingsPort(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), null, watchdog),
+                () => Array.Empty<IUnityCliLoopTool>());
+            UnityCliLoopExecutionRouter router = new UnityCliLoopExecutionRouter(
+                registrarService,
+                new EditorExecutionActivity(new RecordingProcessActivityApi()),
+                new EditorDialogTracker());
+
+            await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
+                new JObject { ["ToolName"] = "get-logs" },
+                CancellationToken.None);
+
+            Assert.That(watchdog.ReportCount, Is.EqualTo(1));
+            Assert.That(watchdog.LastToolName, Is.EqualTo("get-logs"));
+        }
+
+        /// <summary>
+        /// Verifies a report whose params are not an object is taken as a report without a name instead
+        /// of failing, so the CLI keeps reporting and no request is failed early.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReportBlockingDialogWithNonObjectParams_IsTakenWithoutAName()
+        {
+            CountingWatchdog watchdog = new CountingWatchdog();
+            UnityCliLoopToolRegistrarService registrarService = new UnityCliLoopToolRegistrarService(
+                new EmptyInternalToolNameProvider(),
+                new AlwaysEnabledToolSettingsPort(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), null, watchdog),
+                () => Array.Empty<IUnityCliLoopTool>());
+            UnityCliLoopExecutionRouter router = new UnityCliLoopExecutionRouter(
+                registrarService,
+                new EditorExecutionActivity(new RecordingProcessActivityApi()),
+                new EditorDialogTracker());
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
+                new JArray("get-logs"),
+                CancellationToken.None);
+
+            Assert.That(response, Is.InstanceOf<ReportBlockingDialogResponse>());
+            Assert.That(watchdog.LastToolName, Is.Empty);
+        }
+
+        /// <summary>
         /// Verifies an internal bridge command holds one activity and ends it when the command returns.
         /// </summary>
         [Test]
@@ -227,6 +301,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 () => tools);
             return new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(api), dialogTracker);
+        }
+
+        /// <summary>
+        /// Watchdog that only counts the dialog reports it receives and keeps the last reported name.
+        /// </summary>
+        private sealed class CountingWatchdog : IMainThreadEntryWatchdog
+        {
+            public int ReportCount { get; private set; }
+
+            public string LastToolName { get; private set; }
+
+            public Task GuardAsync(ToolExecutionLease lease, CancellationToken stop)
+            {
+                return Task.CompletedTask;
+            }
+
+            public void ReportBlockingDialog(string toolName)
+            {
+                ReportCount++;
+                LastToolName = toolName;
+            }
         }
 
         /// <summary>

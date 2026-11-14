@@ -337,7 +337,8 @@ func runFreshCompileAttempt(
 		resendBefore:   options.resendBefore,
 		// Only a dispatched send reaches this wait, so a dropped connection here came after the
 		// request was sent.
-		serverRestartSeen: err != nil && clierrors.IsTransportDisconnectError(err),
+		serverRestartSeen:  err != nil && clierrors.IsTransportDisconnectError(err),
+		sendWentUnanswered: compileSendWentUnanswered(err, outcome),
 	}, compileWait)
 	if errors.Is(waitErr, errCompileRequestMissing) {
 		spinner.Stop()
@@ -440,4 +441,12 @@ func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 	}
 	clicore.WriteFormat(stdout, "Tools synced to %s\n", cachePath)
 	return 0
+}
+
+// compileSendWentUnanswered reports whether Unity accepted the compile request and then left it
+// unanswered past the send's response timeout.
+// Why only then: a compile Unity answered has started, and a dropped connection means a domain
+// reload; neither waits behind a dialog, so an ordinary compile pays for no extra look.
+func compileSendWentUnanswered(err error, outcome unityipc.UnitySendOutcome) bool {
+	return err != nil && outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err)
 }

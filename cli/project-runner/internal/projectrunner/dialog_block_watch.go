@@ -99,6 +99,12 @@ func (watch *dialogBlockWatch) observePoll(ctx context.Context, answered bool) [
 	return watch.observeStall(ctx, now.Sub(watch.unansweredSince).Seconds())
 }
 
+// observeUnansweredProbe is observeStall for a poll Unity accepted but did not answer in time: the
+// main thread was still for the whole probe, so the look does not wait for the threshold.
+func (watch *dialogBlockWatch) observeUnansweredProbe(ctx context.Context) []statusDialog {
+	return watch.observeStall(ctx, watch.stallThresholdSeconds)
+}
+
 // observeEditorStatus is observeStall for a wait that already reads the Editor status: dialogs the
 // Editor reported end the wait at once, and the reported stall decides whether to look further.
 func (watch *dialogBlockWatch) observeEditorStatus(

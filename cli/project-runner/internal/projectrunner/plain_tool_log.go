@@ -111,20 +111,35 @@ func logPlainToolRequestFailed(
 	})
 }
 
+// serverBusyHolder is what a busy answer's data says about the request holding the command slot.
+type serverBusyHolder struct {
+	RunningToolName                string   `json:"runningToolName"`
+	RunningToolPhase               string   `json:"runningToolPhase"`
+	SecondsSinceLastMainThreadTick *float64 `json:"secondsSinceLastMainThreadTick"`
+}
+
+// decodeServerBusyHolder reads the slot holder from a busy answer's data. It reports false for any
+// other error, and for a busy answer whose data cannot be read.
+func decodeServerBusyHolder(err error) (serverBusyHolder, bool) {
+	var rpcErr *unityipc.RPCError
+	if !errors.As(err, &rpcErr) || clierrors.RPCDataType(rpcErr.Data) != "server_busy" {
+		return serverBusyHolder{}, false
+	}
+	var holder serverBusyHolder
+	if json.Unmarshal(rpcErr.Data, &holder) != nil {
+		return serverBusyHolder{}, false
+	}
+	return holder, true
+}
+
 // serverBusyRunningToolName reads the name of the tool that held the Editor from a busy answer's
 // data. It reports false for any other error, and for a busy answer that names no tool.
 func serverBusyRunningToolName(err error) (string, bool) {
-	var rpcErr *unityipc.RPCError
-	if !errors.As(err, &rpcErr) || clierrors.RPCDataType(rpcErr.Data) != "server_busy" {
+	holder, ok := decodeServerBusyHolder(err)
+	if !ok || holder.RunningToolName == "" {
 		return "", false
 	}
-	data := struct {
-		RunningToolName string `json:"runningToolName"`
-	}{}
-	if json.Unmarshal(rpcErr.Data, &data) != nil || data.RunningToolName == "" {
-		return "", false
-	}
-	return data.RunningToolName, true
+	return holder.RunningToolName, true
 }
 
 // classifyPlainToolError names what failed without any of the error's text: "rpc:" followed by the
