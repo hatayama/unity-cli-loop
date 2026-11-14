@@ -59,7 +59,7 @@ func pausePointWaitError(
 			// change first. Reporting a permanent failure as retryable is what made the original
 			// incident waste a full timeout window on it.
 			false)
-		waitErr.NextActions = pausePointTriggerFailedNextActions(options.id, triggerResult)
+		waitErr.NextActions = pausePointTriggerFailedNextActions(options.id, triggerResult, options.resumePlay)
 	case pausePointWaitStateCleared:
 		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointCleared,

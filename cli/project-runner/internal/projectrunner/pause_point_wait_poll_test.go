@@ -546,6 +546,9 @@ func TestRunWaitForPausePointRepausesPlayModeWhenTriggerRejectsArguments(t *test
 	if _, hasError := resumeResult["RepauseError"]; hasError {
 		t.Fatalf("expected no RepauseError for a successful re-pause: %#v", resumeResult)
 	}
+	if !strings.HasSuffix(envelope.Error.NextActions[1], " --resume-play") {
+		t.Fatalf("the await step must keep --resume-play after the re-pause: %#v", envelope.Error.NextActions)
+	}
 }
 
 // Verifies a failed re-pause is reported rather than silently dropped, since gameplay then keeps

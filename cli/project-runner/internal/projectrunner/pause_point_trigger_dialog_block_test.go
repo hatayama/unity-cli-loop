@@ -565,7 +565,7 @@ func TestWaitForPausePointAbandonsAWaitWhoseTriggerUnityDidNotRun(t *testing.T) 
 	if elapsed >= 5*time.Second {
 		t.Fatalf("waited %v, want an early stop", elapsed)
 	}
-	actions := strings.Join(pausePointTriggerFailedNextActions(triggerDialogPausePointID, triggerResult), "\n")
+	actions := strings.Join(pausePointTriggerFailedNextActions(triggerDialogPausePointID, triggerResult, false), "\n")
 	if strings.Contains(actions, "Fix the --trigger value") || strings.Contains(actions, "INVALID_ARGUMENT") {
 		t.Fatalf("NextActions = %s, want no advice to fix the trigger value", actions)
 	}
@@ -602,5 +602,26 @@ func TestWaitForPausePointReportsAHitOverATriggerNotRunBehindADialog(t *testing.
 
 	if err != nil || state != pausePointWaitStateHit || response.HitCount != 1 {
 		t.Fatalf("state = %q, err = %v, HitCount = %d, want the hit", state, err, response.HitCount)
+	}
+}
+
+// Verifies the await step after an abandoned trigger keeps --resume-play when the wait used it: the
+// wait re-pauses PlayMode it resumed, so a retry without it would reach a paused PlayMode again.
+func TestPausePointTriggerFailedAwaitStepKeepsResumePlay(t *testing.T) {
+	results := map[string]*pausePointTriggerResult{
+		"stalled main thread": triggerMainThreadBlockedResult(t),
+		"argument rejection":  {Command: "simulate-keyboard", Completed: true, Error: argumentErrorTriggerStderr},
+	}
+	for name, result := range results {
+		t.Run(name, func(t *testing.T) {
+			withResume := pausePointTriggerFailedNextActions(triggerDialogPausePointID, result, true)[1]
+			withoutResume := pausePointTriggerFailedNextActions(triggerDialogPausePointID, result, false)[1]
+			if !strings.HasSuffix(withResume, " --resume-play") {
+				t.Fatalf("await step = %q, want it to end with --resume-play", withResume)
+			}
+			if strings.Contains(withoutResume, "--resume-play") {
+				t.Fatalf("await step = %q, want no --resume-play when the wait did not use it", withoutResume)
+			}
+		})
 	}
 }

@@ -488,7 +488,7 @@ func TestPausePointTriggerFailedNextActionsDiagnosesUnknownCommandPrefix(t *test
 	got := pausePointTriggerFailedNextActions("jump", &pausePointTriggerResult{
 		Completed: true,
 		Error:     argumentErrorTriggerStderr,
-	})
+	}, false)
 	want := []string{
 		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
 			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
@@ -721,7 +721,7 @@ func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
 		Error:     argumentErrorTriggerStderr,
 	}
 
-	actions := pausePointTriggerFailedNextActions("jump", result)
+	actions := pausePointTriggerFailedNextActions("jump", result, false)
 
 	if len(actions) != 3 {
 		t.Fatalf("expected three recovery steps, got %#v", actions)
@@ -747,7 +747,7 @@ func TestPausePointTriggerFailedNextActionsForUnityRejection(t *testing.T) {
 			`"Message":"PlayMode is not active. Use control-play-mode tool to start PlayMode first."}`),
 	}
 
-	actions := pausePointTriggerFailedNextActions("jump", result)
+	actions := pausePointTriggerFailedNextActions("jump", result, false)
 
 	if len(actions) != 3 {
 		t.Fatalf("expected three recovery steps, got %#v", actions)

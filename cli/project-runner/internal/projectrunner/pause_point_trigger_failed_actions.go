@@ -16,10 +16,17 @@ import "fmt"
 // Why the await form carries the real id: it is the one recovery command this function can spell
 // out completely, and naming a command without its arguments is exactly the failure this guidance
 // exists to prevent.
-func pausePointTriggerFailedNextActions(id string, triggerResult *pausePointTriggerResult) []string {
+//
+// resumePlay is whether the wait used --resume-play. Why the await form keeps it: the wait re-pauses
+// PlayMode it resumed when it abandons the trigger, so a retry without it reaches a paused PlayMode.
+func pausePointTriggerFailedNextActions(id string, triggerResult *pausePointTriggerResult, resumePlay bool) []string {
+	awaitAction := pausePointTriggerRejectionAwaitAction(id, triggerResult)
+	if resumePlay {
+		awaitAction += " --resume-play"
+	}
 	return []string{
 		pausePointTriggerRejectionFirstAction(triggerResult),
-		pausePointTriggerRejectionAwaitAction(id, triggerResult),
+		awaitAction,
 		pausePointTriggerRejectionRecoveryAction(triggerResult),
 	}
 }
