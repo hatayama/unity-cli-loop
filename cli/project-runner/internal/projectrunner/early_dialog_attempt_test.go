@@ -68,7 +68,11 @@ func TestEarlyDialogReportEndsWithTheAttempt(t *testing.T) {
 	_, err := sendAttemptWithEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, gated.deps(), nil,
 		func(progress unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error) {
 			progress(cliprogress.Event{Stage: cliprogress.StageAccepted})
-			<-gated.waits
+			select {
+			case <-gated.waits:
+			case <-time.After(5 * time.Second):
+				t.Error("the accepted attempt started no watch")
+			}
 			return unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true}, busy
 		})
 	gated.release()
