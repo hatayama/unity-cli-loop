@@ -23,6 +23,10 @@ const (
 		"result is not returned; run uloop status, then check the effect before running it again."
 	controlPlayModeDialogClosedNextAction = "After the dialog is closed, run uloop control-play-mode --action Status " +
 		"to see the state it reached."
+	// commandNotRunDetailKey is true in Details when the command is known not to have run: Unity gave up
+	// waiting for its main thread before running it, or uloop never sent it. Absent otherwise, including
+	// when it is unknown whether the command started.
+	commandNotRunDetailKey = "CommandNotRun"
 	// The pause-point wait ends in uloop only; the marker stays armed in Unity, and a repeated --trigger
 	// would send the trigger again.
 	// pausePointDialogIDDetailKey holds the awaited marker's id in the pause-point wait's Details.
@@ -197,6 +201,11 @@ func (err blockedByDialogError) ToCLIError(context clierrors.ErrorContext) clier
 		for key, value := range notRunError.Details {
 			details[key] = value
 		}
+	}
+	// Why a key and not only the Message: a caller that reads this error from another command's output,
+	// such as a pause-point wait reading its trigger's result, must not match on prose.
+	if err.notRun != nil || err.notSent {
+		details[commandNotRunDetailKey] = true
 	}
 	details["Dialogs"] = err.dialogs
 	return clierrors.CLIError{
