@@ -43,6 +43,8 @@ A wait (`await-pause-point` or `enable-pause-point --await`) that a modal dialog
 - A wait with `--trigger` and no `CommandNotRun`: the trigger had started or may still run once the dialog closes. Check `uloop pause-point-status` first, and wait again without `--trigger` so it is not sent twice.
 - A wait without `--trigger`: check `uloop pause-point-status`, and wait again if the marker is still waiting.
 
+A trigger Unity did not run because its main thread stayed still without a dialog ends the wait with `PAUSE_POINT_TRIGGER_FAILED` instead, the marker still armed: run `uloop status` until it reports Ready, then wait again with the same `--trigger`.
+
 ## Locating Where Control Flow Stops
 
 To locate where control flow stops before an unhit line, bisect with a second pause point on the method's entry (its first executable line). If the entry point hits while the target line stays at `HitCount=0`, an early return or a branch between the two lines is filtering execution — inspect the guard values in the entry hit's `CapturedVariables` instead of retrying the original line.

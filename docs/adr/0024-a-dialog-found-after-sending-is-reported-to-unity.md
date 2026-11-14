@@ -82,8 +82,11 @@ envelope (`BLOCKED_BY_DIALOG` with `Details.CommandNotRun`) and ends at once, sa
 run and to wait again with the same `--trigger`, instead of waiting until its own 30-second-interval
 watch finds the dialog and telling the agent to drop a trigger that was never run. When its own watch
 finds the dialog first and the look's report shows the trigger holding the slot while it waits for the
-main thread, the wait reports the dialog to Unity under the trigger's name and waits up to 3 seconds for
-the trigger's answer; a `main_thread_blocked` answer ends the wait the same way. Why ask Unity instead
+main thread, the wait reports the dialog to Unity under the trigger's name and waits up to 6 seconds for
+the trigger's answer (Unity's check, then the trigger's own second look, take about 3 on macOS); a
+`main_thread_blocked` answer ends the wait the same way, naming the watch's dialog when the trigger's
+own look found none. A `main_thread_blocked` answer without any dialog, as after a 30-second stall,
+abandons the wait as a trigger that did not run, the way a rejected trigger does. Why ask Unity instead
 of judging from the look: the look is one moment, and the dialog can close and let the trigger run
 before uloop exits. A request that outlives the disconnect, such as a default `compile`, is not failed
 by the report, so no answer comes. Without that answer, and in every other case, the wait keeps the
