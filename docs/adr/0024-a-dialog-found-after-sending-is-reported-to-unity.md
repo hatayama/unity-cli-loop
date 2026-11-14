@@ -74,6 +74,20 @@ form that the next `uloop compile` reattaches to:
   once per dialog-check interval. Without a dialog it keeps retrying, so its last answer still
   decides between waiting and sending a new compile.
 
+### Pause-Point Trigger
+
+A pause-point wait sends its `--trigger` through the same dispatch, so the trigger's own send can be
+the one Unity fails with `main_thread_blocked`. The wait reads that result from the trigger's error
+envelope (`BLOCKED_BY_DIALOG` with `Details.CommandNotRun`) and ends at once, saying the trigger was not
+run and to wait again with the same `--trigger`, instead of waiting until its own 30-second-interval
+watch finds the dialog and telling the agent to drop a trigger that was never run. When its own watch
+finds the dialog first, the look's report names the request holding the slot; a trigger still waiting
+for the main thread in a request Unity drops on disconnect is reported the same way, because it is
+cancelled once uloop exits. Compile and run-tests are excluded by name, since they can outlive the
+connection and the report does not carry the options that decide it; they, and every case the wait
+cannot pin on the trigger, keep the `had already started` form, which never risks sending the trigger
+twice.
+
 ## Context
 
 A dialog that opened after the check before sending was only noticed
