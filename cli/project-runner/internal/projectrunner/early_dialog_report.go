@@ -29,24 +29,26 @@ const (
 	reportBlockingDialogTimeout = 5 * time.Second
 )
 
-// earlyDialogFoundFreshness is how long after Unity took a report the reported dialogs may still name
-// Unity's main_thread_blocked answer.
-// Why: Unity fails a reported request at its next check, which runs every second, so an answer the
-// report caused arrives about a second after it; 3 seconds leaves room for that. An older answer may
-// have another cause, such as Unity's own 30-second answer or a dialog that opened after the reported
-// one closed without the main thread running in between, so it is looked up again.
+// earlyDialogFoundFreshness is how long after the look that saw them the reported dialogs may still
+// name Unity's main_thread_blocked answer.
+// Why counted from the look: what the answer names is what that look saw. On macOS a look takes about
+// a second, and Unity fails a reported request at its next check, which runs every second, so an
+// answer the report caused arrives about 2 seconds after the look; 3 seconds leaves room for that. An
+// older answer may have another cause, such as Unity's own 30-second answer or a dialog that opened
+// after the reported one closed without the main thread running in between, so it is looked up
+// again. Within the 3 seconds the named dialog may also be gone (see explainBlockedByDialog).
 const earlyDialogFoundFreshness = 3 * time.Second
 
-// earlyDialogFinding is the dialogs a watch last reported and when Unity took that report.
+// earlyDialogFinding is the dialogs a watch last reported and when the look that saw them started.
 type earlyDialogFinding struct {
-	dialogs    []statusDialog
-	reportedAt time.Time
+	dialogs  []statusDialog
+	lookedAt time.Time
 }
 
-// freshDialogs returns the dialogs when now is at most earlyDialogFoundFreshness after Unity took
-// their report, and nil otherwise.
+// freshDialogs returns the dialogs when now is at most earlyDialogFoundFreshness after the look that
+// saw them started, and nil otherwise.
 func (finding earlyDialogFinding) freshDialogs(now time.Time) []statusDialog {
-	if finding.dialogs == nil || now.Sub(finding.reportedAt) > earlyDialogFoundFreshness {
+	if finding.dialogs == nil || now.Sub(finding.lookedAt) > earlyDialogFoundFreshness {
 		return nil
 	}
 	return finding.dialogs
@@ -75,8 +77,8 @@ func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
 
 // startEarlyDialogReport watches one sent request for a dialog that opened after the check before
 // sending, and returns the function that ends the watch, waits for it to stop, and hands back the
-// dialogs the watch last reported when Unity took that report at most earlyDialogFoundFreshness
-// before the stop, or nil. The send stops the watch as soon as Unity answers, so the stop stands for
+// dialogs the watch last reported when the look that saw them started at most
+// earlyDialogFoundFreshness before the stop, or nil. The send stops the watch as soon as Unity answers, so the stop stands for
 // the time of the answer.
 // It only tells Unity about the dialog. Unity then answers the request with main_thread_blocked if
 // its tool code has not started, and leaves it alone if it has.
@@ -114,8 +116,8 @@ func startEarlyDialogReport(
 
 // runEarlyDialogReport looks once after earlyDialogLookDelay and then every interval, until the
 // window ends, ctx is done, or Unity does not take the report. It returns the dialogs of the last
-// completed look and when Unity took their report, when that look found them and Unity took it; it
-// returns an empty finding otherwise.
+// completed look and when that look started, when that look found them and Unity took their report;
+// it returns an empty finding otherwise.
 // Why a look or report cut short by ctx changes nothing: it ends because Unity answered, and that
 // answer came for an earlier report, whose dialogs are the ones to name.
 func runEarlyDialogReport(
@@ -134,6 +136,7 @@ func runEarlyDialogReport(
 		case <-deps.waitFor(wait):
 		}
 		wait = interval
+		lookedAt := deps.now()
 		dialogs := ownCommandHoldingDialogs(ctx, connection, method, deps.probeEditorStatus)
 		if ctx.Err() != nil {
 			return reported
@@ -144,7 +147,7 @@ func runEarlyDialogReport(
 		}
 		err := deps.reportBlockingDialog(ctx, connection, method)
 		if err == nil {
-			reported = earlyDialogFinding{dialogs: dialogs, reportedAt: deps.now()}
+			reported = earlyDialogFinding{dialogs: dialogs, lookedAt: lookedAt}
 			continue
 		}
 		if ctx.Err() != nil {

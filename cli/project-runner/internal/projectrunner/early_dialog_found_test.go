@@ -66,12 +66,12 @@ func TestEarlyDialogReportHandsBackTheDialogOfItsLastReport(t *testing.T) {
 	}
 }
 
-// Verifies the reported dialogs name an answer that arrives up to 3 seconds after Unity took the
-// report, the time a report-caused answer needs, and not a later one, which may have another cause.
+// Verifies the reported dialogs name an answer that arrives up to 3 seconds after the look that saw
+// them, the time a report-caused answer needs, and not a later one, which may have another cause.
 func TestEarlyDialogFindingNamesOnlyAnAnswerSoonAfterTheReport(t *testing.T) {
-	reportedAt := time.Unix(100, 0)
+	lookedAt := time.Unix(100, 0)
 	dialog := commandDialogPlayerStoppedDialog()
-	finding := earlyDialogFinding{dialogs: []statusDialog{dialog}, reportedAt: reportedAt}
+	finding := earlyDialogFinding{dialogs: []statusDialog{dialog}, lookedAt: lookedAt}
 	cases := []struct {
 		name      string
 		after     time.Duration
@@ -83,7 +83,7 @@ func TestEarlyDialogFindingNamesOnlyAnAnswerSoonAfterTheReport(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			got := finding.freshDialogs(reportedAt.Add(testCase.after))
+			got := finding.freshDialogs(lookedAt.Add(testCase.after))
 
 			if (got != nil) != testCase.wantFresh {
 				t.Fatalf("dialogs = %#v, want fresh = %v", got, testCase.wantFresh)
@@ -108,21 +108,38 @@ func TestEarlyDialogReportAtThePausePointIntervalNamesOnlyASoonAnswer(t *testing
 	}
 }
 
-// Verifies the time of a report is when Unity took it, not when its look was due: a look that takes
-// 4 seconds still names an answer that comes a second after its report.
-func TestEarlyDialogReportTimesTheReportWhenUnityTookIt(t *testing.T) {
-	dialog := commandDialogPlayerStoppedDialog()
-	script := &earlyDialogReportScript{
-		reports:   []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)},
-		probeCost: 4 * time.Second,
+// Verifies freshness counts from the start of the look that saw the dialog, not from the report: an
+// answer up to 3 seconds after that start names the dialog, and a later one does not, however soon it
+// follows the report.
+func TestEarlyDialogReportCountsFreshnessFromTheLookThatSawTheDialog(t *testing.T) {
+	cases := []struct {
+		name        string
+		lookCost    time.Duration
+		afterReport time.Duration
+		wantReuse   bool
+	}{
+		{name: "instant look, answer a second after the report", afterReport: time.Second, wantReuse: true},
+		{name: "one-second look, answer a second after the report", lookCost: time.Second, afterReport: time.Second, wantReuse: true},
+		{name: "one-second look, answer exactly three seconds after the look", lookCost: time.Second, afterReport: 2 * time.Second, wantReuse: true},
+		{name: "four-second look, answer a second after the report", lookCost: 4 * time.Second, afterReport: time.Second},
+		{name: "instant look, answer 3.1 seconds after the report", afterReport: 3100 * time.Millisecond},
 	}
-	start := script.clock
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			dialog := commandDialogPlayerStoppedDialog()
+			script := &earlyDialogReportScript{
+				reports:   []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)},
+				probeCost: testCase.lookCost,
+			}
 
-	finding := script.run(pausePointDialogWatchInterval)
+			finding := script.run(pausePointDialogWatchInterval)
 
-	answeredAt := start.Add(earlyDialogLookDelay + 4*time.Second + time.Second)
-	if got := finding.freshDialogs(answeredAt); !reflect.DeepEqual(got, []statusDialog{dialog}) {
-		t.Fatalf("dialogs = %#v, reported at %v, want the dialog for an answer at %v", got, finding.reportedAt, answeredAt)
+			got := finding.freshDialogs(script.clock.Add(testCase.afterReport))
+			if (got != nil) != testCase.wantReuse {
+				t.Fatalf("dialogs = %#v, looked at %v, report done at %v, want reuse = %v",
+					got, finding.lookedAt, script.clock, testCase.wantReuse)
+			}
+		})
 	}
 }
 

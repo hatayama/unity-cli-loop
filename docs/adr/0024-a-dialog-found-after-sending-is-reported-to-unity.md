@@ -34,13 +34,15 @@ command `report-blocking-dialog`, which carries the name of the command the send
   slot can change hands between the CLI's look and its report, a busy answer can arrive late, and a
   `compile --no-wait-for-domain-reload`, which waits for its answer and is reported, shares the name
   `compile` with a default compile. Such a run-tests keeps the 30-second answer.
-- When Unity answers `main_thread_blocked` at most 3 seconds after it took a report from the watch of
-  that attempt, the CLI names the reported dialog in `BLOCKED_BY_DIALOG` without looking again.
-  Unity fails a reported request at its next check, which runs every second, so an answer the report
-  caused arrives about a second after it, and the dialog seen then still holds the main thread. An
-  older answer may have another cause: Unity's own 30-second answer, or a second dialog that opened
-  as the reported one closed, without the main thread running in between, which can happen at any
-  point of the watch and goes unseen for up to a look interval. So freshness from the report, not
+- When Unity answers `main_thread_blocked` at most 3 seconds after the start of the look whose
+  dialog the watch of that attempt reported, the CLI names that dialog in `BLOCKED_BY_DIALOG` without
+  looking again. Freshness counts from the look because the error names what that look saw. On macOS
+  a look takes about a second, and Unity fails a reported request at its next check, which runs every
+  second, so an answer the report caused arrives about 2 seconds after the look. Unity fails it only
+  while its main thread has not run since the report, so the dialog the look saw usually still holds
+  it. An older answer may have another cause: Unity's own 30-second answer, or a second dialog that
+  opened as the reported one closed, without the main thread running in between, which can happen at
+  any point of the watch and goes unseen for up to a look interval. So freshness from the look, not
   the 30-second window, decides. A later look that finds no dialog, or a report Unity refuses, drops
   the dialog; a look or report cut short because Unity answered changes nothing. Without a fresh
   reported dialog, and for `UNITY_EDITOR_UNRESPONSIVE`, the CLI looks once as before. On macOS that
@@ -93,6 +95,10 @@ opened took 32.5 seconds to answer on macOS.
 - A command sent just after a dialog opens answers `BLOCKED_BY_DIALOG` (`was not run`) about 3
   seconds after sending (measured on macOS; about 6 before the answer reused the reported dialog)
   instead of after about 30.
+- Accepted for those 2 seconds: within the 3 seconds after the look, the dialog it saw may close, be
+  replaced by another, or give way to the rest of the code that opened it, all without the main
+  thread running, and the error then names a dialog that is gone. The answer still means the command
+  was not run, so running it again stays safe, and `uloop get-dialogs` shows what is open now.
 - `compile`, and `run-tests` that compiles first, answer `BLOCKED_BY_DIALOG` (`had already started`)
   about 3 seconds after sending, and about 7 seconds when they reattach to an earlier compile
   (measured on macOS), instead of 13 to 23 seconds.
