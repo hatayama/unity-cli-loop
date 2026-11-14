@@ -58,8 +58,10 @@ type blockedByDialogError struct {
 	// command.
 	stopped          string
 	closedNextAction string
-	phase            string
-	safeToRetry      bool
+	// afterClosedNextActions follow the closed step, for a wait that has more to say about it.
+	afterClosedNextActions []string
+	phase                  string
+	safeToRetry            bool
 	// details are the replaced error's details, kept beside Dialogs.
 	details map[string]any
 }
@@ -116,10 +118,15 @@ func startedCommandBlockedByDialog(
 // one quoting rule is safe in POSIX shells, PowerShell, and Git Bash alike; any other id is read from
 // Details instead.
 func pausePointDialogClosedNextAction(id string) string {
+	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, shellSafePausePointID(id))
+}
+
+// shellSafePausePointID is id when it can be pasted into a step as-is, and a pointer to Details otherwise.
+func shellSafePausePointID(id string) string {
 	if !isShellSafeArgument(id) {
-		id = "<Details." + pausePointDialogIDDetailKey + ">"
+		return "<Details." + pausePointDialogIDDetailKey + ">"
 	}
-	return fmt.Sprintf(pausePointDialogClosedNextActionFormat, id)
+	return id
 }
 
 // isShellSafeArgument reports whether value is non-empty and made only of characters no common shell
@@ -216,7 +223,7 @@ func (err blockedByDialogError) ToCLIError(context clierrors.ErrorContext) clier
 		SafeToRetry: safeToRetry,
 		ProjectRoot: context.ProjectRoot,
 		Command:     context.Command,
-		NextActions: clicore.DialogAnswerNextActions(err.dialogs, err.canPress, closedNextAction),
+		NextActions: append(clicore.DialogAnswerNextActions(err.dialogs, err.canPress, closedNextAction), err.afterClosedNextActions...),
 		Details:     details,
 	}
 }
@@ -285,14 +292,25 @@ func neutralBlockedByDialog(command string, dialogs []statusDialog, canPress boo
 // findBlockingDialogs reads the Editor once and returns the dialogs holding its main thread; nil
 // when there are none, the read failed, or the dependencies turn the look off.
 func findBlockingDialogs(ctx context.Context, connection unityipc.Connection, deps dialogWatchDeps) []statusDialog {
-	if deps.probeEditorStatus == nil {
-		return nil
-	}
-	report, err := deps.probeEditorStatus(ctx, connection)
-	if err != nil || report.State != statusStateBlockedByDialog || len(report.Dialogs) == 0 {
+	report, found := findBlockingDialogReport(ctx, connection, deps)
+	if !found {
 		return nil
 	}
 	return report.Dialogs
+}
+
+// findBlockingDialogReport is findBlockingDialogs with the whole report the dialogs came in, which
+// also names the command holding Unity's command slot; found is false whenever findBlockingDialogs
+// returns nil.
+func findBlockingDialogReport(ctx context.Context, connection unityipc.Connection, deps dialogWatchDeps) (statusReport, bool) {
+	if deps.probeEditorStatus == nil {
+		return statusReport{}, false
+	}
+	report, err := deps.probeEditorStatus(ctx, connection)
+	if err != nil || report.State != statusStateBlockedByDialog || len(report.Dialogs) == 0 {
+		return statusReport{}, false
+	}
+	return report, true
 }
 
 func probeEditorStatusForDialogs(ctx context.Context, connection unityipc.Connection) (statusReport, error) {

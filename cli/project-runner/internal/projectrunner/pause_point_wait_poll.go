@@ -60,7 +60,7 @@ func waitForPausePoint(
 
 	resumeResult := sideEffects.resumeResult
 	response, state, polledTriggerResult, hasBaseline, err := waitForPausePointStatus(
-		ctx, connection, options, sideEffects.triggerHandle,
+		ctx, connection, options, sideEffects.triggerHandle, resumeResult,
 		sideEffects.baselineSequence, sideEffects.hasBaseline, sideEffects.baselineDecided)
 
 	if state == pausePointWaitStateTriggerFailed && resumeResult != nil && resumeResult.Resumed {
@@ -104,6 +104,7 @@ func waitForPausePointStatus(
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 	triggerHandle *pausePointTriggerHandle,
+	resumeResult *pausePointResumePlayResult,
 	baselineSequence int,
 	hasBaseline bool,
 	baselineDecided bool,
@@ -131,10 +132,11 @@ func waitForPausePointStatus(
 			return state.lastResponse, waitState, state.triggerResult, state.hasBaseline, pollErr
 		}
 		if dialogs := state.dialogWatch.observePoll(waitContext, err == nil); dialogs != nil {
-			// Not safe to retry: the marker and any --trigger stay in effect in Unity.
-			blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
-			blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
-			blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
+			// The trigger may have reported in the same moment; its result decides which error is true.
+			if state.triggerResult == nil {
+				state.triggerResult = receivePausePointTriggerResultNow(triggerDone)
+			}
+			blocked := pausePointWaitBlockedByDialog(options, &state, dialogs, resumeResult)
 			return state.lastResponse, "", state.triggerResult, state.hasBaseline, blocked
 		}
 
@@ -146,15 +148,71 @@ func waitForPausePointStatus(
 			// buffered value, and the caller reuses the result received here instead of joining.
 			state.triggerResult = result
 			triggerDone = nil
-			if pausePointTriggerRejectedBeforeExecution(result) ||
-				pausePointTriggerRejectedByUnityBeforeExecution(result) {
-				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
-					ctx, connection, options.id, state.lastResponse, state.baselineSequence, state.hasBaseline)
-				return abortResponse, abortState, state.triggerResult, state.hasBaseline, nil
+			if response, waitState, done, err := settlePausePointWaitOnTriggerResult(
+				ctx, connection, options, &state, resumeResult); done {
+				return response, waitState, state.triggerResult, state.hasBaseline, err
 			}
 		case <-ticker.C:
 		}
 	}
+}
+
+// receivePausePointTriggerResultNow returns the trigger's result when it is already waiting in done,
+// and nil otherwise, without blocking. done may be nil.
+func receivePausePointTriggerResultNow(done <-chan *pausePointTriggerResult) *pausePointTriggerResult {
+	select {
+	case result := <-done:
+		return result
+	default:
+		return nil
+	}
+}
+
+// pausePointWaitBlockedByDialog is the error of a wait whose own watch found a dialog. It says the
+// trigger was not run only when the look showed the trigger still waiting to run in a request Unity
+// drops once uloop exits; otherwise the marker and any --trigger stay in effect in Unity, so it says
+// the command had started and is not safe to retry.
+func pausePointWaitBlockedByDialog(
+	options waitForPausePointOptions,
+	state *pausePointWaitLoopState,
+	dialogs []statusDialog,
+	resumeResult *pausePointResumePlayResult,
+) blockedByDialogError {
+	if triggerDialogs, notRun := pausePointTriggerNotRunDialogs(state.triggerResult); notRun {
+		return pausePointTriggerNotRunBlockedByDialog(options, triggerDialogs, state.triggerResult, resumeResult)
+	}
+	if state.triggerResult == nil && pausePointTriggerWaitsToRun(state.dialogWatch.lastFoundReport(), options.triggerCommand) {
+		return pausePointTriggerNotRunBlockedByDialog(options, dialogs, nil, resumeResult)
+	}
+	blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
+	blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
+	blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
+	return blocked
+}
+
+// settlePausePointWaitOnTriggerResult ends the wait when the trigger's result shows the trigger
+// performed nothing: rejected before it executed, or kept from running by a dialog. done is false
+// when the wait should go on. Either way the wait first reads the marker once more, because the game
+// itself can hit it in the meantime, and that hit is what the wait reports then.
+func settlePausePointWaitOnTriggerResult(
+	ctx context.Context,
+	connection unityipc.Connection,
+	options waitForPausePointOptions,
+	state *pausePointWaitLoopState,
+	resumeResult *pausePointResumePlayResult,
+) (pausePointStatusResponse, pausePointWaitState, bool, error) {
+	result := state.triggerResult
+	rejected := pausePointTriggerRejectedBeforeExecution(result) || pausePointTriggerRejectedByUnityBeforeExecution(result)
+	dialogs, notRunBehindDialog := pausePointTriggerNotRunDialogs(result)
+	if !rejected && !notRunBehindDialog {
+		return pausePointStatusResponse{}, "", false, nil
+	}
+	response, waitState := abortPausePointWaitAfterTriggerRejection(
+		ctx, connection, options.id, state.lastResponse, state.baselineSequence, state.hasBaseline)
+	if !notRunBehindDialog || waitState != pausePointWaitStateTriggerFailed {
+		return response, waitState, true, nil
+	}
+	return response, "", true, pausePointTriggerNotRunBlockedByDialog(options, dialogs, result, resumeResult)
 }
 
 // applyPausePointWaitPoll records one status query. Why abort on a permanent
