@@ -139,7 +139,9 @@ func TestStartEarlyDialogReportHandsBackOnlyAFreshDialog(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			var clock atomic.Int64
+			// Why by call order: the watch reads the clock once, when Unity took the report, and the
+			// stop reads it once more, so no timing between them decides what each read returns.
+			var clockReads atomic.Int32
 			reported := make(chan struct{})
 			deps := earlyDialogReportDeps{
 				probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
@@ -150,7 +152,12 @@ func TestStartEarlyDialogReportHandsBackOnlyAFreshDialog(t *testing.T) {
 					return nil
 				},
 				waitFor: releasedOnce(),
-				now:     func() time.Time { return time.Unix(0, clock.Load()) },
+				now: func() time.Time {
+					if clockReads.Add(1) == 1 {
+						return time.Unix(0, 0)
+					}
+					return time.Unix(0, 0).Add(testCase.after)
+				},
 			}
 			stop := startEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, 0, deps)
 			select {
@@ -158,7 +165,6 @@ func TestStartEarlyDialogReportHandsBackOnlyAFreshDialog(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("the watch never reported")
 			}
-			clock.Add(int64(testCase.after))
 
 			if got := stop(); (got != nil) != testCase.wantFresh {
 				t.Fatalf("dialogs = %#v, want fresh = %v", got, testCase.wantFresh)
