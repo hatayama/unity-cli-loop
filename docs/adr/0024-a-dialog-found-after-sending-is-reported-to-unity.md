@@ -20,6 +20,11 @@ command `report-blocking-dialog`.
 - While the request holds the command slot, the Editor answers `Busy`. The CLI looks at Unity's
   windows behind that `Busy` once the request has waited for a main thread still for 1 second,
   instead of from the 5-second stall that `uloop status` uses.
+- Only a send whose own request Unity accepted and has not answered is watched, from that accept
+  until the attempt ends; a retry that Unity accepts again is watched afresh. Unity acks a request
+  before it takes the command slot, so a send it then refuses as busy was accepted too: that attempt
+  ends at once and never reports. Why: a report fails whichever request waits for the main thread,
+  and the one holding the slot may be another command's compile that uloop said keeps running.
 - The 30-second limit of ADR 0020 does not change. It still applies when no dialog is reported.
 
 ### Compile
