@@ -11,8 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// Cancels a request that is still waiting for its first main-thread switch once the Editor
     /// main thread has stalled for BlockedStallSeconds, so the CLI gets an answer instead of a
     /// silent wait. When the CLI reports a modal dialog for a command name, the wait of a request of
-    /// that name shrinks to DialogReportedStallSeconds for as long as the main thread has not ticked
-    /// since the report.
+    /// that name that its sender's disconnect would cancel shrinks to DialogReportedStallSeconds for as
+    /// long as the main thread has not ticked since the report.
     /// Never touches a request whose tool code has started.
     /// </summary>
     internal sealed class MainThreadEntryWatchdog : IMainThreadEntryWatchdog
@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(lease != null, "lease must not be null");
 
             double stallSeconds = _liveness.SecondsSinceLastMainThreadTick();
-            if (stallSeconds < BlockedStallSeconds && !IsStalledByReportedDialog(lease.ToolName, stallSeconds))
+            if (stallSeconds < BlockedStallSeconds && !IsStalledByReportedDialog(lease, stallSeconds))
             {
                 return false;
             }
@@ -77,12 +77,15 @@ namespace io.github.hatayama.UnityCliLoop.Application
         // is at least as old as the report exactly when the main thread has not ticked since. A tick
         // after the report means the dialog closed, and whatever stalls the main thread later is not it.
         // Why only a request of the reported name: the report's sender waits for that request's answer
-        // and reads it as not run. A request of another name may be one its sender stopped waiting for
-        // and said keeps running, as compile does; failing it would contradict that.
-        private bool IsStalledByReportedDialog(string toolName, double stallSeconds)
+        // and reads it as not run.
+        // Why only a request its sender's disconnect would cancel: a request that outlives its sender,
+        // such as a default compile, is the only kind the CLI may hang up on and say keeps running once
+        // the dialog closes. The name cannot tell it from a same-named request whose sender still waits.
+        private bool IsStalledByReportedDialog(ToolExecutionLease lease, double stallSeconds)
         {
             DialogReport report = Volatile.Read(ref _dialogReport);
-            if (report == null || report.ToolName != toolName || stallSeconds < DialogReportedStallSeconds)
+            if (report == null || report.ToolName != lease.ToolName || !lease.CancellableByUser ||
+                stallSeconds < DialogReportedStallSeconds)
             {
                 return false;
             }

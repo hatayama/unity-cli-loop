@@ -141,6 +141,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a dialog report fails early only a request that its sender's disconnect would cancel:
+        /// a request that outlives its sender, such as a default compile the CLI said keeps running, keeps
+        /// the 30-second answer even when a report names its command.
+        /// </summary>
+        [TestCase(false, 3.5, false)]
+        [TestCase(false, 30.0, true)]
+        [TestCase(true, 3.5, true)]
+        public void Observe_WithADialogReport_FailsEarlyOnlyARequestItsSenderStillWaitsFor(
+            bool cancellableByUser,
+            double stallSeconds,
+            bool expectCancelled)
+        {
+            ToolExecutionLease lease =
+                new ToolExecutionSession().TryEnter("compile", cancellableByUser: cancellableByUser).Lease;
+            ManualClock clock = new ManualClock();
+            MainThreadEntryWatchdog watchdog =
+                new MainThreadEntryWatchdog(new ScriptedLiveness(stallSeconds), new ManualPolls().WaitOnePoll, clock.GetUtcTicks);
+
+            watchdog.ReportBlockingDialog("compile");
+            clock.AdvanceSeconds(1.5);
+            bool cancelled = watchdog.Observe(lease);
+
+            Assert.That(cancelled, Is.EqualTo(expectCancelled));
+            lease.Dispose();
+        }
+
+        /// <summary>
         /// Verifies a report without a name counts as no report: it does not replace an earlier report,
         /// so the request that report named is still failed after a short stall.
         /// </summary>

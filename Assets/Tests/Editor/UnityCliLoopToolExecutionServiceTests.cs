@@ -656,7 +656,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a reported dialog fails a waiting request as blocked before its tool runs, even one uloop cancel may not stop.
+        /// Verifies a reported dialog fails a waiting request as blocked before its tool runs.
         /// </summary>
         [Test]
         public void ExecuteToolAsync_WhenADialogIsReportedWhileWaiting_ThrowsMainThreadBlockedWithoutRunningTheTool()
@@ -675,7 +675,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ImmediateTool.HolderName,
                     null,
                     CancellationToken.None,
-                    cancellableByUser: false);
+                    cancellableByUser: true);
 
                 executionService.ReportBlockingDialog(ImmediateTool.HolderName);
                 polls.CompleteLatest();
