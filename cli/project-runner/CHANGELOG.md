@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.13.0...uloop-project-runner-v3.13.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* on Windows, a message box from another thread no longer blocks commands, and a dialog hidden by minimizing Unity is still found ([#3498](https://github.com/hatayama/unity-cli-loop/issues/3498)) ([aafca78](https://github.com/hatayama/unity-cli-loop/commit/aafca78269e3e1460fc9880e263ea95172b0f69e))
+
 ## [3.13.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.8...uloop-project-runner-v3.13.0) (2026-11-13)
 
 
