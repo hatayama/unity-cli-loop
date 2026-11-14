@@ -344,6 +344,11 @@ func startUnityAndWaitForReadiness(
 	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid)
 }
 
+// uloopLaunchMarkerArg tells an Editor started by uloop launch apart from one started by
+// Unity Hub or by hand when several Unity processes are running. Unity ignores arguments it
+// does not know, so the marker only shows up in the process command line and Editor.log.
+const uloopLaunchMarkerArg = "-launchedByUloop"
+
 func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 	launchArgs := []string{"-projectPath", projectRoot}
 	if options.platform != "" {
@@ -352,7 +357,7 @@ func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 	if options.logFile != "" {
 		launchArgs = append(launchArgs, "-logFile", options.logFile)
 	}
-	launchArgs = append(launchArgs, "-ignorecompilererrors")
+	launchArgs = append(launchArgs, uloopLaunchMarkerArg)
 	return launchArgs
 }
 

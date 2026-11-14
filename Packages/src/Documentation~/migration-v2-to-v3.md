@@ -38,7 +38,7 @@ On startup, Unity finds the compile errors from the V2 sources and asks whether 
 
 Entering Safe Mode by accident is recoverable. Because the package code does not run in Safe Mode, nothing is recorded about the migration state — restart Unity, press `Ignore`, and the wizard opens as described below.
 
-Launching from the CLI does not avoid this dialog. `uloop launch` shows the same prompt: Unity's `-ignorecompilererrors` switch does not suppress it in GUI mode.
+Launching from the CLI does not avoid this dialog. `uloop launch` shows the same prompt. Unity's `-ignorecompilererrors` switch does not suppress it in GUI mode, so `uloop launch` does not pass it.
 
 ## Step 2: Press Migrate
 
