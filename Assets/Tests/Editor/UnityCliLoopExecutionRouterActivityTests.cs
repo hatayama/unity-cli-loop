@@ -217,7 +217,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// Verifies the report-blocking-dialog answer reaches the main-thread watchdog once, through the
-        /// registrar and the execution service. Without it Unity silently keeps its 30-second answer.
+        /// registrar and the execution service, with the command name the CLI sent. Without it Unity
+        /// silently keeps its 30-second answer.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_ReportBlockingDialog_TellsTheWatchdogOnce()
@@ -235,10 +236,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             await router.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
-                new JObject(),
+                new JObject { ["ToolName"] = "get-logs" },
                 CancellationToken.None);
 
             Assert.That(watchdog.ReportCount, Is.EqualTo(1));
+            Assert.That(watchdog.LastToolName, Is.EqualTo("get-logs"));
         }
 
         /// <summary>
@@ -275,20 +277,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Watchdog that only counts the dialog reports it receives.
+        /// Watchdog that only counts the dialog reports it receives and keeps the last reported name.
         /// </summary>
         private sealed class CountingWatchdog : IMainThreadEntryWatchdog
         {
             public int ReportCount { get; private set; }
+
+            public string LastToolName { get; private set; }
 
             public Task GuardAsync(ToolExecutionLease lease, CancellationToken stop)
             {
                 return Task.CompletedTask;
             }
 
-            public void ReportBlockingDialog()
+            public void ReportBlockingDialog(string toolName)
             {
                 ReportCount++;
+                LastToolName = toolName;
             }
         }
 

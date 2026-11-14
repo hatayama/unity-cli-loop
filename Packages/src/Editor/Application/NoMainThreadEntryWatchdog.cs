@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return Task.CompletedTask;
         }
 
-        public void ReportBlockingDialog()
+        public void ReportBlockingDialog(string toolName)
         {
         }
     }

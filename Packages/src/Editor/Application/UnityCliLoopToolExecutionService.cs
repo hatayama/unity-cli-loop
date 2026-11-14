@@ -132,9 +132,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
         }
 
         // Passes the CLI's dialog sighting to the guard of the requests still waiting for the main thread.
-        internal void ReportBlockingDialog()
+        internal void ReportBlockingDialog(string toolName)
         {
-            _watchdog.ReportBlockingDialog();
+            _watchdog.ReportBlockingDialog(toolName);
         }
 
         // Why convert here: Infrastructure cannot see the Domain result type, so the outcome leaves

@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Why before the main-thread switch below: the report is about a main thread a dialog
                 // holds, so it must be taken without waiting for it.
                 ct.ThrowIfCancellationRequested();
-                return ReportBlockingDialogBridgeCommand.Execute(_toolRegistrarService);
+                return ReportBlockingDialogBridgeCommand.Execute(_toolRegistrarService, paramsToken);
             }
 
             // Why hold an activity for the length of the request: macOS throttles an Editor that is not

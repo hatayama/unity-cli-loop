@@ -677,7 +677,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     CancellationToken.None,
                     cancellableByUser: false);
 
-                executionService.ReportBlockingDialog();
+                executionService.ReportBlockingDialog(ImmediateTool.HolderName);
                 polls.CompleteLatest();
 
                 // Checked first: ThrowsAsync waits on a pending task and would freeze the Editor.
@@ -970,9 +970,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return _inner == null ? Task.CompletedTask : _inner.GuardAsync(lease, stop);
             }
 
-            public void ReportBlockingDialog()
+            public void ReportBlockingDialog(string toolName)
             {
-                _inner?.ReportBlockingDialog();
+                _inner?.ReportBlockingDialog(toolName);
             }
         }
 

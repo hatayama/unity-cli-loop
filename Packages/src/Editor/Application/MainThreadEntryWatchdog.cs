@@ -10,8 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
     /// <summary>
     /// Cancels a request that is still waiting for its first main-thread switch once the Editor
     /// main thread has stalled for BlockedStallSeconds, so the CLI gets an answer instead of a
-    /// silent wait. When the CLI reports a modal dialog, the wait shrinks to
-    /// DialogReportedStallSeconds for as long as the main thread has not ticked since the report.
+    /// silent wait. When the CLI reports a modal dialog for a command name, the wait of a request of
+    /// that name shrinks to DialogReportedStallSeconds for as long as the main thread has not ticked
+    /// since the report.
     /// Never touches a request whose tool code has started.
     /// </summary>
     internal sealed class MainThreadEntryWatchdog : IMainThreadEntryWatchdog
@@ -23,7 +24,6 @@ namespace io.github.hatayama.UnityCliLoop.Application
         // woke it, so a stall this long with a dialog reported is the dialog and not the sleep.
         internal const double DialogReportedStallSeconds = 1;
         internal static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
-        private const long NoDialogReport = long.MinValue;
 
         private readonly IMainThreadLivenessPort _liveness;
         private readonly Func<CancellationToken, Task> _waitOnePoll;
@@ -31,7 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Application
         // EditorMainThreadLivenessTracker, which reads DateTime.UtcNow. Taking the report's age from the
         // same clock keeps "stall >= age" meaning "no tick since the report" even when the clock jumps.
         private readonly Func<long> _getUtcTicks;
-        private long _dialogReportedUtcTicks = NoDialogReport;
+        // Why one immutable value swapped as a whole: reports arrive off the main thread and Observe
+        // reads on a pool thread, so a name and a time kept apart could be read from two reports.
+        private DialogReport _dialogReport;
 
         internal MainThreadEntryWatchdog(
             IMainThreadLivenessPort liveness,
@@ -46,9 +48,15 @@ namespace io.github.hatayama.UnityCliLoop.Application
             _getUtcTicks = getUtcTicks ?? (() => DateTime.UtcNow.Ticks);
         }
 
-        public void ReportBlockingDialog()
+        public void ReportBlockingDialog(string toolName)
         {
-            Interlocked.Exchange(ref _dialogReportedUtcTicks, _getUtcTicks());
+            // Why an empty name is dropped: it names no request, so it must fail none.
+            if (string.IsNullOrEmpty(toolName))
+            {
+                return;
+            }
+
+            Interlocked.Exchange(ref _dialogReport, new DialogReport(toolName, _getUtcTicks()));
         }
 
         // Returns true when the lease was cancelled for a blocked main thread.
@@ -57,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             Debug.Assert(lease != null, "lease must not be null");
 
             double stallSeconds = _liveness.SecondsSinceLastMainThreadTick();
-            if (stallSeconds < BlockedStallSeconds && !IsStalledByReportedDialog(stallSeconds))
+            if (stallSeconds < BlockedStallSeconds && !IsStalledByReportedDialog(lease.ToolName, stallSeconds))
             {
                 return false;
             }
@@ -68,15 +76,18 @@ namespace io.github.hatayama.UnityCliLoop.Application
         // Why compare the stall with the report's age: the stall is the time since the last tick, so it
         // is at least as old as the report exactly when the main thread has not ticked since. A tick
         // after the report means the dialog closed, and whatever stalls the main thread later is not it.
-        private bool IsStalledByReportedDialog(double stallSeconds)
+        // Why only a request of the reported name: the report's sender waits for that request's answer
+        // and reads it as not run. A request of another name may be one its sender stopped waiting for
+        // and said keeps running, as compile does; failing it would contradict that.
+        private bool IsStalledByReportedDialog(string toolName, double stallSeconds)
         {
-            long reportedUtcTicks = Interlocked.Read(ref _dialogReportedUtcTicks);
-            if (reportedUtcTicks == NoDialogReport || stallSeconds < DialogReportedStallSeconds)
+            DialogReport report = Volatile.Read(ref _dialogReport);
+            if (report == null || report.ToolName != toolName || stallSeconds < DialogReportedStallSeconds)
             {
                 return false;
             }
 
-            double secondsSinceReport = (_getUtcTicks() - reportedUtcTicks) / (double)TimeSpan.TicksPerSecond;
+            double secondsSinceReport = (_getUtcTicks() - report.ReportedUtcTicks) / (double)TimeSpan.TicksPerSecond;
             return stallSeconds >= secondsSinceReport;
         }
 
@@ -107,6 +118,20 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     return;
                 }
             }
+        }
+
+        // A dialog the CLI reported: the command name whose request it saw waiting, and when.
+        private sealed class DialogReport
+        {
+            internal DialogReport(string toolName, long reportedUtcTicks)
+            {
+                ToolName = toolName;
+                ReportedUtcTicks = reportedUtcTicks;
+            }
+
+            internal string ToolName { get; }
+
+            internal long ReportedUtcTicks { get; }
         }
     }
 }
