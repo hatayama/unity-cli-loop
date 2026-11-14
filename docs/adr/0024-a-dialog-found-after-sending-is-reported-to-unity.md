@@ -35,18 +35,20 @@ command `report-blocking-dialog`, which carries the name of the command the send
   `compile --no-wait-for-domain-reload`, which waits for its answer and is reported, shares the name
   `compile` with a default compile. Such a run-tests keeps the 30-second answer.
 - When Unity answers `main_thread_blocked` at most 3 seconds after the start of the look whose
-  dialog the watch of that attempt reported, the CLI names that dialog in `BLOCKED_BY_DIALOG` without
-  looking again. Freshness counts from the look because the error names what that look saw. On macOS
-  a look takes about a second, and Unity fails a reported request at its next check, which runs every
-  second, so an answer the report caused arrives about 2 seconds after the look. Unity fails it only
-  while its main thread has not run since the report, so the dialog the look saw usually still holds
-  it. An older answer may have another cause: Unity's own 30-second answer, or a second dialog that
-  opened as the reported one closed, without the main thread running in between, which can happen at
-  any point of the watch and goes unseen for up to a look interval. So freshness from the look, not
-  the 30-second window, decides. A later look that finds no dialog, or a report Unity refuses, drops
-  the dialog; a look or report cut short because Unity answered changes nothing. Without a fresh
-  reported dialog, and for `UNITY_EDITOR_UNRESPONSIVE`, the CLI looks once as before. On macOS that
-  look takes about 2 seconds.
+  dialog the watch of that attempt reported, the CLI names that dialog in `BLOCKED_BY_DIALOG`
+  without looking again. Freshness counts from the look because the error names what that look saw.
+  On macOS the watch's look, one look at Unity's windows, takes about a second, and Unity fails a
+  reported request at its next check, which runs every second, so an answer the report caused
+  arrives about 2 seconds after the look. Unity fails it only while its main thread has not run
+  since the report, so the dialog the look saw usually still holds it. An older answer may have
+  another cause: Unity's own 30-second answer, or a second dialog that opened as the reported one
+  closed, without the main thread running in between, which can happen at any point of the watch and
+  goes unseen for up to a look interval. So freshness from the look, not the 30-second window,
+  decides. A later look that finds no dialog, or a report Unity refuses, drops the dialog; a look or
+  report cut short because Unity answered changes nothing. Without a fresh reported dialog, and for
+  `UNITY_EDITOR_UNRESPONSIVE`, the CLI looks once as before, through the `uloop status` probe. On
+  macOS that probe takes about 2 seconds, because it asks the Editor again after a second before it
+  looks at Unity's windows; that is the time the reuse saves.
 - A send refused as busy, while the request holding the slot waits for a main thread that has been
   still for a second, looks for a dialog once. When it finds one it ends with the same
   `BLOCKED_BY_DIALOG` (`was not run`) as the check before sending, instead of retrying and then
