@@ -37,10 +37,11 @@ Avoid the state instead: never start a frame-waiting snippet while a marker is a
 
 ## A Dialog During a Wait
 
-When a modal dialog holds Unity during `await-pause-point` or `enable-pause-point --await`, the wait ends with `BLOCKED_BY_DIALOG`; the marker stays armed (`Details.PausePointId`). Answer the dialog as `NextActions` says (see the `uloop-status` skill's dialog reference), then take the last step:
+A wait (`await-pause-point` or `enable-pause-point --await`) that a modal dialog stops ends with `BLOCKED_BY_DIALOG`, and the marker stays armed (`Details.PausePointId`). A hit the wait reads before giving up is still reported as a hit instead. Answer the dialog as `NextActions` says (see the `uloop-status` skill's dialog reference), then take the last step:
 
 - `Details.CommandNotRun: true` (Message: `its --trigger command was not run`): the trigger never ran, so wait again with the same `--trigger`. If `--resume-play` had resumed PlayMode (`Details.ResumePlayResult.Resumed`), PlayMode keeps playing after the dialog closes; pause it with `uloop control-play-mode --action Pause` first when the wait must start paused, and pass `--resume-play` again.
-- No `CommandNotRun`: the trigger had started or may still run once the dialog closes. Check `uloop pause-point-status` first, and wait again without `--trigger` so it is not sent twice.
+- A wait with `--trigger` and no `CommandNotRun`: the trigger had started or may still run once the dialog closes. Check `uloop pause-point-status` first, and wait again without `--trigger` so it is not sent twice.
+- A wait without `--trigger`: check `uloop pause-point-status`, and wait again if the marker is still waiting.
 
 ## Locating Where Control Flow Stops
 
