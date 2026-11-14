@@ -86,8 +86,9 @@ func startEarlyDialogReport(
 }
 
 // runEarlyDialogReport looks once after earlyDialogLookDelay and then every interval, until the
-// window ends, ctx is done, or Unity does not take the report. It returns the dialogs of the last
-// completed look when that look found them and Unity took their report, and nil otherwise.
+// window ends, ctx is done, or Unity does not take the report. When ctx ends it, it returns the
+// dialogs of the last completed look when that look found them and Unity took their report; it
+// returns nil otherwise.
 // Why a look or report cut short by ctx changes nothing: it ends because Unity answered, and that
 // answer came for an earlier report, whose dialogs are the ones to name.
 // Why the reported dialogs may name Unity's not-run answer: Unity fails a request for a report only
@@ -128,7 +129,9 @@ func runEarlyDialogReport(
 		// error every time, and that package keeps its 30-second answer.
 		return nil
 	}
-	return reported
+	// Why nothing once the window ends: no look runs after it, so the dialog may close, and an
+	// answer that comes later is Unity's own 30-second one, not one for a report.
+	return nil
 }
 
 // ownCommandHoldingDialogs returns the dialogs the probe finds holding Unity while a command named

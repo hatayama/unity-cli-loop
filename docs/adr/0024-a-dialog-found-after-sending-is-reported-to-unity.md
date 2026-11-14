@@ -37,8 +37,9 @@ command `report-blocking-dialog`, which carries the name of the command the send
 - When Unity answers `main_thread_blocked` and the watch of that attempt reported a dialog at its
   last completed look, the CLI names that dialog in `BLOCKED_BY_DIALOG` without looking again. This
   is safe because Unity fails a request for a report only while its main thread has not run since the
-  report, so the dialog seen then still holds it. A later look that finds no dialog, or a report Unity
-  refuses, drops it; a look or report cut short because Unity answered changes nothing. Without a
+  report, so the dialog seen then still holds it. A later look that finds no dialog, a report Unity
+  refuses, or the end of the 30-second window drops it; a look or report cut short because Unity
+  answered changes nothing. Without a
   reported dialog, and for `UNITY_EDITOR_UNRESPONSIVE`, the CLI looks once as before. On macOS that
   look takes about 2 seconds.
 - A send refused as busy, while the request holding the slot waits for a main thread that has been

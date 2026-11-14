@@ -267,11 +267,9 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 			once.Do(func() { close(reported) })
 			return nil
 		},
-		waitFor: func(time.Duration) <-chan time.Time {
-			released := make(chan time.Time, 1)
-			released <- time.Time{}
-			return released
-		},
+		// Why only the first wait fires: the watch must still be open when Unity answers, as it is
+		// when Unity answers about a second after the report.
+		waitFor: releasedOnce(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -21,6 +21,34 @@ func releasedAtOnce(time.Duration) <-chan time.Time {
 	return released
 }
 
+// runUntilAnswered runs the watch until it has looked looks times, then ends it the way Unity's
+// answer does: the stop cancels it while it waits for its next look.
+func runUntilAnswered(script *earlyDialogReportScript, looks int) []statusDialog {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := script.deps()
+	deps.waitFor = func(wait time.Duration) <-chan time.Time {
+		if script.probes >= looks {
+			cancel()
+			return make(chan time.Time)
+		}
+		return releasedAtOnce(wait)
+	}
+	return runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second)
+}
+
+// releasedOnce releases the first wait at once and never the later ones, so a watch looks once and
+// then waits until it is stopped.
+func releasedOnce() func(time.Duration) <-chan time.Time {
+	var calls atomic.Int32
+	return func(wait time.Duration) <-chan time.Time {
+		if calls.Add(1) == 1 {
+			return releasedAtOnce(wait)
+		}
+		return make(chan time.Time)
+	}
+}
+
 func otherBlockingDialog() statusDialog {
 	return statusDialog{Title: "Another dialog", Message: "Close me", Buttons: []string{"OK"}}
 }
@@ -31,10 +59,24 @@ func TestEarlyDialogReportHandsBackTheDialogOfItsLastReport(t *testing.T) {
 	dialog := commandDialogPlayerStoppedDialog()
 	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)}}
 
-	found := script.run(10 * time.Second)
+	found := runUntilAnswered(script, 2)
 
 	if !reflect.DeepEqual(found, []statusDialog{dialog}) {
 		t.Fatalf("found = %#v, want the reported dialog", found)
+	}
+}
+
+// Verifies a watch whose window ended hands back nothing: no look runs after the window, so the
+// dialog may have closed, and a later answer is Unity's own 30-second one rather than one for a report.
+func TestEarlyDialogReportHandsBackNothingOnceItsWindowEnds(t *testing.T) {
+	script := &earlyDialogReportScript{reports: []statusReport{
+		heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()),
+	}}
+
+	found := script.run(10 * time.Second)
+
+	if found != nil || script.sent != 3 {
+		t.Fatalf("found = %#v, reports sent = %d, want nothing after three reports", found, script.sent)
 	}
 }
 
@@ -46,7 +88,7 @@ func TestEarlyDialogReportForgetsADialogTheLastLookNoLongerFinds(t *testing.T) {
 		readyStatusReport(),
 	}}
 
-	found := script.run(10 * time.Second)
+	found := runUntilAnswered(script, 2)
 
 	if found != nil || script.sent != 1 {
 		t.Fatalf("found = %#v, reports sent = %d, want nothing after one report", found, script.sent)
@@ -66,7 +108,7 @@ func TestEarlyDialogReportHandsBackNothingWithoutADialog(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			script := &earlyDialogReportScript{reports: []statusReport{testCase.report}}
 
-			if found := script.run(10 * time.Second); found != nil {
+			if found := runUntilAnswered(script, 2); found != nil {
 				t.Fatalf("found = %#v, want nothing", found)
 			}
 		})
@@ -81,7 +123,7 @@ func TestEarlyDialogReportHandsBackNothingWhenUnityDoesNotTakeTheReport(t *testi
 		reportErr: errors.New("Unknown tool: report-blocking-dialog"),
 	}
 
-	if found := script.run(10 * time.Second); found != nil {
+	if found := runUntilAnswered(script, 2); found != nil {
 		t.Fatalf("found = %#v, want nothing", found)
 	}
 }
@@ -254,7 +296,7 @@ func TestSendDoesNotCarryAReportedDialogIntoTheNextAttempt(t *testing.T) {
 			once.Do(func() { close(reported) })
 			return nil
 		},
-		waitFor: releasedAtOnce,
+		waitFor: releasedOnce(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
