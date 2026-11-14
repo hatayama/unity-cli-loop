@@ -25,6 +25,9 @@ command `report-blocking-dialog`.
   before it takes the command slot, so a send it then refuses as busy was accepted too: that attempt
   ends at once and never reports. Why: a report fails whichever request waits for the main thread,
   and the one holding the slot may be another command's compile that uloop said keeps running.
+  A busy answer may arrive late, so the watch also reports only when the Editor names a command of
+  the same name as the send's as the slot holder. A compile send is never watched, so a held compile
+  is never failed by a report, however late the busy answer comes.
 - A send refused as busy, while the request holding the slot waits for a main thread that has been
   still for a second, looks for a dialog once. When it finds one it ends with the same
   `BLOCKED_BY_DIALOG` (`was not run`) as the check before sending, instead of retrying and then
