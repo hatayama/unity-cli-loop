@@ -7,10 +7,12 @@ Date: 2026-11-14
 While a sent request is still unanswered, the CLI looks at the Editor 2 seconds after sending and
 then at the dialog-check interval (10 seconds, 30 seconds while a pause point holds) until 30
 seconds have passed. When it finds a modal dialog, it tells Unity through the internal bridge
-command `report-blocking-dialog`.
+command `report-blocking-dialog`, which carries the name of the command the send was for.
 
-- Unity then fails a request that has not entered its tool code with `main_thread_blocked`, as soon
-  as its main thread has not ticked since the report and has been still for at least 1 second. The
+- Unity then fails a request of that command that has not entered its tool code with
+  `main_thread_blocked`, as soon as its main thread has not ticked since the report and has been
+  still for at least 1 second. Requests of other commands keep the 30-second answer. A report
+  without a name counts as no report. The
   CLI turns that answer into `BLOCKED_BY_DIALOG` with a Message that says the command `was not run`.
 - A request whose tool code has started is left alone, as before.
 - The CLI never hangs up on the request itself. It keeps waiting on the same connection for Unity's
@@ -23,11 +25,13 @@ command `report-blocking-dialog`.
 - Only a send whose own request Unity accepted and has not answered is watched, from that accept
   until the attempt ends; a retry that Unity accepts again is watched afresh. Unity acks a request
   before it takes the command slot, so a send it then refuses as busy was accepted too: that attempt
-  ends at once and never reports. Why: a report fails whichever request waits for the main thread,
-  and the one holding the slot may be another command's compile that uloop said keeps running.
-  A busy answer may arrive late, so the watch also reports only when the Editor names a command of
-  the same name as the send's as the slot holder. A compile send is never watched, so a held compile
-  is never failed by a report, however late the busy answer comes.
+  ends at once and never reports. The watch also reports only when the Editor names a command of the
+  send's name as the slot holder, so it does not send a report that could fail nothing.
+- Invariant: a send with a response timeout (today only `compile`) is never watched and never
+  reports, so a request of its name is never failed early by a report. Such a send hangs up and
+  tells the user the command keeps running once the dialog closes; this invariant keeps that true.
+  Unity enforces it by the reported name, not the CLI by timing, because the command slot can change
+  hands between the CLI's look and its report, and a busy answer can arrive late.
 - A send refused as busy, while the request holding the slot waits for a main thread that has been
   still for a second, looks for a dialog once. When it finds one it ends with the same
   `BLOCKED_BY_DIALOG` (`was not run`) as the check before sending, instead of retrying and then
