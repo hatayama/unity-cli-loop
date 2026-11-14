@@ -297,7 +297,12 @@ func TestSendReportBlockingDialogNamesTheCommand(t *testing.T) {
 
 	err := sendReportBlockingDialog(context.Background(), connection, "get-logs")
 
-	request := <-received
+	var request scriptedIPCRequest
+	select {
+	case request = <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("err = %v, want Unity to receive the report", err)
+	}
 	if err != nil || request.method != reportBlockingDialogBridgeCommandName || request.params["ToolName"] != "get-logs" {
 		t.Fatalf("err = %v, method = %q, params = %v, want the report naming get-logs", err, request.method, request.params)
 	}
