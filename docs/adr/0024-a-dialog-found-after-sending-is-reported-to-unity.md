@@ -25,6 +25,10 @@ command `report-blocking-dialog`.
   before it takes the command slot, so a send it then refuses as busy was accepted too: that attempt
   ends at once and never reports. Why: a report fails whichever request waits for the main thread,
   and the one holding the slot may be another command's compile that uloop said keeps running.
+- A send refused as busy, while the request holding the slot waits for a main thread that has been
+  still for a second, looks for a dialog once. When it finds one it ends with the same
+  `BLOCKED_BY_DIALOG` (`was not run`) as the check before sending, instead of retrying and then
+  answering `UNITY_SERVER_BUSY`. It only looks and never reports, so the holder is not failed.
 - The 30-second limit of ADR 0020 does not change. It still applies when no dialog is reported.
 
 ### Compile
@@ -73,6 +77,8 @@ opened took 32.5 seconds to answer on macOS.
   answers early with it too.
 - On Linux before Unity 6000.7 the CLI cannot look at Unity's windows, so other commands keep the
   30-second answer and `compile` keeps its earlier answer.
+- A command sent while a dialog-stopped compile holds the slot answers `BLOCKED_BY_DIALOG` in about
+  1 second (measured on macOS) instead of `UNITY_SERVER_BUSY` after about 10 seconds of retries.
 - When the main thread stops for 1 second or more right after a dialog closes, for some other work,
   a request that was waiting may fail once; `SafeToRetry` says it can be run again.
 - `report-blocking-dialog` is a new internal bridge command, so the protocol version does not change.
