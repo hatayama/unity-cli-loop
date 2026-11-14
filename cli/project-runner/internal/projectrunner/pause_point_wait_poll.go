@@ -138,7 +138,7 @@ func waitForPausePointStatus(
 		}
 		if dialogs := state.dialogWatch.observePoll(waitContext, err == nil); dialogs != nil {
 			response, waitState, waitErr := finishPausePointWaitBehindDialog(
-				ctx, connection, options, &state, triggerDone, dialogs, resumeResult)
+				ctx, waitContext, connection, options, &state, triggerDone, dialogs, resumeResult)
 			return response, waitState, state.triggerResult, state.hasBaseline, waitErr
 		}
 
@@ -160,8 +160,12 @@ func waitForPausePointStatus(
 }
 
 // receivePausePointTriggerResultWithin returns the trigger's result when it arrives in done within
-// wait, and nil otherwise. A nil done returns nil at once.
-func receivePausePointTriggerResultWithin(done <-chan *pausePointTriggerResult, wait time.Duration) *pausePointTriggerResult {
+// wait and before ctx ends, and nil otherwise. A nil done returns nil at once.
+func receivePausePointTriggerResultWithin(
+	ctx context.Context,
+	done <-chan *pausePointTriggerResult,
+	wait time.Duration,
+) *pausePointTriggerResult {
 	if done == nil {
 		return nil
 	}
@@ -172,15 +176,19 @@ func receivePausePointTriggerResultWithin(done <-chan *pausePointTriggerResult, 
 		return result
 	case <-timer.C:
 		return nil
+	case <-ctx.Done():
+		return nil
 	}
 }
 
 // finishPausePointWaitBehindDialog ends a wait whose own watch found a dialog. It says the trigger was
 // not run only when the trigger itself reports so, the way a trigger result in the poll loop does;
 // every other case says the command had started, because the marker and any --trigger stay in effect
-// in Unity, and is not safe to retry.
+// in Unity, and is not safe to retry. waitContext bounds the wait for the trigger's result, so it ends
+// with --timeout-seconds or a cancel; ctx is the caller's, for the final marker read.
 func finishPausePointWaitBehindDialog(
 	ctx context.Context,
+	waitContext context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 	state *pausePointWaitLoopState,
@@ -190,7 +198,7 @@ func finishPausePointWaitBehindDialog(
 ) (pausePointStatusResponse, pausePointWaitState, error) {
 	if state.triggerResult == nil {
 		state.triggerResult = awaitPausePointTriggerResultBehindDialog(
-			ctx, connection, options, state.dialogWatch.lastFoundReport(), triggerDone)
+			waitContext, connection, options, state.dialogWatch.lastFoundReport(), triggerDone)
 	}
 	if response, waitState, done, err := settlePausePointWaitOnTriggerResult(
 		ctx, connection, options, state, resumeResult); done {
@@ -227,7 +235,7 @@ func awaitPausePointTriggerResultBehindDialog(
 		_ = options.dialogWatch.reportBlockingDialog(ctx, connection, options.triggerCommand)
 		wait = pausePointTriggerNotRunConfirmWait
 	}
-	return receivePausePointTriggerResultWithin(triggerDone, wait)
+	return receivePausePointTriggerResultWithin(ctx, triggerDone, wait)
 }
 
 // settlePausePointWaitOnTriggerResult ends the wait when the trigger's result shows the trigger

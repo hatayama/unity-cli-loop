@@ -431,3 +431,34 @@ func TestDefaultDialogWatchDependenciesReportDialogsForTheTrigger(t *testing.T) 
 		t.Fatal("reportBlockingDialog is nil, want the report to Unity")
 	}
 }
+
+// Verifies the wait for Unity's answer to a dialog report ends with the wait's own deadline instead of
+// running past --timeout-seconds for the whole confirmation wait.
+func TestPausePointWaitStopsWaitingForUnitysAnswerAtItsDeadline(t *testing.T) {
+	useUnityProcessLookup(t, runningUnityProcessLookup)
+	originalConfirmWait := pausePointTriggerNotRunConfirmWait
+	pausePointTriggerNotRunConfirmWait = 10 * time.Second
+	t.Cleanup(func() { pausePointTriggerNotRunConfirmWait = originalConfirmWait })
+	unity := &triggerDialogUnity{}
+	deps := triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase).deps()
+	deps.reportBlockingDialog = unity.report
+	handle := &pausePointTriggerHandle{command: "execute-dynamic-code", done: make(chan *pausePointTriggerResult, 1)}
+	options := waitForPausePointOptions{
+		id:             triggerDialogPausePointID,
+		timeout:        time.Second,
+		dialogWatch:    deps,
+		triggerCommand: "execute-dynamic-code",
+	}
+
+	startedAt := time.Now()
+	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+	elapsed := time.Since(startedAt)
+
+	if len(unity.reported) != 1 {
+		t.Fatalf("reported = %#v, want the dialog reported once", unity.reported)
+	}
+	if elapsed >= 3*time.Second {
+		t.Fatalf("waited %v, want the wait to end near its 1s deadline", elapsed)
+	}
+	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName), triggerDialogStartedStep, false)
+}
