@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -238,6 +239,8 @@ type triggerDialogUnity struct {
 	reported []string
 	answer   *pausePointTriggerResult
 	handle   *pausePointTriggerHandle
+	// preset is a result the trigger reported before the wait started.
+	preset *pausePointTriggerResult
 }
 
 func (unity *triggerDialogUnity) report(_ context.Context, _ unityipc.Connection, toolName string) error {
@@ -252,8 +255,8 @@ func (unity *triggerDialogUnity) report(_ context.Context, _ unityipc.Connection
 	return nil
 }
 
-// waitForPausePointBehindDialog runs the poll loop against an Editor that answers nothing while the
-// look finds a dialog, with a trigger that has not reported (or has reported result).
+// waitForPausePointBehindDialog is waitForPausePointStatusBehindDialog for a trigger that may have
+// reported already, returning only the error.
 func waitForPausePointBehindDialog(
 	t *testing.T,
 	look *fakeDialogLook,
@@ -261,6 +264,20 @@ func waitForPausePointBehindDialog(
 	result *pausePointTriggerResult,
 	unity *triggerDialogUnity,
 ) error {
+	t.Helper()
+	unity.preset = result
+	_, _, err := waitForPausePointStatusBehindDialog(t, look, triggerCommand, unity)
+	return err
+}
+
+// waitForPausePointStatusBehindDialog runs the poll loop against an Editor that answers nothing while the
+// look finds a dialog, with a trigger that has not reported (or has reported unity.preset).
+func waitForPausePointStatusBehindDialog(
+	t *testing.T,
+	look *fakeDialogLook,
+	triggerCommand string,
+	unity *triggerDialogUnity,
+) (pausePointStatusResponse, pausePointWaitState, error) {
 	t.Helper()
 	useUnityProcessLookup(t, runningUnityProcessLookup)
 	originalConfirmWait := pausePointTriggerNotRunConfirmWait
@@ -277,13 +294,13 @@ func waitForPausePointBehindDialog(
 	var handle *pausePointTriggerHandle
 	if triggerCommand != "" {
 		handle = &pausePointTriggerHandle{command: triggerCommand, done: make(chan *pausePointTriggerResult, 1)}
-		if result != nil {
-			handle.done <- result
+		if unity.preset != nil {
+			handle.done <- unity.preset
 		}
 	}
 	unity.handle = handle
-	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
-	return err
+	response, state, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+	return response, state, err
 }
 
 // Verifies a dialog the wait's own watch finds while its trigger still waits for the main thread is
@@ -461,4 +478,34 @@ func TestPausePointWaitStopsWaitingForUnitysAnswerAtItsDeadline(t *testing.T) {
 		t.Fatalf("waited %v, want the wait to end near its 1s deadline", elapsed)
 	}
 	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName), triggerDialogStartedStep, false)
+}
+
+// Verifies a hit recorded while the wait waited for Unity's answer is reported as the hit: a trigger
+// result that arrives then means the main thread ran, so the wait reads the marker once more before it
+// reports the dialog.
+func TestPausePointWaitReportsAHitRecordedWhileItWaitedForTheTrigger(t *testing.T) {
+	useUnityProcessLookup(t, runningUnityProcessLookup)
+	originalQuery := queryPausePointStatus
+	t.Cleanup(func() { queryPausePointStatus = originalQuery })
+	lookDone := false
+	queryPausePointStatus = func(context.Context, unityipc.Connection, string) (pausePointStatusResponse, error) {
+		if !lookDone {
+			return pausePointStatusResponse{}, errors.New("status query timed out")
+		}
+		return pausePointStatusResponse{Id: triggerDialogPausePointID, Status: pausePointStatusHit, HitCount: 1}, nil
+	}
+	succeeded := &pausePointTriggerResult{Command: "execute-dynamic-code", Completed: true, Response: []byte(`{"Success":true}`)}
+	unity := &triggerDialogUnity{answer: succeeded}
+	look := triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase)
+	setReport := look.report
+	look.report = func(report statusReport) statusReport {
+		lookDone = true
+		return setReport(report)
+	}
+
+	response, state, err := waitForPausePointStatusBehindDialog(t, look, "execute-dynamic-code", unity)
+
+	if err != nil || state != pausePointWaitStateHit || response.HitCount != 1 {
+		t.Fatalf("state = %q, err = %v, response = %#v, want the recorded hit", state, err, response)
+	}
 }

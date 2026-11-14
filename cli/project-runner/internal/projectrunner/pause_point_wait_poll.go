@@ -204,6 +204,16 @@ func finishPausePointWaitBehindDialog(
 		ctx, connection, options, state, resumeResult); done {
 		return response, waitState, err
 	}
+	// A trigger result that came in means Unity's main thread ran since the look, so the dialog may be
+	// gone and the marker hit; that hit is what the wait reports then. Why not without a result: the
+	// dialog still holds the main thread then, so the read would only wait out its timeout.
+	if state.triggerResult != nil {
+		response, waitState, hasResponse, _ := queryPausePointStatusAtTimeout(
+			ctx, connection, options.id, state.baselineSequence, state.hasBaseline)
+		if hasResponse && waitState != "" {
+			return response, waitState, nil
+		}
+	}
 	blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
 	blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
 	blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
