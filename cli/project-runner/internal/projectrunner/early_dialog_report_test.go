@@ -17,8 +17,11 @@ import (
 // earlyDialogReportScript drives runEarlyDialogReport by hand: every wait the watch asks for is
 // recorded and released at once, the probe answers from reports in order (repeating the last), and
 // the watch's context is cancelled when the looks run out, the way an answered request ends it.
+// Its clock moves by each wait and by probeCost at each look.
 type earlyDialogReportScript struct {
 	reports   []statusReport
+	clock     time.Time
+	probeCost time.Duration
 	probeErr  error
 	reportErr error
 	waits     []time.Duration
@@ -32,6 +35,7 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
 			report := script.reports[min(script.probes, len(script.reports)-1)]
 			script.probes++
+			script.clock = script.clock.Add(script.probeCost)
 			return report, script.probeErr
 		},
 		reportBlockingDialog: func(_ context.Context, _ unityipc.Connection, toolName string) error {
@@ -41,14 +45,16 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 		},
 		waitFor: func(wait time.Duration) <-chan time.Time {
 			script.waits = append(script.waits, wait)
+			script.clock = script.clock.Add(wait)
 			released := make(chan time.Time, 1)
 			released <- time.Time{}
 			return released
 		},
+		now: func() time.Time { return script.clock },
 	}
 }
 
-func (script *earlyDialogReportScript) run(interval time.Duration) []statusDialog {
+func (script *earlyDialogReportScript) run(interval time.Duration) earlyDialogFinding {
 	return runEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, script.deps(), interval)
 }
 
@@ -98,8 +104,7 @@ func readyStatusReport() statusReport {
 }
 
 // Verifies the watch tells Unity about a dialog at each look that finds one, first after the short
-// delay and then at the interval, and stops looking before Unity's own 30-second answer, waiting out
-// the rest of the window while it holds a reported dialog.
+// delay and then at the interval, and stops looking before Unity's own 30-second answer.
 func TestEarlyDialogReportTellsUnityAtEachLookThatFindsADialog(t *testing.T) {
 	script := &earlyDialogReportScript{reports: []statusReport{
 		readyStatusReport(),
@@ -108,8 +113,7 @@ func TestEarlyDialogReportTellsUnityAtEachLookThatFindsADialog(t *testing.T) {
 
 	script.run(10 * time.Second)
 
-	// Why the last 8 seconds: the reported dialog is kept until the 30-second window ends.
-	wantWaits := []time.Duration{earlyDialogLookDelay, 10 * time.Second, 10 * time.Second, 8 * time.Second}
+	wantWaits := []time.Duration{earlyDialogLookDelay, 10 * time.Second, 10 * time.Second}
 	if len(script.waits) != len(wantWaits) {
 		t.Fatalf("waits = %v, want %v", script.waits, wantWaits)
 	}
@@ -272,6 +276,7 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 		// Why only the first wait fires: the watch must still be open when Unity answers, as it is
 		// when Unity answers about a second after the report.
 		waitFor: releasedOnce(),
+		now:     time.Now,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

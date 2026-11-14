@@ -29,8 +29,31 @@ const (
 	reportBlockingDialogTimeout = 5 * time.Second
 )
 
+// earlyDialogFoundFreshness is how long after Unity took a report the reported dialogs may still name
+// Unity's main_thread_blocked answer.
+// Why: Unity fails a reported request at its next check, which runs every second, so an answer the
+// report caused arrives about a second after it; 3 seconds leaves room for that. An older answer may
+// have another cause, such as Unity's own 30-second answer or a dialog that opened after the reported
+// one closed without the main thread running in between, so it is looked up again.
+const earlyDialogFoundFreshness = 3 * time.Second
+
+// earlyDialogFinding is the dialogs a watch last reported and when Unity took that report.
+type earlyDialogFinding struct {
+	dialogs    []statusDialog
+	reportedAt time.Time
+}
+
+// freshDialogs returns the dialogs when now is at most earlyDialogFoundFreshness after Unity took
+// their report, and nil otherwise.
+func (finding earlyDialogFinding) freshDialogs(now time.Time) []statusDialog {
+	if finding.dialogs == nil || now.Sub(finding.reportedAt) > earlyDialogFoundFreshness {
+		return nil
+	}
+	return finding.dialogs
+}
+
 // earlyDialogReportDeps is how the send looks for a dialog that opened after the check before
-// sending. A nil probe or report turns it off, so only the default dependencies look.
+// sending. A nil probe, report, or clock turns it off, so only the default dependencies look.
 type earlyDialogReportDeps struct {
 	// probeEditorStatus reads the Editor the way the check before sending does.
 	probeEditorStatus func(context.Context, unityipc.Connection) (statusReport, error)
@@ -38,6 +61,7 @@ type earlyDialogReportDeps struct {
 	// named command waits.
 	reportBlockingDialog func(context.Context, unityipc.Connection, string) error
 	waitFor              func(time.Duration) <-chan time.Time
+	now                  func() time.Time
 }
 
 func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
@@ -45,12 +69,15 @@ func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
 		probeEditorStatus:    probeEditorStatusWhileUnanswered,
 		reportBlockingDialog: sendReportBlockingDialog,
 		waitFor:              time.After,
+		now:                  time.Now,
 	}
 }
 
 // startEarlyDialogReport watches one sent request for a dialog that opened after the check before
 // sending, and returns the function that ends the watch, waits for it to stop, and hands back the
-// dialogs the watch last reported (see runEarlyDialogReport), or nil.
+// dialogs the watch last reported when Unity took that report at most earlyDialogFoundFreshness
+// before the stop, or nil. The send stops the watch as soon as Unity answers, so the stop stands for
+// the time of the answer.
 // It only tells Unity about the dialog. Unity then answers the request with main_thread_blocked if
 // its tool code has not started, and leaves it alone if it has.
 // Why uloop never ends the wait itself here: hanging up on a request Unity has not started does not
@@ -66,13 +93,13 @@ func startEarlyDialogReport(
 	responseTimeout time.Duration,
 	deps earlyDialogReportDeps,
 ) func() []statusDialog {
-	if deps.probeEditorStatus == nil || deps.reportBlockingDialog == nil || internalBridgeMethods[method] ||
-		responseTimeout > 0 {
+	if deps.probeEditorStatus == nil || deps.reportBlockingDialog == nil || deps.now == nil ||
+		internalBridgeMethods[method] || responseTimeout > 0 {
 		return func() []statusDialog { return nil }
 	}
 	watchCtx, cancel := context.WithCancel(ctx)
 	stopped := make(chan struct{})
-	var reported []statusDialog
+	var reported earlyDialogFinding
 	go func() {
 		defer close(stopped)
 		reported = runEarlyDialogReport(watchCtx, connection, method, deps, heartbeatDialogInterval(ctx))
@@ -81,30 +108,26 @@ func startEarlyDialogReport(
 		cancel()
 		// Why no lock: reported is written only before stopped closes.
 		<-stopped
-		return reported
+		return reported.freshDialogs(deps.now())
 	}
 }
 
 // runEarlyDialogReport looks once after earlyDialogLookDelay and then every interval, until the
-// window ends, ctx is done, or Unity does not take the report. When ctx ends it, it returns the
-// dialogs of the last completed look when that look found them and Unity took their report; it
-// returns nil otherwise.
+// window ends, ctx is done, or Unity does not take the report. It returns the dialogs of the last
+// completed look and when Unity took their report, when that look found them and Unity took it; it
+// returns an empty finding otherwise.
 // Why a look or report cut short by ctx changes nothing: it ends because Unity answered, and that
 // answer came for an earlier report, whose dialogs are the ones to name.
-// Why the reported dialogs may name Unity's not-run answer: Unity fails a request for a report only
-// while its main thread has not run since the report, so the dialog seen then still holds it.
 func runEarlyDialogReport(
 	ctx context.Context,
 	connection unityipc.Connection,
 	method string,
 	deps earlyDialogReportDeps,
 	interval time.Duration,
-) []statusDialog {
-	var reported []statusDialog
+) earlyDialogFinding {
+	var reported earlyDialogFinding
 	wait := earlyDialogLookDelay
-	lastLook := earlyDialogLookDelay
 	for elapsed := earlyDialogLookDelay; elapsed < earlyDialogLookWindow; elapsed += interval {
-		lastLook = elapsed
 		select {
 		case <-ctx.Done():
 			return reported
@@ -116,12 +139,12 @@ func runEarlyDialogReport(
 			return reported
 		}
 		if dialogs == nil {
-			reported = nil
+			reported = earlyDialogFinding{}
 			continue
 		}
 		err := deps.reportBlockingDialog(ctx, connection, method)
 		if err == nil {
-			reported = dialogs
+			reported = earlyDialogFinding{dialogs: dialogs, reportedAt: deps.now()}
 			continue
 		}
 		if ctx.Err() != nil {
@@ -129,32 +152,9 @@ func runEarlyDialogReport(
 		}
 		// Why stop on a failed report: a Unity package older than this command answers it with an
 		// error every time, and that package keeps its 30-second answer.
-		return nil
+		return earlyDialogFinding{}
 	}
-	return keepReportedUntilWindowEnds(ctx, reported, earlyDialogLookWindow-lastLook, deps.waitFor)
-}
-
-// keepReportedUntilWindowEnds hands back reported when ctx ends within remaining, and nil once
-// remaining has passed.
-// Why wait out the window after the last look: Unity answers a report about a second after it, and
-// with a long interval, as for a pause-point trigger, the last look can come long before the window
-// ends. Why nothing once the window ends: no look runs after it, so the dialog may close, and an
-// answer that comes later is Unity's own 30-second one, not one for a report.
-func keepReportedUntilWindowEnds(
-	ctx context.Context,
-	reported []statusDialog,
-	remaining time.Duration,
-	waitFor func(time.Duration) <-chan time.Time,
-) []statusDialog {
-	if reported == nil {
-		return nil
-	}
-	select {
-	case <-ctx.Done():
-		return reported
-	case <-waitFor(remaining):
-		return nil
-	}
+	return reported
 }
 
 // ownCommandHoldingDialogs returns the dialogs the probe finds holding Unity while a command named

@@ -56,6 +56,7 @@ func (gated *gatedEarlyDialogReport) deps() earlyDialogReportDeps {
 			}()
 			return fired
 		},
+		now: time.Now,
 	}
 }
 

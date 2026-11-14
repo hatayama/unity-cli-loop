@@ -24,10 +24,6 @@ func releasedAtOnce(time.Duration) <-chan time.Time {
 // runUntilAnswered runs the watch until it has looked looks times, then ends it the way Unity's
 // answer does: the stop cancels it while it waits for its next look.
 func runUntilAnswered(script *earlyDialogReportScript, looks int) []statusDialog {
-	return runUntilAnsweredAtInterval(script, looks, 10*time.Second)
-}
-
-func runUntilAnsweredAtInterval(script *earlyDialogReportScript, looks int, interval time.Duration) []statusDialog {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	deps := script.deps()
@@ -38,7 +34,7 @@ func runUntilAnsweredAtInterval(script *earlyDialogReportScript, looks int, inte
 		}
 		return releasedAtOnce(wait)
 	}
-	return runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, interval)
+	return runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second).dialogs
 }
 
 // releasedOnce releases the first wait at once and never the later ones, so a watch looks once and
@@ -70,30 +66,104 @@ func TestEarlyDialogReportHandsBackTheDialogOfItsLastReport(t *testing.T) {
 	}
 }
 
-// Verifies a watch whose last look came long before its window ends, as at the pause-point interval,
-// still hands back the reported dialog when Unity answers after that look.
-func TestEarlyDialogReportKeepsTheReportedDialogUntilItsWindowEnds(t *testing.T) {
+// Verifies the reported dialogs name an answer that arrives up to 3 seconds after Unity took the
+// report, the time a report-caused answer needs, and not a later one, which may have another cause.
+func TestEarlyDialogFindingNamesOnlyAnAnswerSoonAfterTheReport(t *testing.T) {
+	reportedAt := time.Unix(100, 0)
 	dialog := commandDialogPlayerStoppedDialog()
-	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)}}
+	finding := earlyDialogFinding{dialogs: []statusDialog{dialog}, reportedAt: reportedAt}
+	cases := []struct {
+		name      string
+		after     time.Duration
+		wantFresh bool
+	}{
+		{name: "one second", after: time.Second, wantFresh: true},
+		{name: "exactly three seconds", after: 3 * time.Second, wantFresh: true},
+		{name: "just over three seconds", after: 3100 * time.Millisecond},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := finding.freshDialogs(reportedAt.Add(testCase.after))
 
-	found := runUntilAnsweredAtInterval(script, 1, pausePointDialogWatchInterval)
-
-	if !reflect.DeepEqual(found, []statusDialog{dialog}) || script.probes != 1 {
-		t.Fatalf("found = %#v, looks = %d, want the reported dialog after one look", found, script.probes)
+			if (got != nil) != testCase.wantFresh {
+				t.Fatalf("dialogs = %#v, want fresh = %v", got, testCase.wantFresh)
+			}
+		})
 	}
 }
 
-// Verifies a watch whose window ended hands back nothing: no look runs after the window, so the
-// dialog may have closed, and a later answer is Unity's own 30-second one rather than one for a report.
-func TestEarlyDialogReportHandsBackNothingOnceItsWindowEnds(t *testing.T) {
-	script := &earlyDialogReportScript{reports: []statusReport{
-		heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()),
-	}}
+// Verifies a pause-point trigger, whose watch looks once at 2 seconds, names an answer that comes a
+// second after that report, and not one that comes 28 seconds after it.
+func TestEarlyDialogReportAtThePausePointIntervalNamesOnlyASoonAnswer(t *testing.T) {
+	dialog := commandDialogPlayerStoppedDialog()
+	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)}}
 
-	found := script.run(10 * time.Second)
+	finding := script.run(pausePointDialogWatchInterval)
 
-	if found != nil || script.sent != 3 {
-		t.Fatalf("found = %#v, reports sent = %d, want nothing after three reports", found, script.sent)
+	if script.probes != 1 || !reflect.DeepEqual(finding.freshDialogs(script.clock.Add(time.Second)), []statusDialog{dialog}) {
+		t.Fatalf("looks = %d, finding = %#v, want one look whose dialog names an answer a second later", script.probes, finding)
+	}
+	if got := finding.freshDialogs(script.clock.Add(28 * time.Second)); got != nil {
+		t.Fatalf("dialogs = %#v, want nothing 28 seconds after the report", got)
+	}
+}
+
+// Verifies the time of a report is when Unity took it, not when its look was due: a look that takes
+// 4 seconds still names an answer that comes a second after its report.
+func TestEarlyDialogReportTimesTheReportWhenUnityTookIt(t *testing.T) {
+	dialog := commandDialogPlayerStoppedDialog()
+	script := &earlyDialogReportScript{
+		reports:   []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)},
+		probeCost: 4 * time.Second,
+	}
+	start := script.clock
+
+	finding := script.run(pausePointDialogWatchInterval)
+
+	answeredAt := start.Add(earlyDialogLookDelay + 4*time.Second + time.Second)
+	if got := finding.freshDialogs(answeredAt); !reflect.DeepEqual(got, []statusDialog{dialog}) {
+		t.Fatalf("dialogs = %#v, reported at %v, want the dialog for an answer at %v", got, finding.reportedAt, answeredAt)
+	}
+}
+
+// Verifies the stop of a watch hands back the reported dialog only while it is fresh, so a send that
+// Unity answers long after the report looks again.
+func TestStartEarlyDialogReportHandsBackOnlyAFreshDialog(t *testing.T) {
+	cases := []struct {
+		name      string
+		after     time.Duration
+		wantFresh bool
+	}{
+		{name: "answered a second after the report", after: time.Second, wantFresh: true},
+		{name: "answered 28 seconds after the report", after: 28 * time.Second},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var clock atomic.Int64
+			reported := make(chan struct{})
+			deps := earlyDialogReportDeps{
+				probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
+					return heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()), nil
+				},
+				reportBlockingDialog: func(context.Context, unityipc.Connection, string) error {
+					defer close(reported)
+					return nil
+				},
+				waitFor: releasedOnce(),
+				now:     func() time.Time { return time.Unix(0, clock.Load()) },
+			}
+			stop := startEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, 0, deps)
+			select {
+			case <-reported:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the watch never reported")
+			}
+			clock.Add(int64(testCase.after))
+
+			if got := stop(); (got != nil) != testCase.wantFresh {
+				t.Fatalf("dialogs = %#v, want fresh = %v", got, testCase.wantFresh)
+			}
+		})
 	}
 }
 
@@ -163,9 +233,10 @@ func TestEarlyDialogReportKeepsTheReportedDialogWhenStoppedDuringALook(t *testin
 		},
 		reportBlockingDialog: func(context.Context, unityipc.Connection, string) error { return nil },
 		waitFor:              releasedAtOnce,
+		now:                  time.Now,
 	}
 
-	found := runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second)
+	found := runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second).dialogs
 
 	if !reflect.DeepEqual(found, []statusDialog{reported}) {
 		t.Fatalf("found = %#v, want the dialog of the successful report", found)
@@ -197,9 +268,10 @@ func TestEarlyDialogReportKeepsTheEarlierDialogWhenStoppedDuringAReport(t *testi
 			return context.Canceled
 		},
 		waitFor: releasedAtOnce,
+		now:     time.Now,
 	}
 
-	found := runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second)
+	found := runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second).dialogs
 
 	if !reflect.DeepEqual(found, []statusDialog{reported}) {
 		t.Fatalf("found = %#v, want the dialog of the earlier successful report", found)
@@ -339,6 +411,7 @@ func TestSendDoesNotCarryAReportedDialogIntoTheNextAttempt(t *testing.T) {
 			}
 			return make(chan time.Time)
 		},
+		now: time.Now,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

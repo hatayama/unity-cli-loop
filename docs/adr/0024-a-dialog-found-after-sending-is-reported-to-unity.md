@@ -34,12 +34,15 @@ command `report-blocking-dialog`, which carries the name of the command the send
   slot can change hands between the CLI's look and its report, a busy answer can arrive late, and a
   `compile --no-wait-for-domain-reload`, which waits for its answer and is reported, shares the name
   `compile` with a default compile. Such a run-tests keeps the 30-second answer.
-- When Unity answers `main_thread_blocked` and the watch of that attempt reported a dialog at its
-  last completed look, the CLI names that dialog in `BLOCKED_BY_DIALOG` without looking again. This
-  is safe because Unity fails a request for a report only while its main thread has not run since the
-  report, so the dialog seen then still holds it. A later look that finds no dialog, a report Unity
-  refuses, or the end of the 30-second window drops it; a look or report cut short because Unity
-  answered changes nothing. Without a
+- When Unity answers `main_thread_blocked` at most 3 seconds after it took a report from the watch of
+  that attempt, the CLI names the reported dialog in `BLOCKED_BY_DIALOG` without looking again.
+  Unity fails a reported request at its next check, which runs every second, so an answer the report
+  caused arrives about a second after it, and the dialog seen then still holds the main thread. An
+  older answer may have another cause: Unity's own 30-second answer, or a second dialog that opened
+  as the reported one closed, without the main thread running in between, which can happen at any
+  point of the watch and goes unseen for up to a look interval. So freshness from the report, not
+  the 30-second window, decides. A later look that finds no dialog, or a report Unity refuses, drops
+  the dialog; a look or report cut short because Unity answered changes nothing. Without a fresh
   reported dialog, and for `UNITY_EDITOR_UNRESPONSIVE`, the CLI looks once as before. On macOS that
   look takes about 2 seconds.
 - A send refused as busy, while the request holding the slot waits for a main thread that has been
