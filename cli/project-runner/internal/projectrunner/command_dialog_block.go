@@ -223,17 +223,25 @@ func (err blockedByDialogError) ToCLIError(context clierrors.ErrorContext) clier
 // Why the uloop status probe: it already switches between the Editor's own report (Unity 6000.7 and
 // later) and a look at Unity's windows. Its requests do not go through the retrying send, so this
 // lookup cannot run again from inside itself.
+// reported is what the early dialog report of the last attempt told Unity about. It names Unity's
+// main_thread_blocked answer without a look. Why that is safe: Unity fails a request for a report only
+// while its main thread has not run since the report, so that dialog still holds it. Why not for
+// EditorUnresponsiveError: Unity did not end that wait for a report.
 func explainBlockedByDialog(
 	ctx context.Context,
 	connection unityipc.Connection,
 	command string,
 	err error,
+	reported []statusDialog,
 	deps dialogWatchDeps,
 ) error {
 	notRun := isMainThreadBlockedRPCError(err)
 	var unresponsiveErr *unityipc.EditorUnresponsiveError
 	if !notRun && !errors.As(err, &unresponsiveErr) {
 		return err
+	}
+	if notRun && len(reported) > 0 {
+		return blockedByDialogError{command: command, dialogs: reported, canPress: deps.canPressDialogs, notRun: err}
 	}
 	dialogs := findBlockingDialogs(ctx, connection, deps)
 	if len(dialogs) == 0 {

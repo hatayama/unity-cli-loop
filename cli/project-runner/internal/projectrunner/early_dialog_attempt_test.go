@@ -65,7 +65,7 @@ func TestEarlyDialogReportEndsWithTheAttempt(t *testing.T) {
 	gated := newGatedEarlyDialogReport()
 	busy := errors.New("server busy")
 
-	_, err := sendAttemptWithEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, gated.deps(), nil,
+	_, _, err := sendAttemptWithEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, gated.deps(), nil,
 		func(progress unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error) {
 			progress(cliprogress.Event{Stage: cliprogress.StageAccepted})
 			select {
@@ -90,7 +90,7 @@ func TestEarlyDialogReportDoesNotWatchAnAttemptUnityDidNotAccept(t *testing.T) {
 	gated.release()
 	var seen []cliprogress.Stage
 
-	_, err := sendAttemptWithEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, gated.deps(),
+	_, _, err := sendAttemptWithEarlyDialogReport(context.Background(), unityipc.Connection{}, "get-logs", 0, gated.deps(),
 		func(event cliprogress.Event) { seen = append(seen, event.Stage) },
 		func(progress unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error) {
 			progress(cliprogress.Event{Stage: cliprogress.StageConnected})

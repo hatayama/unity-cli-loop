@@ -48,8 +48,8 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 	}
 }
 
-func (script *earlyDialogReportScript) run(interval time.Duration) {
-	runEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, script.deps(), interval)
+func (script *earlyDialogReportScript) run(interval time.Duration) []statusDialog {
+	return runEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, script.deps(), interval)
 }
 
 // heldBlockedByDialogReport is a BlockedByDialog report whose slot is held by holder.
@@ -251,6 +251,7 @@ func serveUntilDialogReported(t *testing.T, command string, reported <-chan stru
 // Verifies a send whose request is unanswered tells Unity about the dialog and keeps waiting on the
 // same connection, so Unity's answer that the command was not run arrives and is reported with the
 // dialog. A send that hung up instead would never read that answer and would end at the test's deadline.
+// The answer is named by the reported dialog, so no further look runs.
 func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testing.T) {
 	reported := make(chan struct{})
 	var once sync.Once
@@ -282,6 +283,9 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 	assertCommandBlockedByDialog(t, cliError, commandDialogPlayerStoppedDialog().Title)
 	if !isMainThreadBlockedRPCError(err) {
 		t.Fatalf("the error must still carry Unity's answer that the command was not run: %v", err)
+	}
+	if probe.calls != 0 {
+		t.Fatalf("probe calls = %d, want the reported dialog to name the answer without a look", probe.calls)
 	}
 }
 

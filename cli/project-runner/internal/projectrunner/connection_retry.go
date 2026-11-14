@@ -247,8 +247,9 @@ func sendWithTransientConnectionRetryWithDeps(
 	responseTimeout time.Duration,
 	deps connectionRetryDeps,
 ) (unityipc.UnitySendOutcome, error) {
-	outcome, err := sendWithTransientConnectionRetryAttempts(ctx, connection, method, params, progress, responseTimeout, deps)
-	return outcome, explainBlockedByDialog(ctx, connection, method, err, deps.dialogWatch)
+	var reported []statusDialog
+	outcome, err := sendWithTransientConnectionRetryAttempts(ctx, connection, method, params, progress, responseTimeout, deps, &reported)
+	return outcome, explainBlockedByDialog(ctx, connection, method, err, reported, deps.dialogWatch)
 }
 
 func sendWithTransientConnectionRetryAttempts(
@@ -259,6 +260,7 @@ func sendWithTransientConnectionRetryAttempts(
 	progress unityipc.ProgressFunc,
 	responseTimeout time.Duration,
 	deps connectionRetryDeps,
+	reported *[]statusDialog,
 ) (unityipc.UnitySendOutcome, error) {
 	startedAt := time.Now()
 	retryContext, cancel := context.WithTimeout(ctx, unityAliveRetryWindow(deps))
@@ -292,10 +294,12 @@ func sendWithTransientConnectionRetryAttempts(
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
 		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
-		outcome, err := sendAttemptWithEarlyDialogReport(ctx, connection, method, responseTimeout, deps.earlyDialogReport, progress,
+		// Why every attempt overwrites reported: only the last attempt's watch can explain its answer.
+		outcome, attemptReported, err := sendAttemptWithEarlyDialogReport(ctx, connection, method, responseTimeout, deps.earlyDialogReport, progress,
 			func(watched unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error) {
 				return client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, watched)
 			})
+		*reported = attemptReported
 		cancelAttempt()
 		// Why Unity's answer first, a result or an error: it can arrive while the watch looks, and a
 		// command that finished must report how it ended rather than a dialog that no longer stops it.

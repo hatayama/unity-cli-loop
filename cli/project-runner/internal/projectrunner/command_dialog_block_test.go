@@ -75,7 +75,7 @@ func classifyCommandDialogError(err error) clierrors.CLIError {
 }
 
 func explainCommandDialogBlock(err error, deps dialogWatchDeps) error {
-	return explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), commandDialogBlockCommand, err, deps)
+	return explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), commandDialogBlockCommand, err, nil, deps)
 }
 
 func assertCommandBlockedByDialog(t *testing.T, cliError clierrors.CLIError, wantTitle string) {

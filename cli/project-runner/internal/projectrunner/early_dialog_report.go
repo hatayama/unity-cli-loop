@@ -49,7 +49,8 @@ func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
 }
 
 // startEarlyDialogReport watches one sent request for a dialog that opened after the check before
-// sending, and returns the function that ends the watch and waits for it to stop.
+// sending, and returns the function that ends the watch, waits for it to stop, and hands back the
+// dialogs the watch last reported (see runEarlyDialogReport), or nil.
 // It only tells Unity about the dialog. Unity then answers the request with main_thread_blocked if
 // its tool code has not started, and leaves it alone if it has.
 // Why uloop never ends the wait itself here: hanging up on a request Unity has not started does not
@@ -64,67 +65,91 @@ func startEarlyDialogReport(
 	method string,
 	responseTimeout time.Duration,
 	deps earlyDialogReportDeps,
-) func() {
+) func() []statusDialog {
 	if deps.probeEditorStatus == nil || deps.reportBlockingDialog == nil || internalBridgeMethods[method] ||
 		responseTimeout > 0 {
-		return func() {}
+		return func() []statusDialog { return nil }
 	}
 	watchCtx, cancel := context.WithCancel(ctx)
 	stopped := make(chan struct{})
+	var reported []statusDialog
 	go func() {
 		defer close(stopped)
-		runEarlyDialogReport(watchCtx, connection, method, deps, heartbeatDialogInterval(ctx))
+		reported = runEarlyDialogReport(watchCtx, connection, method, deps, heartbeatDialogInterval(ctx))
 	}()
-	return func() {
+	return func() []statusDialog {
 		cancel()
+		// Why no lock: reported is written only before stopped closes.
 		<-stopped
+		return reported
 	}
 }
 
 // runEarlyDialogReport looks once after earlyDialogLookDelay and then every interval, until the
-// window ends, ctx is done, or Unity does not take the report.
+// window ends, ctx is done, or Unity does not take the report. It returns the dialogs of the last
+// completed look when that look found them and Unity took their report, and nil otherwise.
+// Why a look or report cut short by ctx changes nothing: it ends because Unity answered, and that
+// answer came for an earlier report, whose dialogs are the ones to name.
+// Why the reported dialogs may name Unity's not-run answer: Unity fails a request for a report only
+// while its main thread has not run since the report, so the dialog seen then still holds it.
 func runEarlyDialogReport(
 	ctx context.Context,
 	connection unityipc.Connection,
 	method string,
 	deps earlyDialogReportDeps,
 	interval time.Duration,
-) {
+) []statusDialog {
+	var reported []statusDialog
 	wait := earlyDialogLookDelay
 	for elapsed := earlyDialogLookDelay; elapsed < earlyDialogLookWindow; elapsed += interval {
 		select {
 		case <-ctx.Done():
-			return
+			return reported
 		case <-deps.waitFor(wait):
 		}
 		wait = interval
-		if !isOwnCommandHeldByDialog(ctx, connection, method, deps.probeEditorStatus) {
+		dialogs := ownCommandHoldingDialogs(ctx, connection, method, deps.probeEditorStatus)
+		if ctx.Err() != nil {
+			return reported
+		}
+		if dialogs == nil {
+			reported = nil
 			continue
+		}
+		err := deps.reportBlockingDialog(ctx, connection, method)
+		if err == nil {
+			reported = dialogs
+			continue
+		}
+		if ctx.Err() != nil {
+			return reported
 		}
 		// Why stop on a failed report: a Unity package older than this command answers it with an
 		// error every time, and that package keeps its 30-second answer.
-		if err := deps.reportBlockingDialog(ctx, connection, method); err != nil {
-			return
-		}
+		return nil
 	}
+	return reported
 }
 
-// isOwnCommandHeldByDialog reports whether the probe finds a dialog holding Unity while a command
-// named method holds the command slot.
+// ownCommandHoldingDialogs returns the dialogs the probe finds holding Unity while a command named
+// method holds the command slot, and nil otherwise.
 // Why: Unity acks a request before it takes the slot, so this send's request may still be waiting for
 // a busy answer while another command holds the slot. Unity fails early only a request of the
 // reported name, so a report sent then would fail nothing; this check saves that report. The safety
 // that a report never fails a request uloop said keeps running lives in Unity, which fails early only
 // a request of the reported name that its sender's disconnect would cancel.
-func isOwnCommandHeldByDialog(
+func ownCommandHoldingDialogs(
 	ctx context.Context,
 	connection unityipc.Connection,
 	method string,
 	probe func(context.Context, unityipc.Connection) (statusReport, error),
-) bool {
+) []statusDialog {
 	report, err := probe(ctx, connection)
-	return err == nil && report.State == statusStateBlockedByDialog && len(report.Dialogs) > 0 &&
-		report.RunningToolName == method
+	if err != nil || report.State != statusStateBlockedByDialog || len(report.Dialogs) == 0 ||
+		report.RunningToolName != method {
+		return nil
+	}
+	return report.Dialogs
 }
 
 // findDialog returns the dialogs the probe reports holding Unity, or nil when it reports none or fails.
@@ -199,6 +224,7 @@ func isWaitingForStillMainThread(response editorStatusResponse) bool {
 
 // sendAttemptWithEarlyDialogReport makes one send attempt through send and watches it for a dialog
 // only from Unity's accept of that attempt until the attempt returns, waiting for the watch to stop.
+// It also returns the dialogs the watch last reported, nil when it reported none or never started.
 // progress may be nil; it still gets every event the attempt reports.
 // Why per accepted attempt: Unity acks a request before it takes the command slot, so an attempt it
 // then refuses as busy was accepted too. A watch that outlived that attempt would report the dialog
@@ -211,9 +237,9 @@ func sendAttemptWithEarlyDialogReport(
 	deps earlyDialogReportDeps,
 	progress unityipc.ProgressFunc,
 	send func(unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error),
-) (unityipc.UnitySendOutcome, error) {
-	stop := func() {}
-	defer func() { stop() }()
+) (outcome unityipc.UnitySendOutcome, reported []statusDialog, err error) {
+	stop := func() []statusDialog { return nil }
+	defer func() { reported = stop() }()
 	watched := func(event cliprogress.Event) {
 		if event.Stage == cliprogress.StageAccepted {
 			stop = startEarlyDialogReport(ctx, connection, method, responseTimeout, deps)
@@ -222,5 +248,6 @@ func sendAttemptWithEarlyDialogReport(
 			progress(event)
 		}
 	}
-	return send(watched)
+	outcome, err = send(watched)
+	return outcome, nil, err
 }
