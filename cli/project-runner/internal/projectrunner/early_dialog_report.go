@@ -102,7 +102,9 @@ func runEarlyDialogReport(
 ) []statusDialog {
 	var reported []statusDialog
 	wait := earlyDialogLookDelay
+	lastLook := earlyDialogLookDelay
 	for elapsed := earlyDialogLookDelay; elapsed < earlyDialogLookWindow; elapsed += interval {
+		lastLook = elapsed
 		select {
 		case <-ctx.Done():
 			return reported
@@ -129,9 +131,30 @@ func runEarlyDialogReport(
 		// error every time, and that package keeps its 30-second answer.
 		return nil
 	}
-	// Why nothing once the window ends: no look runs after it, so the dialog may close, and an
-	// answer that comes later is Unity's own 30-second one, not one for a report.
-	return nil
+	return keepReportedUntilWindowEnds(ctx, reported, earlyDialogLookWindow-lastLook, deps.waitFor)
+}
+
+// keepReportedUntilWindowEnds hands back reported when ctx ends within remaining, and nil once
+// remaining has passed.
+// Why wait out the window after the last look: Unity answers a report about a second after it, and
+// with a long interval, as for a pause-point trigger, the last look can come long before the window
+// ends. Why nothing once the window ends: no look runs after it, so the dialog may close, and an
+// answer that comes later is Unity's own 30-second one, not one for a report.
+func keepReportedUntilWindowEnds(
+	ctx context.Context,
+	reported []statusDialog,
+	remaining time.Duration,
+	waitFor func(time.Duration) <-chan time.Time,
+) []statusDialog {
+	if reported == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return reported
+	case <-waitFor(remaining):
+		return nil
+	}
 }
 
 // ownCommandHoldingDialogs returns the dialogs the probe finds holding Unity while a command named

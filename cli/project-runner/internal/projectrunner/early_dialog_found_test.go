@@ -24,6 +24,10 @@ func releasedAtOnce(time.Duration) <-chan time.Time {
 // runUntilAnswered runs the watch until it has looked looks times, then ends it the way Unity's
 // answer does: the stop cancels it while it waits for its next look.
 func runUntilAnswered(script *earlyDialogReportScript, looks int) []statusDialog {
+	return runUntilAnsweredAtInterval(script, looks, 10*time.Second)
+}
+
+func runUntilAnsweredAtInterval(script *earlyDialogReportScript, looks int, interval time.Duration) []statusDialog {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	deps := script.deps()
@@ -34,7 +38,7 @@ func runUntilAnswered(script *earlyDialogReportScript, looks int) []statusDialog
 		}
 		return releasedAtOnce(wait)
 	}
-	return runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, 10*time.Second)
+	return runEarlyDialogReport(ctx, unityipc.Connection{}, commandDialogBlockCommand, deps, interval)
 }
 
 // releasedOnce releases the first wait at once and never the later ones, so a watch looks once and
@@ -63,6 +67,19 @@ func TestEarlyDialogReportHandsBackTheDialogOfItsLastReport(t *testing.T) {
 
 	if !reflect.DeepEqual(found, []statusDialog{dialog}) {
 		t.Fatalf("found = %#v, want the reported dialog", found)
+	}
+}
+
+// Verifies a watch whose last look came long before its window ends, as at the pause-point interval,
+// still hands back the reported dialog when Unity answers after that look.
+func TestEarlyDialogReportKeepsTheReportedDialogUntilItsWindowEnds(t *testing.T) {
+	dialog := commandDialogPlayerStoppedDialog()
+	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, dialog)}}
+
+	found := runUntilAnsweredAtInterval(script, 1, pausePointDialogWatchInterval)
+
+	if !reflect.DeepEqual(found, []statusDialog{dialog}) || script.probes != 1 {
+		t.Fatalf("found = %#v, looks = %d, want the reported dialog after one look", found, script.probes)
 	}
 }
 
@@ -232,8 +249,14 @@ func TestExplainBlockedByDialogIgnoresTheReportedDialogForOtherFailures(t *testi
 }
 
 // serveReportedBusyThenNotRun accepts the first request and refuses it as busy once a dialog is
-// reported, then marks second, accepts the second request and answers at once that it was not run.
-func serveReportedBusyThenNotRun(t *testing.T, reported <-chan struct{}, second *atomic.Bool) unityipc.Connection {
+// reported, then marks second, accepts the second request and answers that it was not run once
+// secondLooked closes.
+func serveReportedBusyThenNotRun(
+	t *testing.T,
+	reported <-chan struct{},
+	second *atomic.Bool,
+	secondLooked <-chan struct{},
+) unityipc.Connection {
 	t.Helper()
 	listener := newLoopbackIpcListener(t)
 	accepted := `{"jsonrpc":"2.0","result":{"accepted":true},"uloop":{"phase":"accepted","heartbeatIntervalSeconds":10},"id":1}`
@@ -262,6 +285,10 @@ func serveReportedBusyThenNotRun(t *testing.T, reported <-chan struct{}, second 
 				_ = conn.Close()
 				continue
 			}
+			select {
+			case <-secondLooked:
+			case <-time.After(5 * time.Second):
+			}
 			_ = unityipc.Write(conn, []byte(notRun))
 			_, _ = io.Copy(io.Discard, conn)
 			_ = conn.Close()
@@ -279,6 +306,9 @@ func TestSendDoesNotCarryAReportedDialogIntoTheNextAttempt(t *testing.T) {
 	reported := make(chan struct{})
 	var once sync.Once
 	var second atomic.Bool
+	secondLooked := make(chan struct{})
+	var secondOnce sync.Once
+	var firstWaits, secondWaits atomic.Int32
 	looked := commandDialogPlayerStoppedDialog()
 	probe := &commandDialogProbe{report: blockedByDialogStatusReport(looked)}
 	deps := defaultConnectionRetryDeps()
@@ -288,6 +318,7 @@ func TestSendDoesNotCarryAReportedDialogIntoTheNextAttempt(t *testing.T) {
 	deps.earlyDialogReport = earlyDialogReportDeps{
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
 			if second.Load() {
+				secondOnce.Do(func() { close(secondLooked) })
 				return readyStatusReport(), nil
 			}
 			return heldBlockedByDialogReport(commandDialogBlockCommand, otherBlockingDialog()), nil
@@ -296,16 +327,32 @@ func TestSendDoesNotCarryAReportedDialogIntoTheNextAttempt(t *testing.T) {
 			once.Do(func() { close(reported) })
 			return nil
 		},
-		waitFor: releasedOnce(),
+		// Why each attempt's first wait only: each watch looks once and then stays open until its
+		// attempt ends, so the first holds its report and the second looks and finds none.
+		waitFor: func(wait time.Duration) <-chan time.Time {
+			waits := &firstWaits
+			if second.Load() {
+				waits = &secondWaits
+			}
+			if waits.Add(1) == 1 {
+				return releasedAtOnce(wait)
+			}
+			return make(chan time.Time)
+		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	_, err := sendWithTransientConnectionRetryWithDeps(
-		ctx, serveReportedBusyThenNotRun(t, reported, &second), commandDialogBlockCommand, map[string]any{}, nil, 0, deps)
+		ctx, serveReportedBusyThenNotRun(t, reported, &second, secondLooked), commandDialogBlockCommand, map[string]any{}, nil, 0, deps)
 
 	cliError := clierrors.ClassifyError(err, clierrors.ErrorContext{Command: commandDialogBlockCommand})
 	assertCommandBlockedByDialog(t, cliError, looked.Title)
+	select {
+	case <-secondLooked:
+	default:
+		t.Fatal("the second attempt's watch never looked")
+	}
 	if probe.calls != 1 {
 		t.Fatalf("probe calls = %d, want one fresh look", probe.calls)
 	}
