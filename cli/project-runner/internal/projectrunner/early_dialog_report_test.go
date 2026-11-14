@@ -17,8 +17,11 @@ import (
 // earlyDialogReportScript drives runEarlyDialogReport by hand: every wait the watch asks for is
 // recorded and released at once, the probe answers from reports in order (repeating the last), and
 // the watch's context is cancelled when the looks run out, the way an answered request ends it.
+// Its clock moves by each wait and by probeCost at each look.
 type earlyDialogReportScript struct {
 	reports   []statusReport
+	clock     time.Time
+	probeCost time.Duration
 	probeErr  error
 	reportErr error
 	waits     []time.Duration
@@ -32,6 +35,7 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
 			report := script.reports[min(script.probes, len(script.reports)-1)]
 			script.probes++
+			script.clock = script.clock.Add(script.probeCost)
 			return report, script.probeErr
 		},
 		reportBlockingDialog: func(_ context.Context, _ unityipc.Connection, toolName string) error {
@@ -41,15 +45,17 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 		},
 		waitFor: func(wait time.Duration) <-chan time.Time {
 			script.waits = append(script.waits, wait)
+			script.clock = script.clock.Add(wait)
 			released := make(chan time.Time, 1)
 			released <- time.Time{}
 			return released
 		},
+		now: func() time.Time { return script.clock },
 	}
 }
 
-func (script *earlyDialogReportScript) run(interval time.Duration) {
-	runEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, script.deps(), interval)
+func (script *earlyDialogReportScript) run(interval time.Duration) earlyDialogFinding {
+	return runEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, script.deps(), interval)
 }
 
 // heldBlockedByDialogReport is a BlockedByDialog report whose slot is held by holder.
@@ -251,6 +257,7 @@ func serveUntilDialogReported(t *testing.T, command string, reported <-chan stru
 // Verifies a send whose request is unanswered tells Unity about the dialog and keeps waiting on the
 // same connection, so Unity's answer that the command was not run arrives and is reported with the
 // dialog. A send that hung up instead would never read that answer and would end at the test's deadline.
+// The answer is named by the reported dialog, so no further look runs.
 func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testing.T) {
 	reported := make(chan struct{})
 	var once sync.Once
@@ -266,11 +273,10 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 			once.Do(func() { close(reported) })
 			return nil
 		},
-		waitFor: func(time.Duration) <-chan time.Time {
-			released := make(chan time.Time, 1)
-			released <- time.Time{}
-			return released
-		},
+		// Why only the first wait fires: the watch must still be open when Unity answers, as it is
+		// when Unity answers about a second after the report.
+		waitFor: releasedOnce(),
+		now:     time.Now,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -282,6 +288,9 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 	assertCommandBlockedByDialog(t, cliError, commandDialogPlayerStoppedDialog().Title)
 	if !isMainThreadBlockedRPCError(err) {
 		t.Fatalf("the error must still carry Unity's answer that the command was not run: %v", err)
+	}
+	if probe.calls != 0 {
+		t.Fatalf("probe calls = %d, want the reported dialog to name the answer without a look", probe.calls)
 	}
 }
 

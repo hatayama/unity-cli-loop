@@ -212,7 +212,7 @@ func TestStartedDialogErrorsDoNotReadAsADisconnect(t *testing.T) {
 	dialogs := []statusDialog{{Title: "Unexpected EOF while reading the scene", Buttons: []string{"OK"}}}
 	look := &fakeDialogLook{dialogs: dialogs, step: time.Second}
 	unresponsive := explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), "get-logs",
-		&unityipc.EditorUnresponsiveError{StallSeconds: 300}, look.deps())
+		&unityipc.EditorUnresponsiveError{StallSeconds: 300}, nil, look.deps())
 	heartbeat := (&heartbeatDialogWatch{method: "get-logs", dialogs: dialogs}).blockedError()
 	cases := map[string]error{
 		"started":      startedCommandBlockedByDialog(clicore.CompileCommandName, dialogs, true, true),
@@ -239,7 +239,7 @@ func TestStartedDialogErrorsDoNotReadAsADisconnect(t *testing.T) {
 func TestExplainBlockedByDialogExplainsTheFiveMinuteStall(t *testing.T) {
 	original := &unityipc.EditorUnresponsiveError{StallSeconds: 300}
 
-	withDialog := explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), "get-logs", original,
+	withDialog := explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), "get-logs", original, nil,
 		newFakeDialogLook(commandDialogPlayerStoppedDialog()).deps())
 	cliError := clierrors.ClassifyError(withDialog, clierrors.ErrorContext{ProjectRoot: "<PROJECT_ROOT>", Command: "get-logs"})
 	wantMessage := blockedByDialogMessage([]statusDialog{commandDialogPlayerStoppedDialog()}) + " uloop get-logs stopped waiting."
@@ -255,7 +255,7 @@ func TestExplainBlockedByDialogExplainsTheFiveMinuteStall(t *testing.T) {
 		}
 	}
 
-	withoutDialog := explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), "get-logs", original, newFakeDialogLook().deps())
+	withoutDialog := explainBlockedByDialog(context.Background(), unreachableConnection("<PROJECT_ROOT>"), "get-logs", original, nil, newFakeDialogLook().deps())
 	if withoutDialog != error(original) {
 		t.Fatalf("error = %#v, want the original error", withoutDialog)
 	}
