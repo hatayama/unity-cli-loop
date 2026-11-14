@@ -40,7 +40,7 @@ func (gated *gatedEarlyDialogReport) deps() earlyDialogReportDeps {
 	return earlyDialogReportDeps{
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
 			gated.probes.Add(1)
-			return blockedByDialogStatusReport(commandDialogPlayerStoppedDialog()), nil
+			return heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()), nil
 		},
 		reportBlockingDialog: func(context.Context, unityipc.Connection) error {
 			gated.sent.Add(1)

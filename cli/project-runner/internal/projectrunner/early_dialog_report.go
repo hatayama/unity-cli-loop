@@ -69,7 +69,7 @@ func startEarlyDialogReport(
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		runEarlyDialogReport(watchCtx, connection, deps, heartbeatDialogInterval(ctx))
+		runEarlyDialogReport(watchCtx, connection, method, deps, heartbeatDialogInterval(ctx))
 	}()
 	return func() {
 		cancel()
@@ -82,6 +82,7 @@ func startEarlyDialogReport(
 func runEarlyDialogReport(
 	ctx context.Context,
 	connection unityipc.Connection,
+	method string,
 	deps earlyDialogReportDeps,
 	interval time.Duration,
 ) {
@@ -93,7 +94,7 @@ func runEarlyDialogReport(
 		case <-deps.waitFor(wait):
 		}
 		wait = interval
-		if len(findDialog(ctx, connection, deps.probeEditorStatus)) == 0 {
+		if !isOwnCommandHeldByDialog(ctx, connection, method, deps.probeEditorStatus) {
 			continue
 		}
 		// Why stop on a failed report: a Unity package older than this command answers it with an
@@ -102,6 +103,24 @@ func runEarlyDialogReport(
 			return
 		}
 	}
+}
+
+// isOwnCommandHeldByDialog reports whether the probe finds a dialog holding Unity while a command
+// named method holds the command slot.
+// Why the name and not timing: Unity acks a request before it takes the slot, so this send's request
+// may still be waiting for a busy answer while another request holds the slot. A report fails
+// whichever request waits for the main thread, and that request may be a compile uloop said keeps
+// running once the dialog closes. A compile send is never watched, so a holder named like this send
+// is a request whose sender still waits for Unity's answer and reads it as not run.
+func isOwnCommandHeldByDialog(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	probe func(context.Context, unityipc.Connection) (statusReport, error),
+) bool {
+	report, err := probe(ctx, connection)
+	return err == nil && report.State == statusStateBlockedByDialog && len(report.Dialogs) > 0 &&
+		report.RunningToolName == method
 }
 
 // findDialog returns the dialogs the probe reports holding Unity, or nil when it reports none or fails.

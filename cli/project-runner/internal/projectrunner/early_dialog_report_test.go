@@ -47,7 +47,45 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 }
 
 func (script *earlyDialogReportScript) run(interval time.Duration) {
-	runEarlyDialogReport(context.Background(), unityipc.Connection{}, script.deps(), interval)
+	runEarlyDialogReport(context.Background(), unityipc.Connection{}, commandDialogBlockCommand, script.deps(), interval)
+}
+
+// heldBlockedByDialogReport is a BlockedByDialog report whose slot is held by holder.
+func heldBlockedByDialogReport(holder string, dialogs ...statusDialog) statusReport {
+	report := blockedByDialogStatusReport(dialogs...)
+	report.RunningToolName = holder
+	return report
+}
+
+// Verifies the watch tells Unity about a dialog only when the request holding the slot is a command
+// of the same name as the send's, whatever the timing: another request, such as a compile uloop said
+// keeps running, must not be failed by this send's report.
+func TestEarlyDialogReportTellsUnityOnlyWhenItsOwnCommandHoldsTheSlot(t *testing.T) {
+	cases := []struct {
+		name       string
+		holder     string
+		method     string
+		wantReport bool
+	}{
+		{name: "own command", holder: "get-logs", method: "get-logs", wantReport: true},
+		{name: "compile holds the slot", holder: "compile", method: "get-logs"},
+		{name: "no holder named", holder: "", method: "get-logs"},
+		{name: "dynamic code", holder: "execute-dynamic-code", method: "execute-dynamic-code", wantReport: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			script := &earlyDialogReportScript{reports: []statusReport{
+				heldBlockedByDialogReport(tc.holder, commandDialogPlayerStoppedDialog()),
+			}}
+
+			runEarlyDialogReport(context.Background(), unityipc.Connection{}, tc.method, script.deps(), 10*time.Second)
+
+			if (script.sent > 0) != tc.wantReport || script.probes < 2 {
+				t.Fatalf("reports = %d, looks = %d, want reported=%v while the looks go on",
+					script.sent, script.probes, tc.wantReport)
+			}
+		})
+	}
 }
 
 func readyStatusReport() statusReport {
@@ -59,7 +97,7 @@ func readyStatusReport() statusReport {
 func TestEarlyDialogReportTellsUnityAtEachLookThatFindsADialog(t *testing.T) {
 	script := &earlyDialogReportScript{reports: []statusReport{
 		readyStatusReport(),
-		blockedByDialogStatusReport(commandDialogPlayerStoppedDialog()),
+		heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()),
 	}}
 
 	script.run(10 * time.Second)
@@ -88,7 +126,7 @@ func TestEarlyDialogReportStaysSilentWithoutADialog(t *testing.T) {
 	}{
 		{name: "busy Editor", report: newStatusReport(statusStateBusy, "busy")},
 		{name: "blocked without a dialog", report: newStatusReport(statusStateBlockedByDialog, "blocked")},
-		{name: "failed look", report: blockedByDialogStatusReport(commandDialogPlayerStoppedDialog()), probeErr: errors.New("unreachable")},
+		{name: "failed look", report: heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()), probeErr: errors.New("unreachable")},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -106,7 +144,7 @@ func TestEarlyDialogReportStaysSilentWithoutADialog(t *testing.T) {
 // Verifies a Unity package that does not take the report is not asked again.
 func TestEarlyDialogReportStopsWhenUnityDoesNotTakeTheReport(t *testing.T) {
 	script := &earlyDialogReportScript{
-		reports:   []statusReport{blockedByDialogStatusReport(commandDialogPlayerStoppedDialog())},
+		reports:   []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog())},
 		reportErr: errors.New("Unknown tool: report-blocking-dialog"),
 	}
 
@@ -132,7 +170,7 @@ func TestEarlyDialogReportLooksOnceAtThePausePointInterval(t *testing.T) {
 // Verifies the watch is off for requests Unity runs without a command slot and when its dependencies
 // are not set, and that an answered request ends it without a look.
 func TestStartEarlyDialogReportDoesNotLookWhenOffOrAnswered(t *testing.T) {
-	script := &earlyDialogReportScript{reports: []statusReport{blockedByDialogStatusReport(commandDialogPlayerStoppedDialog())}}
+	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog())}}
 	never := script.deps()
 	never.waitFor = func(time.Duration) <-chan time.Time { return make(chan time.Time) }
 
@@ -148,7 +186,7 @@ func TestStartEarlyDialogReportDoesNotLookWhenOffOrAnswered(t *testing.T) {
 // Verifies a send that ends its own wait for the answer, as compile does, never starts the watch:
 // Unity would fail a request that runs later while uloop says it keeps running.
 func TestStartEarlyDialogReportDoesNotWatchASendThatEndsItsOwnWait(t *testing.T) {
-	script := &earlyDialogReportScript{reports: []statusReport{blockedByDialogStatusReport(commandDialogPlayerStoppedDialog())}}
+	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog())}}
 
 	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "compile", 2*time.Second, script.deps())()
 
@@ -204,7 +242,7 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 	deps.dialogWatch = probe.deps(true)
 	deps.earlyDialogReport = earlyDialogReportDeps{
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
-			return blockedByDialogStatusReport(commandDialogPlayerStoppedDialog()), nil
+			return heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()), nil
 		},
 		reportBlockingDialog: func(context.Context, unityipc.Connection) error {
 			once.Do(func() { close(reported) })
