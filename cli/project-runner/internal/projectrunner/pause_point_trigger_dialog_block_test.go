@@ -282,20 +282,34 @@ func TestPausePointWaitKeepsTheStartedMessageWhenTheTriggerMayRun(t *testing.T) 
 		result         *pausePointTriggerResult
 	}{
 		{name: "no trigger", look: newFakeDialogLook(commandDialogPlayerStoppedDialog())},
-		{name: "trigger already succeeded", look: triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase),
-			triggerCommand: "execute-dynamic-code", result: succeeded},
-		{name: "compile survives a disconnect", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
-			triggerCommand: clicore.CompileCommandName},
-		{name: "run-tests survives a disconnect", look: triggerDialogLook(clicore.RunTestsCommandName, waitingForMainThreadPhase),
-			triggerCommand: clicore.RunTestsCommandName},
-		{name: "run-tests trigger behind its implicit compile", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
-			triggerCommand: clicore.RunTestsCommandName},
-		{name: "trigger already executing", look: triggerDialogLook("execute-dynamic-code", "Executing"),
-			triggerCommand: "execute-dynamic-code"},
-		{name: "phase unknown", look: triggerDialogLook("execute-dynamic-code", ""),
-			triggerCommand: "execute-dynamic-code"},
-		{name: "another command holds the slot", look: triggerDialogLook("get-logs", waitingForMainThreadPhase),
-			triggerCommand: "execute-dynamic-code"},
+		{
+			name: "trigger already succeeded", look: triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase),
+			triggerCommand: "execute-dynamic-code", result: succeeded,
+		},
+		{
+			name: "compile survives a disconnect", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
+			triggerCommand: clicore.CompileCommandName,
+		},
+		{
+			name: "run-tests survives a disconnect", look: triggerDialogLook(clicore.RunTestsCommandName, waitingForMainThreadPhase),
+			triggerCommand: clicore.RunTestsCommandName,
+		},
+		{
+			name: "run-tests trigger behind its implicit compile", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
+			triggerCommand: clicore.RunTestsCommandName,
+		},
+		{
+			name: "trigger already executing", look: triggerDialogLook("execute-dynamic-code", "Executing"),
+			triggerCommand: "execute-dynamic-code",
+		},
+		{
+			name: "phase unknown", look: triggerDialogLook("execute-dynamic-code", ""),
+			triggerCommand: "execute-dynamic-code",
+		},
+		{
+			name: "another command holds the slot", look: triggerDialogLook("get-logs", waitingForMainThreadPhase),
+			triggerCommand: "execute-dynamic-code",
+		},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
