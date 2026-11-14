@@ -14,6 +14,11 @@ const pausePointFinalStatusProbeTimeout = 250 * time.Millisecond
 
 var pausePointStatusPoll = 50 * time.Millisecond
 
+// pausePointTriggerNotRunConfirmWait is how long a wait that reported a dialog to Unity waits for its
+// trigger's answer. Why 3 seconds: Unity checks reported requests once a second, and its answer then
+// travels back through the trigger's own send.
+var pausePointTriggerNotRunConfirmWait = 3 * time.Second
+
 type pausePointWaitState string
 
 const (
@@ -132,12 +137,9 @@ func waitForPausePointStatus(
 			return state.lastResponse, waitState, state.triggerResult, state.hasBaseline, pollErr
 		}
 		if dialogs := state.dialogWatch.observePoll(waitContext, err == nil); dialogs != nil {
-			// The trigger may report in the same moment; its result decides which error is true.
-			if state.triggerResult == nil {
-				state.triggerResult = receivePausePointTriggerResultWithin(triggerDone, pausePointFinalStatusProbeTimeout)
-			}
-			blocked := pausePointWaitBlockedByDialog(options, &state, dialogs, resumeResult)
-			return state.lastResponse, "", state.triggerResult, state.hasBaseline, blocked
+			response, waitState, waitErr := finishPausePointWaitBehindDialog(
+				ctx, connection, options, &state, triggerDone, dialogs, resumeResult)
+			return response, waitState, state.triggerResult, state.hasBaseline, waitErr
 		}
 
 		select {
@@ -158,14 +160,12 @@ func waitForPausePointStatus(
 }
 
 // receivePausePointTriggerResultWithin returns the trigger's result when it arrives in done within
-// grace, and nil otherwise. A nil done returns nil at once. Why the grace of the join after a wait
-// settles: a trigger stopped by the same dialog often reports just after the watch's look, and its
-// result is what tells a trigger that was not run from one that started.
-func receivePausePointTriggerResultWithin(done <-chan *pausePointTriggerResult, grace time.Duration) *pausePointTriggerResult {
+// wait, and nil otherwise. A nil done returns nil at once.
+func receivePausePointTriggerResultWithin(done <-chan *pausePointTriggerResult, wait time.Duration) *pausePointTriggerResult {
 	if done == nil {
 		return nil
 	}
-	timer := time.NewTimer(grace)
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case result := <-done:
@@ -175,26 +175,59 @@ func receivePausePointTriggerResultWithin(done <-chan *pausePointTriggerResult, 
 	}
 }
 
-// pausePointWaitBlockedByDialog is the error of a wait whose own watch found a dialog. It says the
-// trigger was not run only when the look showed the trigger still waiting to run in a request Unity
-// drops once uloop exits; otherwise the marker and any --trigger stay in effect in Unity, so it says
-// the command had started and is not safe to retry.
-func pausePointWaitBlockedByDialog(
+// finishPausePointWaitBehindDialog ends a wait whose own watch found a dialog. It says the trigger was
+// not run only when the trigger itself reports so, the way a trigger result in the poll loop does;
+// every other case says the command had started, because the marker and any --trigger stay in effect
+// in Unity, and is not safe to retry.
+func finishPausePointWaitBehindDialog(
+	ctx context.Context,
+	connection unityipc.Connection,
 	options waitForPausePointOptions,
 	state *pausePointWaitLoopState,
+	triggerDone <-chan *pausePointTriggerResult,
 	dialogs []statusDialog,
 	resumeResult *pausePointResumePlayResult,
-) blockedByDialogError {
-	if triggerDialogs, notRun := pausePointTriggerNotRunDialogs(state.triggerResult); notRun {
-		return pausePointTriggerNotRunBlockedByDialog(options, triggerDialogs, state.triggerResult, resumeResult)
+) (pausePointStatusResponse, pausePointWaitState, error) {
+	if state.triggerResult == nil {
+		state.triggerResult = awaitPausePointTriggerResultBehindDialog(
+			ctx, connection, options, state.dialogWatch.lastFoundReport(), triggerDone)
 	}
-	if state.triggerResult == nil && pausePointTriggerWaitsToRun(state.dialogWatch.lastFoundReport(), options.triggerCommand) {
-		return pausePointTriggerNotRunBlockedByDialog(options, dialogs, nil, resumeResult)
+	if response, waitState, done, err := settlePausePointWaitOnTriggerResult(
+		ctx, connection, options, state, resumeResult); done {
+		return response, waitState, err
 	}
 	blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
 	blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
 	blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
-	return blocked
+	return state.lastResponse, "", blocked
+}
+
+// awaitPausePointTriggerResultBehindDialog waits briefly for the trigger's result once the wait's own
+// watch found a dialog, and returns it, or nil when none came. When the look showed the trigger holding
+// Unity's command slot while it waits for the main thread, it first reports the dialog to Unity under
+// the trigger's command name: Unity then fails that request with main_thread_blocked if it has not
+// started and would be cancelled when uloop disconnects, and the trigger reports that as not run. Why
+// ask Unity instead of judging from the look: the look is one moment, and the dialog can close and let
+// the trigger run before uloop exits. A request that outlives the disconnect, such as a default
+// compile, is not failed, so no answer comes and the wait says the command had started.
+// Why a short wait otherwise: a trigger stopped by the same dialog often reports just after the look.
+func awaitPausePointTriggerResultBehindDialog(
+	ctx context.Context,
+	connection unityipc.Connection,
+	options waitForPausePointOptions,
+	report statusReport,
+	triggerDone <-chan *pausePointTriggerResult,
+) *pausePointTriggerResult {
+	if triggerDone == nil {
+		return nil
+	}
+	wait := pausePointFinalStatusProbeTimeout
+	if options.dialogWatch.reportBlockingDialog != nil && pausePointTriggerWaitsForMainThread(report, options.triggerCommand) {
+		// A failed report only means no answer comes; the wait then says the command had started.
+		_ = options.dialogWatch.reportBlockingDialog(ctx, connection, options.triggerCommand)
+		wait = pausePointTriggerNotRunConfirmWait
+	}
+	return receivePausePointTriggerResultWithin(triggerDone, wait)
 }
 
 // settlePausePointWaitOnTriggerResult ends the wait when the trigger's result shows the trigger

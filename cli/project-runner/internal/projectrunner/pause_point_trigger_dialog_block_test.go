@@ -231,6 +231,27 @@ func triggerDialogLook(runningToolName string, phase string) *fakeDialogLook {
 	return look
 }
 
+// triggerDialogUnity stands in for Unity's side of a dialog report: it records the reported command
+// names and, when answer is set, has the trigger report it after a delay longer than the short wait
+// for a result that follows the look, so only the wait for the report's answer receives it.
+type triggerDialogUnity struct {
+	reported []string
+	answer   *pausePointTriggerResult
+	handle   *pausePointTriggerHandle
+}
+
+func (unity *triggerDialogUnity) report(_ context.Context, _ unityipc.Connection, toolName string) error {
+	unity.reported = append(unity.reported, toolName)
+	if unity.answer != nil {
+		answer := unity.answer
+		go func() {
+			time.Sleep(2 * pausePointFinalStatusProbeTimeout)
+			unity.handle.done <- answer
+		}()
+	}
+	return nil
+}
+
 // waitForPausePointBehindDialog runs the poll loop against an Editor that answers nothing while the
 // look finds a dialog, with a trigger that has not reported (or has reported result).
 func waitForPausePointBehindDialog(
@@ -238,13 +259,19 @@ func waitForPausePointBehindDialog(
 	look *fakeDialogLook,
 	triggerCommand string,
 	result *pausePointTriggerResult,
+	unity *triggerDialogUnity,
 ) error {
 	t.Helper()
 	useUnityProcessLookup(t, runningUnityProcessLookup)
+	originalConfirmWait := pausePointTriggerNotRunConfirmWait
+	pausePointTriggerNotRunConfirmWait = 4 * pausePointFinalStatusProbeTimeout
+	t.Cleanup(func() { pausePointTriggerNotRunConfirmWait = originalConfirmWait })
+	deps := look.deps()
+	deps.reportBlockingDialog = unity.report
 	options := waitForPausePointOptions{
 		id:             triggerDialogPausePointID,
 		timeout:        5 * time.Second,
-		dialogWatch:    look.deps(),
+		dialogWatch:    deps,
 		triggerCommand: triggerCommand,
 	}
 	var handle *pausePointTriggerHandle
@@ -254,32 +281,42 @@ func waitForPausePointBehindDialog(
 			handle.done <- result
 		}
 	}
+	unity.handle = handle
 	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
 	return err
 }
 
-// Verifies a dialog the wait's own watch finds while the trigger it sent still holds the command slot
-// waiting for the main thread reports the trigger as not run: once uloop exits, the dropped connection
-// cancels that request in Unity.
-func TestPausePointWaitReportsTheTriggerNotRunWhenItStillWaitsForTheMainThread(t *testing.T) {
+// Verifies a dialog the wait's own watch finds while its trigger still waits for the main thread is
+// reported to Unity once under the trigger's name, and that Unity's answer, the trigger reporting it
+// was not run, ends the wait with the not-run error.
+func TestPausePointWaitConfirmsTheTriggerNotRunByReportingTheDialog(t *testing.T) {
+	notRun := &pausePointTriggerResult{Command: "execute-dynamic-code", Completed: true, Error: triggerNotRunDialogEnvelope(t)}
+	unity := &triggerDialogUnity{answer: notRun}
+
 	err := waitForPausePointBehindDialog(t, triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase),
-		"execute-dynamic-code", nil)
+		"execute-dynamic-code", nil, unity)
 
 	cliError := assertTriggerNotRunBlockedByDialog(t, err)
-	if _, present := cliError.Details["TriggerResult"]; present {
-		t.Fatalf("Details = %#v, want no TriggerResult before the trigger reported", cliError.Details)
+	if cliError.Details["TriggerResult"] != notRun {
+		t.Fatalf("Details.TriggerResult = %#v, want the trigger's answer", cliError.Details["TriggerResult"])
+	}
+	if len(unity.reported) != 1 || unity.reported[0] != "execute-dynamic-code" {
+		t.Fatalf("reported = %#v, want one report under the trigger's name", unity.reported)
 	}
 }
 
-// Verifies every case the watch cannot pin on a not-yet-run trigger that Unity drops on disconnect keeps
-// the started message and the step to wait again without --trigger.
-func TestPausePointWaitKeepsTheStartedMessageWhenTheTriggerMayRun(t *testing.T) {
+// Verifies the wait keeps the started message and the step to wait again without --trigger whenever
+// Unity does not confirm the trigger was not run, and reports the dialog only while the trigger itself
+// waits for the main thread.
+func TestPausePointWaitKeepsTheStartedMessageWithoutUnitysConfirmation(t *testing.T) {
 	succeeded := &pausePointTriggerResult{Command: "execute-dynamic-code", Completed: true, Response: []byte(`{"Success":true}`)}
 	cases := []struct {
 		name           string
 		look           *fakeDialogLook
 		triggerCommand string
 		result         *pausePointTriggerResult
+		answer         *pausePointTriggerResult
+		wantReports    int
 	}{
 		{name: "no trigger", look: newFakeDialogLook(commandDialogPlayerStoppedDialog())},
 		{
@@ -287,12 +324,12 @@ func TestPausePointWaitKeepsTheStartedMessageWhenTheTriggerMayRun(t *testing.T) 
 			triggerCommand: "execute-dynamic-code", result: succeeded,
 		},
 		{
-			name: "compile survives a disconnect", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
-			triggerCommand: clicore.CompileCommandName,
+			name: "no answer to the report", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
+			triggerCommand: clicore.CompileCommandName, wantReports: 1,
 		},
 		{
-			name: "run-tests survives a disconnect", look: triggerDialogLook(clicore.RunTestsCommandName, waitingForMainThreadPhase),
-			triggerCommand: clicore.RunTestsCommandName,
+			name: "another answer to the report", look: triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase),
+			triggerCommand: "execute-dynamic-code", answer: succeeded, wantReports: 1,
 		},
 		{
 			name: "run-tests trigger behind its implicit compile", look: triggerDialogLook(clicore.CompileCommandName, waitingForMainThreadPhase),
@@ -313,12 +350,17 @@ func TestPausePointWaitKeepsTheStartedMessageWhenTheTriggerMayRun(t *testing.T) 
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := waitForPausePointBehindDialog(t, testCase.look, testCase.triggerCommand, testCase.result)
+			unity := &triggerDialogUnity{answer: testCase.answer}
+
+			err := waitForPausePointBehindDialog(t, testCase.look, testCase.triggerCommand, testCase.result, unity)
 
 			cliError := classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName)
 			assertStartedBlockedByDialog(t, cliError, triggerDialogStartedStep, false)
 			if _, present := cliError.Details[commandNotRunDetailKey]; present {
 				t.Fatalf("Details = %#v, want no CommandNotRun", cliError.Details)
+			}
+			if len(unity.reported) != testCase.wantReports {
+				t.Fatalf("reported = %#v, want %d reports", unity.reported, testCase.wantReports)
 			}
 		})
 	}
@@ -379,5 +421,13 @@ func TestPausePointWaitReadsATriggerResultThatArrivesJustAfterTheLook(t *testing
 	cliError := assertTriggerNotRunBlockedByDialog(t, err)
 	if triggerResult != notRun || cliError.Details["TriggerResult"] != notRun {
 		t.Fatalf("triggerResult = %#v, Details.TriggerResult = %#v, want the result that arrived", triggerResult, cliError.Details["TriggerResult"])
+	}
+}
+
+// Verifies the default watch dependencies can report a dialog to Unity: a nil report turns the
+// confirmation off without any error, so a dropped default would silently lose the not-run answer.
+func TestDefaultDialogWatchDependenciesReportDialogsForTheTrigger(t *testing.T) {
+	if defaultDialogWatchDeps().reportBlockingDialog == nil {
+		t.Fatal("reportBlockingDialog is nil, want the report to Unity")
 	}
 }

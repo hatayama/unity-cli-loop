@@ -52,17 +52,13 @@ func pausePointTriggerNotRunDialogs(result *pausePointTriggerResult) ([]statusDi
 	return envelope.Error.Details.Dialogs, true
 }
 
-// pausePointTriggerWaitsToRun reports whether the report a dialog look returned shows the --trigger
-// command holding Unity's command slot while it still waits for the main thread, and whether Unity
-// drops such a request when this uloop process exits. Both together mean the trigger will not run.
-// Why the name match: another client's command, or the compile run-tests starts first, can hold the
-// slot instead. Why ClientDisconnectCancelsRunningTool: compile and run-tests can outlive the
-// connection, and the report carries only the name, not the options that decide it.
-func pausePointTriggerWaitsToRun(report statusReport, triggerCommand string) bool {
+// pausePointTriggerWaitsForMainThread reports whether the report a dialog look returned shows the
+// --trigger command holding Unity's command slot while it still waits for the main thread. Why the name
+// match: another client's command, or the compile run-tests starts first, can hold the slot instead.
+func pausePointTriggerWaitsForMainThread(report statusReport, triggerCommand string) bool {
 	return triggerCommand != "" &&
 		report.RunningToolName == triggerCommand &&
-		report.RunningToolPhase == waitingForMainThreadPhase &&
-		clierrors.ClientDisconnectCancelsRunningTool(report.RunningToolName)
+		report.RunningToolPhase == waitingForMainThreadPhase
 }
 
 // pausePointTriggerNotRunBlockedByDialog is the error of a pause-point wait whose --trigger command a

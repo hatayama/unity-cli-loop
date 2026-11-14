@@ -81,12 +81,13 @@ the one Unity fails with `main_thread_blocked`. The wait reads that result from 
 envelope (`BLOCKED_BY_DIALOG` with `Details.CommandNotRun`) and ends at once, saying the trigger was not
 run and to wait again with the same `--trigger`, instead of waiting until its own 30-second-interval
 watch finds the dialog and telling the agent to drop a trigger that was never run. When its own watch
-finds the dialog first, the look's report names the request holding the slot; a trigger still waiting
-for the main thread in a request Unity drops on disconnect is reported the same way, because it is
-cancelled once uloop exits. Compile and run-tests are excluded by name, since they can outlive the
-connection and the report does not carry the options that decide it; they, and every case the wait
-cannot pin on the trigger, keep the `had already started` form, which never risks sending the trigger
-twice.
+finds the dialog first and the look's report shows the trigger holding the slot while it waits for the
+main thread, the wait reports the dialog to Unity under the trigger's name and waits up to 3 seconds for
+the trigger's answer; a `main_thread_blocked` answer ends the wait the same way. Why ask Unity instead
+of judging from the look: the look is one moment, and the dialog can close and let the trigger run
+before uloop exits. A request that outlives the disconnect, such as a default `compile`, is not failed
+by the report, so no answer comes. Without that answer, and in every other case, the wait keeps the
+`had already started` form, which never risks sending the trigger twice.
 
 ## Context
 

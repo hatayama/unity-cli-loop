@@ -28,13 +28,18 @@ type dialogWatchDeps struct {
 	// canPressDialogs is whether uloop press-dialog-button works on this operating system.
 	canPressDialogs bool
 	now             func() time.Time
+	// reportBlockingDialog tells Unity that a dialog holds its main thread while a request of the named
+	// command waits, so Unity fails that request if it has not started. Only the pause-point wait uses
+	// it, to confirm its --trigger was not run; nil turns that confirmation off.
+	reportBlockingDialog func(context.Context, unityipc.Connection, string) error
 }
 
 func defaultDialogWatchDeps() dialogWatchDeps {
 	return dialogWatchDeps{
-		probeEditorStatus: probeEditorStatusForDialogs,
-		canPressDialogs:   defaultDialogInspector().CanPress(),
-		now:               time.Now,
+		probeEditorStatus:    probeEditorStatusForDialogs,
+		canPressDialogs:      defaultDialogInspector().CanPress(),
+		now:                  time.Now,
+		reportBlockingDialog: sendReportBlockingDialog,
 	}
 }
 
