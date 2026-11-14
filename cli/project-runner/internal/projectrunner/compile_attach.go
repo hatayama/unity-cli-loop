@@ -63,6 +63,17 @@ func tryAttachToPendingCompile(
 	}
 
 	status, probeErr := probePendingCompileStatus(ctx, connection, record.RequestID, deps)
+	var blocked blockedByDialogError
+	if errors.As(probeErr, &blocked) {
+		// Why keep the record: the pending compile goes on once the dialog closes, and the next
+		// uloop compile reattaches to it as the error's guidance says.
+		logCompileAttachProbeFailed(connection, record.RequestID, probeErr, "blocked_by_dialog")
+		clierrors.WriteClassifiedError(stderr, probeErr, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
+		})
+		return true, compileExecutionResult{exitCode: 1}
+	}
 	if probeErr != nil {
 		// Why wait: Unity acknowledged the query, so its server is alive and only the main thread
 		// that answers status queries stayed blocked. While the pending compile holds the
@@ -102,8 +113,9 @@ func tryAttachToPendingCompile(
 	return false, compileExecutionResult{}
 }
 
-// probePendingCompileStatus queries the pending compile's status until one query succeeds or the
-// probe deadline passes. A failed probe returns the last query's error, or ctx.Err() when ctx ends
+// probePendingCompileStatus queries the pending compile's status until one query succeeds, a dialog
+// is found behind a query Unity accepted but did not answer, or the probe deadline passes. A failed
+// probe returns the dialog's BLOCKED_BY_DIALOG, the last query's error, or ctx.Err() when ctx ends
 // between queries.
 func probePendingCompileStatus(
 	ctx context.Context,
@@ -121,10 +133,18 @@ func probePendingCompileStatus(
 	}
 
 	deadline := time.Now().Add(timeout)
+	dialogWatch := newCompileDialogWatch(connection, deps)
 	for {
 		status, err := deps.queryCompileStatus(ctx, connection, requestID)
 		if err == nil {
 			return status, nil
+		}
+		// Why look here and keep retrying otherwise: an unanswered query shows the main thread is
+		// held, while the retries decide by the last answer whether the pending compile is waited on.
+		if isUnansweredStatusProbe(err) {
+			if dialogs := dialogWatch.observeUnansweredProbe(ctx); dialogs != nil {
+				return compileStatusResponse{}, compileBlockedByDialog(dialogs, deps)
+			}
 		}
 		if !time.Now().Before(deadline) {
 			// Why the last error, not the first: it is the Editor's latest state. An Editor that was
@@ -295,7 +315,7 @@ func waitForAttachedCompileCompletion(
 			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
-		if dialogs := dialogWatch.observePoll(ctx, err == nil); dialogs != nil {
+		if dialogs := compileWaitDialogs(ctx, dialogWatch, err); dialogs != nil {
 			return nil, attachWaitFailed, lastObservedCompileStatus(lastStatus, observedStatus), compileBlockedByDialog(dialogs, deps)
 		}
 		observeCompileWaitInterim(&interim, deps, status, err)

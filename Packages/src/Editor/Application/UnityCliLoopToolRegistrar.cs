@@ -134,6 +134,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _toolExecutionService.CancelRunningTool();
         }
 
+        internal void ReportBlockingDialog(string toolName)
+        {
+            _toolExecutionService.ReportBlockingDialog(toolName);
+        }
+
         internal UnityCliLoopExecutionStatus GetExecutionStatus()
         {
             return _toolExecutionService.GetExecutionStatus();

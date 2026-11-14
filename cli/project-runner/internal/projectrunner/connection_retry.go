@@ -32,6 +32,8 @@ type connectionRetryDeps struct {
 	// dialogWatch looks for the dialog that holds Unity's main thread when the response waits on a
 	// long stall, and when the send ends in main_thread_blocked or after the five-minute stall.
 	dialogWatch dialogWatchDeps
+	// earlyDialogReport tells Unity about a dialog found while the request is still unanswered.
+	earlyDialogReport earlyDialogReportDeps
 }
 
 func defaultConnectionRetryDeps() connectionRetryDeps {
@@ -41,6 +43,7 @@ func defaultConnectionRetryDeps() connectionRetryDeps {
 		retryTimeout:            serverConnectionRetryDefaultTimeout,
 		retryPoll:               serverConnectionRetryDefaultPoll,
 		dialogWatch:             defaultDialogWatchDeps(),
+		earlyDialogReport:       defaultEarlyDialogReportDeps(),
 	}
 }
 
@@ -277,6 +280,7 @@ func sendWithTransientConnectionRetryAttempts(
 	// would last its whole window and end in a "wait and retry" error that never names the dialog.
 	serverWaitDialogWatch := newDialogBlockWatch(connection, deps.dialogWatch, dialogWatchInterval, dialogWatchStallThresholdSeconds)
 
+	busyLook := busyDialogLook{}
 	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
 	for {
@@ -288,7 +292,10 @@ func sendWithTransientConnectionRetryAttempts(
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
 		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
-		outcome, err := client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, progress)
+		outcome, err := sendAttemptWithEarlyDialogReport(ctx, connection, method, responseTimeout, deps.earlyDialogReport, progress,
+			func(watched unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error) {
+				return client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, watched)
+			})
 		cancelAttempt()
 		// Why Unity's answer first, a result or an error: it can arrive while the watch looks, and a
 		// command that finished must report how it ended rather than a dialog that no longer stops it.
@@ -298,6 +305,9 @@ func sendWithTransientConnectionRetryAttempts(
 		if isUnityServerBusyRPCError(err) {
 			if deps.returnBusyWithoutRetry {
 				return outcome, err
+			}
+			if dialogs := busyLook.observe(ctx, connection, err, deps.earlyDialogReport.probeEditorStatus); dialogs != nil {
+				return outcome, notSentBlockedByDialog(method, dialogs, deps.dialogWatch.canPressDialogs)
 			}
 			// Busy means the request was never executed, so a bounded retry is safe and
 			// usually absorbs back-to-back tool calls without bothering the caller.
