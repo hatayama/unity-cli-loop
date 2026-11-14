@@ -9,10 +9,10 @@ then at the dialog-check interval (10 seconds, 30 seconds while a pause point ho
 seconds have passed. When it finds a modal dialog, it tells Unity through the internal bridge
 command `report-blocking-dialog`, which carries the name of the command the send was for.
 
-- Unity then fails a request of that command that has not entered its tool code with
-  `main_thread_blocked`, as soon as its main thread has not ticked since the report and has been
-  still for at least 1 second. Requests of other commands keep the 30-second answer. A report
-  without a name counts as no report. The
+- Unity then fails a request of that command that has not entered its tool code, and that its
+  sender's disconnect would cancel, with `main_thread_blocked`, as soon as its main thread has not
+  ticked since the report and has been still for at least 1 second. Every other request keeps the
+  30-second answer. A report without a name counts as no report. The
   CLI turns that answer into `BLOCKED_BY_DIALOG` with a Message that says the command `was not run`.
 - A request whose tool code has started is left alone, as before.
 - The CLI never hangs up on the request itself. It keeps waiting on the same connection for Unity's
@@ -27,11 +27,13 @@ command `report-blocking-dialog`, which carries the name of the command the send
   before it takes the command slot, so a send it then refuses as busy was accepted too: that attempt
   ends at once and never reports. The watch also reports only when the Editor names a command of the
   send's name as the slot holder, so it does not send a report that could fail nothing.
-- Invariant: a send with a response timeout (today only `compile`) is never watched and never
-  reports, so a request of its name is never failed early by a report. Such a send hangs up and
-  tells the user the command keeps running once the dialog closes; this invariant keeps that true.
-  Unity enforces it by the reported name, not the CLI by timing, because the command slot can change
-  hands between the CLI's look and its report, and a busy answer can arrive late.
+- Invariant: a request that outlives its sender's disconnect (a default `compile`, and a PlayMode
+  `run-tests` that keeps the Enter Play Mode settings) is never failed early by a report. Those are
+  the only requests uloop may hang up on and say keep running once the dialog closes, so this keeps
+  that true. Unity enforces it from the request itself, not the CLI by name or timing: the command
+  slot can change hands between the CLI's look and its report, a busy answer can arrive late, and a
+  `compile --no-wait-for-domain-reload`, which waits for its answer and is reported, shares the name
+  `compile` with a default compile. Such a run-tests keeps the 30-second answer.
 - A send refused as busy, while the request holding the slot waits for a main thread that has been
   still for a second, looks for a dialog once. When it finds one it ends with the same
   `BLOCKED_BY_DIALOG` (`was not run`) as the check before sending, instead of retrying and then
@@ -42,8 +44,9 @@ command `report-blocking-dialog`, which carries the name of the command the send
 
 ### Compile
 
-`compile` is never reported to Unity: its request stays in Unity after the send hangs up and runs
-once the dialog closes, so a report would make Unity drop a compile that uloop says keeps running.
+A default `compile` is never reported to Unity: its request stays in Unity after the send hangs up
+and runs once the dialog closes, so it reads no answer to a report, and Unity would not fail it early
+anyway. `compile --no-wait-for-domain-reload` waits for its answer like other commands and is reported.
 It finds the dialog earlier instead, and still answers with the `had already started` form that the
 next `uloop compile` reattaches to:
 
