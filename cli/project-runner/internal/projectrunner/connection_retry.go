@@ -275,7 +275,6 @@ func sendWithTransientConnectionRetryAttempts(
 
 	dialogWatch := newHeartbeatDialogWatch(ctx, connection, method, deps.dialogWatch)
 	defer dialogWatch.release()
-	defer startEarlyDialogReport(ctx, connection, method, responseTimeout, deps.earlyDialogReport)()
 	// serverWaitDialogWatch looks for a dialog while the server stays unreachable with Unity running.
 	// Why: a dialog Unity shows while it starts keeps its server from starting, so the wait below
 	// would last its whole window and end in a "wait and retry" error that never names the dialog.
@@ -292,7 +291,10 @@ func sendWithTransientConnectionRetryAttempts(
 		// acked must still fail at the base window. Only the dial-retry loop as a whole
 		// uses the extended unity-alive window.
 		attemptContext, cancelAttempt := context.WithTimeout(retryContext, deps.retryTimeout)
-		outcome, err := client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, progress)
+		outcome, err := sendAttemptWithEarlyDialogReport(ctx, connection, method, responseTimeout, deps.earlyDialogReport, progress,
+			func(watched unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error) {
+				return client.SendWithProgressOutcomeAcceptContext(dialogWatch.sendContext(ctx), attemptContext, method, params, watched)
+			})
 		cancelAttempt()
 		// Why Unity's answer first, a result or an error: it can arrive while the watch looks, and a
 		// command that finished must report how it ended rather than a dialog that no longer stops it.

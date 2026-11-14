@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
+	cliprogress "github.com/hatayama/unity-cli-loop/common/progress"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -169,4 +170,32 @@ func probeEditorStatusWhileUnansweredWithDeps(
 func isWaitingForStillMainThread(response editorStatusResponse) bool {
 	return response.RunningToolPhase == waitingForMainThreadPhase &&
 		response.SecondsSinceLastMainThreadTick >= editorStatusEarlyStallSeconds
+}
+
+// sendAttemptWithEarlyDialogReport makes one send attempt through send and watches it for a dialog
+// only from Unity's accept of that attempt until the attempt returns, waiting for the watch to stop.
+// progress may be nil; it still gets every event the attempt reports.
+// Why per accepted attempt: Unity acks a request before it takes the command slot, so an attempt it
+// then refuses as busy was accepted too. A watch that outlived that attempt would report the dialog
+// for another request holding the slot, such as a compile uloop told the user keeps running.
+func sendAttemptWithEarlyDialogReport(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	responseTimeout time.Duration,
+	deps earlyDialogReportDeps,
+	progress unityipc.ProgressFunc,
+	send func(unityipc.ProgressFunc) (unityipc.UnitySendOutcome, error),
+) (unityipc.UnitySendOutcome, error) {
+	stop := func() {}
+	defer func() { stop() }()
+	watched := func(event cliprogress.Event) {
+		if event.Stage == cliprogress.StageAccepted {
+			stop = startEarlyDialogReport(ctx, connection, method, responseTimeout, deps)
+		}
+		if progress != nil {
+			progress(event)
+		}
+	}
+	return send(watched)
 }
