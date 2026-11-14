@@ -134,7 +134,7 @@ func busyLookSendDeps(probe *countingDialogProbe) connectionRetryDeps {
 	deps.dialogWatch = dialogWatchDeps{}
 	deps.earlyDialogReport = earlyDialogReportDeps{
 		probeEditorStatus:    probe.probe,
-		reportBlockingDialog: func(context.Context, unityipc.Connection) error { return nil },
+		reportBlockingDialog: func(context.Context, unityipc.Connection, string) error { return nil },
 		waitFor:              func(time.Duration) <-chan time.Time { return make(chan time.Time) },
 	}
 	return deps

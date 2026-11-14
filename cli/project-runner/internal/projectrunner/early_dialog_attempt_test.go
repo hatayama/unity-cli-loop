@@ -42,7 +42,7 @@ func (gated *gatedEarlyDialogReport) deps() earlyDialogReportDeps {
 			gated.probes.Add(1)
 			return heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()), nil
 		},
-		reportBlockingDialog: func(context.Context, unityipc.Connection) error {
+		reportBlockingDialog: func(context.Context, unityipc.Connection, string) error {
 			gated.sent.Add(1)
 			gated.once.Do(func() { close(gated.reported) })
 			return nil

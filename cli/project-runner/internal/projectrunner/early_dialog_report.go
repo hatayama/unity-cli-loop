@@ -11,6 +11,8 @@ import (
 
 const (
 	reportBlockingDialogBridgeCommandName = "report-blocking-dialog"
+	// reportBlockingDialogToolNameParam mirrors ReportBlockingDialogBridgeCommand.ToolNameParam.
+	reportBlockingDialogToolNameParam = "ToolName"
 
 	// earlyDialogLookDelay is how long a sent request may stay unanswered before uloop looks for a
 	// dialog. Why 2 seconds: most commands have answered by then, so they never pay for the look,
@@ -32,8 +34,9 @@ const (
 type earlyDialogReportDeps struct {
 	// probeEditorStatus reads the Editor the way the check before sending does.
 	probeEditorStatus func(context.Context, unityipc.Connection) (statusReport, error)
-	// reportBlockingDialog tells Unity that a dialog holds its main thread.
-	reportBlockingDialog func(context.Context, unityipc.Connection) error
+	// reportBlockingDialog tells Unity that a dialog holds its main thread while a request of the
+	// named command waits.
+	reportBlockingDialog func(context.Context, unityipc.Connection, string) error
 	waitFor              func(time.Duration) <-chan time.Time
 }
 
@@ -99,7 +102,7 @@ func runEarlyDialogReport(
 		}
 		// Why stop on a failed report: a Unity package older than this command answers it with an
 		// error every time, and that package keeps its 30-second answer.
-		if err := deps.reportBlockingDialog(ctx, connection); err != nil {
+		if err := deps.reportBlockingDialog(ctx, connection, method); err != nil {
 			return
 		}
 	}
@@ -107,11 +110,11 @@ func runEarlyDialogReport(
 
 // isOwnCommandHeldByDialog reports whether the probe finds a dialog holding Unity while a command
 // named method holds the command slot.
-// Why the name and not timing: Unity acks a request before it takes the slot, so this send's request
-// may still be waiting for a busy answer while another request holds the slot. A report fails
-// whichever request waits for the main thread, and that request may be a compile uloop said keeps
-// running once the dialog closes. A compile send is never watched, so a holder named like this send
-// is a request whose sender still waits for Unity's answer and reads it as not run.
+// Why: Unity acks a request before it takes the slot, so this send's request may still be waiting for
+// a busy answer while another command holds the slot. Unity fails early only a request of the
+// reported name, so a report sent then would fail nothing; this check saves that report. The safety
+// that a report never fails another command's request, such as a compile uloop said keeps running,
+// lives in Unity, because the slot can change hands between this look and the report.
 func isOwnCommandHeldByDialog(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -141,13 +144,15 @@ func findDialogWhileUnanswered(ctx context.Context, connection unityipc.Connecti
 	return findDialog(ctx, connection, probeEditorStatusWhileUnanswered)
 }
 
-func sendReportBlockingDialog(ctx context.Context, connection unityipc.Connection) error {
+// sendReportBlockingDialog sends the report with the command name it is for, so Unity fails early
+// only a request of that command.
+func sendReportBlockingDialog(ctx context.Context, connection unityipc.Connection, toolName string) error {
 	sendCtx, cancel := context.WithTimeout(ctx, reportBlockingDialogTimeout)
 	defer cancel()
 	_, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
 		sendCtx,
 		reportBlockingDialogBridgeCommandName,
-		map[string]any{})
+		map[string]any{reportBlockingDialogToolNameParam: toolName})
 	return err
 }
 

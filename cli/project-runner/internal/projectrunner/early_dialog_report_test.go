@@ -24,6 +24,7 @@ type earlyDialogReportScript struct {
 	waits     []time.Duration
 	probes    int
 	sent      int
+	sentNames []string
 }
 
 func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
@@ -33,8 +34,9 @@ func (script *earlyDialogReportScript) deps() earlyDialogReportDeps {
 			script.probes++
 			return report, script.probeErr
 		},
-		reportBlockingDialog: func(context.Context, unityipc.Connection) error {
+		reportBlockingDialog: func(_ context.Context, _ unityipc.Connection, toolName string) error {
 			script.sent++
+			script.sentNames = append(script.sentNames, toolName)
 			return script.reportErr
 		},
 		waitFor: func(wait time.Duration) <-chan time.Time {
@@ -80,6 +82,9 @@ func TestEarlyDialogReportTellsUnityOnlyWhenItsOwnCommandHoldsTheSlot(t *testing
 
 			runEarlyDialogReport(context.Background(), unityipc.Connection{}, tc.method, script.deps(), 10*time.Second)
 
+			if tc.wantReport && script.sentNames[0] != tc.method {
+				t.Fatalf("reported for %q, want the send's command %q", script.sentNames[0], tc.method)
+			}
 			if (script.sent > 0) != tc.wantReport || script.probes < 2 {
 				t.Fatalf("reports = %d, looks = %d, want reported=%v while the looks go on",
 					script.sent, script.probes, tc.wantReport)
@@ -244,7 +249,7 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 		probeEditorStatus: func(context.Context, unityipc.Connection) (statusReport, error) {
 			return heldBlockedByDialogReport(commandDialogBlockCommand, commandDialogPlayerStoppedDialog()), nil
 		},
-		reportBlockingDialog: func(context.Context, unityipc.Connection) error {
+		reportBlockingDialog: func(context.Context, unityipc.Connection, string) error {
 			once.Do(func() { close(reported) })
 			return nil
 		},
@@ -264,5 +269,36 @@ func TestSendReportsADialogFoundWhileUnansweredAndKeepsWaitingForUnity(t *testin
 	assertCommandBlockedByDialog(t, cliError, commandDialogPlayerStoppedDialog().Title)
 	if !isMainThreadBlockedRPCError(err) {
 		t.Fatalf("the error must still carry Unity's answer that the command was not run: %v", err)
+	}
+}
+
+// Verifies the report Unity receives names the command it was sent for, so Unity fails only a
+// request of that command.
+func TestSendReportBlockingDialogNamesTheCommand(t *testing.T) {
+	listener := newLoopbackIpcListener(t)
+	received := make(chan scriptedIPCRequest, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		request, err := readScriptedIPCRequest(conn)
+		if err != nil {
+			return
+		}
+		received <- request
+		_ = unityipc.Write(conn, []byte(`{"jsonrpc":"2.0","result":{},"id":1}`))
+	}()
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
+		ProjectRoot: t.TempDir(),
+	}
+
+	err := sendReportBlockingDialog(context.Background(), connection, "get-logs")
+
+	request := <-received
+	if err != nil || request.method != reportBlockingDialogBridgeCommandName || request.params["ToolName"] != "get-logs" {
+		t.Fatalf("err = %v, method = %q, params = %v, want the report naming get-logs", err, request.method, request.params)
 	}
 }
