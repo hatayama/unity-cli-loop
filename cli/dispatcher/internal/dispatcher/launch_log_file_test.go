@@ -74,7 +74,7 @@ func TestBuildUnityLaunchArgsPassesLogFile(t *testing.T) {
 		"/tmp/project",
 		"-logFile",
 		"/tmp/my logs/editor.log",
-		"-ignorecompilererrors",
+		"-launchedByUloop",
 	}
 
 	if !slices.Equal(args, expectedArgs) {

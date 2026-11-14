@@ -77,8 +77,8 @@ func TestParseLaunchOptionsRejectsRemovedIgnoreCompilerErrorsFlags(t *testing.T)
 	}
 }
 
-func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsByDefault(t *testing.T) {
-	// Verifies every Unity launch ignores project compiler errors during Editor startup.
+func TestBuildUnityLaunchArgsMarksLaunchAsUloopStarted(t *testing.T) {
+	// Verifies a launch ends with the marker that identifies a uloop-started Editor, and no compiler-error switch.
 	args := buildUnityLaunchArgs(
 		"/tmp/project",
 		launchOptions{platform: "Android"},
@@ -88,7 +88,7 @@ func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsByDefault(t *testing.T)
 		"/tmp/project",
 		"-buildTarget",
 		"Android",
-		"-ignorecompilererrors",
+		"-launchedByUloop",
 	}
 
 	if !slices.Equal(args, expectedArgs) {
@@ -96,8 +96,8 @@ func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsByDefault(t *testing.T)
 	}
 }
 
-func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsForRestart(t *testing.T) {
-	// Verifies restarted Unity launches use the same compiler-error ignore startup argument.
+func TestBuildUnityLaunchArgsMarksRestartAsUloopStarted(t *testing.T) {
+	// Verifies a restarted Editor carries the same uloop-started marker as a fresh launch.
 	args := buildUnityLaunchArgs(
 		"/tmp/project",
 		launchOptions{restart: true},
@@ -105,7 +105,7 @@ func TestBuildUnityLaunchArgsIncludesIgnoreCompilerErrorsForRestart(t *testing.T
 	expectedArgs := []string{
 		"-projectPath",
 		"/tmp/project",
-		"-ignorecompilererrors",
+		"-launchedByUloop",
 	}
 
 	if !slices.Equal(args, expectedArgs) {
