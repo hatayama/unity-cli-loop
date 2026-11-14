@@ -27,9 +27,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             // Why a missing name is taken, not rejected: a report without a name fails no request, so it
             // is the same as no report, and an error answer would only make the CLI stop reporting.
-            string toolName = paramsToken?[ToolNameParam]?.Type == JTokenType.String
-                ? paramsToken[ToolNameParam].Value<string>()
-                : string.Empty;
+            // Why the object check: indexing params that are an array or a scalar throws, which would turn
+            // a malformed report into an error answer instead of a report without a name.
+            JToken nameToken = paramsToken is JObject paramsObject ? paramsObject[ToolNameParam] : null;
+            string toolName = nameToken?.Type == JTokenType.String ? nameToken.Value<string>() : string.Empty;
             toolRegistrarService.ReportBlockingDialog(toolName);
             return new ReportBlockingDialogResponse();
         }

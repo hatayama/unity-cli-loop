@@ -244,6 +244,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies a report whose params are not an object is taken as a report without a name instead
+        /// of failing, so the CLI keeps reporting and no request is failed early.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_ReportBlockingDialogWithNonObjectParams_IsTakenWithoutAName()
+        {
+            CountingWatchdog watchdog = new CountingWatchdog();
+            UnityCliLoopToolRegistrarService registrarService = new UnityCliLoopToolRegistrarService(
+                new EmptyInternalToolNameProvider(),
+                new AlwaysEnabledToolSettingsPort(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), null, watchdog),
+                () => Array.Empty<IUnityCliLoopTool>());
+            UnityCliLoopExecutionRouter router = new UnityCliLoopExecutionRouter(
+                registrarService,
+                new EditorExecutionActivity(new RecordingProcessActivityApi()),
+                new EditorDialogTracker());
+
+            UnityCliLoopToolResponse response = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
+                new JArray("get-logs"),
+                CancellationToken.None);
+
+            Assert.That(response, Is.InstanceOf<ReportBlockingDialogResponse>());
+            Assert.That(watchdog.LastToolName, Is.Empty);
+        }
+
+        /// <summary>
         /// Verifies an internal bridge command holds one activity and ends it when the command returns.
         /// </summary>
         [Test]
