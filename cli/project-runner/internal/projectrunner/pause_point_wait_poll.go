@@ -15,9 +15,10 @@ const pausePointFinalStatusProbeTimeout = 250 * time.Millisecond
 var pausePointStatusPoll = 50 * time.Millisecond
 
 // pausePointTriggerNotRunConfirmWait is how long a wait that reported a dialog to Unity waits for its
-// trigger's answer. Why 3 seconds: Unity checks reported requests once a second, and its answer then
-// travels back through the trigger's own send.
-var pausePointTriggerNotRunConfirmWait = 3 * time.Second
+// trigger's answer. Why 6 seconds: Unity checks reported requests within a second, and the trigger's
+// send then reads the Editor again after a second and looks at Unity's windows for about a second on
+// macOS before it reports; 6 is twice those 3 seconds.
+var pausePointTriggerNotRunConfirmWait = 6 * time.Second
 
 type pausePointWaitState string
 
@@ -151,7 +152,7 @@ func waitForPausePointStatus(
 			state.triggerResult = result
 			triggerDone = nil
 			if response, waitState, done, err := settlePausePointWaitOnTriggerResult(
-				ctx, connection, options, &state, resumeResult); done {
+				ctx, connection, options, &state, nil, resumeResult); done {
 				return response, waitState, state.triggerResult, state.hasBaseline, err
 			}
 		case <-ticker.C:
@@ -201,7 +202,7 @@ func finishPausePointWaitBehindDialog(
 			waitContext, connection, options, state.dialogWatch.lastFoundReport(), triggerDone)
 	}
 	if response, waitState, done, err := settlePausePointWaitOnTriggerResult(
-		ctx, connection, options, state, resumeResult); done {
+		ctx, connection, options, state, dialogs, resumeResult); done {
 		return response, waitState, err
 	}
 	// A trigger result that came in means Unity's main thread ran since the look, so the dialog may be
@@ -249,7 +250,9 @@ func awaitPausePointTriggerResultBehindDialog(
 }
 
 // settlePausePointWaitOnTriggerResult ends the wait when the trigger's result shows the trigger
-// performed nothing: rejected before it executed, or kept from running by a dialog. done is false
+// performed nothing: rejected before it executed, not run by a stalled main thread, or kept from
+// running by a dialog; foundDialogs are the dialogs the wait's own watch found, nil when it found
+// none. done is false
 // when the wait should go on. Either way the wait first reads the marker once more, because the game
 // itself can hit it in the meantime, and that hit is what the wait reports then.
 func settlePausePointWaitOnTriggerResult(
@@ -257,11 +260,13 @@ func settlePausePointWaitOnTriggerResult(
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 	state *pausePointWaitLoopState,
+	foundDialogs []statusDialog,
 	resumeResult *pausePointResumePlayResult,
 ) (pausePointStatusResponse, pausePointWaitState, bool, error) {
 	result := state.triggerResult
-	rejected := pausePointTriggerRejectedBeforeExecution(result) || pausePointTriggerRejectedByUnityBeforeExecution(result)
-	dialogs, notRunBehindDialog := pausePointTriggerNotRunDialogs(result)
+	dialogs, notRunBehindDialog := pausePointTriggerNotRunBehindDialog(result, foundDialogs)
+	rejected := pausePointTriggerRejectedBeforeExecution(result) || pausePointTriggerRejectedByUnityBeforeExecution(result) ||
+		pausePointTriggerNotRunOnStalledMainThread(result)
 	if !rejected && !notRunBehindDialog {
 		return pausePointStatusResponse{}, "", false, nil
 	}

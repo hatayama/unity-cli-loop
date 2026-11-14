@@ -241,14 +241,22 @@ type triggerDialogUnity struct {
 	handle   *pausePointTriggerHandle
 	// preset is a result the trigger reported before the wait started.
 	preset *pausePointTriggerResult
+	// delay is how long after the report the answer comes; zero means just past the short grace.
+	delay time.Duration
+	// keepConfirmWait runs with the production wait for the answer instead of a short one.
+	keepConfirmWait bool
 }
 
 func (unity *triggerDialogUnity) report(_ context.Context, _ unityipc.Connection, toolName string) error {
 	unity.reported = append(unity.reported, toolName)
 	if unity.answer != nil {
 		answer := unity.answer
+		delay := unity.delay
+		if delay == 0 {
+			delay = 2 * pausePointFinalStatusProbeTimeout
+		}
 		go func() {
-			time.Sleep(2 * pausePointFinalStatusProbeTimeout)
+			time.Sleep(delay)
 			unity.handle.done <- answer
 		}()
 	}
@@ -281,7 +289,11 @@ func waitForPausePointStatusBehindDialog(
 	t.Helper()
 	useUnityProcessLookup(t, runningUnityProcessLookup)
 	originalConfirmWait := pausePointTriggerNotRunConfirmWait
-	pausePointTriggerNotRunConfirmWait = 4 * pausePointFinalStatusProbeTimeout
+	if unity.keepConfirmWait {
+		pausePointTriggerNotRunConfirmWait = originalConfirmWait
+	} else {
+		pausePointTriggerNotRunConfirmWait = 4 * pausePointFinalStatusProbeTimeout
+	}
 	t.Cleanup(func() { pausePointTriggerNotRunConfirmWait = originalConfirmWait })
 	deps := look.deps()
 	deps.reportBlockingDialog = unity.report
@@ -507,5 +519,88 @@ func TestPausePointWaitReportsAHitRecordedWhileItWaitedForTheTrigger(t *testing.
 
 	if err != nil || state != pausePointWaitStateHit || response.HitCount != 1 {
 		t.Fatalf("state = %q, err = %v, response = %#v, want the recorded hit", state, err, response)
+	}
+}
+
+// triggerMainThreadBlockedResult is the trigger result of Unity's bare main_thread_blocked answer, which
+// the trigger's send reports when its own look found no dialog.
+func triggerMainThreadBlockedResult(t *testing.T) *pausePointTriggerResult {
+	t.Helper()
+	return &pausePointTriggerResult{
+		Command:   "execute-dynamic-code",
+		Completed: true,
+		Error:     triggerDialogEnvelope(t, commandDialogMainThreadBlockedRPCError("execute-dynamic-code")),
+	}
+}
+
+// Verifies Unity's bare main_thread_blocked answer to a dialog report counts as the trigger not run,
+// naming the dialog the wait's own watch found, since the trigger's own look found none to name.
+func TestPausePointWaitTakesABareMainThreadBlockedAnswerAsNotRun(t *testing.T) {
+	blocked := triggerMainThreadBlockedResult(t)
+	if !strings.Contains(blocked.Error, pausePointTriggerMainThreadBlockedErrorCode) {
+		t.Fatalf("trigger stderr = %s, want the %s error code", blocked.Error, pausePointTriggerMainThreadBlockedErrorCode)
+	}
+	unity := &triggerDialogUnity{answer: blocked}
+
+	err := waitForPausePointBehindDialog(t, triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase),
+		"execute-dynamic-code", nil, unity)
+
+	_ = assertTriggerNotRunBlockedByDialog(t, err)
+}
+
+// Verifies Unity's bare main_thread_blocked answer that arrives without a dialog from the wait's own
+// watch abandons the wait as a trigger that did not run, and tells the agent to run the same trigger
+// once Unity responds instead of to fix its value.
+func TestWaitForPausePointAbandonsAWaitWhoseTriggerUnityDidNotRun(t *testing.T) {
+	blocked := triggerMainThreadBlockedResult(t)
+	useTriggerDialogFakes(t, blocked.Error)
+
+	startedAt := time.Now()
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, triggerDialogWaitOptions())
+	elapsed := time.Since(startedAt)
+
+	if err != nil || state != pausePointWaitStateTriggerFailed {
+		t.Fatalf("state = %q, err = %v, want the trigger_failed state", state, err)
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("waited %v, want an early stop", elapsed)
+	}
+	actions := strings.Join(pausePointTriggerFailedNextActions(triggerDialogPausePointID, triggerResult), "\n")
+	if strings.Contains(actions, "Fix the --trigger value") || strings.Contains(actions, "INVALID_ARGUMENT") {
+		t.Fatalf("NextActions = %s, want no advice to fix the trigger value", actions)
+	}
+	if !strings.Contains(actions, "<the same trigger command>") || !strings.Contains(actions, "uloop status") {
+		t.Fatalf("NextActions = %s, want the same trigger once uloop status reports Ready", actions)
+	}
+}
+
+// Verifies the wait for Unity's answer is long enough for a trigger that reports 3.5 seconds after the
+// dialog report, about what Unity's check and the trigger's own second look take on macOS.
+func TestPausePointWaitWaitsLongEnoughForUnitysAnswer(t *testing.T) {
+	notRun := &pausePointTriggerResult{Command: "execute-dynamic-code", Completed: true, Error: triggerNotRunDialogEnvelope(t)}
+	unity := &triggerDialogUnity{answer: notRun, delay: 3500 * time.Millisecond, keepConfirmWait: true}
+
+	err := waitForPausePointBehindDialog(t, triggerDialogLook("execute-dynamic-code", waitingForMainThreadPhase),
+		"execute-dynamic-code", nil, unity)
+
+	_ = assertTriggerNotRunBlockedByDialog(t, err)
+}
+
+// Verifies a genuine hit the final marker read finds wins over a trigger that reported it was not run
+// behind a dialog: the game itself can reach the marker while the trigger waits.
+func TestWaitForPausePointReportsAHitOverATriggerNotRunBehindADialog(t *testing.T) {
+	useTriggerDialogFakes(t, triggerNotRunDialogEnvelope(t))
+	queryPausePointStatus = func(ctx context.Context, _ unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		// Only the final read runs under the short probe deadline; the polls before it see the armed marker.
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= pausePointFinalStatusProbeTimeout {
+			return pausePointStatusResponse{Id: id, Status: pausePointStatusHit, HitCount: 1}, nil
+		}
+		return pausePointArmedStatusResponse(id), nil
+	}
+
+	response, state, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, triggerDialogWaitOptions())
+
+	if err != nil || state != pausePointWaitStateHit || response.HitCount != 1 {
+		t.Fatalf("state = %q, err = %v, HitCount = %d, want the hit", state, err, response.HitCount)
 	}
 }

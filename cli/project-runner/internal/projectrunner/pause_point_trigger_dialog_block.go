@@ -18,38 +18,67 @@ const (
 	pausePointTriggerNotRunResumedNextAction = "--resume-play resumed PlayMode, and it keeps playing once the dialog " +
 		"is closed; to wait from a paused PlayMode again, run uloop control-play-mode --action Pause first, and pass " +
 		"--resume-play along with the same --trigger."
-	pausePointTriggerResultDetailKey    = "TriggerResult"
-	pausePointResumePlayResultDetailKey = "ResumePlayResult"
+	pausePointTriggerResultDetailKey = "TriggerResult"
+	// pausePointTriggerMainThreadBlockedErrorCode is the ErrorCode of Unity's main_thread_blocked answer
+	// when the trigger's send found no dialog to name. Why a local copy of the wire value: exporting
+	// the one in the shared errors module would make it a shared release input for this alone.
+	pausePointTriggerMainThreadBlockedErrorCode = "MAIN_THREAD_BLOCKED"
+	pausePointResumePlayResultDetailKey         = "ResumePlayResult"
 )
 
-// pausePointTriggerNotRunDialogs returns the dialogs a --trigger command reported when it stopped on a
-// dialog before it ran: its stderr envelope is BLOCKED_BY_DIALOG with Details.CommandNotRun. ok is
-// false for every other result, including a dialog error of a trigger that had already started.
-func pausePointTriggerNotRunDialogs(result *pausePointTriggerResult) ([]statusDialog, bool) {
-	if result == nil {
+// pausePointTriggerNotRunBehindDialog returns the dialogs to report when a --trigger command was kept
+// from running by a dialog, and ok false for every other result. It accepts the trigger's
+// BLOCKED_BY_DIALOG envelope with Details.CommandNotRun, which names the dialogs itself, and, when
+// foundDialogs is not empty, Unity's bare main_thread_blocked answer: the trigger's send reports that
+// when its own look found no dialog, for example because the look failed, while the wait's own watch
+// had found foundDialogs. A dialog error of a trigger that had already started is not accepted.
+func pausePointTriggerNotRunBehindDialog(result *pausePointTriggerResult, foundDialogs []statusDialog) ([]statusDialog, bool) {
+	envelope, ok := decodePausePointTriggerErrorEnvelope(result)
+	if !ok {
 		return nil, false
+	}
+	if envelope.ErrorCode == pausePointTriggerMainThreadBlockedErrorCode && len(foundDialogs) > 0 {
+		return foundDialogs, true
+	}
+	if envelope.ErrorCode != clierrors.ErrorCodeBlockedByDialog || !envelope.Details.CommandNotRun ||
+		len(envelope.Details.Dialogs) == 0 {
+		return nil, false
+	}
+	return envelope.Details.Dialogs, true
+}
+
+// pausePointTriggerNotRunOnStalledMainThread reports whether Unity answered the trigger with
+// main_thread_blocked: its main thread did not run the trigger within Unity's wait, so the trigger
+// performed nothing and waiting longer cannot bring it.
+func pausePointTriggerNotRunOnStalledMainThread(result *pausePointTriggerResult) bool {
+	envelope, ok := decodePausePointTriggerErrorEnvelope(result)
+	return ok && envelope.ErrorCode == pausePointTriggerMainThreadBlockedErrorCode
+}
+
+// pausePointTriggerErrorEnvelope is the part of a trigger's stderr error envelope the wait reads.
+type pausePointTriggerErrorEnvelope struct {
+	ErrorCode string `json:"ErrorCode"`
+	Details   struct {
+		CommandNotRun bool           `json:"CommandNotRun"`
+		Dialogs       []statusDialog `json:"Dialogs"`
+	} `json:"Details"`
+}
+
+func decodePausePointTriggerErrorEnvelope(result *pausePointTriggerResult) (pausePointTriggerErrorEnvelope, bool) {
+	if result == nil {
+		return pausePointTriggerErrorEnvelope{}, false
 	}
 	trimmed := bytes.TrimSpace([]byte(result.Error))
 	if len(trimmed) == 0 {
-		return nil, false
+		return pausePointTriggerErrorEnvelope{}, false
 	}
 	envelope := struct {
-		Error struct {
-			ErrorCode string `json:"ErrorCode"`
-			Details   struct {
-				CommandNotRun bool           `json:"CommandNotRun"`
-				Dialogs       []statusDialog `json:"Dialogs"`
-			} `json:"Details"`
-		} `json:"Error"`
+		Error pausePointTriggerErrorEnvelope `json:"Error"`
 	}{}
 	if err := json.Unmarshal(trimmed, &envelope); err != nil {
-		return nil, false
+		return pausePointTriggerErrorEnvelope{}, false
 	}
-	if envelope.Error.ErrorCode != clierrors.ErrorCodeBlockedByDialog || !envelope.Error.Details.CommandNotRun ||
-		len(envelope.Error.Details.Dialogs) == 0 {
-		return nil, false
-	}
-	return envelope.Error.Details.Dialogs, true
+	return envelope.Error, true
 }
 
 // pausePointTriggerWaitsForMainThread reports whether the report a dialog look returned shows the

@@ -155,6 +155,10 @@ func pausePointTriggerRejectionFirstAction(triggerResult *pausePointTriggerResul
 			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
 			"HitCount and --timeout-seconds countdown, and re-patching an already patched id is a no-op."
 	}
+	if pausePointTriggerNotRunOnStalledMainThread(triggerResult) {
+		return "The trigger command itself was valid; Unity did not run it because its main thread did not " +
+			"respond (see the trigger message). Nothing about the command has to change."
+	}
 	return "The trigger command itself was valid; Unity refused to run it because of the state named in the trigger message."
 }
 
@@ -168,6 +172,11 @@ func pausePointTriggerRejectionAwaitAction(id string, triggerResult *pausePointT
 			"The marker is still armed, so you can also wait on it directly: "+
 				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id)
 	}
+	if pausePointTriggerNotRunOnStalledMainThread(triggerResult) {
+		return fmt.Sprintf(
+			"The marker is still armed, so once Unity responds again you can wait on it directly: "+
+				"uloop await-pause-point --id %q --trigger \"<the same trigger command>\"", id)
+	}
 	return fmt.Sprintf(
 		"The marker is still armed, so once the precondition holds you can wait on it directly: "+
 			"uloop await-pause-point --id %q --trigger \"<the same trigger command>\"", id)
@@ -179,6 +188,9 @@ func pausePointTriggerRejectionAwaitAction(id string, triggerResult *pausePointT
 func pausePointTriggerRejectionRecoveryAction(triggerResult *pausePointTriggerResult) string {
 	if pausePointTriggerRejectedBeforeExecution(triggerResult) {
 		return "For an INVALID_ARGUMENT rejection, check the rejected value against the triggered command's own --help; for UNKNOWN_COMMAND, the first token must be a uloop subcommand name written without the leading 'uloop'."
+	}
+	if pausePointTriggerNotRunOnStalledMainThread(triggerResult) {
+		return "Run uloop status until it reports Ready (a modal dialog, a long import, or running code can hold the main thread), then run the same command again."
 	}
 	return "Fix the precondition named in the trigger message (for example enter Play Mode with 'uloop control-play-mode --action Play'), then run the same enable-pause-point command again."
 }
