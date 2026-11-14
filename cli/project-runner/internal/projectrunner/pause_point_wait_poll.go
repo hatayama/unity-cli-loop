@@ -132,9 +132,9 @@ func waitForPausePointStatus(
 			return state.lastResponse, waitState, state.triggerResult, state.hasBaseline, pollErr
 		}
 		if dialogs := state.dialogWatch.observePoll(waitContext, err == nil); dialogs != nil {
-			// The trigger may have reported in the same moment; its result decides which error is true.
+			// The trigger may report in the same moment; its result decides which error is true.
 			if state.triggerResult == nil {
-				state.triggerResult = receivePausePointTriggerResultNow(triggerDone)
+				state.triggerResult = receivePausePointTriggerResultWithin(triggerDone, pausePointFinalStatusProbeTimeout)
 			}
 			blocked := pausePointWaitBlockedByDialog(options, &state, dialogs, resumeResult)
 			return state.lastResponse, "", state.triggerResult, state.hasBaseline, blocked
@@ -157,13 +157,20 @@ func waitForPausePointStatus(
 	}
 }
 
-// receivePausePointTriggerResultNow returns the trigger's result when it is already waiting in done,
-// and nil otherwise, without blocking. done may be nil.
-func receivePausePointTriggerResultNow(done <-chan *pausePointTriggerResult) *pausePointTriggerResult {
+// receivePausePointTriggerResultWithin returns the trigger's result when it arrives in done within
+// grace, and nil otherwise. A nil done returns nil at once. Why the grace of the join after a wait
+// settles: a trigger stopped by the same dialog often reports just after the watch's look, and its
+// result is what tells a trigger that was not run from one that started.
+func receivePausePointTriggerResultWithin(done <-chan *pausePointTriggerResult, grace time.Duration) *pausePointTriggerResult {
+	if done == nil {
+		return nil
+	}
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
 	select {
 	case result := <-done:
 		return result
-	default:
+	case <-timer.C:
 		return nil
 	}
 }

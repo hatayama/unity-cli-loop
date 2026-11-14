@@ -351,3 +351,33 @@ func TestPausePointWaitReadsATriggerResultThatArrivesDuringTheLook(t *testing.T)
 		t.Fatalf("triggerResult = %#v, Details.TriggerResult = %#v, want the result that arrived", triggerResult, cliError.Details["TriggerResult"])
 	}
 }
+
+// Verifies a trigger result that arrives shortly after the watch's look found the dialog still decides
+// the error, within the same grace the wait gives a trigger once it settles.
+func TestPausePointWaitReadsATriggerResultThatArrivesJustAfterTheLook(t *testing.T) {
+	useUnityProcessLookup(t, runningUnityProcessLookup)
+	handle := &pausePointTriggerHandle{command: "execute-dynamic-code", done: make(chan *pausePointTriggerResult, 1)}
+	notRun := &pausePointTriggerResult{Command: "execute-dynamic-code", Completed: true, Error: triggerNotRunDialogEnvelope(t)}
+	look := newFakeDialogLook(commandDialogPlayerStoppedDialog())
+	look.report = func(report statusReport) statusReport {
+		go func() {
+			time.Sleep(pausePointFinalStatusProbeTimeout / 5)
+			handle.done <- notRun
+		}()
+		return report
+	}
+	options := waitForPausePointOptions{
+		id:             triggerDialogPausePointID,
+		timeout:        5 * time.Second,
+		dialogWatch:    look.deps(),
+		triggerCommand: "execute-dynamic-code",
+	}
+
+	_, _, triggerResult, _, err := waitForPausePointStatus(
+		context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+
+	cliError := assertTriggerNotRunBlockedByDialog(t, err)
+	if triggerResult != notRun || cliError.Details["TriggerResult"] != notRun {
+		t.Fatalf("triggerResult = %#v, Details.TriggerResult = %#v, want the result that arrived", triggerResult, cliError.Details["TriggerResult"])
+	}
+}
