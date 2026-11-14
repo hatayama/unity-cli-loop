@@ -29,6 +29,8 @@ command `report-blocking-dialog`.
   still for a second, looks for a dialog once. When it finds one it ends with the same
   `BLOCKED_BY_DIALOG` (`was not run`) as the check before sending, instead of retrying and then
   answering `UNITY_SERVER_BUSY`. It only looks and never reports, so the holder is not failed.
+  This covers sends that retry on busy; hot reload hands busy straight back to its own wait,
+  which already watches for dialogs.
 - The 30-second limit of ADR 0020 does not change. It still applies when no dialog is reported.
 
 ### Compile
