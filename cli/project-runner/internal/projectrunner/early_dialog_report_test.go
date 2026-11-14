@@ -188,6 +188,19 @@ func TestStartEarlyDialogReportDoesNotLookWhenOffOrAnswered(t *testing.T) {
 	}
 }
 
+// Verifies a compile sent without a response timeout, as --no-wait-for-domain-reload sends it, is
+// watched: its sender waits for the answer, and Unity cancels its request if the sender goes.
+func TestStartEarlyDialogReportWatchesACompileThatWaitsForItsAnswer(t *testing.T) {
+	script := &earlyDialogReportScript{reports: []statusReport{heldBlockedByDialogReport("compile", commandDialogPlayerStoppedDialog())}}
+
+	startEarlyDialogReport(context.Background(), unityipc.Connection{}, "compile", 0, script.deps())()
+
+	// Why waits: a started watch asks for its first wait before it can be cancelled.
+	if len(script.waits) == 0 {
+		t.Fatalf("waits = %v, want the watch to start", script.waits)
+	}
+}
+
 // Verifies a send that ends its own wait for the answer, as compile does, never starts the watch:
 // Unity would fail a request that runs later while uloop says it keeps running.
 func TestStartEarlyDialogReportDoesNotWatchASendThatEndsItsOwnWait(t *testing.T) {

@@ -55,8 +55,9 @@ func defaultEarlyDialogReportDeps() earlyDialogReportDeps {
 // Why uloop never ends the wait itself here: hanging up on a request Unity has not started does not
 // stop it, because compile and some run-tests requests still run after the client is gone.
 // Why a send with a responseTimeout is not watched: it hangs up when the timeout ends and moves on
-// to another wait, while its request stays in Unity and runs once the dialog closes. A report then
-// would make Unity drop the request as not run while uloop says it keeps running.
+// to another wait, while its request stays in Unity and runs once the dialog closes, so no answer to
+// the report would reach it. Unity also never fails such a request early, because only a request
+// its sender's disconnect would cancel is failed by a report.
 func startEarlyDialogReport(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -113,8 +114,8 @@ func runEarlyDialogReport(
 // Why: Unity acks a request before it takes the slot, so this send's request may still be waiting for
 // a busy answer while another command holds the slot. Unity fails early only a request of the
 // reported name, so a report sent then would fail nothing; this check saves that report. The safety
-// that a report never fails another command's request, such as a compile uloop said keeps running,
-// lives in Unity, because the slot can change hands between this look and the report.
+// that a report never fails a request uloop said keeps running lives in Unity, which fails early only
+// a request of the reported name that its sender's disconnect would cancel.
 func isOwnCommandHeldByDialog(
 	ctx context.Context,
 	connection unityipc.Connection,
