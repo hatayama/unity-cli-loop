@@ -280,6 +280,7 @@ func sendWithTransientConnectionRetryAttempts(
 	// would last its whole window and end in a "wait and retry" error that never names the dialog.
 	serverWaitDialogWatch := newDialogBlockWatch(connection, deps.dialogWatch, dialogWatchInterval, dialogWatchStallThresholdSeconds)
 
+	busyLook := busyDialogLook{}
 	retryTicker := time.NewTicker(deps.retryPoll)
 	defer retryTicker.Stop()
 	for {
@@ -304,6 +305,9 @@ func sendWithTransientConnectionRetryAttempts(
 		if isUnityServerBusyRPCError(err) {
 			if deps.returnBusyWithoutRetry {
 				return outcome, err
+			}
+			if dialogs := busyLook.observe(ctx, connection, err, deps.earlyDialogReport.probeEditorStatus); dialogs != nil {
+				return outcome, notSentBlockedByDialog(method, dialogs, deps.dialogWatch.canPressDialogs)
 			}
 			// Busy means the request was never executed, so a bounded retry is safe and
 			// usually absorbs back-to-back tool calls without bothering the caller.
@@ -465,4 +469,36 @@ func shouldRetryUndispatchedConnection(err error, outcome unityipc.UnitySendOutc
 	// refused permanently never becomes reachable inside it, and retrying it replaces the
 	// syscall error with the window's own deadline expiry.
 	return !clierrors.IsPermanentConnectError(connectionErr)
+}
+
+// busyDialogLook looks once per send for a dialog behind a busy answer whose slot holder waits for a
+// main thread that has been still for a second. It only looks: it never reports the dialog to Unity,
+// so the holder, which may be a compile uloop said keeps running, is not failed.
+// Why look at all: this send was never run, so a dialog that holds the slot is what the caller must
+// answer, while the busy error would tell it to wait or restart Unity.
+type busyDialogLook struct {
+	looked bool
+}
+
+// observe returns the dialogs found behind err, or nil when err is not such a busy answer, a look
+// already ran for this send, probe is nil, or the look finds none.
+// Why only a still holder waiting for the main thread: busy answers between back-to-back commands are
+// ordinary, and a look starts osascript on macOS.
+func (look *busyDialogLook) observe(
+	ctx context.Context,
+	connection unityipc.Connection,
+	err error,
+	probe func(context.Context, unityipc.Connection) (statusReport, error),
+) []statusDialog {
+	if look.looked || probe == nil {
+		return nil
+	}
+	holder, ok := decodeServerBusyHolder(err)
+	if !ok || holder.RunningToolPhase != waitingForMainThreadPhase ||
+		holder.SecondsSinceLastMainThreadTick == nil ||
+		*holder.SecondsSinceLastMainThreadTick < editorStatusEarlyStallSeconds {
+		return nil
+	}
+	look.looked = true
+	return findDialog(ctx, connection, probe)
 }
