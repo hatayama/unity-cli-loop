@@ -31,6 +31,11 @@ const (
 	pausePointResumeNotSentStoppedFormat    = "uloop %s stopped waiting; --resume-play did not resume PlayMode."
 	pausePointNotSentClosedNextActionFormat = "After the dialog is closed, run uloop await-pause-point --id %s " +
 		"again with the same %s."
+	pausePointNotArmedClosedNextActionFormat = "After the dialog is closed, run uloop pause-point-status --id %s: " +
+		"the marker was not armed when this wait started, so re-enable it with uloop enable-pause-point and wait " +
+		"again with the same %s."
+	pausePointTriggerDialogAtWaitStartError = "trigger was not dispatched: a dialog held Unity's main thread at wait start"
+	pausePointResumeDialogAtWaitStartError  = "resume was not dispatched: a dialog held Unity's main thread at wait start"
 )
 
 // pausePointTriggerNotRunBehindDialog returns the dialogs to report when a --trigger command was kept
@@ -138,12 +143,14 @@ func pausePointTriggerNotRunBlockedByDialog(
 // pausePointWaitUnsentBehindDialog is the error of a wait that a dialog ended before it sent its
 // --trigger or resumed PlayMode, and ok false when it did either, or used neither. Nothing reached the
 // game then, so waiting again with the same arguments is safe. Why it does not say the marker stays
-// armed: the trigger was also skipped when Unity answered that the marker is not armed.
+// armed: the trigger was also skipped when Unity answered that the marker is not armed. markerNotArmed
+// is that answer, and makes the last step re-enable the marker before waiting again.
 func pausePointWaitUnsentBehindDialog(
 	options waitForPausePointOptions,
 	dialogs []statusDialog,
 	skippedTriggerResult *pausePointTriggerResult,
 	resumeResult *pausePointResumePlayResult,
+	markerNotArmed bool,
 ) (blockedByDialogError, bool) {
 	details := map[string]any{pausePointDialogIDDetailKey: options.id}
 	if resumeResult != nil {
@@ -163,14 +170,51 @@ func pausePointWaitUnsentBehindDialog(
 	default:
 		return blockedByDialogError{}, false
 	}
+	closedFormat := pausePointNotSentClosedNextActionFormat
+	if markerNotArmed {
+		closedFormat = pausePointNotArmedClosedNextActionFormat
+	}
 	return blockedByDialogError{
 		command:          options.commandName(),
 		dialogs:          dialogs,
 		canPress:         options.dialogWatch.canPressDialogs,
 		stopped:          fmt.Sprintf(stoppedFormat, options.commandName()),
-		closedNextAction: fmt.Sprintf(pausePointNotSentClosedNextActionFormat, shellSafePausePointID(options.id), sameArguments),
+		closedNextAction: fmt.Sprintf(closedFormat, shellSafePausePointID(options.id), sameArguments),
 		phase:            clierrors.ErrorPhaseResponseWaiting,
 		safeToRetry:      true,
 		details:          details,
 	}, true
+}
+
+// pausePointWaitStartedBehindDialog is the error of a wait that a dialog ended while its marker, and any
+// --trigger it sent, stay in effect in Unity: the command had started, and it is not safe to retry.
+func pausePointWaitStartedBehindDialog(options waitForPausePointOptions, dialogs []statusDialog) blockedByDialogError {
+	blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
+	blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
+	blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
+	return blocked
+}
+
+// pausePointWaitBehindDialogAtStart ends a wait that found a dialog before it confirmed its marker, so
+// it sent no --trigger and resumed nothing; a wait asked for neither gets the started form.
+func pausePointWaitBehindDialogAtStart(
+	options waitForPausePointOptions,
+	dialogs []statusDialog,
+) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, *pausePointResumePlayResult, bool, error) {
+	var triggerResult *pausePointTriggerResult
+	if options.triggerCommand != "" {
+		triggerResult = &pausePointTriggerResult{
+			Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+			Error:   pausePointTriggerDialogAtWaitStartError,
+		}
+	}
+	var resumeResult *pausePointResumePlayResult
+	if options.resumePlay {
+		resumeResult = &pausePointResumePlayResult{Error: pausePointResumeDialogAtWaitStartError}
+	}
+	response := pausePointStatusResponse{Id: options.id}
+	if blocked, unsent := pausePointWaitUnsentBehindDialog(options, dialogs, triggerResult, resumeResult, false); unsent {
+		return response, "", triggerResult, resumeResult, false, blocked
+	}
+	return response, "", nil, nil, false, pausePointWaitStartedBehindDialog(options, dialogs)
 }

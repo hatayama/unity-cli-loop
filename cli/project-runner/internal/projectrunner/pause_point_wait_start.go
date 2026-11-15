@@ -26,6 +26,9 @@ type pausePointWaitSideEffects struct {
 	// skipped without knowing why; a dialog holding the main thread is the usual reason.
 	armQueryUnanswered bool
 
+	// markerNotArmed is true when Unity answered the arm confirmation and the marker was not armed.
+	markerNotArmed bool
+
 	// immediateHit is the arm-confirmation response when it already settles the wait: an
 	// already-hit marker that awaits no later hit. It is the wait's answer, so the poll loop must
 	// not run at all — see waitForPausePoint.
@@ -77,6 +80,7 @@ func startPausePointWaitSideEffects(
 			resumeResult:         resumeResult,
 			baselineSequence:     -1,
 			armQueryUnanswered:   pausePointArmQueryWentUnanswered(armQueryErr),
+			markerNotArmed:       !pausePointArmQueryWentUnanswered(armQueryErr),
 		}
 	}
 

@@ -54,6 +54,13 @@ func waitForPausePoint(
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 ) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, *pausePointResumePlayResult, bool, error) {
+	// Why look before the arm query: an expiry extension Unity did not answer usually means a dialog
+	// holds the main thread, and the arm query would only wait out its own timeout behind it.
+	if options.expiryExtensionUnanswered {
+		if dialogs := findBlockingDialogs(ctx, connection, options.dialogWatch); dialogs != nil {
+			return pausePointWaitBehindDialogAtStart(options, dialogs)
+		}
+	}
 	sideEffects := startPausePointWaitSideEffects(ctx, connection, options)
 
 	if sideEffects.immediateHit != nil {
@@ -97,6 +104,7 @@ type pausePointWaitLoopState struct {
 	triggerResult *pausePointTriggerResult
 	// skippedTriggerResult is the reason the wait did not send its --trigger, nil when it sent it.
 	skippedTriggerResult *pausePointTriggerResult
+	markerNotArmed       bool
 	hasResponse          bool
 	baselineSequence     int
 	hasBaseline          bool
@@ -117,6 +125,7 @@ func waitForPausePointStatus(
 	state := pausePointWaitLoopState{
 		lastResponse:         pausePointStatusResponse{Id: options.id},
 		skippedTriggerResult: sideEffects.skippedTriggerResult,
+		markerNotArmed:       sideEffects.markerNotArmed,
 		baselineSequence:     sideEffects.baselineSequence,
 		hasBaseline:          sideEffects.hasBaseline,
 		baselineDecided:      sideEffects.baselineDecided,
@@ -128,8 +137,9 @@ func waitForPausePointStatus(
 	resumeResult := sideEffects.resumeResult
 	triggerDone := sideEffects.triggerHandle.doneChannel()
 	// Why look before the first poll: an arm query Unity did not answer usually means a dialog holds
-	// the main thread, and the watch would otherwise find it only after its stall threshold.
-	if sideEffects.armQueryUnanswered {
+	// the main thread, and the watch would otherwise find it only after its stall threshold. Why not
+	// after an unanswered expiry extension: the wait already looked then, and a look takes about 1s.
+	if sideEffects.armQueryUnanswered && !options.expiryExtensionUnanswered {
 		if dialogs := state.dialogWatch.observeUnansweredProbe(waitContext); dialogs != nil {
 			response, waitState, waitErr := finishPausePointWaitBehindDialog(
 				ctx, waitContext, connection, options, &state, triggerDone, dialogs, resumeResult)
@@ -204,7 +214,8 @@ func finishPausePointWaitBehindDialog(
 	dialogs []statusDialog,
 	resumeResult *pausePointResumePlayResult,
 ) (pausePointStatusResponse, pausePointWaitState, error) {
-	if blocked, unsent := pausePointWaitUnsentBehindDialog(options, dialogs, state.skippedTriggerResult, resumeResult); unsent {
+	if blocked, unsent := pausePointWaitUnsentBehindDialog(
+		options, dialogs, state.skippedTriggerResult, resumeResult, state.markerNotArmed); unsent {
 		return state.lastResponse, "", blocked
 	}
 	if state.triggerResult == nil {
@@ -225,10 +236,7 @@ func finishPausePointWaitBehindDialog(
 			return response, waitState, nil
 		}
 	}
-	blocked := startedCommandBlockedByDialog(options.commandName(), dialogs, options.dialogWatch.canPressDialogs, false)
-	blocked.closedNextAction = pausePointDialogClosedNextAction(options.id)
-	blocked.details = map[string]any{pausePointDialogIDDetailKey: options.id}
-	return state.lastResponse, "", blocked
+	return state.lastResponse, "", pausePointWaitStartedBehindDialog(options, dialogs)
 }
 
 // awaitPausePointTriggerResultBehindDialog waits briefly for the trigger's result once the wait's own

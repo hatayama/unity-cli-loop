@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,10 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
+
+// triggerDialogReEnableStep is the last step when Unity answered that the marker was not armed.
+const triggerDialogReEnableStep = "After the dialog is closed, run uloop pause-point-status --id trigger_dialog: the marker " +
+	"was not armed when this wait started, so re-enable it with uloop enable-pause-point and wait again with the same --trigger."
 
 // waitStartDialogFakes answers the arm query with armAnswer or armErr (both nil means no answer) and
 // every poll with no answer, and looks find the dialog from look number foundFrom on. It returns the query and look counters.
@@ -120,10 +125,11 @@ func TestPausePointWaitReportsAnUnsentTriggerWhenItsWatchFindsTheDialog(t *testi
 		armAnswer *pausePointStatusResponse
 		armErr    error
 		foundFrom int
+		wantLast  string
 	}{
-		{name: "no dialog at the first look", foundFrom: 2},
-		{name: "arm query answered not armed", armAnswer: &expired, foundFrom: 1},
-		{name: "arm query answered with an error", armErr: &unityipc.RPCError{Message: "unknown pause point"}, foundFrom: 1},
+		{name: "no dialog at the first look", foundFrom: 2, wantLast: triggerDialogNotRunStep},
+		{name: "arm query answered not armed", armAnswer: &expired, foundFrom: 1, wantLast: triggerDialogReEnableStep},
+		{name: "arm query answered with an error", armErr: &unityipc.RPCError{Message: "unknown pause point"}, foundFrom: 1, wantLast: triggerDialogReEnableStep},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -131,7 +137,7 @@ func TestPausePointWaitReportsAnUnsentTriggerWhenItsWatchFindsTheDialog(t *testi
 
 			_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, true, false))
 
-			_ = assertTriggerNotSentBlockedByDialog(t, err, triggerDialogNotRunStep)
+			_ = assertTriggerNotSentBlockedByDialog(t, err, testCase.wantLast)
 			if fakes.queries < 3 {
 				t.Fatalf("queries = %d, want the wait to have polled before its watch found the dialog", fakes.queries)
 			}
@@ -183,5 +189,79 @@ func TestWaitForPausePointKeepsItsOwnEndWithoutADialog(t *testing.T) {
 	var blocked blockedByDialogError
 	if errors.As(err, &blocked) {
 		t.Fatalf("err = %v, want the wait's own end", err)
+	}
+}
+
+// Verifies a wait whose expiry extension got no answer looks for a dialog at once, before the arm
+// query, and ends in the form for what it was asked to do: not sent, not resumed, or started.
+func TestWaitForPausePointLooksOnceWhenTheExpiryExtensionGoesUnanswered(t *testing.T) {
+	cases := []struct {
+		name       string
+		trigger    bool
+		resumePlay bool
+		wantSuffix string
+	}{
+		{name: "trigger", trigger: true, wantSuffix: "its --trigger command was not sent."},
+		{name: "resume only", resumePlay: true, wantSuffix: "--resume-play did not resume PlayMode."},
+		{name: "neither", wantSuffix: "the command had already started and continues in Unity once the dialog is closed."},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fakes, deps := useWaitStartDialogFakes(t, nil, nil, 1)
+			options := waitStartDialogOptions(deps, testCase.trigger, testCase.resumePlay)
+			options.expiryExtensionUnanswered = true
+
+			_, _, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, options)
+
+			cliError := classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName)
+			if !strings.HasSuffix(cliError.Message, testCase.wantSuffix) || fakes.queries != 0 || fakes.looks != 1 {
+				t.Fatalf("Message = %q, queries = %d, looks = %d, want %q from one look before any query",
+					cliError.Message, fakes.queries, fakes.looks, testCase.wantSuffix)
+			}
+			if testCase.trigger && (triggerResult == nil || !strings.Contains(triggerResult.Error, "dialog")) {
+				t.Fatalf("TriggerResult = %#v, want the dialog as the reason it was not sent", triggerResult)
+			}
+		})
+	}
+}
+
+// Verifies a wait looks for a dialog at most once at its start: after an unanswered expiry extension
+// found none, an unanswered arm query does not look again, and only the later watch finds the dialog.
+func TestWaitForPausePointLooksAtMostOnceAtItsStart(t *testing.T) {
+	fakes, deps := useWaitStartDialogFakes(t, nil, nil, 2)
+	options := waitStartDialogOptions(deps, true, false)
+	options.expiryExtensionUnanswered = true
+
+	_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, options)
+
+	_ = assertTriggerNotSentBlockedByDialog(t, err, triggerDialogNotRunStep)
+	if fakes.queries < 3 {
+		t.Fatalf("queries = %d, want the dialog found by the watch after polling, not by a second start look", fakes.queries)
+	}
+}
+
+// Verifies the expiry extension counts as unanswered only when it failed without an answer from
+// Unity, the same rule the arm query uses, so an answered error starts no early look.
+func TestExtendPausePointExpiryBeforeWaitReportsAnUnansweredExtension(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	t.Cleanup(func() { extendPausePointExpiry = originalExtend })
+	results := map[string]struct {
+		err  error
+		want bool
+	}{
+		"succeeded":           {want: false},
+		"answered with error": {err: &unityipc.RPCError{Message: "unknown command"}, want: false},
+		"no answer":           {err: context.DeadlineExceeded, want: true},
+	}
+	for name, result := range results {
+		t.Run(name, func(t *testing.T) {
+			extendPausePointExpiry = func(context.Context, unityipc.Connection, string, int) (pausePointStatusResponse, error) {
+				return pausePointStatusResponse{}, result.err
+			}
+			got := extendPausePointExpiryBeforeWait(context.Background(), unityipc.Connection{}, waitForPausePointOptions{id: "x"}, io.Discard)
+			if got != result.want {
+				t.Fatalf("unanswered = %v, want %v", got, result.want)
+			}
+		})
 	}
 }
