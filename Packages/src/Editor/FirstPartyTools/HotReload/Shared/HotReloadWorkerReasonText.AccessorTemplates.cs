@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind,
                 Plain(
-                    "Constructors, operators, and event accessors are skipped; "
+                    "Constructors, finalizers, operators, and event accessors are skipped; "
                     + "run 'uloop compile' to apply these edits.",
                     0));
 

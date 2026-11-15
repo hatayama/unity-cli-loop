@@ -573,7 +573,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind,
                 NoArgs,
-                "Constructors, operators, and event accessors are skipped; "
+                "Constructors, finalizers, operators, and event accessors are skipped; "
                 + "run 'uloop compile' to apply these edits.");
             yield return Case(
                 HotReloadWorkerReasonCode.EventCustomAccessor,

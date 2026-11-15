@@ -56,11 +56,13 @@ internal static class BaselineSnapshotBuilder
         baseline.SnapshotPropertyMap = WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(baseline.SnapshotRoot);
         baseline.SnapshotIndexerMap = WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(baseline.SnapshotRoot);
         baseline.SnapshotConstructorMap = WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotDestructorMap = WorkerSyntaxMemberMaps.BuildSyntaxDestructorMapOrNull(baseline.SnapshotRoot);
         baseline.SnapshotOperatorMap = WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(baseline.SnapshotRoot);
         baseline.SnapshotEventMap = WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(baseline.SnapshotRoot);
         baseline.PlainCurrentPropertyMap = WorkerSyntaxMemberMaps.BuildSyntaxPropertyMapOrNull(plainRoot);
         baseline.PlainCurrentIndexerMap = WorkerSyntaxMemberMaps.BuildSyntaxIndexerMapOrNull(plainRoot);
         baseline.PlainCurrentConstructorMap = WorkerSyntaxMemberMaps.BuildSyntaxConstructorMapOrNull(plainRoot);
+        baseline.PlainCurrentDestructorMap = WorkerSyntaxMemberMaps.BuildSyntaxDestructorMapOrNull(plainRoot);
         baseline.PlainCurrentOperatorMap = WorkerSyntaxMemberMaps.BuildSyntaxOperatorMapOrNull(plainRoot);
         baseline.PlainCurrentEventMap = WorkerSyntaxMemberMaps.BuildSyntaxEventMapOrNull(plainRoot);
         return baseline;

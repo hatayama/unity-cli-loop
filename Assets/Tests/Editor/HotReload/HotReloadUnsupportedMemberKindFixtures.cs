@@ -3,7 +3,7 @@ using System;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// Compiled types for worker tests that assert ctor/operator/event-accessor Skipped rows
+    /// Compiled types for worker tests that assert ctor/finalizer/operator/event-accessor Skipped rows
     /// and the local-function parent-method pin. Unique assignment tokens are replaced in
     /// snapshots; do not reuse them across types.
     /// </summary>
@@ -24,6 +24,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Read()
         {
             return Marker;
+        }
+    }
+
+    /// <summary>
+    /// Finalizer host whose finalizer the worker tests edit. Token 121 is unique in this file.
+    /// </summary>
+    public sealed class HotReloadUnsupportedKindFinalizerFixture
+    {
+        public static int Marker;
+
+        public int ReadMarker()
+        {
+            return Marker;
+        }
+
+        ~HotReloadUnsupportedKindFinalizerFixture()
+        {
+            Marker = 121;
+        }
+    }
+
+    /// <summary>
+    /// Finalizer host the worker tests leave unedited. Token 122 is unique in this file.
+    /// </summary>
+    public sealed class HotReloadUnsupportedKindUneditedFinalizerFixture
+    {
+        public static int Marker;
+
+        public int ReadMarker()
+        {
+            return Marker;
+        }
+
+        ~HotReloadUnsupportedKindUneditedFinalizerFixture()
+        {
+            Marker = 122;
         }
     }
 

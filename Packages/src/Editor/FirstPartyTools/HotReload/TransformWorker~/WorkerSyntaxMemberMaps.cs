@@ -125,6 +125,30 @@ internal static class WorkerSyntaxMemberMaps
         return map;
     }
 
+    internal static Dictionary<string, DestructorDeclarationSyntax> BuildSyntaxDestructorMapOrNull(
+        CompilationUnitSyntax root)
+    {
+        Dictionary<string, DestructorDeclarationSyntax> map =
+            new Dictionary<string, DestructorDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in TransformWorkerProgram.EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (DestructorDeclarationSyntax destructorDeclaration in typeDeclaration.Members
+                .OfType<DestructorDeclarationSyntax>())
+            {
+                string key = WorkerSyntaxIndex.BuildSyntaxDestructorKey(typeMetadataName);
+                if (map.ContainsKey(key))
+                {
+                    return null;
+                }
+
+                map[key] = destructorDeclaration;
+            }
+        }
+
+        return map;
+    }
+
     internal static Dictionary<string, MemberDeclarationSyntax> BuildSyntaxOperatorMapOrNull(
         CompilationUnitSyntax root)
     {

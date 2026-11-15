@@ -107,9 +107,11 @@ internal static class TypeEmitPlanner
                 addedMethodCatalog,
                 addedPropertyCatalog);
             (Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
+                Dictionary<string, DestructorDeclarationSyntax> snapshotDestructorMap,
                 Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
                 Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
                 Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
+                Dictionary<string, DestructorDeclarationSyntax> plainCurrentDestructorMap,
                 Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
                 Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
                 baseline.GetUnsupportedMemberBaselineMaps();
@@ -124,9 +126,11 @@ internal static class TypeEmitPlanner
                 semanticModel,
                 skipped,
                 snapshotConstructorMap,
+                snapshotDestructorMap,
                 snapshotOperatorMap,
                 snapshotEventMap,
                 plainCurrentConstructorMap,
+                plainCurrentDestructorMap,
                 plainCurrentOperatorMap,
                 plainCurrentEventMap,
                 servedByRetainedArtifact);
