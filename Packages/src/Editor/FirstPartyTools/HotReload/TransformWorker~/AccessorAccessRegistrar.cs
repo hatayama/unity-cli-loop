@@ -371,11 +371,14 @@ internal static class AccessorAccessRegistrar
         }
 
         ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
-        if (symbol is not IMethodSymbol methodSymbol)
+        if (symbol is not IMethodSymbol invokedMethod)
         {
             return false;
         }
 
+        // Why unreduce first: a reduced extension call is not MethodKind.Ordinary, and returning
+        // here left it unregistered and unrefused, so the shim called the method and failed.
+        IMethodSymbol methodSymbol = AccessibilityRules.UnreducedMethod(invokedMethod);
         if (methodSymbol.MethodKind != MethodKind.Ordinary)
         {
             return false;
