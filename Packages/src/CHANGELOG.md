@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.25.0](https://github.com/hatayama/unity-cli-loop/compare/v3.24.3...v3.25.0) (2026-11-15)
+
+
+### Features
+
+* Hot reload now applies a lambda whose whole body assigns a private property ([#3514](https://github.com/hatayama/unity-cli-loop/issues/3514)) ([81c4c9a](https://github.com/hatayama/unity-cli-loop/commit/81c4c9a796da2f6db4ee649f1769568e8c81a300))
+
 ## [3.24.3](https://github.com/hatayama/unity-cli-loop/compare/v3.24.2...v3.24.3) (2026-11-15)
 
 
