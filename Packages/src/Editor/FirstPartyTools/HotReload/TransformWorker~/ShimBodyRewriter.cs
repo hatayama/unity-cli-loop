@@ -175,7 +175,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
-        if (node.Expression is MemberAccessExpressionSyntax baseAccess && baseAccess.Expression is BaseExpressionSyntax)
+        if (BaseCallShimRewrite.IsBaseCall(node))
         {
             // Why here: a base call has no receiver the later rewrites could qualify, and C# cannot
             // express it from the shim type, so it becomes a stand-in call the Editor redirects.

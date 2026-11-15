@@ -10,6 +10,13 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 /// </summary>
 internal static class BaseCallShimRewrite
 {
+    /// <summary>True when <paramref name="node"/> is a <c>base.M(args)</c> call.</summary>
+    internal static bool IsBaseCall(InvocationExpressionSyntax node)
+    {
+        return node.Expression is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Expression is BaseExpressionSyntax;
+    }
+
     /// <summary>Rewrites <c>base.M(args)</c> into a call to its stand-in, which the Editor redirects to the base method.</summary>
     internal static ExpressionSyntax Rewrite(
         ShimBodyRewriter rewriter,
