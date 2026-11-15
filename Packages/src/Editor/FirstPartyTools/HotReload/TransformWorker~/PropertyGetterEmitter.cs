@@ -203,7 +203,7 @@ internal static class PropertyGetterEmitter
         SyntaxNode getterBodyNode = (SyntaxNode)propertyDeclaration.ExpressionBody
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
-        (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyGetterByDecision(
+        (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyAccessorByDecision(
             sourceProjectRelativePath,
             typeDeclaration,
             typeSymbol,
@@ -292,24 +292,34 @@ internal static class PropertyGetterEmitter
             AddedPropertyCatalog addedPropertyCatalog,
             string homeAssemblyName)
     {
-        if (currentShimType == null)
-        {
-            string shimTypeName = shimNames.NextShimTypeName(typeSymbol.Name);
-            string namespaceName = typeSymbol.ContainingNamespace == null
-                || typeSymbol.ContainingNamespace.IsGlobalNamespace
-                ? string.Empty
-                : typeSymbol.ContainingNamespace.ToDisplayString();
-            currentShimType = new ShimTypeBuilder(
-                shimTypeName,
-                namespaceName,
-                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
-                sourceProjectRelativePath);
-            shimTypes.Add(currentShimType);
-        }
+        currentShimType = EnsureShimType(
+            currentShimType,
+            typeSymbol,
+            typeDeclaration,
+            root,
+            sourceProjectRelativePath,
+            shimTypes,
+            shimNames,
+            assemblyGlobalUsings);
 
         string shimMethodName = shimNames.NextShimMethodName(getterSymbol.Name);
 
-        FileLinePositionSpan originalSpan = propertyDeclaration.GetLocation().GetLineSpan();
+        // Why narrow to the get accessor beside a bodied set or init: the setter gets an entry of
+        // its own, and a Skipped init body must not resolve to the getter's patch, so the getter
+        // entry must not cover either line. Decided from syntax alone so it does not depend on
+        // whether the setter was actually patched in this run.
+        SyntaxNode spanNode = propertyDeclaration;
+        if (PropertySetterClassifier.HasBodiedSetOrInitAccessor(propertyDeclaration))
+        {
+            AccessorDeclarationSyntax getAccessor = propertyDeclaration.AccessorList.Accessors
+                .FirstOrDefault(accessor => accessor.IsKind(SyntaxKind.GetAccessorDeclaration));
+            if (getAccessor != null)
+            {
+                spanNode = getAccessor;
+            }
+        }
+
+        FileLinePositionSpan originalSpan = spanNode.GetLocation().GetLineSpan();
         int sourceStartLine = originalSpan.StartLinePosition.Line + 1;
         int sourceEndLine = originalSpan.EndLinePosition.Line + 1;
 
@@ -356,6 +366,36 @@ internal static class PropertyGetterEmitter
         return currentShimType;
     }
 
+    // What: the shim type this type's accessor shims go into, created on the first one.
+    internal static ShimTypeBuilder EnsureShimType(
+        ShimTypeBuilder currentShimType,
+        INamedTypeSymbol typeSymbol,
+        TypeDeclarationSyntax typeDeclaration,
+        CompilationUnitSyntax root,
+        string sourceProjectRelativePath,
+        List<ShimTypeBuilder> shimTypes,
+        ShimNameAllocator shimNames,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings)
+    {
+        if (currentShimType != null)
+        {
+            return currentShimType;
+        }
+
+        string shimTypeName = shimNames.NextShimTypeName(typeSymbol.Name);
+        string namespaceName = typeSymbol.ContainingNamespace == null
+            || typeSymbol.ContainingNamespace.IsGlobalNamespace
+            ? string.Empty
+            : typeSymbol.ContainingNamespace.ToDisplayString();
+        ShimTypeBuilder shimType = new ShimTypeBuilder(
+            shimTypeName,
+            namespaceName,
+            WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
+            sourceProjectRelativePath);
+        shimTypes.Add(shimType);
+        return shimType;
+    }
+
     // What: rewrite a getter body while it is still in the bound tree, then wrap as a shim method.
     internal static MethodDeclarationSyntax RewritePropertyGetterBody(
         PropertyDeclarationSyntax propertyDeclaration,
@@ -379,7 +419,9 @@ internal static class PropertyGetterEmitter
         // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
         rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);
 
-        TypeSyntax returnType = propertyDeclaration.Type.WithoutTrivia();
+        // Why visit the type with the body's rewriter: a nested type named by its simple name does
+        // not resolve in the hoisted shim class, and the rewriter already qualifies such names.
+        TypeSyntax returnType = ((TypeSyntax)rewriter.Visit(propertyDeclaration.Type)).WithoutTrivia();
         // ToShimMethod forces public static and injects __instance for instance getters.
         MethodDeclarationSyntax method = SyntaxFactory.MethodDeclaration(
                 returnType,

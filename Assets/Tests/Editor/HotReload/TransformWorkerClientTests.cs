@@ -1471,7 +1471,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedExplicitAccessorSkipReason =
-            "Property setter, init, or indexer accessors are skipped; "
+            "Property init accessors, indexer accessors, and setters with no matching setter on the compiled property are skipped; "
             + "run 'uloop compile' to apply accessor edits.";
 
         private const string ExpectedSetOnlyPropertySkipReason =
@@ -1610,11 +1610,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing both accessor bodies of an existing getter+setter property patches the
-        /// getter and still skips the setter, because the setter is the one that changed.
+        /// What: editing both accessor bodies of an existing getter+setter property patches both
+        /// accessors, without an outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Run_ExistingGetterAndSetterProperty_BothBodiesEdited_PatchesTheGetterAndSkipsTheSetter()
+        public async Task Run_ExistingGetterAndSetterProperty_BothBodiesEdited_PatchesBothAccessors()
         {
             const string fileName = "ExistingGetterAndSetterPropertyBothEdited.cs";
             TransformWorkerClientResult result = await RunWorkerOnEditedShapeCopyAsync(
@@ -1625,7 +1625,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "set { _value = value + 1; }"));
 
             AssertEmittedWithoutSkip(result, "get_Value");
-            AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
+            AssertEmittedWithoutSkip(result, "set_Value");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
         }
 
@@ -1693,12 +1693,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a property the snapshot does not declare still reports its setter as Skipped, and
-        /// the property is not read as an edit outside method bodies because the setter row marks it
-        /// as added to the current tree.
+        /// What: a property the snapshot does not declare emits its setter as an entry, and the
+        /// property is still not read as an edit outside method bodies because it stays marked as
+        /// added to the current tree.
         /// </summary>
         [Test]
-        public async Task Run_PropertyAbsentFromSnapshot_SetterBodyIsStillSkipped()
+        public async Task Run_PropertyAbsentFromSnapshot_SetterIsEmittedWithoutDriftWarning()
         {
             string sourcePath = ResolveShapeFixturePath();
             string onDisk = File.ReadAllText(sourcePath);
@@ -1717,7 +1717,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: snapshotSource);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
+            AssertEmittedWithoutSkip(result, "set_Value");
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
@@ -2175,12 +2175,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: when only a property setter body differs from the snapshot, the setter is Skipped
-        /// and the unchanged getter stays out of entries (both compares are per accessor, not
-        /// whole-property).
+        /// What: when only a property setter body differs from the snapshot, the setter is emitted
+        /// as an entry and the unchanged getter stays out of entries (both compares are per
+        /// accessor, not whole-property).
         /// </summary>
         [Test]
-        public async Task Run_WithSnapshotDifferingOnlyInSetter_SkipsTheSetterAndDoesNotEmitUnchangedGetter()
+        public async Task Run_WithSnapshotDifferingOnlyInSetter_EmitsTheSetterEntry()
         {
             string sourcePath = ResolveShapeFixturePath();
             string onDisk = File.ReadAllText(sourcePath);
@@ -2196,7 +2196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: snapshotSource);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
+            AssertEmittedWithoutSkip(result, "set_Value");
             if (result.Output.entries != null)
             {
                 foreach (TransformWorkerEntryDto entry in result.Output.entries)
@@ -2224,6 +2224,422 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 foundUnchangedGetter,
                 Is.True,
                 "Unedited get_Value must appear in unchangedMethods after a setter-only edit.");
+        }
+
+        /// <summary>
+        /// What: an edited set accessor of a compiled property emits a transplant set_ entry that
+        /// takes the property type, while the unedited getter is recorded as unchanged.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterBodyEdited_EmitsSetAccessorEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterBodyEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 1001", "value + 1002"));
+
+            AssertEmittedWithoutSkip(result, "set_Stored");
+            TransformWorkerEntryDto entry = FindEntryNamed(result, "set_Stored");
+            Assert.That(entry.parameterTypeFullNames, Is.EqualTo(new[] { "System.Int32" }));
+            Assert.That(entry.patchKind, Is.EqualTo("transplant"));
+            Assert.That(HasSetterFixtureUnchangedRow(result, "get_Stored"), Is.True, "get_Stored must be unchanged.");
+            AssertNoEntryNamed(result, "get_Stored");
+        }
+
+        /// <summary>
+        /// What: a getter-only edit records the untouched bodied setter as unchanged (with its one
+        /// parameter type) so an earlier setter patch is reverted, and reports it nowhere else.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterBodyEdited_RecordsTheSetterAsUnchanged()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterBodyEditedSetterUnchanged.cs",
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "get { return _stored; }\n            set { _stored = value + 1001; }",
+                    "get { return _stored + 1; }\n            set { _stored = value + 1001; }"));
+
+            AssertEmittedWithoutSkip(result, "get_Stored");
+            TransformWorkerUnchangedMethodDto unchangedSetter = FindSetterFixtureUnchangedRowOrNull(result, "set_Stored");
+            Assert.That(unchangedSetter, Is.Not.Null, "set_Stored must be unchanged.");
+            Assert.That(unchangedSetter.parameterTypeFullNames, Is.EqualTo(new[] { "System.Int32" }));
+            AssertNoEntryNamed(result, "set_Stored");
+            AssertSkippedDoesNotContain(result, "set_Stored");
+        }
+
+        /// <summary>
+        /// What: when a property is untouched, both its getter and its bodied setter are recorded as
+        /// unchanged against the baseline.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedBodiedProperty_RecordsBothAccessorsAsUnchanged()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "UnchangedBodiedProperty.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "_stored + 4004", "_stored + 4005"));
+
+            Assert.That(HasSetterFixtureUnchangedRow(result, "get_Stored"), Is.True, "get_Stored must be unchanged.");
+            Assert.That(HasSetterFixtureUnchangedRow(result, "set_Stored"), Is.True, "set_Stored must be unchanged.");
+        }
+
+        /// <summary>
+        /// What: without a baseline, every bodied setter of a compiled property is emitted as an
+        /// entry (block, static, expression-bodied, and lambda-capturing alike).
+        /// </summary>
+        [Test]
+        public async Task Run_WithoutBaseline_EmitsEveryBodiedSetter()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveSetterFixturePath(),
+                SetterFixtureProjectRelativePath);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmittedWithoutSkip(result, "set_Stored");
+            FindEntryNamed(result, "set_StaticStored");
+            FindEntryNamed(result, "set_ArrowStored");
+            FindEntryNamed(result, "set_LambdaStored");
+        }
+
+        /// <summary>
+        /// What: an edited expression-bodied set accessor emits a set_ entry without a skip row.
+        /// </summary>
+        [Test]
+        public async Task Run_ArrowBodiedSetterEdited_EmitsSetAccessorEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "ArrowBodiedSetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 3003", "value + 3004"));
+
+            AssertEmittedWithoutSkip(result, "set_ArrowStored");
+        }
+
+        /// <summary>
+        /// What: an edited setter of a static property emits a set_ entry without a skip row.
+        /// </summary>
+        [Test]
+        public async Task Run_StaticPropertySetterEdited_EmitsSetAccessorEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "StaticPropertySetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 2002", "value + 2003"));
+
+            AssertEmittedWithoutSkip(result, "set_StaticStored");
+        }
+
+        /// <summary>
+        /// What: an edited setter whose lambda reads a private field is emitted as a delegation
+        /// entry, like a getter or method with the same body shape.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterWithLambdaPrivateAccessEdited_EmitsDelegationEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterWithLambdaPrivateAccessEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "_stored + 6006", "_stored + 6007"));
+
+            TransformWorkerEntryDto entry = FindEntryNamed(result, "set_LambdaStored");
+            Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindDelegation));
+        }
+
+        /// <summary>
+        /// What: a set accessor added to a getter-only property has no compiled setter to patch, so
+        /// it stays Skipped with the accessor reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterAddedToGetterOnlyProperty_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterAddedToGetterOnlyProperty.cs",
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "get { return _stored + 4004; }",
+                    "get { return _stored + 4004; }\n            set { _stored = value; }"));
+
+            AssertSkippedContains(result, "set_GetterOnly", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_GetterOnly");
+        }
+
+        /// <summary>
+        /// What: an edited init accessor stays Skipped with the accessor reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_InitAccessorBodyEdited_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "InitAccessorBodyEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 5005", "value + 5006"));
+
+            AssertSkippedContains(result, "set_InitStored", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_InitStored");
+        }
+
+        /// <summary>
+        /// What: a source set accessor whose compiled accessor is init-only stays Skipped with the
+        /// accessor reason and no entry, since the compiled property has no ordinary setter to patch.
+        /// </summary>
+        [Test]
+        public async Task Run_CompiledInitAccessorNowSetInSource_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "CompiledInitNowSet.cs",
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "init { _stored = value + 5005; }",
+                    "set { _stored = value + 5006; }"));
+
+            AssertSkippedContains(result, "set_InitStored", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_InitStored");
+        }
+
+        /// <summary>
+        /// What: a setter whose property became static since the last compile stays Skipped with the
+        /// accessor reason and no entry, since a static shim would not match the compiled instance
+        /// setter's shape.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterOfPropertyMadeStatic_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterOfPropertyMadeStatic.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "public int Widened", "public static int Widened"),
+                    "value + 1212",
+                    "value + 1213"));
+
+            AssertSkippedContains(result, "set_Widened", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_Widened");
+        }
+
+        /// <summary>
+        /// What: a setter-body-only edit is not read as an edit outside method bodies, because the
+        /// patched setter body is stripped before the declaration compare.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterBodyOnlyEdit_DoesNotEmitOutsideBodyWarning()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterBodyOnlyEditDrift.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 1001", "value + 1002"));
+
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>(),
+                Has.None.Contain("Edits outside method bodies"));
+        }
+
+        /// <summary>
+        /// What: when both accessors of a property are emitted, each entry carries the line span of
+        /// its own accessor and the two spans do not overlap, so compile errors and pause points can
+        /// tell the getter from the setter.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAndSetterBothEdited_EntriesCarryTheirOwnAccessorLineSpans()
+        {
+            const string editedGetter = "get { return _stored + 1; }";
+            const string editedSetter = "set { _stored = value + 1002; }";
+            string editedSource = ReplaceUniqueFragment(
+                File.ReadAllText(ResolveSetterFixturePath()),
+                "get { return _stored; }\n            set { _stored = value + 1001; }",
+                editedGetter + "\n            " + editedSetter);
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterAndSetterBothEditedSpans.cs",
+                onDisk => editedSource);
+
+            int getterLine = FindLineNumberContaining(editedSource, editedGetter);
+            int setterLine = FindLineNumberContaining(editedSource, editedSetter);
+            TransformWorkerEntryDto getter = FindEntryNamed(result, "get_Stored");
+            TransformWorkerEntryDto setter = FindEntryNamed(result, "set_Stored");
+            Assert.That((getter.sourceStartLine, getter.sourceEndLine), Is.EqualTo((getterLine, getterLine)));
+            Assert.That((setter.sourceStartLine, setter.sourceEndLine), Is.EqualTo((setterLine, setterLine)));
+            Assert.That(getter.sourceEndLine, Is.LessThan(setter.sourceStartLine), "Accessor spans must not overlap.");
+        }
+
+        /// <summary>
+        /// What: a getter-only property keeps the whole property declaration as its getter entry's
+        /// line span.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOnlyPropertyEdited_EntryKeepsTheWholePropertyLineSpan()
+        {
+            string editedSource = ReplaceUniqueFragment(
+                File.ReadAllText(ResolveSetterFixturePath()),
+                "_stored + 4004",
+                "_stored + 4005");
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOnlyPropertyEditedSpan.cs",
+                onDisk => editedSource);
+
+            int declarationIndex = editedSource.IndexOf("public int GetterOnly", StringComparison.Ordinal);
+            int closingBraceIndex = editedSource.IndexOf("        }", declarationIndex, StringComparison.Ordinal);
+            TransformWorkerEntryDto getter = FindEntryNamed(result, "get_GetterOnly");
+            Assert.That(getter.sourceStartLine, Is.EqualTo(LineNumberAt(editedSource, declarationIndex)));
+            Assert.That(getter.sourceEndLine, Is.EqualTo(LineNumberAt(editedSource, closingBraceIndex)));
+        }
+
+        /// <summary>
+        /// What: a property whose bodied get sits beside a bodied init narrows its getter entry to
+        /// the get accessor, so the Skipped init line is not covered by the getter's patch.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterBesideBodiedInitEdited_EntrySpansOnlyTheGetAccessor()
+        {
+            const string editedGetter = "get { return _stored + 7; }";
+            string editedSource = ReplaceUniqueFragment(
+                File.ReadAllText(ResolveSetterFixturePath()),
+                "get { return _stored; }\n            init",
+                editedGetter + "\n            init");
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterBesideBodiedInitSpan.cs",
+                onDisk => editedSource);
+
+            int getterLine = FindLineNumberContaining(editedSource, editedGetter);
+            int initLine = FindLineNumberContaining(editedSource, "init { _stored = value + 5005; }");
+            TransformWorkerEntryDto getter = FindEntryNamed(result, "get_InitStored");
+            Assert.That((getter.sourceStartLine, getter.sourceEndLine), Is.EqualTo((getterLine, getterLine)));
+            Assert.That(initLine, Is.GreaterThan(getter.sourceEndLine), "The init line must stay outside the getter span.");
+        }
+
+        /// <summary>
+        /// What: an explicit interface property beside an ordinary property of the same name keeps
+        /// its interface-qualified setter name, so editing only the ordinary setter emits plain
+        /// set_Twin and no unchanged or Skipped row also named plain set_Twin.
+        /// </summary>
+        [Test]
+        public async Task Run_OrdinarySetterBesideSameNameExplicitSetterEdited_RowsDoNotCollide()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "OrdinarySetterBesideExplicitTwin.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 1414", "value + 1415"));
+
+            TransformWorkerEntryDto entry = FindEntryNamed(result, "set_Twin");
+            Assert.That(entry.typeMetadataName, Does.EndWith("." + nameof(HotReloadPropertySetterTwinFixture)));
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>())
+            {
+                Assert.That(unchanged.methodName, Is.Not.EqualTo("set_Twin"), "Only the edited ordinary setter is named plain set_Twin.");
+            }
+
+            AssertSkippedDoesNotContain(result, nameof(HotReloadPropertySetterTwinFixture) + ".set_Twin(");
+        }
+
+        /// <summary>
+        /// What: the getter and setter shims of a property typed as a nested enum name that type
+        /// qualified in their signatures (return type and value parameter), since the shim class
+        /// sits outside the declaring type.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedTypePropertyAccessorsEdited_ShimSignaturesQualifyTheType()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "NestedTypePropertyAccessors.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "(Mode)(LastNested % 3)", "(Mode)(LastNested % 2)"),
+                    "(int)value + 1616;",
+                    "(int)value + 1626;"));
+
+            string getterHeader = ShimSignatureOf(result, "get_NestedMode");
+            string setterHeader = ShimSignatureOf(result, "set_NestedMode");
+            Assert.That(getterHeader, Does.Contain(nameof(HotReloadPropertySetterNestedTypeFixture) + ".Mode get_NestedMode"));
+            Assert.That(setterHeader, Does.Contain(nameof(HotReloadPropertySetterNestedTypeFixture) + ".Mode value"));
+            Assert.That(setterHeader, Does.Not.Contain(" Mode value"));
+        }
+
+        /// <summary>
+        /// What: an edited setter of a struct property is Skipped with the struct-host reason and
+        /// emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_StructPropertySetterEdited_IsSkippedAsStructHost()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "StructPropertySetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 7007", "value + 7008"));
+
+            AssertSkippedWithCode(result, "set_StructStored", HotReloadWorkerReasonCode.MethodTransformStructHost);
+            AssertNoEntryNamed(result, "set_StructStored");
+        }
+
+        /// <summary>
+        /// What: an edited setter of an explicit interface implementation is Skipped with the
+        /// explicit-implementation reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitInterfacePropertySetterEdited_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "ExplicitInterfacePropertySetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 9009", "value + 9010"));
+
+            AssertSkippedWithCode(
+                result,
+                "set_Contract",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+            AssertNoEntryFragment(result, "set_Contract");
+        }
+
+        /// <summary>
+        /// What: an edited default setter of an interface property emits a set_ entry without a
+        /// skip row, the same way an interface default getter does.
+        /// </summary>
+        [Test]
+        public async Task Run_InterfaceDefaultPropertySetterEdited_EmitsSetAccessorEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "InterfaceDefaultPropertySetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 8008", "value + 8009"));
+
+            AssertEmittedWithoutSkip(result, "set_Sink");
+        }
+
+        /// <summary>
+        /// What: an edited setter that calls through base is Skipped and emits no entry. The reason
+        /// code is not checked here because the base-call decision owns it.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterWithBaseAccessEdited_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterWithBaseAccessEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 1111", "value + 1112"));
+
+            Assert.That(
+                FormatSkippedMethodNames(result.Output.skipped),
+                Does.Contain("HotReloadPropertySetterDerivedFixture.set_Chained"));
+            AssertNoEntryNamed(result, "set_Chained");
+        }
+
+        /// <summary>
+        /// What: a setter whose property type changed since the last compile has no compiled setter
+        /// with that parameter type, so it stays Skipped with the accessor reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterOfPropertyWhoseTypeChanged_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterOfPropertyWhoseTypeChanged.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "public int Widened", "public long Widened"),
+                    "value + 1212",
+                    "value + 1213"));
+
+            AssertSkippedContains(result, "set_Widened", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_Widened");
+        }
+
+        /// <summary>
+        /// What: an edited setter of a generic type's property is Skipped with the generic reason
+        /// and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_GenericTypePropertySetterEdited_IsSkippedAsGenericHost()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GenericTypePropertySetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 1313", "value + 1314"));
+
+            AssertSkippedWithCode(
+                result,
+                "set_GenericStored",
+                HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType);
+            AssertNoEntryNamed(result, "set_GenericStored");
         }
 
         /// <summary>
@@ -3077,7 +3493,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fileName,
             Func<string, string> edit)
         {
-            string onDisk = File.ReadAllText(ResolveShapeFixturePath());
+            return await RunWorkerOnEditedFixtureCopyAsync(
+                ResolveShapeFixturePath(),
+                ResolveShapeFixtureProjectRelativePath(),
+                fileName,
+                edit);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnEditedSetterCopyAsync(
+            string fileName,
+            Func<string, string> edit)
+        {
+            return await RunWorkerOnEditedFixtureCopyAsync(
+                ResolveSetterFixturePath(),
+                SetterFixtureProjectRelativePath,
+                fileName,
+                edit);
+        }
+
+        /// <summary>
+        /// Writes an edited copy of a fixture under the test-sources directory and runs the worker on
+        /// it, with the fixture as it is on disk as the baseline snapshot.
+        /// </summary>
+        private static async Task<TransformWorkerClientResult> RunWorkerOnEditedFixtureCopyAsync(
+            string fixturePath,
+            string fixtureProjectRelativePath,
+            string fileName,
+            Func<string, string> edit)
+        {
+            string onDisk = File.ReadAllText(fixturePath);
             string editedSource = edit(onDisk);
             Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
 
@@ -3089,10 +3533,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                 sourcePath,
-                ResolveShapeFixtureProjectRelativePath(),
+                fixtureProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        private static TransformWorkerUnchangedMethodDto FindSetterFixtureUnchangedRowOrNull(
+            TransformWorkerClientResult result,
+            string methodName)
+        {
+            if (result.Output.unchangedMethods == null)
+            {
+                return null;
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                if (unchanged.methodName == methodName
+                    && unchanged.typeMetadataName != null
+                    && unchanged.typeMetadataName.EndsWith("." + nameof(HotReloadPropertySetterFixture), StringComparison.Ordinal))
+                {
+                    return unchanged;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool HasSetterFixtureUnchangedRow(TransformWorkerClientResult result, string methodName)
+        {
+            return FindSetterFixtureUnchangedRowOrNull(result, methodName) != null;
+        }
+
+        private static void AssertNoEntryNamed(TransformWorkerClientResult result, string methodName)
+        {
+            foreach (TransformWorkerEntryDto entry in result.Output.entries ?? Array.Empty<TransformWorkerEntryDto>())
+            {
+                Assert.That(
+                    entry.methodName,
+                    Is.Not.EqualTo(methodName),
+                    "Unexpected entry; got: " + FormatEntryMethodNames(result.Output.entries));
+            }
+        }
+
+        private static void AssertNoEntryFragment(TransformWorkerClientResult result, string methodFragment)
+        {
+            foreach (TransformWorkerEntryDto entry in result.Output.entries ?? Array.Empty<TransformWorkerEntryDto>())
+            {
+                Assert.That(
+                    entry.methodName,
+                    Does.Not.Contain(methodFragment),
+                    "Unexpected entry; got: " + FormatEntryMethodNames(result.Output.entries));
+            }
+        }
+
+        private static void AssertSkippedWithCode(
+            TransformWorkerClientResult result,
+            string methodFragment,
+            HotReloadWorkerReasonCode expectedCode)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped ?? Array.Empty<TransformWorkerSkippedDto>())
+            {
+                if (skipped.method == null || !skipped.method.Contains(methodFragment))
+                {
+                    continue;
+                }
+
+                Assert.That(skipped.reason.code, Is.EqualTo(expectedCode), HotReloadWorkerReasonText.Render(skipped.reason));
+                return;
+            }
+
+            Assert.Fail(
+                "Expected a skip containing '" + methodFragment + "'; got: "
+                + FormatSkippedMethodNames(result.Output.skipped));
+        }
+
+        // The shim method's declaration up to the end of its parameter list, so a Contains check
+        // reads the signature and not the body.
+        private static string ShimSignatureOf(TransformWorkerClientResult result, string methodName)
+        {
+            string slice = SliceShimMethod(result.Output.shimSource, FindEntryNamed(result, methodName).shimMethodName);
+            return slice.Substring(0, slice.IndexOf(')') + 1);
+        }
+
+        private static int LineNumberAt(string source, int index)
+        {
+            int line = 1;
+            for (int position = 0; position < index; position++)
+            {
+                if (source[position] == '\n')
+                {
+                    line++;
+                }
+            }
+
+            return line;
         }
 
         // Why the uniqueness check: Replace edits every occurrence, and a comment that also landed
@@ -3532,6 +4068,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string ResolveShapeFixtureProjectRelativePath()
         {
             return "Assets/Tests/Editor/HotReload/HotReloadShapeFixtures.cs";
+        }
+
+        private const string SetterFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadPropertySetterFixtures.cs";
+
+        private static string ResolveSetterFixturePath()
+        {
+            string path = Path.GetFullPath(Path.Combine(Application.dataPath, "..", SetterFixtureProjectRelativePath));
+            Assert.That(File.Exists(path), Is.True, "Setter fixture source missing: " + path);
+            return path;
         }
 
         private static int FindLineNumberContaining(string source, string fragment)

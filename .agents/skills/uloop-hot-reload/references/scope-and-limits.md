@@ -1,13 +1,13 @@
 # Hot Reload Scope and Limits
 
-Only ordinary method declarations and property getters with a body are patched. A
+Only ordinary method declarations and property getters and setters with a body are patched. A
 property added to a compiled type applies as an added member instead (see below).
 Constructors, finalizers, operators, and explicit event accessors are reported as
 `Skipped` when edited (with a verified baseline, unchanged members of those kinds
 produce no row). Methods of an `interface`, including default interface
-implementations, are reported as `Skipped` the same way; a default property getter of
-an `interface` is patched like any other getter. Use `uloop compile` for the skipped
-ones.
+implementations, are reported as `Skipped` the same way; a default property getter or
+setter of an `interface` is patched like any other. Use `uloop compile` for the
+skipped ones.
 Adding a constructor, finalizer, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
 Methods and property getters of `partial` types are patched like any other; the
@@ -380,12 +380,17 @@ A file saved while the compile was running — after the compiler read it — is
 the snapshot is captured: a run without `--files` selects it, and its methods are all
 patched with a warning, until the next compile.
 
-Property getters with a body (including expression-bodied properties) are patched
-like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
-is reported per-accessor as `Skipped`, so an edited accessor never disappears from the
-response silently; with a verified baseline, accessors unchanged from it produce no
-row. A property *added* in this edit is different: both of its accessors apply (see
-"Added members" above).
+Property getters and setters with a body (including expression-bodied ones) are patched
+like ordinary methods; a setter's row reads `Ns.Type.set_X(<type>)`. A patched setter
+changes what the next assignment does: values stored by earlier assignments stay as they
+are. Editing a compiled property's `init` accessor or an indexer accessor is reported
+per-accessor as `Skipped`, and so is a setter with no matching setter on the compiled
+property (a `set` added to a getter-only property, one that was `init` at the last
+compile, or one whose property changed its type or `static` modifier since then), so an
+edited accessor never disappears from the response silently; with a verified baseline,
+accessors unchanged from it produce no row. A property *added* in this edit is
+different: its accessors apply when the property has a supported shape (see "Added
+members" above).
 
 Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an edited
 body works, and so does raising or reading one (`E?.Invoke(x)`, `E(x)`,
@@ -448,7 +453,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | An added member's body cannot be fully bound in the hot-reload compilation | Hot reload cannot verify a member it cannot bind. A common cause: another file of the same reload, passed or pulled back in because it holds active patches, declares a compiled type from source, while a compiled API the body calls still names the compiled copy (for example, a lambda handed to a compiled `Register(Action<T>)`). The reason then names both types and the file declaring the compiled API. When the called member belongs to a type an earlier reload introduced and its signature was bound to the compiled copy, the reason names the introduced type and that compiled type instead. Either way the `Skipped` row names the step for that run (pass the file declaring the compiled API, leave the file declaring the type out, undo its edit and leave it out, or `uloop compile`), chosen from whether each file was passed, carried in, or already holds patches; a row about an added property's body points to the row of its accessor instead. A file passed this way is brought back by every later reload of the assembly while it stays unchanged, including the reload that re-applies after `--revert-all` or Play entry, until the next successful compile. When the skip deactivated added members an earlier reload applied, the next reload of the assembly retries their unchanged file once, so passing only the declaring file applies them again |
-| Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |
+| Edited `init` or indexer accessor of a *compiled* property, or a setter with no matching setter on the compiled property | Accessor patching covers getters and setters of ordinary properties; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead when the property has a supported shape |
 | Constructor (instance or static), finalizer, operator, conversion operator, or explicit event accessor (add/remove) | Skipped; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an added event the added-field store cannot hold leave nothing for the shim's Harmony accessor to bind |
 | Method raises or reads a field-like event through a conditional receiver (`other?.E`) | The shim has no name for the conditional receiver to pass to the accessor call |

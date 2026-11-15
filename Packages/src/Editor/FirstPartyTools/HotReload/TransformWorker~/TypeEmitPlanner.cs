@@ -87,8 +87,12 @@ internal static class TypeEmitPlanner
                 addedPropertyCatalog,
                 typeState.AddedEvents);
 
-            // Existing property setters/init and all indexer accessors with bodies stay Skipped.
+            // Init accessors, setters without a matching compiled setter, and all indexer accessors
+            // with bodies stay Skipped; the setter emitter reports the rest of the setters.
             // Added properties were classified above and must not receive duplicate skip rows.
+            // Adopt sets the home assembly only for a type a retained artifact serves; a type the
+            // patch target itself holds is resolved by FindCompiledType and leaves it null.
+            bool servedByRetainedArtifact = typeState.HomeAssemblyName != null;
             (Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
                 Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
                 Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
@@ -105,7 +109,9 @@ internal static class TypeEmitPlanner
                 plainCurrentPropertyMap,
                 plainCurrentIndexerMap,
                 addedMethodCatalog,
-                addedPropertyCatalog);
+                addedPropertyCatalog,
+                typeState.CompiledType,
+                servedByRetainedArtifact);
             (Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
                 Dictionary<string, DestructorDeclarationSyntax> snapshotDestructorMap,
                 Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
@@ -116,9 +122,6 @@ internal static class TypeEmitPlanner
                 Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
                 baseline.GetUnsupportedMemberBaselineMaps();
 
-            // Adopt sets the home assembly only for a type a retained artifact serves; a type the
-            // patch target itself holds is resolved by FindCompiledType and leaves it null.
-            bool servedByRetainedArtifact = typeState.HomeAssemblyName != null;
             UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
                 sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,

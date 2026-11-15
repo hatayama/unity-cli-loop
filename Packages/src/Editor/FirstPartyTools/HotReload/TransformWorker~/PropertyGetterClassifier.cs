@@ -56,12 +56,14 @@ internal static class PropertyGetterClassifier
         return false;
     }
 
-    internal static (bool SkipGetter, MethodTransformDecision Decision) TrySkipPropertyGetterByDecision(
+    // What: runs a property accessor body through the same transform decision and name/added-call
+    // guards as an ordinary method, adding the skip row itself when one applies.
+    internal static (bool SkipAccessor, MethodTransformDecision Decision) TrySkipPropertyAccessorByDecision(
         string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
-        IMethodSymbol getterSymbol,
-        SyntaxNode getterBodyNode,
+        IMethodSymbol accessorSymbol,
+        SyntaxNode accessorBodyNode,
         SemanticModel semanticModel,
         INamedTypeSymbol compiledType,
         AddedEventLookup addedEvents,
@@ -76,8 +78,8 @@ internal static class PropertyGetterClassifier
             typeDeclaration,
             typeSymbol,
             methodDeclaration: null,
-            getterSymbol,
-            getterBodyNode,
+            accessorSymbol,
+            accessorBodyNode,
             semanticModel,
             compiledType,
             addedMemberAccess: null,
@@ -88,7 +90,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
                 Reason = decision.SkipReason
             });
             return (true, decision);
@@ -97,7 +99,7 @@ internal static class PropertyGetterClassifier
         WorkerReason unresolvedNameSkip = UnresolvedBodyNameGuard.DescribeSkipOrNull(
             typeDeclaration,
             semanticModel,
-            getterBodyNode,
+            accessorBodyNode,
             methodDeclarationOrNull: null,
             decision,
             typeSymbol,
@@ -107,14 +109,14 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
                 Reason = unresolvedNameSkip
             });
             return (true, MethodTransformDecision.Skip(unresolvedNameSkip));
         }
 
         (WorkerReason addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
-            getterBodyNode,
+            accessorBodyNode,
             semanticModel,
             addedMethodCatalog,
             addedFieldCatalog,
@@ -128,12 +130,12 @@ internal static class PropertyGetterClassifier
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+            Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
             Reason = addedCallSiteSkip,
             CalledAddedMethodKey = calledAddedMethodKey,
             MethodKey = calledAddedMethodKey == null
                 ? null
-                : WorkerMethodKeys.BuildMethodKeyFromSymbol(getterSymbol)
+                : WorkerMethodKeys.BuildMethodKeyFromSymbol(accessorSymbol)
         });
         return (true, decision);
     }

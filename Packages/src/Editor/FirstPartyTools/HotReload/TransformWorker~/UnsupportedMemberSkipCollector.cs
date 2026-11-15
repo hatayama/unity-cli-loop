@@ -18,8 +18,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class UnsupportedMemberSkipCollector
 {
-    // What: reports each property/indexer accessor that has an explicit body as Skipped.
-    // Auto-properties ({ get; set; }) have no body and are not listed.
+    // What: reports each property/indexer accessor that has an explicit body and that hot reload
+    // does not patch as Skipped. Auto-properties ({ get; set; }) have no body and are not listed;
+    // getters and the setters PropertySetterClassifier hands to the setter emitter are left out.
     // When a verified snapshot declares an equivalent property/indexer, skip rows are omitted
     // (unchanged accessors must not appear as Skipped noise). A property is also compared one
     // accessor at a time, so a set or init body equal to the snapshot's is omitted even when
@@ -35,7 +36,9 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
         Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
         AddedMethodCatalog addedMethodCatalog,
-        AddedPropertyCatalog addedPropertyCatalog)
+        AddedPropertyCatalog addedPropertyCatalog,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
         int firstAppendedIndex = skipped.Count;
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
@@ -70,7 +73,9 @@ internal static class UnsupportedMemberSkipCollector
                     snapshotPropertyMap,
                     addedMethodCatalog,
                     snapshotProperty,
-                    plainProperty);
+                    plainProperty,
+                    compiledType,
+                    servedByRetainedArtifact);
                 continue;
             }
 
@@ -98,7 +103,9 @@ internal static class UnsupportedMemberSkipCollector
                     snapshotPropertyMap,
                     addedMethodCatalog,
                     snapshotProperty: null,
-                    plainCurrentProperty: null);
+                    plainCurrentProperty: null,
+                    compiledType: null,
+                    servedByRetainedArtifact: false);
             }
         }
 
@@ -116,7 +123,9 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
         AddedMethodCatalog addedMethodCatalog,
         PropertyDeclarationSyntax snapshotProperty,
-        PropertyDeclarationSyntax plainCurrentProperty)
+        PropertyDeclarationSyntax plainCurrentProperty,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
         if (propertySymbol == null)
         {
@@ -130,21 +139,33 @@ internal static class UnsupportedMemberSkipCollector
             return;
         }
 
-        // Properties: getters are patched elsewhere; only setter/init with bodies are Skipped here.
+        // Properties: getters and patchable setters are reported by the emitters; only init and
+        // setters without a matching compiled setter are Skipped here.
         if (propertyDeclaration.AccessorList == null)
         {
             return;
         }
 
         bool emittedSkip = AppendChangedSetOrInitAccessorSkips(
-            propertyDeclaration.AccessorList,
+            propertyDeclaration,
             propertySymbol,
             skipped,
             snapshotProperty,
-            plainCurrentProperty);
+            plainCurrentProperty,
+            compiledType,
+            servedByRetainedArtifact);
 
         PropertyDeclarationSyntax namedProperty = propertyDeclaration as PropertyDeclarationSyntax;
-        if (!emittedSkip
+        // Why also for an emitter-reported setter: a property the snapshot does not declare has to be
+        // marked as added to the current tree whichever path reports its setter, or the drift check
+        // reads the whole property as an edit outside method bodies.
+        bool setterReportedByEmitter = namedProperty != null
+            && PropertySetterClassifier.IsPatchableCompiledSetter(
+                namedProperty,
+                propertySymbol,
+                compiledType,
+                servedByRetainedArtifact);
+        if ((!emittedSkip && !setterReportedByEmitter)
             || namedProperty == null
             || snapshotPropertyMap == null
             || addedMethodCatalog == null)
@@ -159,19 +180,33 @@ internal static class UnsupportedMemberSkipCollector
         }
     }
 
-    // Reports each set or init accessor that has a body and differs from the snapshot, and returns
-    // whether it reported any.
+    // Reports each set or init accessor that has a body, differs from the snapshot, and is not
+    // reported by the setter emitter, and returns whether it reported any.
     private static bool AppendChangedSetOrInitAccessorSkips(
-        AccessorListSyntax accessorList,
+        BasePropertyDeclarationSyntax propertyDeclaration,
         IPropertySymbol propertySymbol,
         List<WorkerSkipped> skipped,
         PropertyDeclarationSyntax snapshotProperty,
-        PropertyDeclarationSyntax plainCurrentProperty)
+        PropertyDeclarationSyntax plainCurrentProperty,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
         bool emittedSkip = false;
-        foreach (AccessorDeclarationSyntax accessor in accessorList.Accessors)
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
         {
             if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
+            {
+                continue;
+            }
+
+            // The setter emitter reports this accessor (entry, unchanged row, or its own skip).
+            if (accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
+                && propertyDeclaration is PropertyDeclarationSyntax namedProperty
+                && PropertySetterClassifier.IsPatchableCompiledSetter(
+                    namedProperty,
+                    propertySymbol,
+                    compiledType,
+                    servedByRetainedArtifact))
             {
                 continue;
             }
