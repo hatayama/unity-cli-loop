@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -51,10 +52,13 @@ internal sealed class BaseCallStandInPlan
             SyntaxFactory.Parameter(SyntaxFactory.Identifier(TransformWorkerProgramMarker.InstanceParameterName))
                 .WithType(hostTypeSyntax)
         };
-        foreach (IParameterSymbol parameter in target.Parameters)
+        // Why positional names: the stand-in never reads its parameters, and a target parameter
+        // named with a C# keyword (@event) would otherwise emit an invalid identifier.
+        for (int index = 0; index < target.Parameters.Length; index++)
         {
+            IParameterSymbol parameter = target.Parameters[index];
             parameters.Add(
-                SyntaxFactory.Parameter(SyntaxFactory.Identifier(parameter.Name))
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("p" + index.ToString(CultureInfo.InvariantCulture)))
                     .WithModifiers(BuildRefModifiers(parameter.RefKind))
                     .WithType(ToTypeSyntax(parameter.Type)));
         }

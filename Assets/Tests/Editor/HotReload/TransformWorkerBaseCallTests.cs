@@ -216,6 +216,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.MethodTransformBaseCallArgumentShape);
         }
 
+        /// <summary>
+        /// What: a stand-in for a base method whose parameter name is a C# keyword names its
+        /// parameters by position, so the shim source stays valid C#.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToKeywordNamedParameter_StandInNamesParametersByPosition()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "BaseCallKeywordParameter.cs",
+                source => ReplaceUniqueFragment(source, "6125", "7125"));
+
+            AssertTransplantEntryWithoutSkip(result, nameof(HotReloadBaseCallDerivedFixture.CallKeywordParameter));
+            Assert.That(
+                result.Output.shimSource,
+                Does.Contain("__uloopBaseCall__d2__Keyword__0(global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadBaseCallDerivedFixture __uloopInstance, int p0)"),
+                result.Output.shimSource);
+        }
+
         /// <summary>What: a base call to a generic method is Skipped for its argument shape.</summary>
         [Test]
         public async Task Run_BaseCallToGenericMethod_IsSkippedAsArgumentShape()

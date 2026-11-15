@@ -147,6 +147,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.CallBesidePrivateLambda(1), Is.EqualTo(1 + 100 + 3 + 7107));
         }
 
+        /// <summary>
+        /// What: a base call to a method whose parameter name is a C# keyword is Patched, runs the base
+        /// body, and RevertAll restores the compiled body.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToKeywordNamedParameter_ApplyAndRevert_CallsTheBaseImplementation()
+        {
+            HotReloadBaseCallDerivedFixture fixture = new HotReloadBaseCallDerivedFixture();
+            Assert.That(fixture.CallKeywordParameter(1), Is.EqualTo(1 + 600 + 6125));
+
+            await ApplyEditAsync("BaseCallE2EKeyword.cs", "6125", "7125", "CallKeywordParameter");
+
+            Assert.That(fixture.CallKeywordParameter(1), Is.EqualTo(1 + 600 + 7125));
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(fixture.CallKeywordParameter(1), Is.EqualTo(1 + 600 + 6125), "RevertAll must restore the compiled body.");
+        }
+
         private static async Task ApplyEditAsync(
             string editedFileName,
             string token,
