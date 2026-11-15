@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -280,6 +281,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a base call to Pick(int) on Base&lt;int&gt;, whose base also declares Pick(T), is Skipped
+        /// as ambiguous, because the two overloads have the same parameter types once T is int.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToOverloadCollidingAfterSubstitution_IsSkippedAsAmbiguousTarget()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "BaseCallCollisionPick.cs",
+                source => ReplaceUniqueFragment(source, "6141", "7141"));
+
+            AssertCollisionSkippedWithCode(result, nameof(HotReloadBaseCallCollisionDerivedFixture.CallPick));
+        }
+
+        /// <summary>
+        /// What: a base call to Take(ref int) on Base&lt;int&gt;, whose base also declares Take(out T), is
+        /// Skipped as ambiguous rather than as a target the compiled assembly does not hold.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToRefOverloadCollidingWithOut_IsSkippedAsAmbiguousTarget()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "BaseCallCollisionTake.cs",
+                source => ReplaceUniqueFragment(source, "6142", "7142"));
+
+            AssertCollisionSkippedWithCode(result, nameof(HotReloadBaseCallCollisionDerivedFixture.CallTakeByRef));
+        }
+
+        /// <summary>
+        /// What: on the same generic base, a base call to a method with no colliding overload is still
+        /// emitted as a transplant entry.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToNonCollidingMethodOnSameBase_EmitsTransplantEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "BaseCallCollisionPlain.cs",
+                source => ReplaceUniqueFragment(source, "6143", "7143"));
+
+            TransformWorkerEntryDto entry = result.Output.entries.FirstOrDefault(candidate =>
+                candidate.typeMetadataName == typeof(HotReloadBaseCallCollisionDerivedFixture).FullName
+                && candidate.methodName == nameof(HotReloadBaseCallCollisionDerivedFixture.CallPlain));
+            Assert.That(entry, Is.Not.Null, "Skipped=" + FormatSkipped(result.Output.skipped));
+        }
+
+        /// <summary>
         /// What: a stand-in for a base method whose parameter name is a C# keyword names its
         /// parameters by position, so the shim source stays valid C#.
         /// </summary>
@@ -361,6 +407,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 source => ReplaceUniqueFragment(source, token, "7" + token.Substring(1)));
 
             AssertSkippedWithCode(result, methodName, expectedCode);
+        }
+
+        private static void AssertCollisionSkippedWithCode(TransformWorkerClientResult result, string methodName)
+        {
+            string labelFragment = "HotReloadBaseCallCollisionDerivedFixture." + methodName + "(";
+            TransformWorkerSkippedDto skipped = FindSkipped(result, labelFragment);
+            Assert.That(
+                skipped,
+                Is.Not.Null,
+                "Expected a Skipped row for '" + labelFragment + "'. Skipped=" + FormatSkipped(result.Output.skipped));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformBaseCallAmbiguousTarget),
+                "Skipped=" + FormatSkipped(result.Output.skipped));
         }
 
         private static void AssertSkippedWithCode(

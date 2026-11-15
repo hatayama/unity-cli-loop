@@ -225,6 +225,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Calls a base method marked [Conditional]; the compiler removes such a call when the symbol is "
                 + "not defined, and hot reload cannot do the same; run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallAmbiguousTarget,
+                NoArgs,
+                "Calls a base method whose type declares another method with the same name and the same "
+                + "parameter types once type arguments are filled in; hot reload cannot tell the two apart, so "
+                + "run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
                 NoArgs,
                 "Lambda, local-function, or query-expression bodies that access private/internal members "

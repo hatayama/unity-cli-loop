@@ -166,4 +166,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [MethodImpl(MethodImplOptions.NoInlining)]
         public override int Pass(int value) { return base.Pass(value) + 6131; }
     }
+
+    /// <summary>
+    /// A generic base whose overloads collide once T is int: Pick(T) / Pick(int) and
+    /// Take(out T) / Take(ref int). Plain has no colliding overload.
+    /// </summary>
+    public class HotReloadBaseCallCollisionBaseFixture<T>
+    {
+        public virtual int Pick(T value) { return 1; }
+        public virtual int Pick(int value) { return 2; }
+        public virtual int Take(out T value) { value = default; return 3; }
+        public virtual int Take(ref int value) { return 4; }
+        public virtual int Plain(int value) { return value + 5; }
+    }
+
+    /// <summary>Calls the colliding overloads of a constructed generic base type.</summary>
+    public class HotReloadBaseCallCollisionDerivedFixture : HotReloadBaseCallCollisionBaseFixture<int>
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallPick(int input) { return base.Pick(input) + 6141; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallTakeByRef(int input) { int value = input; return base.Take(ref value) + 6142; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallPlain(int input) { return base.Plain(input) + 6143; }
+    }
 }

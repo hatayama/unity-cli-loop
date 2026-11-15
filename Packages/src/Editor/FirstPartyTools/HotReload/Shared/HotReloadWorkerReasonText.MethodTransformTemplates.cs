@@ -66,6 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "not defined, and hot reload cannot do the same; run 'uloop compile'.",
                     0));
             templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallAmbiguousTarget,
+                Plain(
+                    "Calls a base method whose type declares another method with the same name and the same "
+                    + "parameter types once type arguments are filled in; hot reload cannot tell the two apart, so "
+                    + "run 'uloop compile'.",
+                    0));
+            templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
                 Composing(
                     "Lambda, local-function, or query-expression bodies that access private/internal members "

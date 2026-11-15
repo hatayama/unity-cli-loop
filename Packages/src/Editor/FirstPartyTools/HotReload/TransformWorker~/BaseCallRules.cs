@@ -41,6 +41,7 @@ internal static class BaseCallRules
         return FindPlacementReason(methodDeclaration, bodyNode, compiledType, baseExpressions)
             ?? FindConditionalTargetReason(calls)
             ?? FindArgumentShapeReason(calls)
+            ?? FindAmbiguousTargetReason(calls)
             ?? FindTargetReason(typeSymbol, compiledType, calls);
     }
 
@@ -190,6 +191,51 @@ internal static class BaseCallRules
         }
 
         return false;
+    }
+
+    // Why refused: the stand-in and the Editor identify the target by name and parameter types,
+    // which cannot tell Pick(T) from Pick(int) on Base<int>, nor Take(out T) from Take(ref int).
+    private static WorkerReason FindAmbiguousTargetReason(List<BaseCall> calls)
+    {
+        foreach (BaseCall call in calls)
+        {
+            if (HasCollidingOverload(call.Target))
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseCallAmbiguousTarget);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasCollidingOverload(IMethodSymbol target)
+    {
+        string[] targetParameterTypes = ToByRefAgnosticParameterTypes(target);
+        foreach (ISymbol member in target.ContainingType.GetMembers(target.Name))
+        {
+            if (member is not IMethodSymbol other
+                || SymbolEqualityComparer.Default.Equals(other, target)
+                || other.MethodKind != MethodKind.Ordinary
+                || other.IsStatic
+                || other.IsGenericMethod)
+            {
+                continue;
+            }
+
+            if (ToByRefAgnosticParameterTypes(other).SequenceEqual(targetParameterTypes))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Why the Cecil names: ref, out and in all map to the same "&" name, which is how the Editor
+    // sees them after substitution.
+    private static string[] ToByRefAgnosticParameterTypes(IMethodSymbol method)
+    {
+        return method.Parameters.Select(CecilTypeNames.ToParameterTypeFullName).ToArray();
     }
 
     private static WorkerReason FindArgumentShapeReason(List<BaseCall> calls)

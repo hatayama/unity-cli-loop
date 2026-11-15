@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         MethodTransformBaseCallArgumentShape,
         MethodTransformBaseCallTargetNotCompiled,
         MethodTransformBaseCallConditionalTarget,
+        MethodTransformBaseCallAmbiguousTarget,
         MethodTransformClosureInaccessibleAccess,
         MethodTransformAsyncIteratorInaccessibleAccess,
         MethodTransformPartialOtherPartChanged,
