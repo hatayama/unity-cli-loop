@@ -284,7 +284,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(callsBaseEntry, Is.Not.Null, "CallsBase must be an entry.");
             Assert.That(callsBaseEntry.patchKind, Is.EqualTo("transplant"));
             AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBaseInLambda), "Calls a base method from a lambda");
-            AssertHasSkip(result, "ExplicitPing", "Explicit interface");
+            // Why an entry named by the compiled metadata name: an explicit implementation the
+            // compiled type already has is patched, and the Editor finds it by that name.
+            TransformWorkerEntryDto explicitPingEntry =
+                FindEntryNamed(result, typeof(IHotReloadE2EMarker).FullName + ".ExplicitPing");
+            Assert.That(explicitPingEntry.shimMethodName, Does.StartWith("ExplicitPing__shim"));
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncConditionalPrivateField), "conditional access");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncNullCoalesceAssignPrivateProperty), "null-coalescing");
@@ -2663,6 +2667,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "set_Contract",
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
             AssertNoEntryFragment(result, "set_Contract");
+        }
+
+        /// <summary>
+        /// What: an edited getter of an explicit interface property is Skipped with the
+        /// explicit-implementation reason and emits no entry, while explicit methods are patched.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitInterfacePropertyGetterEdited_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "ExplicitInterfacePropertyGetterEdited.cs",
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "get { return _stored; }\n            set { _stored = value + 9009; }",
+                    "get { return _stored + 1; }\n            set { _stored = value + 9009; }"));
+
+            AssertSkippedWithCode(
+                result,
+                "get_Contract",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+            AssertNoEntryFragment(result, "get_Contract");
         }
 
         /// <summary>

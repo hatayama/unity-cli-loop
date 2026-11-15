@@ -117,7 +117,7 @@ internal static class ShimMethodEmitter
             {
                 SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-                MethodName = queued.MethodSymbol.Name,
+                MethodName = queued.EntryMethodName,
                 ParameterTypeFullNames = queued.ParameterTypeFullNames,
                 GenericArity = queued.MethodSymbol.Arity,
                 ShimTypeName = queued.ShimType.ShimTypeName,

@@ -565,6 +565,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
         }
 
+        /// <summary>
+        /// What: with an ordinary method and an explicit interface implementation on adjacent lines,
+        /// both patched, a pause point on the explicit implementation's line arms its own shim, not
+        /// the method declared just above it, and is hit when the call goes through the interface.
+        /// </summary>
+        [Test]
+        public async Task PatchThenEnable_ExplicitImplementationBelowAnotherPatchedMethod_ArmsItsOwnShim()
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", ExplicitFixtureProjectRelativePath));
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk
+                .Replace("return 4201;", "return 4211;", StringComparison.Ordinal)
+                .Replace("return 4202;", "return 4212;", StringComparison.Ordinal);
+            int explicitLine = FindLineNumber(editedSource, "return 4212;");
+            Assert.That(explicitLine, Is.EqualTo(FindLineNumber(editedSource, "return 4211;") + 1), "Precondition: adjacent lines.");
+
+            string directory = Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string editedPath = Path.Combine(directory, "E2E_explicit_adjacent.cs");
+            File.WriteAllText(editedPath, editedSource);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            Assert.That(
+                result.Methods.Count(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
+                Is.EqualTo(2),
+                FormatHotReloadOutcomes(result));
+
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(ExplicitFixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            SourcePausePointShimResolution resolution =
+                SourcePausePointShimResolver.Resolve(lookup, ExplicitFixtureProjectRelativePath, explicitLine);
+            Assert.That(resolution.LogicalOwner?.Name, Does.EndWith("IHotReloadExplicitRunner.Run"), resolution.ErrorMessage);
+            Assert.That(resolution.TargetMethod?.Name, Does.Not.Contain("First"), resolution.ErrorMessage);
+
+            PausePointResponse enable = EnableContinuousInFile(ExplicitFixtureProjectRelativePath, explicitLine);
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+
+            IHotReloadExplicitRunner runner = new HotReloadPausePointExplicitFixture();
+            Assert.That(runner.Run(), Is.EqualTo(4212));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        private const string ExplicitFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadPausePointExplicitFixture.cs";
+
         private const string AdjacentMethodsFixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadPausePointAdjacentMethodsFixture.cs";
 

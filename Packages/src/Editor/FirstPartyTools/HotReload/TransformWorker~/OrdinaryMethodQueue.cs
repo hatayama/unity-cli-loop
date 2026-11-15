@@ -181,18 +181,42 @@ internal static class OrdinaryMethodQueue
         INamedTypeSymbol compiledType,
         IMethodSymbol methodSymbol)
     {
-        // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
-        // see them (metadata name is Interface.Method), so they would be misclassified as
-        // Added and skip the unchanged/baseline path.
+        // Why match by the implemented member: the metadata name follows the specifier's
+        // spelling, so a name lookup would call a respelled implementation added. A changed
+        // signature is a different member, so an explicit implementation never replaces one.
         if (methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            return (false, false);
+            return (ExplicitImplementationMatcher.FindCompiledImplementation(compiledType, methodSymbol) == null, false);
         }
 
         CompiledMethodMatch compiledMatch = CompiledMemberMatcher.MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
         return (
             compiledMatch != CompiledMethodMatch.Matched,
             compiledMatch == CompiledMethodMatch.ReturnTypeChanged);
+    }
+
+    // Why the compiled name for an explicit implementation: the Editor finds the method by the name
+    // the compiled assembly holds, and the source name changes with the specifier's spelling.
+    private static string ResolveEntryMethodName(
+        bool isExplicitImplementation,
+        bool isAddedMethod,
+        TypeEmitState typeState,
+        IMethodSymbol methodSymbol)
+    {
+        if (!isExplicitImplementation || isAddedMethod)
+        {
+            return methodSymbol.Name;
+        }
+
+        IMethodSymbol compiledMethod = ExplicitImplementationMatcher.FindCompiledImplementation(typeState.CompiledType, methodSymbol);
+        if (compiledMethod == null)
+        {
+            throw new InvalidOperationException(
+                "An explicit implementation classified as compiled has no compiled counterpart: "
+                + methodSymbol.ToDisplayString());
+        }
+
+        return compiledMethod.MetadataName;
     }
 
     internal static bool TrySkipExcludedOrdinaryMethod(
@@ -282,8 +306,8 @@ internal static class OrdinaryMethodQueue
     /// </summary>
     /// <remarks>
     /// With a baseline the change is known, so the existing reasons stay. An added method needs a
-    /// compile whatever its body. An explicit interface implementation is never matched against the
-    /// compiled type, so it cannot be called compiled. The compiled method must lack a body as well:
+    /// compile whatever its body. An explicit interface implementation is matched by the interface
+    /// member it implements rather than by name. The compiled method must lack a body as well:
     /// the signature match ignores abstract and extern, so an edit that removes a body (virtual to
     /// abstract, a method made extern, a default interface method made bodyless) leaves the
     /// compiled body running until a compile.
@@ -300,17 +324,12 @@ internal static class OrdinaryMethodQueue
             return false;
         }
 
-        if (methodDeclaration.ExplicitInterfaceSpecifier != null)
-        {
-            return false;
-        }
-
         if (methodDeclaration.Body != null || methodDeclaration.ExpressionBody != null)
         {
             return false;
         }
 
-        IMethodSymbol compiledMethod = CompiledMemberMatcher.FindCompiledOrdinaryMethod(compiledType, methodSymbol);
+        IMethodSymbol compiledMethod = FindCompiledCounterpart(methodDeclaration, compiledType, methodSymbol);
         if (compiledMethod == null)
         {
             throw new InvalidOperationException(
@@ -318,6 +337,17 @@ internal static class OrdinaryMethodQueue
         }
 
         return compiledMethod.IsAbstract || compiledMethod.IsExtern;
+    }
+
+    /// <summary>The compiled method a source method classified as compiled replaces; null when there is none.</summary>
+    internal static IMethodSymbol FindCompiledCounterpart(
+        MethodDeclarationSyntax methodDeclaration,
+        INamedTypeSymbol compiledType,
+        IMethodSymbol methodSymbol)
+    {
+        return methodDeclaration.ExplicitInterfaceSpecifier != null
+            ? ExplicitImplementationMatcher.FindCompiledImplementation(compiledType, methodSymbol)
+            : CompiledMemberMatcher.FindCompiledOrdinaryMethod(compiledType, methodSymbol);
     }
 
     internal static MethodTransformDecision DecideOrdinaryMethodTransform(
@@ -427,7 +457,11 @@ internal static class OrdinaryMethodQueue
             assemblyGlobalUsings,
             shimTypes,
             shimNames);
-        string shimMethodName = shimNames.NextShimMethodName(methodSymbol.Name);
+        // Why the interface member's name: an explicit implementation's own name is dotted
+        // (Ns.IFoo.Run), which is not a legal shim identifier.
+        bool isExplicitImplementation = methodDeclaration.ExplicitInterfaceSpecifier != null;
+        string shimMethodName = shimNames.NextShimMethodName(
+            isExplicitImplementation ? ExplicitImplementationMatcher.ImplementedMemberName(methodSymbol) : methodSymbol.Name);
 
         FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
         QueuedShimMethod queued = new QueuedShimMethod
@@ -436,6 +470,7 @@ internal static class OrdinaryMethodQueue
             MethodSymbol = methodSymbol,
             Decision = decision,
             ShimMethodName = shimMethodName,
+            EntryMethodName = ResolveEntryMethodName(isExplicitImplementation, isAddedMethod, typeState, methodSymbol),
             ShimType = shimType,
             SourceStartLine = originalSpan.StartLinePosition.Line + 1,
             SourceEndLine = originalSpan.EndLinePosition.Line + 1,

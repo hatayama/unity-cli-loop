@@ -156,8 +156,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return value;
         }
 
-        // Explicit interface implementation — must be Skipped so its dotted metadata name cannot
-        // poison shim compilation for the rest of the file.
+        // Explicit interface implementation: patched, with a shim named after the interface member
+        // because its own dotted metadata name is not a legal identifier.
         int IHotReloadE2EMarker.ExplicitPing()
         {
             return _secret;
