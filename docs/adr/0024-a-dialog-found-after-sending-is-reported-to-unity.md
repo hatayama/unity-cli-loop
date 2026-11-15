@@ -85,8 +85,9 @@ look takes about a second on macOS. Finding a dialog, it ends saying the trigger
 wait again with the same `--trigger` (and `--resume-play` when given); a wait asked for neither gets the
 started form. On macOS this took about 7 seconds: the expiry extension's 5-second timeout, then the look.
 A dialog its later watch finds ends such a wait the same way, and when Unity had answered that the
-marker was not armed, the last step says to re-enable it first. Both need a look that can read Unity's
-windows; when it cannot, as with a locked screen, the wait runs on to its own end.
+marker was not armed, the last step says to re-enable it first. Both need the look to find the dialog:
+Unity 6000.7 and later report their own dialogs, and on older Editors the look reads Unity's windows;
+when it cannot, as with a locked screen, the wait runs on to its own end.
 
 A pause-point wait that did send its `--trigger` sends it through the same dispatch, so the trigger's own send can be
 the one Unity fails with `main_thread_blocked`. The wait reads that result from the trigger's error
