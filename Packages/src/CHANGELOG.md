@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.26.1](https://github.com/hatayama/unity-cli-loop/compare/v3.26.0...v3.26.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* Hot reload applies a method that uses a nested type as a generic type argument ([#3518](https://github.com/hatayama/unity-cli-loop/issues/3518)) ([fd785c2](https://github.com/hatayama/unity-cli-loop/commit/fd785c2fbd553a5f9424bbe37a840413263dbf45))
+
 ## [3.26.0](https://github.com/hatayama/unity-cli-loop/compare/v3.25.0...v3.26.0) (2026-11-15)
 
 
