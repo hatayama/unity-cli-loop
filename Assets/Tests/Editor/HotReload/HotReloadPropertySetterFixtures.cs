@@ -76,6 +76,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             get { return (Mode)(LastNested % 3); }
             set { LastNested = (int)value + 1616; }
         }
+
+        public System.Collections.Generic.List<Mode> NestedModes
+        {
+            get { return new System.Collections.Generic.List<Mode> { Mode.On }; }
+            set { LastNested = value.Count + 1717; }
+        }
     }
 
     /// <summary>

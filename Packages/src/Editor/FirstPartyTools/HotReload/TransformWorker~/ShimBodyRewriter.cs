@@ -80,7 +80,13 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitGenericName(GenericNameSyntax node)
     {
-        return VisitName(node, node);
+        // Why visit the type arguments first: a nested type named by its simple name inside <...>
+        // must be qualified like any other nested name, and every path below that keeps or wraps
+        // the name must keep those visited arguments. Symbols are still looked up on `node`,
+        // because the semantic model only knows the original tree.
+        GenericNameSyntax withVisitedArguments = node.WithTypeArgumentList(
+            (TypeArgumentListSyntax)Visit(node.TypeArgumentList));
+        return VisitName(node, withVisitedArguments);
     }
 
     public override SyntaxNode VisitInterpolation(InterpolationSyntax node)
@@ -468,18 +474,21 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         return base.VisitMemberAccessExpression(node);
     }
 
-    private SyntaxNode VisitName(SimpleNameSyntax node, SyntaxNode original)
+    // What: rewrites a name for the shim. `node` is the bound original used for every symbol and
+    // context lookup; `rewritten` is what the name becomes when no rewrite replaces it (the same
+    // node, or a generic name with visited type arguments).
+    private SyntaxNode VisitName(SimpleNameSyntax node, SimpleNameSyntax rewritten)
     {
         if (HarmonyAccessorShimRewrite.IsNameSideOfLargerExpression(node))
         {
-            return original;
+            return rewritten;
         }
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? UnboundOwnedCallQualifier.ResolveOwnedMethodOrNull(node, _semanticModel, _targetType);
         if (symbol == null)
         {
-            return original;
+            return rewritten;
         }
 
         TypeSyntax qualifiedNestedType = NestedTypeNameQualifier.QualifyOrNull(node, symbol);
@@ -503,7 +512,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
         if (HarmonyAccessorShimRewrite.IsLocalOrAnonymousFunctionSymbol(symbol))
         {
-            return original;
+            return rewritten;
         }
 
         SyntaxNode accessorRead = HarmonyAccessors.TryRewriteNameAsAccessorRead(node, symbol);
@@ -515,7 +524,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = HarmonyAccessors.ResolveOwnedMember(symbol);
         if (!ownership.owned)
         {
-            return original;
+            return rewritten;
         }
 
         // Why only before the final qualification, not with the name-side checks at the top:
@@ -523,10 +532,10 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         // a pattern naming a member the shim cannot reach could then compile and fail at run time.
         if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(node))
         {
-            return original;
+            return rewritten;
         }
 
-        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
+        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(rewritten, ownership.isStatic, ownership.containingType);
     }
 
     internal static SyntaxKind GetCompoundAssignmentBinaryKind(SyntaxKind assignmentKind)

@@ -2543,6 +2543,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a nested type inside a generic argument of the property type is qualified too, in
+        /// both the getter's return type and the setter's value parameter, even when the generic
+        /// type itself is written namespace-qualified.
+        /// </summary>
+        [Test]
+        public async Task Run_GenericOfNestedTypePropertyAccessorsEdited_ShimSignaturesQualifyTheArgument()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GenericOfNestedTypePropertyAccessors.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "{ Mode.On }; }", "{ Mode.Off }; }"),
+                    "value.Count + 1717",
+                    "value.Count + 1718"));
+
+            string qualifiedArgument = nameof(HotReloadPropertySetterNestedTypeFixture) + ".Mode>";
+            Assert.That(ShimSignatureOf(result, "get_NestedModes"), Does.Contain(qualifiedArgument).And.Not.Contain("<Mode>"));
+            Assert.That(ShimSignatureOf(result, "set_NestedModes"), Does.Contain(qualifiedArgument).And.Not.Contain("<Mode>"));
+        }
+
+        /// <summary>
+        /// What: a body that names a nested type as a generic type argument by its simple name
+        /// emits shim source that names that argument qualified.
+        /// </summary>
+        [Test]
+        public async Task Run_BodyNamingNestedTypeAsGenericArgument_ShimQualifiesTheArgument()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedGenericArgumentCopyAsync(
+                "NestedTypeGenericArgumentBody.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "+ 7100;", "+ 7110;"));
+
+            string slice = SliceShimMethod(result.Output.shimSource, FindEntryNamed(result, "BodyList").shimMethodName);
+            Assert.That(slice, Does.Contain(nameof(HotReloadNestedTypeGenericArgumentFixture) + ".Mode>"));
+            Assert.That(slice, Does.Not.Contain("<Mode>"));
+        }
+
+        /// <summary>
+        /// What: a signature whose parameter and return type name nested types as generic type
+        /// arguments emits a shim signature that names both arguments qualified.
+        /// </summary>
+        [Test]
+        public async Task Run_SignatureNamingNestedTypesAsGenericArguments_ShimQualifiesTheArguments()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedGenericArgumentCopyAsync(
+                "NestedTypeGenericArgumentSignature.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "modes.Count + 7200", "modes.Count + 7210"));
+
+            string signature = ShimSignatureOf(result, "SignatureGeneric");
+            string fixtureName = nameof(HotReloadNestedTypeGenericArgumentFixture);
+            Assert.That(signature, Does.Contain(fixtureName + ".Item>"));
+            Assert.That(signature, Does.Contain(fixtureName + ".Mode>"));
+            Assert.That(signature, Does.Not.Contain("<Mode>").And.Not.Contain(" Item>"));
+        }
+
+        /// <summary>
         /// What: an edited setter of a struct property is Skipped with the struct-host reason and
         /// emits no entry.
         /// </summary>
@@ -3537,6 +3591,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        private const string GenericArgumentFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadNestedTypeGenericArgumentFixture.cs";
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnEditedGenericArgumentCopyAsync(
+            string fileName,
+            Func<string, string> edit)
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", GenericArgumentFixtureProjectRelativePath));
+            return await RunWorkerOnEditedFixtureCopyAsync(
+                fixturePath,
+                GenericArgumentFixtureProjectRelativePath,
+                fileName,
+                edit);
         }
 
         private static TransformWorkerUnchangedMethodDto FindSetterFixtureUnchangedRowOrNull(
