@@ -2774,7 +2774,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 "HotReloadUnsupportedKindFinalizerFixture.Finalize()",
                 ExpectedUnsupportedMemberKindSkipReason);
-            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
+            Assert.That(
+                warnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "A finalizer body-only edit must not emit any outside-body warning.\n"
+                + string.Join("\n", warnings));
         }
 
         /// <summary>
