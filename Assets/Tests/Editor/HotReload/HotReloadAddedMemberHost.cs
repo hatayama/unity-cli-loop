@@ -295,6 +295,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled interface with a default property getter for the interface-member Skipped tests.
+    /// Token 805 is unique in this file.
+    /// </summary>
+    public interface IHotReloadInterfaceDefaultGetterFixture
+    {
+        int DefaultValue
+        {
+            get { return 805; }
+        }
+    }
+
+    /// <summary>
     /// Compiled host that already implements the interface so an added explicit implementation
     /// is a new method on an existing type, not a new type.
     /// </summary>

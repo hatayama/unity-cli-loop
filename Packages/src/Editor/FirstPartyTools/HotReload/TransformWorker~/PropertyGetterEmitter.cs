@@ -172,6 +172,30 @@ internal static class PropertyGetterEmitter
             return currentShimType;
         }
 
+        // Why before the unchanged check: an unedited interface getter must stay inert (no
+        // unchanged row either), so the Editor does not look for a patch to revert on a member
+        // hot reload never patches. Same rule as TrySkipInterfaceOrdinaryMethod.
+        if (typeSymbol.TypeKind == TypeKind.Interface)
+        {
+            if (PropertyGetterClassifier.IsPropertyGetterUnchangedFromBaseline(
+                hasBaseline,
+                snapshotPropertyMap,
+                plainCurrentPropertyMap,
+                typeMetadataNameFromSyntax,
+                propertyDeclaration))
+            {
+                return currentShimType;
+            }
+
+            skipped.Add(new WorkerSkipped
+            {
+                SourceProjectRelativePath = sourceProjectRelativePath,
+                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
+                Reason = WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodInterfaceMember)
+            });
+            return currentShimType;
+        }
+
         if (PropertyGetterClassifier.TryRecordUnchangedPropertyGetter(
             sourceProjectRelativePath,
             hasBaseline,
