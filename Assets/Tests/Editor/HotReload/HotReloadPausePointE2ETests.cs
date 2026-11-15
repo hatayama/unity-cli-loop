@@ -424,6 +424,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             PausePointResponse enable = EnableContinuousInFile(SetterFixtureProjectRelativePath, setterLine);
             Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
             HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
             fixture.Stored = 1;
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
@@ -444,6 +446,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             PausePointResponse enable = EnableContinuousInFile(SetterFixtureProjectRelativePath, getterLine);
             Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
             HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
             Assert.That(fixture.Stored, Is.EqualTo(1));
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
