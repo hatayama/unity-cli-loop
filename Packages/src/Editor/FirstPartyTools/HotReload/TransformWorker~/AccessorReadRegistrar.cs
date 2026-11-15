@@ -56,6 +56,14 @@ internal static class AccessorReadRegistrar
     // and on the right of '+=' a lambda could no longer be removed by a compiled '-='.
     private static WorkerReason DescribeMethodGroupReject(IMethodSymbol methodSymbol, SyntaxKind handlerAssignmentKind)
     {
+        // Why the extension reason: the method-group reasons suggest a lambda that calls the
+        // method, but an inaccessible extension method call is refused as well, so that advice
+        // would lead to another skip.
+        if (AccessibilityRules.UnreducedMethod(methodSymbol).IsExtensionMethod)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
+        }
+
         if (handlerAssignmentKind == SyntaxKind.SubtractAssignmentExpression)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape, methodSymbol.Name);
