@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.24.1](https://github.com/hatayama/unity-cli-loop/compare/v3.24.0...v3.24.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* a command sent just after a dialog opens now reports it in seconds instead of after 30 ([#3502](https://github.com/hatayama/unity-cli-loop/issues/3502)) ([eff8585](https://github.com/hatayama/unity-cli-loop/commit/eff8585e7c18a6aba5ff1c0b7a28b5a3ca78fd01))
+* A pause-point wait behind a dialog now says its --trigger was not sent or not run, and to keep it ([#3505](https://github.com/hatayama/unity-cli-loop/issues/3505)) ([5670873](https://github.com/hatayama/unity-cli-loop/commit/567087364d40b61bb0528f646527f7241a6000e0))
+* on macOS, a command sent just after a dialog opens now reports it in 3 to 4 seconds instead of 5 to 6 ([#3504](https://github.com/hatayama/unity-cli-loop/issues/3504)) ([a543208](https://github.com/hatayama/unity-cli-loop/commit/a5432080fc4c3cb6421a9c3bec9ebf7f923ba213))
+* on Windows, a message box from another thread no longer blocks commands, and a dialog hidden by minimizing Unity is still found ([#3498](https://github.com/hatayama/unity-cli-loop/issues/3498)) ([aafca78](https://github.com/hatayama/unity-cli-loop/commit/aafca78269e3e1460fc9880e263ea95172b0f69e))
+* uloop launch marks the Editors it starts with -launchedByUloop instead of passing -ignorecompilererrors ([#3503](https://github.com/hatayama/unity-cli-loop/issues/3503)) ([691d33f](https://github.com/hatayama/unity-cli-loop/commit/691d33f18bee6220e232fb33b2db20257148156c))
+
 ## [3.24.0](https://github.com/hatayama/unity-cli-loop/compare/v3.23.1...v3.24.0) (2026-11-13)
 
 
