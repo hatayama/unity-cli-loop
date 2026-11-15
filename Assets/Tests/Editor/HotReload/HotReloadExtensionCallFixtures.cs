@@ -101,6 +101,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureHoldsPrivateMethodGroup()
+        {
+            Func<int> read = () =>
+            {
+                Func<int, int> addSeven = AddSeven;
+                return addSeven(5001);
+            };
+            return read();
+        }
+
+        private int AddSeven(int value)
+        {
+            return value + 7;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureReadsPrivateFieldAndCallsPublicExtension()
         {
             Func<int> read = () => _value.PublicTwice(4601);

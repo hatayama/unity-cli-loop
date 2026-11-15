@@ -40,7 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
         private const string PropertyIncrementNoShape = "inaccessible property increment/decrement has no accessor rewrite shape";
         private const string ExtensionMethodNotRewritten = "inaccessible extension method calls are not rewritten";
-        private const string MethodGroupNoShape = "inaccessible method group 'LengthPlus' (non-invocation) has no accessor rewrite shape";
+        private const string PrivateMethodGroupNoShape = "inaccessible method group 'AddSeven' (non-invocation) has no accessor rewrite shape";
+        private const string MethodGroupWrapperHint = "wrapping the method group";
         private const string BodyTypeNotVisible = "body uses a type that is not visible from an external assembly";
 
         /// <summary>
@@ -629,15 +630,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that converts an internal extension method in reduced form to a delegate
-        /// (a method group, no call) is skipped with the method-group reason.
+        /// (a method group, no call) is skipped with the extension-method reason, without the
+        /// lambda-wrapper hint, because a wrapping call is skipped as well.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureHoldingInternalExtensionMethodGroup_IsSkipped()
+        public async Task ExtensionCall_ClosureHoldingInternalExtensionMethodGroup_IsSkippedWithoutWrapperHint()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4901", "4902");
 
-            AssertHasSkip(result, "ClosureHoldsInternalExtensionMethodGroup(", MethodGroupNoShape);
+            AssertHasSkip(result, "ClosureHoldsInternalExtensionMethodGroup(", ExtensionMethodNotRewritten);
+            Assert.That(FindSkipReason(result, "ClosureHoldsInternalExtensionMethodGroup("), Does.Not.Contain(MethodGroupWrapperHint));
             Assert.That(FindEntry(result, "ClosureHoldsInternalExtensionMethodGroup"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that converts a private non-extension method to a delegate keeps the
+        /// method-group reason with its lambda-wrapper hint.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureHoldingPrivateMethodGroup_KeepsWrapperHint()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5001", "5002");
+
+            AssertHasSkip(result, "ClosureHoldsPrivateMethodGroup(", PrivateMethodGroupNoShape);
+            Assert.That(FindSkipReason(result, "ClosureHoldsPrivateMethodGroup("), Does.Contain(MethodGroupWrapperHint));
         }
 
         /// <summary>
