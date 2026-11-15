@@ -109,6 +109,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a local function whose => body returns the value of an assignment to a
+        /// private-setter property stays skipped, because the void setter call cannot produce it.
+        /// </summary>
+        [Test]
+        public async Task ValueReturningArrowLocalFunction_AssigningPrivateSetterProperty_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("6101", "6102");
+
+            AssertSkipped(result, "AssignInValueReturningArrowLocalFunction", ValueConsumed);
+        }
+
+        /// <summary>
+        /// What: a method added in the reload whose => body returns the value of an assignment to a
+        /// private-setter property is skipped, because the void setter call cannot produce it.
+        /// </summary>
+        [Test]
+        public async Task AddedValueReturningArrowMethod_AssigningPrivateSetterProperty_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "        private static int StaticValue { get; set; }\n",
+                "        private static int StaticValue { get; set; }\n\n"
+                + "        public int AddedReturnsAssignment() => Value = 6201;\n");
+
+            AssertSkipped(result, "AddedReturnsAssignment", ValueConsumed);
+        }
+
+        /// <summary>
         /// What: an Action lambda that increments a private-setter property stays skipped by the
         /// increment rule, which this change does not touch.
         /// </summary>

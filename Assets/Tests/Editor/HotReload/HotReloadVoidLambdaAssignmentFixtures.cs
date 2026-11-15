@@ -65,6 +65,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int AssignInValueReturningArrowLocalFunction()
+        {
+            int Assign() => Value = 6101;
+            return Assign();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int AssignInStatementLambda()
         {
             Action assign = () => { Value = 5601; };
