@@ -332,8 +332,14 @@ internal static class OrdinaryMethodQueue
         WorkerReason addedSkip = isAddedMethod
             ? MethodTransformDecider.EvaluateAddedMethodSkipReason(methodSymbol, methodDeclaration)
             : null;
-        MethodTransformDecision decision = addedSkip != null
-            ? MethodTransformDecision.Skip(addedSkip)
+        WorkerReason earlySkip = addedSkip
+            ?? BaseCallRules.EvaluateHostSkipReason(
+                isAddedMethod,
+                typeState.HomeAssemblyName != null,
+                methodBodyNode,
+                semanticModel);
+        MethodTransformDecision decision = earlySkip != null
+            ? MethodTransformDecision.Skip(earlySkip)
             : MethodTransformDecider.DecideMethodTransform(
                 typeState.TypeDeclaration,
                 typeState.TypeSymbol,

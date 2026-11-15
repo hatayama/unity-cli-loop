@@ -441,10 +441,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a method containing base. is reported as Skipped with an explanatory reason.
+        /// What: a method whose own statements call a base method is Patched, and the patched body
+        /// runs the base implementation.
         /// </summary>
         [Test]
-        public async Task Run_MethodWithBaseCall_IsSkippedWithReason()
+        public async Task Run_MethodWithBaseCall_IsPatched()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -461,19 +462,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.CallsBase));
 
-            bool found = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsBase))
-                    && outcome.Reason.Contains("base"))
-                {
-                    found = true;
-                }
-            }
-
-            Assert.That(found, Is.True, "Expected CallsBase to be Skipped for base. usage.");
+            // Why reflection: the fixture method has no NoInlining, and a direct call compiled into
+            // this test before the apply could inline the old body.
+            MethodInfo callsBase = typeof(HotReloadE2EFixture).GetMethod(nameof(HotReloadE2EFixture.CallsBase));
+            Assert.That(
+                callsBase.Invoke(new HotReloadE2EFixture(), null),
+                Is.EqualTo(1 + 2),
+                "The patched body must run the base BaseSeed and the edited literal.");
         }
 
         /// <summary>
@@ -2891,7 +2888,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
             string skippedMixSource = BuildFixtureSource(
                 computeWithPrivateMethod:
-                "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }",
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            System.Func<int> viaLambda = () => base.BaseSeed();\n"
+                + "            return viaLambda() + delta;\n        }",
                 sumGridMethod:
                 "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
             string firstPath = WriteEditedSource("SkippedMixThenIdentical1.cs", firstSource);
@@ -2910,7 +2909,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedMixPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             AssertHasPatched(second, nameof(HotReloadE2EFixture.SumGrid));
             AssertNoAlreadyActive(second);
 
@@ -2919,7 +2918,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedMixPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(third);
-            AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             AssertHasPatched(third, nameof(HotReloadE2EFixture.SumGrid));
             AssertNoAlreadyActive(third);
             AssertHasUnchangedSourceNonBaselineWarning(third);
@@ -2937,14 +2936,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "AllSkippedThenIdenticalReload.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
+                    "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            System.Func<int> viaLambda = () => base.BaseSeed();\n"
+                + "            return viaLambda() + delta;\n        }"));
 
             HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(first);
-            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             Assert.That(first.PatchedTotal, Is.EqualTo(0));
             AssertNoUnchangedSourceNonBaselineWarning(first);
 
@@ -2953,7 +2954,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             AssertNoAlreadyActive(second);
             AssertHasUnchangedSourceNonBaselineWarning(second);
         }
@@ -2970,7 +2971,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "NonBaselineThenChanged1.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
+                    "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            System.Func<int> viaLambda = () => base.BaseSeed();\n"
+                + "            return viaLambda() + delta;\n        }"));
             string changedPath = WriteEditedSource(
                 "NonBaselineThenChanged2.cs",
                 BuildFixtureSource(
@@ -2982,7 +2985,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(first);
-            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
 
             HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
@@ -6154,13 +6157,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(first);
             AssertHasPatched(first, nameof(HotReloadSignatureChangeExternalHost.Target));
 
-            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
-            // sees this writer as skipped while the first run's patch stays what runs.
+            // Why base.GetHashCode() inside a lambda: a base call inside a lambda is a worker-side
+            // skip, so the worker itself sees this writer as skipped while the first run's patch
+            // stays what runs.
             string secondEdit = onDisk
                 .Replace(
                     targetOriginal,
                     "        public int Target(int value)\n        {\n            AddedCount = value;\n"
-                    + "            return value + base.GetHashCode() * 0;\n        }",
+                    + "            System.Func<int> viaLambda = () => base.GetHashCode();\n"
+                    + "            return value + viaLambda() * 0;\n        }",
                     StringComparison.Ordinal)
                 .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
 
@@ -6270,13 +6275,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(first);
             AssertHasPatched(first, writerName);
 
-            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
-            // sees this writer as skipped while the first run's patch stays what runs.
+            // Why base.GetHashCode() inside a lambda: a base call inside a lambda is a worker-side
+            // skip, so the worker itself sees this writer as skipped while the first run's patch
+            // stays what runs.
             string secondEdit = onDisk
                 .Replace(
                     writerOriginal,
                     writerHeader + "            AddedCount = " + writerResult + ";\n"
-                    + "            return " + writerResult + " + base.GetHashCode() * 0;\n        }",
+                    + "            System.Func<int> viaLambda = () => base.GetHashCode();\n"
+                    + "            return " + writerResult + " + viaLambda() * 0;\n        }",
                     StringComparison.Ordinal)
                 .Replace(readOriginal, readingRead, StringComparison.Ordinal);
 
@@ -9798,6 +9805,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         " + computeWithPrivateMethod + @"
 
         " + callsBase + @"
+
+        public int CallsBaseInLambda()
+        {
+            System.Func<int> viaLambda = () => base.BaseSeed();
+            return viaLambda() + 5;
+        }
 
         " + callsMissingHelper + @"
 

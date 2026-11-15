@@ -429,6 +429,11 @@ Play Mode when Domain Reload is off, as a compiled static event's do. Deleting t
 the source removes it from `AddedFields`, but its subscribers stay in the store until
 `--revert-all`, so adding it back delivers to them again.
 
+A method that calls a base method (`base.Method(args)`) in its own statements is
+patched: the call runs the base implementation exactly as compiled code would,
+including a base method declared in another assembly or on a generic base class. The
+other uses of `base` listed in the table below are `Skipped`.
+
 A `Skipped` row never undoes what an earlier reload applied to the same method: that
 patch keeps running, so the method matches neither the compiled assembly nor the
 source on disk. When a run skips a method it had patched before, `Warnings` names it.
@@ -447,7 +452,12 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
 | Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
 | No body (`abstract` / `extern`) | Nothing to transplant |
-| Body contains a `base.` call | `base` cannot be expressed from outside the type |
+| Body uses `base.` for something other than a direct call to a base method (a base property, indexer, event, or method group) | C# cannot express that outside the type; run `uloop compile` |
+| Base method call in a lambda, local function, query, async or iterator body, a property accessor, a member or type hot reload added, or a body patched through a delegating shim | A base call is applied only in a compiled method's own statements; move the call there, or run `uloop compile` |
+| Base call to a generic or ref-returning method, to one with a `params` parameter or a pointer type in its signature, or with named or omitted optional arguments | For named or omitted optional arguments, write every argument positionally; otherwise run `uloop compile` |
+| Base call to a method marked `[Conditional]` | The compiler removes the call, and the evaluation of its arguments, when the symbol is not defined; hot reload cannot do the same. Run `uloop compile` |
+| Base call to a method whose base type declares another overload with the same parameter types once its type arguments are filled in (for example `Pick(T)` and `Pick(int)` on `Base<int>`) | Hot reload finds the base method by name and parameter types, which cannot tell these overloads apart. Run `uloop compile` |
+| Base call to a method the compiled assembly does not hold yet (added or re-signatured since the last compile) | Run `uloop compile` |
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), indexers, initializer member assignments, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates. Neither can ref-returning properties, nor these writes to a property through a private/internal setter: `??=`, a compound write whose receiver could be evaluated twice, an assignment whose value is used (a lambda or `=>` member that returns nothing and is only the assignment applies), and a deconstruction. A compound write (`+=`, `??=`, and the like) to a property whose getter is private/internal and whose setter is not is refused as well. The same writes to a private/internal field declared on a class apply, static fields included. These limits apply to compiled members; a method added in the same reload is reached directly, whatever its arguments. A compiled private/internal static property can be read, assigned, and compound-assigned |
 | An async/iterator/closure body of a type not visible outside its assembly reaches a compiled member | An accessor delegate has to name its host, which a shim cannot do for an `internal` class or a class nested in one, so this refuses even a `public` member of that class. A body reaching only methods added in the same reload applies. In a lambda or local function, copy the compiled member into a local outside it; otherwise run `uloop compile` |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |

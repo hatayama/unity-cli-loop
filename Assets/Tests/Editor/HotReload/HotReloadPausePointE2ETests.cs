@@ -31,8 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
 
-        // A body the transform worker skips: it calls into the base class.
-        private const string ComputeWithBaseCallStatement = "return base.BaseSeed() + _secret + delta + 100;";
+        // A body the transform worker skips: it calls into the base class inside a lambda. One line,
+        // so the edited copy keeps the line numbers the tests compute from the compiled file.
+        private const string ComputeWithBaseCallStatement =
+            "System.Func<int> viaLambda = () => base.BaseSeed(); return viaLambda() + _secret + delta + 100;";
 
         // Each scenario reloads one copy twice, the way a user reloads the same file again.
         private const string LeftBehindCopyFileName = "E2E_left_behind.cs";
@@ -384,24 +386,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a reload that skipped CallsBase with no earlier patch leaves its compiled body
-        /// running, so an unchanged line of it still arms the compiled code.
+        /// What: a reload that skipped CallsBaseInLambda with no earlier patch leaves its compiled
+        /// body running, so an unchanged line of it still arms the compiled code.
         /// </summary>
         [Test]
         public async Task SkipWithoutEarlierPatch_UnchangedLineOfTheSkippedMethod_ArmsTheCompiledBody()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
-            int enableLine = FindLineNumber(onDisk, "return base.BaseSeed() + 1;");
+            int enableLine = FindLineNumber(onDisk, "return viaLambda() + 5;");
             string edited = onDisk.Replace(
-                "return base.BaseSeed() + 1;",
-                "return base.BaseSeed() + 2;",
+                "return viaLambda() + 5;",
+                "return viaLambda() + 6;",
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             HotReloadOrchestratorResult skipping = await HotReloadFromEditedSourceAsync(
                 edited,
                 "E2E_skip_without_patch.cs",
                 requirePatched: false);
-            FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.CallsBase));
+            FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.CallsBaseInLambda));
 
             PausePointResponse enable = EnableContinuous(enableLine);
 

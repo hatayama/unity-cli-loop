@@ -32,6 +32,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     internal readonly HarmonyAccessorShimRewrite HarmonyAccessors;
     private readonly ClosureAccessorScope _closureScope;
 
+    // Null for every body that cannot host a base call; the decider skipped those bodies already.
+    internal BaseCallStandInPlan BaseCallStandIns { get; init; }
+
     // closureScopeBody is the method body whose closures alone take accessor rewrites (a
     // transplanted body); null rewrites every inaccessible access the plan covers.
     public ShimBodyRewriter(
@@ -172,6 +175,13 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        if (BaseCallShimRewrite.IsBaseCall(node))
+        {
+            // Why here: a base call has no receiver the later rewrites could qualify, and C# cannot
+            // express it from the shim type, so it becomes a stand-in call the Editor redirects.
+            return BaseCallShimRewrite.Rewrite(this, node, (IMethodSymbol)invokedSymbol, BaseCallStandIns, _targetType);
+        }
+
         if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(node))
         {
             // Why not rewrite the spine invocation: ExtractReceiver cannot recover a
