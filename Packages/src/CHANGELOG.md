@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.24.2](https://github.com/hatayama/unity-cli-loop/compare/v3.24.1...v3.24.2) (2026-11-15)
+
+
+### Bug Fixes
+
+* A pause point on a hot-reloaded method no longer arms the patched method declared just above it ([#3508](https://github.com/hatayama/unity-cli-loop/issues/3508)) ([31b7b1e](https://github.com/hatayama/unity-cli-loop/commit/31b7b1e1bcf9cd9f808ecfeedcb6d89cdaad1b74))
+* Hot reload reports an edited finalizer as Skipped instead of saying nothing ([#3506](https://github.com/hatayama/unity-cli-loop/issues/3506)) ([908feac](https://github.com/hatayama/unity-cli-loop/commit/908feac36ae0ddceaea5dc2a8d7f9d91c71f24c4))
+
 ## [3.24.1](https://github.com/hatayama/unity-cli-loop/compare/v3.24.0...v3.24.1) (2026-11-15)
 
 
