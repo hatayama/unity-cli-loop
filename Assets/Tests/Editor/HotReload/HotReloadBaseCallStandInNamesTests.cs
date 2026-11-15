@@ -37,14 +37,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: names without the prefix, without a numeric positive depth, or without an index
-        /// segment are not stand-in names.
+        /// What: names without the prefix, without a numeric positive depth, without an index
+        /// segment, or whose separators overlap are not stand-in names.
         /// </summary>
         [TestCase("Compute")]
         [TestCase("__uloopBaseCall__")]
         [TestCase("__uloopBaseCall__dx__M__0")]
         [TestCase("__uloopBaseCall__d0__M__0")]
         [TestCase("__uloopBaseCall__d1__M")]
+        [TestCase("__uloopBaseCall__d1___0")]
         public void TryParse_NonStandInNames_ReturnsFalse(string name)
         {
             bool parsed = HotReloadBaseCallStandInNames.TryParse(name, out int _, out string _);

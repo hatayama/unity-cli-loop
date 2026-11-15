@@ -52,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // depth never does and the index is always the final segment.
             int firstSeparator = rest.IndexOf(Separator, StringComparison.Ordinal);
             int lastSeparator = rest.LastIndexOf(Separator, StringComparison.Ordinal);
-            if (firstSeparator < 0 || lastSeparator <= firstSeparator)
+            // Why the full separator length: in "d1___0" the two separators overlap.
+            if (firstSeparator < 0 || lastSeparator < firstSeparator + Separator.Length)
             {
                 return false;
             }
