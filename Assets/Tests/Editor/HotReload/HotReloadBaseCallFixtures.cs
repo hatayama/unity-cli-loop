@@ -133,6 +133,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int CallKeywordParameter(int input) { return base.Keyword(input) + 6125; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallParamsExpanded(int input) { return base.WithParams(input) + 6126; }
     }
 
     /// <summary>Generic base type for a base call that binds through a constructed generic type.</summary>

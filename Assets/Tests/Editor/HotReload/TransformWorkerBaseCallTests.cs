@@ -217,6 +217,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a base call to a params method in expanded form with as many arguments as parameters
+        /// is Skipped for its argument shape, which only the params rule catches.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToParamsMethodWithOneArgument_IsSkippedAsArgumentShape()
+        {
+            await AssertEditIsSkippedWithCode(
+                "6126",
+                nameof(HotReloadBaseCallDerivedFixture.CallParamsExpanded),
+                HotReloadWorkerReasonCode.MethodTransformBaseCallArgumentShape);
+        }
+
+        /// <summary>
         /// What: a stand-in for a base method whose parameter name is a C# keyword names its
         /// parameters by position, so the shim source stays valid C#.
         /// </summary>
