@@ -47,12 +47,18 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformNoBody));
         }
 
-        if (ContainsBaseExpression(bodyNode))
+        WorkerReason baseCallSkip = BaseCallRules.EvaluateSkipReason(
+            methodDeclaration,
+            typeSymbol,
+            bodyNode,
+            semanticModel,
+            compiledType);
+        if (baseCallSkip != null)
         {
-            return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseMemberCall));
+            return MethodTransformDecision.Skip(baseCallSkip);
         }
 
-        return DecideBodyShape(
+        MethodTransformDecision decision = DecideBodyShape(
             typeSymbol,
             methodDeclaration,
             methodSymbol,
@@ -61,6 +67,14 @@ internal static class MethodTransformDecider
             compiledType,
             addedMemberAccess,
             addedEvents);
+        // Why: a delegating shim runs in the shim assembly, where a base call cannot be redirected.
+        if (decision.SkipReason == null && decision.UsesDelegation && ContainsBaseExpression(bodyNode))
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseCallOutsideOwnStatements));
+        }
+
+        return decision;
     }
 
     // Picks transplant, closure-scoped accessors, delegation, or an access skip for a body that
