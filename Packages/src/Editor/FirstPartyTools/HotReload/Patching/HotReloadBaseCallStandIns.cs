@@ -121,18 +121,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .Skip(1)
                 .Select(parameter => parameter.ParameterType)
                 .ToArray();
-            MethodInfo baseMethod = ancestor.GetMethod(
-                methodName,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly,
-                null,
-                parameterTypes,
-                null);
+            MethodInfo baseMethod = FindDeclaredNonGenericMethodOrNull(ancestor, methodName, parameterTypes);
             if (baseMethod == null || baseMethod.IsAbstract || baseMethod.ReturnType != standIn.ReturnType)
             {
                 return null;
             }
 
             return baseMethod;
+        }
+
+        // Why not Type.GetMethod: a base type that also declares M<T> with the same parameter types
+        // makes that lookup throw AmbiguousMatchException, and a stand-in never targets a generic method.
+        private static MethodInfo FindDeclaredNonGenericMethodOrNull(Type declaringType, string methodName, Type[] parameterTypes)
+        {
+            MethodInfo[] candidates = declaringType.GetMethods(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            return candidates.FirstOrDefault(candidate =>
+                candidate.Name == methodName
+                && !candidate.IsGenericMethodDefinition
+                && candidate.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameterTypes));
         }
     }
 }

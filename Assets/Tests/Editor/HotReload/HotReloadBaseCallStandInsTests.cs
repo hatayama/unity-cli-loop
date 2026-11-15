@@ -63,6 +63,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(error, Is.Null);
         }
 
+        /// <summary>
+        /// What: a stand-in resolves to the non-generic base method even when the base type also
+        /// declares a generic overload with the same parameter types.
+        /// </summary>
+        [Test]
+        public void DescribeUnresolvableCallOrNull_BaseWithGenericOverload_ResolvesTheNonGenericMethod()
+        {
+            string error = HotReloadBaseCallStandIns.DescribeUnresolvableCallOrNull(
+                ShimMethod(typeof(HotReloadBaseCallOverloadShim), nameof(HotReloadBaseCallOverloadShim.CallsOverloaded)),
+                typeof(HotReloadBaseCallOverloadDerived).GetMethod(nameof(HotReloadBaseCallOverloadDerived.Run)),
+                HotReloadPatchShape.Transplant);
+
+            Assert.That(error, Is.Null);
+        }
+
         private static MethodInfo ShimMethod(Type shimType, string methodName)
         {
             MethodInfo method = shimType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
@@ -86,6 +101,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public static int __uloopBaseCall__d1__Missing__1(HotReloadBaseCallDerivedFixture self, int input) { throw new InvalidOperationException(); }
         public static int CallsResolvable(HotReloadBaseCallDerivedFixture self, int input) { return __uloopBaseCall__d2__Compute__0(self, input); }
         public static int CallsMissing(HotReloadBaseCallDerivedFixture self, int input) { return __uloopBaseCall__d1__Missing__1(self, input); }
+    }
+
+    /// <summary>A base type declaring a non-generic method and a generic overload with the same parameter types.</summary>
+    public class HotReloadBaseCallOverloadBase
+    {
+        public virtual int Overloaded(int input) { return input; }
+        public int Overloaded<T>(int input) { return input + 1; }
+    }
+
+    /// <summary>The patched type whose base declares both overloads.</summary>
+    public class HotReloadBaseCallOverloadDerived : HotReloadBaseCallOverloadBase
+    {
+        public int Run(int input) { return input; }
+    }
+
+    /// <summary>A hand-written shim whose stand-in targets the non-generic overload one type up.</summary>
+    public static class HotReloadBaseCallOverloadShim
+    {
+        public static int __uloopBaseCall__d1__Overloaded__0(HotReloadBaseCallOverloadDerived self, int input) { throw new InvalidOperationException(); }
+        public static int CallsOverloaded(HotReloadBaseCallOverloadDerived self, int input) { return __uloopBaseCall__d1__Overloaded__0(self, input); }
     }
 
     /// <summary>A shim type that declares no stand-in.</summary>
