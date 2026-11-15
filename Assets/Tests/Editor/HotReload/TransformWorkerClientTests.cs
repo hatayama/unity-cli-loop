@@ -2462,6 +2462,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an explicit interface property beside an ordinary property of the same name keeps
+        /// its interface-qualified setter name, so editing only the ordinary setter emits plain
+        /// set_Twin and no unchanged or Skipped row also named plain set_Twin.
+        /// </summary>
+        [Test]
+        public async Task Run_OrdinarySetterBesideSameNameExplicitSetterEdited_RowsDoNotCollide()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "OrdinarySetterBesideExplicitTwin.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "value + 1414", "value + 1415"));
+
+            TransformWorkerEntryDto entry = FindEntryNamed(result, "set_Twin");
+            Assert.That(entry.typeMetadataName, Does.EndWith("." + nameof(HotReloadPropertySetterTwinFixture)));
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>())
+            {
+                Assert.That(unchanged.methodName, Is.Not.EqualTo("set_Twin"), "Only the edited ordinary setter is named plain set_Twin.");
+            }
+
+            AssertSkippedDoesNotContain(result, nameof(HotReloadPropertySetterTwinFixture) + ".set_Twin(");
+        }
+
+        /// <summary>
         /// What: an edited setter of a struct property is Skipped with the struct-host reason and
         /// emits no entry.
         /// </summary>

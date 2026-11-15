@@ -135,6 +135,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// The contract whose property the same-name fixture implements explicitly beside its own.
+    /// </summary>
+    public interface IHotReloadPropertySetterTwinContract
+    {
+        int Twin { get; set; }
+    }
+
+    /// <summary>
+    /// An ordinary property and an explicit implementation with the same name, each with a bodied
+    /// setter, so their rows must stay apart.
+    /// </summary>
+    public class HotReloadPropertySetterTwinFixture : IHotReloadPropertySetterTwinContract
+    {
+        private int _ordinary;
+        private int _explicit;
+
+        public int Twin
+        {
+            get { return _ordinary; }
+            set { _ordinary = value + 1414; }
+        }
+
+        int IHotReloadPropertySetterTwinContract.Twin
+        {
+            get { return _explicit; }
+            set { _explicit = value + 1515; }
+        }
+    }
+
+    /// <summary>
     /// The base whose property the derived fixture's setter reaches through base.
     /// </summary>
     public class HotReloadPropertySetterBaseFixture
