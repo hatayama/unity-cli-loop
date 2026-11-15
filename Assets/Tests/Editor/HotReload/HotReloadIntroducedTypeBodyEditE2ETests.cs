@@ -45,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string IntroducedStructReturn = "5";
         private const string EditedStructReturn = "10";
         private const int IntroducedStructValue = 5;
+        private const string IntroducedBaseCallerSimpleName = "HotReloadBodyEditIntroducedBaseCaller";
         private const string StructHostSkipReason =
             "Struct (value type) methods are skipped; byref instance transplant is unverified.";
 
@@ -729,6 +730,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("The caller edited against the introduced type must be patched.\n"
                 + DescribeOutcomes(result));
+        }
+
+        /// <summary>
+        /// Verifies that editing a method of an already introduced type that calls a base method is
+        /// skipped with the placement reason: the body runs from the retained assembly, where the
+        /// base call cannot be redirected, so it is applied only by a compile.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeMethodCallingBase_BodyEdit_IsSkippedAsOutsideOwnStatements()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            await RunInIntroducedTypeDomainAsync(async readArtifact =>
+            {
+                await RunReloadAsync(hostPath, callerPath, CreateBaseCallerEdits(
+                    hostPath,
+                    callerPath,
+                    "a",
+                    "IntroducedBaseCallerHost.cs",
+                    "IntroducedBaseCallerCaller.cs"));
+
+                HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateBaseCallerEdits(
+                    hostPath,
+                    callerPath,
+                    "b",
+                    "IntroducedBaseCallerEditedHost.cs",
+                    "IntroducedBaseCallerEditedCaller.cs"));
+
+                HotReloadMethodOutcome toStringRow = FindOutcomeContaining(
+                    edited,
+                    IntroducedBaseCallerSimpleName + ".ToString()");
+                Assert.That(
+                    toStringRow.Kind,
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    "A base call in a method of an introduced type must be skipped, not patched.\n"
+                    + DescribeOutcomes(edited));
+                Assert.That(
+                    toStringRow.Reason,
+                    Does.Contain("a member or type hot reload added"),
+                    "The skip must name the placement limit of base calls.\n" + DescribeOutcomes(edited));
+            });
+        }
+
+        private static HotReloadMethodOutcome FindOutcomeContaining(HotReloadOrchestratorResult result, string fragment)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method != null && outcome.Method.Contains(fragment, StringComparison.Ordinal))
+                {
+                    return outcome;
+                }
+            }
+
+            Assert.Fail("The reload must report a row for " + fragment + ".\n" + DescribeOutcomes(result));
+            return null;
+        }
+
+        // The introduced type overrides ToString() with a base call; Compute() exists only so the
+        // caller can reference the type the same way the other introducing edits do.
+        private static Dictionary<string, string> CreateBaseCallerEdits(
+            string hostPath,
+            string callerPath,
+            string suffix,
+            string hostFileName,
+            string callerFileName)
+        {
+            string hostSource = File.ReadAllText(hostPath);
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public sealed class " + IntroducedBaseCallerSimpleName + "\n"
+                + "    {\n"
+                + "        public int Compute()\n"
+                + "        {\n"
+                + "            return 1;\n"
+                + "        }\n"
+                + "\n"
+                + "        public override string ToString() { return base.ToString() + \"" + suffix + "\"; }\n"
+                + "    }\n"
+                + "\n";
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    hostFileName,
+                    hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    callerFileName,
+                    CallType(File.ReadAllText(callerPath), IntroducedBaseCallerSimpleName))
+            };
         }
 
         private static HotReloadMethodOutcome FindStructComputeOutcome(HotReloadOrchestratorResult result)
