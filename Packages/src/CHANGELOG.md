@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.27.0](https://github.com/hatayama/unity-cli-loop/compare/v3.26.1...v3.27.0) (2026-11-15)
+
+
+### Features
+
+* Hot reload now applies methods that call a base method ([#3510](https://github.com/hatayama/unity-cli-loop/issues/3510)) ([8c105db](https://github.com/hatayama/unity-cli-loop/commit/8c105dbfb9a81547610bb3ac88d53cadcac25efa))
+
 ## [3.26.1](https://github.com/hatayama/unity-cli-loop/compare/v3.26.0...v3.26.1) (2026-11-15)
 
 
