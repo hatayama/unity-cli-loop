@@ -12,14 +12,14 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-// waitStartDialogFakes answers the arm query and every poll with armAnswer (nil means no answer), and
-// looks find the dialog from look number foundFrom on. It returns the query and look counters.
+// waitStartDialogFakes answers the arm query with armAnswer or armErr (both nil means no answer) and
+// every poll with no answer, and looks find the dialog from look number foundFrom on. It returns the query and look counters.
 type waitStartDialogFakes struct {
 	queries int
 	looks   int
 }
 
-func useWaitStartDialogFakes(t *testing.T, armAnswer *pausePointStatusResponse, foundFrom int) (*waitStartDialogFakes, dialogWatchDeps) {
+func useWaitStartDialogFakes(t *testing.T, armAnswer *pausePointStatusResponse, armErr error, foundFrom int) (*waitStartDialogFakes, dialogWatchDeps) {
 	t.Helper()
 	useUnityProcessLookup(t, runningUnityProcessLookup)
 	originalQuery := queryPausePointStatus
@@ -36,6 +36,9 @@ func useWaitStartDialogFakes(t *testing.T, armAnswer *pausePointStatusResponse, 
 		fakes.queries++
 		if armAnswer != nil && fakes.queries == 1 {
 			return *armAnswer, nil
+		}
+		if armErr != nil && fakes.queries == 1 {
+			return pausePointStatusResponse{}, armErr
 		}
 		return pausePointStatusResponse{}, errors.New("status query timed out")
 	}
@@ -98,7 +101,7 @@ func assertTriggerNotSentBlockedByDialog(t *testing.T, err error, wantLastStep s
 // Verifies a wait whose arm query got no answer, so it sent no trigger, looks for a dialog once before
 // polling and, finding one, returns at once that the trigger was not sent and to wait again with it.
 func TestWaitForPausePointLooksOnceWhenTheArmQueryGoesUnanswered(t *testing.T) {
-	fakes, deps := useWaitStartDialogFakes(t, nil, 1)
+	fakes, deps := useWaitStartDialogFakes(t, nil, nil, 1)
 
 	_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, true, false))
 
@@ -109,20 +112,22 @@ func TestWaitForPausePointLooksOnceWhenTheArmQueryGoesUnanswered(t *testing.T) {
 }
 
 // Verifies the trigger-not-sent error also comes from the wait's own watch when the first look found
-// no dialog, and when the arm query answered that the marker is not armed (no look then).
+// no dialog, and when Unity answered the arm query, with "not armed" or an error (no look then).
 func TestPausePointWaitReportsAnUnsentTriggerWhenItsWatchFindsTheDialog(t *testing.T) {
 	expired := pausePointStatusResponse{Id: triggerDialogPausePointID, Status: pausePointStatusExpired}
 	cases := []struct {
 		name      string
 		armAnswer *pausePointStatusResponse
+		armErr    error
 		foundFrom int
 	}{
 		{name: "no dialog at the first look", foundFrom: 2},
 		{name: "arm query answered not armed", armAnswer: &expired, foundFrom: 1},
+		{name: "arm query answered with an error", armErr: &unityipc.RPCError{Message: "unknown pause point"}, foundFrom: 1},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			fakes, deps := useWaitStartDialogFakes(t, testCase.armAnswer, testCase.foundFrom)
+			fakes, deps := useWaitStartDialogFakes(t, testCase.armAnswer, testCase.armErr, testCase.foundFrom)
 
 			_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, true, false))
 
@@ -136,7 +141,7 @@ func TestPausePointWaitReportsAnUnsentTriggerWhenItsWatchFindsTheDialog(t *testi
 
 // Verifies the await step keeps --resume-play for a wait that used it and sent no trigger.
 func TestPausePointWaitKeepsResumePlayForAnUnsentTrigger(t *testing.T) {
-	_, deps := useWaitStartDialogFakes(t, nil, 1)
+	_, deps := useWaitStartDialogFakes(t, nil, nil, 1)
 
 	_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, true, true))
 
@@ -150,7 +155,7 @@ func TestPausePointWaitKeepsResumePlayForAnUnsentTrigger(t *testing.T) {
 // Verifies a --resume-play-only wait whose arm query got no answer returns at once behind a dialog,
 // saying nothing was resumed and to wait again with the same --resume-play.
 func TestWaitForPausePointReportsAnUnsentResumeBehindADialog(t *testing.T) {
-	fakes, deps := useWaitStartDialogFakes(t, nil, 1)
+	fakes, deps := useWaitStartDialogFakes(t, nil, nil, 1)
 
 	_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, false, true))
 
@@ -169,7 +174,7 @@ func TestWaitForPausePointReportsAnUnsentResumeBehindADialog(t *testing.T) {
 // Verifies a wait whose arm query got no answer and that never finds a dialog ends the way it did
 // before, not with a dialog error.
 func TestWaitForPausePointKeepsItsOwnEndWithoutADialog(t *testing.T) {
-	_, deps := useWaitStartDialogFakes(t, nil, 1_000)
+	_, deps := useWaitStartDialogFakes(t, nil, nil, 1_000)
 	options := waitStartDialogOptions(deps, true, false)
 	options.timeout = 300 * time.Millisecond
 

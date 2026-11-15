@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -75,7 +76,7 @@ func startPausePointWaitSideEffects(
 			skippedTriggerResult: skippedTriggerResult,
 			resumeResult:         resumeResult,
 			baselineSequence:     -1,
-			armQueryUnanswered:   armQueryErr != nil,
+			armQueryUnanswered:   pausePointArmQueryWentUnanswered(armQueryErr),
 		}
 	}
 
@@ -211,4 +212,15 @@ func pausePointNewHitBaseline(response pausePointStatusResponse) (int, bool) {
 		return -1, false
 	}
 	return response.LastHitSequence, true
+}
+
+// pausePointArmQueryWentUnanswered reports that the arm query failed without an answer from Unity.
+// Why an error Unity answered with does not count: Unity's main thread ran to answer it, so no dialog
+// was holding it then.
+func pausePointArmQueryWentUnanswered(err error) bool {
+	if err == nil {
+		return false
+	}
+	var answered *unityipc.RPCError
+	return !errors.As(err, &answered)
 }
