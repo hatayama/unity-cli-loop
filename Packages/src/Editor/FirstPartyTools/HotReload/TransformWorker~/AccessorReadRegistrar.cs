@@ -17,7 +17,7 @@ internal static class AccessorReadRegistrar
         rejectReason = null;
         if (symbol is IFieldSymbol fieldSymbol)
         {
-            return TryRegisterFieldRead(fieldSymbol, plan);
+            return TryRegisterFieldRead(fieldSymbol, plan, out rejectReason);
         }
 
         if (symbol is IPropertySymbol propertySymbol)
@@ -75,8 +75,9 @@ internal static class AccessorReadRegistrar
         return WorkerReason.Of(code, methodSymbol.Name, MethodGroupLambdaExample.BuildSuffix(methodSymbol));
     }
 
-    private static bool TryRegisterFieldRead(IFieldSymbol fieldSymbol, AccessorPlan plan)
+    private static bool TryRegisterFieldRead(IFieldSymbol fieldSymbol, AccessorPlan plan, out WorkerReason rejectReason)
     {
+        rejectReason = null;
         if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             return false;
@@ -85,6 +86,12 @@ internal static class AccessorReadRegistrar
         if (fieldSymbol.IsConst)
         {
             return true;
+        }
+
+        if (AccessibilityRules.NeedsStructInstanceReceiver(fieldSymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
         }
 
         plan.GetOrAddField(fieldSymbol);
@@ -147,6 +154,12 @@ internal static class AccessorReadRegistrar
         {
             rejectReason =
                 WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape);
+            return false;
+        }
+
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
             return false;
         }
 

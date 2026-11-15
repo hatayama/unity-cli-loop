@@ -314,6 +314,12 @@ internal static class AccessorAccessRegistrar
                 return true;
             }
 
+            if (AccessibilityRules.NeedsStructInstanceReceiver(fieldSymbol))
+            {
+                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+                return false;
+            }
+
             plan.GetOrAddField(fieldSymbol);
             return true;
         }
@@ -436,6 +442,11 @@ internal static class AccessorAccessRegistrar
 
     private static WorkerReason FindMethodShapeRejectReason(IMethodSymbol methodSymbol)
     {
+        if (AccessibilityRules.NeedsStructInstanceReceiver(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+        }
+
         if (methodSymbol.IsExtensionMethod)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);

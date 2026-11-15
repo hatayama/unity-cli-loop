@@ -67,6 +67,12 @@ internal static class AccessorPropertyWriteRules
             return false;
         }
 
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
+        }
+
         if (setterInaccessible)
         {
             if (propertySymbol.SetMethod == null)
