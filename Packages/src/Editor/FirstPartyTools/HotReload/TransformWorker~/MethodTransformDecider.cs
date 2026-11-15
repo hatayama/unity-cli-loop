@@ -52,6 +52,29 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseMemberCall));
         }
 
+        return DecideBodyShape(
+            typeSymbol,
+            methodDeclaration,
+            methodSymbol,
+            bodyNode,
+            semanticModel,
+            compiledType,
+            addedMemberAccess,
+            addedEvents);
+    }
+
+    // Picks transplant, closure-scoped accessors, delegation, or an access skip for a body that
+    // passed the hard-skip and base-use checks.
+    private static MethodTransformDecision DecideBodyShape(
+        INamedTypeSymbol typeSymbol,
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        INamedTypeSymbol compiledType,
+        AddedMemberAccessLookup addedMemberAccess,
+        AddedEventLookup addedEvents)
+    {
         WorkerReason eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
             bodyNode,
             semanticModel,
