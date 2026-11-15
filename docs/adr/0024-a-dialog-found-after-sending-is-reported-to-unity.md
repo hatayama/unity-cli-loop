@@ -76,7 +76,14 @@ form that the next `uloop compile` reattaches to:
 
 ### Pause-Point Trigger
 
-A pause-point wait sends its `--trigger` through the same dispatch, so the trigger's own send can be
+A pause-point wait confirms its marker is armed before it sends its `--trigger` (or resumes PlayMode
+for `--resume-play`). With a dialog already open, the usual case, that query goes unanswered, so the
+wait sends nothing; it then looks for a dialog once before its first poll and, finding one, ends saying
+the trigger was not sent and to wait again with the same `--trigger` (and `--resume-play` when given).
+On macOS this took about 12 seconds: the expiry extension and the arm query each wait out their
+5-second timeout, then the look. A dialog its later watch finds ends such a wait the same way.
+
+A pause-point wait that did send its `--trigger` sends it through the same dispatch, so the trigger's own send can be
 the one Unity fails with `main_thread_blocked`. The wait reads that result from the trigger's error
 envelope (`BLOCKED_BY_DIALOG` with `Details.CommandNotRun`) and ends at once, saying the trigger was not
 run and to wait again with the same `--trigger`, instead of waiting until its own 30-second-interval
