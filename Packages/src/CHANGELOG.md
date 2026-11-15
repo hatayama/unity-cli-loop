@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.27.1](https://github.com/hatayama/unity-cli-loop/compare/v3.27.0...v3.27.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* Hot reload no longer suggests a lambda wrapper for an internal extension method group, which is skipped as well ([#3522](https://github.com/hatayama/unity-cli-loop/issues/3522)) ([8fd9198](https://github.com/hatayama/unity-cli-loop/commit/8fd91985ce644de6a78db18559f8e865773b4287))
+
 ## [3.27.0](https://github.com/hatayama/unity-cli-loop/compare/v3.26.1...v3.27.0) (2026-11-15)
 
 
