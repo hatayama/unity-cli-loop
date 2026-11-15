@@ -64,6 +64,27 @@ internal static class PropertySetterClassifier
         return null;
     }
 
+    // What: whether the property has a set or init accessor with a block or expression body.
+    internal static bool HasBodiedSetOrInitAccessor(PropertyDeclarationSyntax propertyDeclaration)
+    {
+        if (propertyDeclaration.AccessorList == null)
+        {
+            return false;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
+        {
+            bool isSetOrInit = accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.InitAccessorDeclaration);
+            if (isSetOrInit && (accessor.Body != null || accessor.ExpressionBody != null))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool HasMatchingOrdinarySetter(IPropertySymbol compiledProperty, IPropertySymbol propertySymbol)
     {
         // Why each check: a setter added since the last compile, one that was init at the last

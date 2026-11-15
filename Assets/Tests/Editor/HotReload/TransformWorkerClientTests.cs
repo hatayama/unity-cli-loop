@@ -2439,6 +2439,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a property whose bodied get sits beside a bodied init narrows its getter entry to
+        /// the get accessor, so the Skipped init line is not covered by the getter's patch.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterBesideBodiedInitEdited_EntrySpansOnlyTheGetAccessor()
+        {
+            const string editedGetter = "get { return _stored + 7; }";
+            string editedSource = ReplaceUniqueFragment(
+                File.ReadAllText(ResolveSetterFixturePath()),
+                "get { return _stored; }\n            init",
+                editedGetter + "\n            init");
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterBesideBodiedInitSpan.cs",
+                onDisk => editedSource);
+
+            int getterLine = FindLineNumberContaining(editedSource, editedGetter);
+            int initLine = FindLineNumberContaining(editedSource, "init { _stored = value + 5005; }");
+            TransformWorkerEntryDto getter = FindEntryNamed(result, "get_InitStored");
+            Assert.That((getter.sourceStartLine, getter.sourceEndLine), Is.EqualTo((getterLine, getterLine)));
+            Assert.That(initLine, Is.GreaterThan(getter.sourceEndLine), "The init line must stay outside the getter span.");
+        }
+
+        /// <summary>
         /// What: an edited setter of a struct property is Skipped with the struct-host reason and
         /// emits no entry.
         /// </summary>

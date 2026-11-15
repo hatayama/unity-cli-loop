@@ -304,12 +304,12 @@ internal static class PropertyGetterEmitter
 
         string shimMethodName = shimNames.NextShimMethodName(getterSymbol.Name);
 
-        // Why narrow to the get accessor only beside a bodied set: the setter gets an entry of its
-        // own, and overlapping spans leave compile-error attribution and pause-point resolution
-        // unable to tell the two apart. Decided from syntax alone so it does not depend on whether
-        // the setter was actually patched in this run.
+        // Why narrow to the get accessor beside a bodied set or init: the setter gets an entry of
+        // its own, and a Skipped init body must not resolve to the getter's patch, so the getter
+        // entry must not cover either line. Decided from syntax alone so it does not depend on
+        // whether the setter was actually patched in this run.
         SyntaxNode spanNode = propertyDeclaration;
-        if (PropertySetterClassifier.FindBodiedSetAccessorOrNull(propertyDeclaration) != null)
+        if (PropertySetterClassifier.HasBodiedSetOrInitAccessor(propertyDeclaration))
         {
             AccessorDeclarationSyntax getAccessor = propertyDeclaration.AccessorList.Accessors
                 .FirstOrDefault(accessor => accessor.IsKind(SyntaxKind.GetAccessorDeclaration));
