@@ -157,6 +157,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Controls", "qualified.Count + 7700;", "qualified.Count + 7710;", () => fixture.Controls(), 7703, 7713);
         }
 
+        /// <summary>
+        /// What: a nested generic type with a nested type argument (Box&lt;Mode&gt;) is patched,
+        /// returns the edited value, and reverts; its qualified spelling must keep the argument.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedGenericTypeWithNestedArgument_IsPatchedAndReverts()
+        {
+            Fixture fixture = new Fixture();
+            await AssertPatchedAndRevertedAsync(
+                "NestedGenericBox", "box.Content + 7800;", "box.Content + 7810;", () => fixture.NestedGenericBox(), 7801, 7811);
+        }
+
         private static async Task AssertPatchedAndRevertedAsync(
             string methodName,
             string anchor,
