@@ -268,7 +268,23 @@ internal static class BaseCallRules
         IMethodSymbol compiledTarget = CompiledMemberMatcher.FindCompiledOrdinaryMethod(compiledAncestor, target);
         return compiledTarget != null
             && !compiledTarget.IsAbstract
-            && CompiledMemberMatcher.ReturnTypesMatch(compiledTarget, target);
+            && CompiledMemberMatcher.ReturnTypesMatch(compiledTarget, target)
+            && RefKindsMatch(compiledTarget, target);
+    }
+
+    // Why compare RefKind: ref, out and in all share one by-reference parameter type, so a base
+    // target re-signatured between them since the compile would otherwise still match.
+    private static bool RefKindsMatch(IMethodSymbol compiledTarget, IMethodSymbol target)
+    {
+        for (int index = 0; index < target.Parameters.Length; index++)
+        {
+            if (compiledTarget.Parameters[index].RefKind != target.Parameters[index].RefKind)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private readonly struct BaseCall

@@ -247,6 +247,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.MethodTransformBaseCallTargetNotCompiled);
         }
 
+        /// <summary>
+        /// What: a base call whose target changed a parameter from out to ref since the last compile is
+        /// Skipped because the compiled assembly does not hold that signature.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToTargetWithChangedRefKind_IsSkippedAsTargetNotCompiled()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "BaseCallToTargetWithChangedRefKind.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        ReplaceUniqueFragment(source, "6103", "7103"),
+                        "public virtual void Fill(int input, out int result, ref int counter)",
+                        "public virtual void Fill(int input, ref int result, ref int counter)"),
+                    "            base.Fill(input, out int result, ref counter);",
+                    "            int result = 0;\n            base.Fill(input, ref result, ref counter);"));
+
+            AssertSkippedWithCode(
+                result,
+                nameof(HotReloadBaseCallDerivedFixture.CallFill),
+                HotReloadWorkerReasonCode.MethodTransformBaseCallTargetNotCompiled);
+        }
+
         private static async Task AssertEditIsSkippedWithCode(
             string token,
             string methodName,
