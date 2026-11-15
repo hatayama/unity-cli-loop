@@ -49,9 +49,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformBaseCallArgumentShape,
                 Plain(
-                    "Calls a generic or ref-returning base method or one with a params parameter, or passes named "
-                    + "or omitted optional arguments to a base method; write every argument positionally, or run "
-                    + "'uloop compile'.",
+                    "Calls a generic or ref-returning base method, or one with a params parameter or a pointer type "
+                    + "in its signature, or passes named or omitted optional arguments to a base method; for named or "
+                    + "omitted arguments write every argument positionally, otherwise run 'uloop compile'.",
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformBaseCallTargetNotCompiled,
