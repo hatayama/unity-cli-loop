@@ -203,7 +203,7 @@ internal static class PropertyGetterEmitter
         SyntaxNode getterBodyNode = (SyntaxNode)propertyDeclaration.ExpressionBody
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
-        (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyGetterByDecision(
+        (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyAccessorByDecision(
             sourceProjectRelativePath,
             typeDeclaration,
             typeSymbol,
@@ -292,20 +292,15 @@ internal static class PropertyGetterEmitter
             AddedPropertyCatalog addedPropertyCatalog,
             string homeAssemblyName)
     {
-        if (currentShimType == null)
-        {
-            string shimTypeName = shimNames.NextShimTypeName(typeSymbol.Name);
-            string namespaceName = typeSymbol.ContainingNamespace == null
-                || typeSymbol.ContainingNamespace.IsGlobalNamespace
-                ? string.Empty
-                : typeSymbol.ContainingNamespace.ToDisplayString();
-            currentShimType = new ShimTypeBuilder(
-                shimTypeName,
-                namespaceName,
-                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
-                sourceProjectRelativePath);
-            shimTypes.Add(currentShimType);
-        }
+        currentShimType = EnsureShimType(
+            currentShimType,
+            typeSymbol,
+            typeDeclaration,
+            root,
+            sourceProjectRelativePath,
+            shimTypes,
+            shimNames,
+            assemblyGlobalUsings);
 
         string shimMethodName = shimNames.NextShimMethodName(getterSymbol.Name);
 
@@ -354,6 +349,36 @@ internal static class PropertyGetterEmitter
         });
 
         return currentShimType;
+    }
+
+    // What: the shim type this type's accessor shims go into, created on the first one.
+    internal static ShimTypeBuilder EnsureShimType(
+        ShimTypeBuilder currentShimType,
+        INamedTypeSymbol typeSymbol,
+        TypeDeclarationSyntax typeDeclaration,
+        CompilationUnitSyntax root,
+        string sourceProjectRelativePath,
+        List<ShimTypeBuilder> shimTypes,
+        ShimNameAllocator shimNames,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings)
+    {
+        if (currentShimType != null)
+        {
+            return currentShimType;
+        }
+
+        string shimTypeName = shimNames.NextShimTypeName(typeSymbol.Name);
+        string namespaceName = typeSymbol.ContainingNamespace == null
+            || typeSymbol.ContainingNamespace.IsGlobalNamespace
+            ? string.Empty
+            : typeSymbol.ContainingNamespace.ToDisplayString();
+        ShimTypeBuilder shimType = new ShimTypeBuilder(
+            shimTypeName,
+            namespaceName,
+            WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
+            sourceProjectRelativePath);
+        shimTypes.Add(shimType);
+        return shimType;
     }
 
     // What: rewrite a getter body while it is still in the bound tree, then wrap as a shim method.

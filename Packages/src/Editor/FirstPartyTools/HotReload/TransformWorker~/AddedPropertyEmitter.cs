@@ -111,7 +111,7 @@ internal static class AddedPropertyEmitter
         return SyntaxFactory.MethodDeclaration(
                 SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.VoidKeyword)),
                 accessor.ShimMethodName)
-            .WithParameterList(CreateSetterParameterList(binding))
+            .WithParameterList(CreateSetterParameterList(binding.Declaration.Type))
             .WithBody(SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(invocation)));
     }
 
@@ -246,16 +246,17 @@ internal static class AddedPropertyEmitter
                     ? binding.Declaration.Type.WithoutTrivia()
                     : SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.VoidKeyword)),
                 accessor.ShimMethodName)
-            .WithParameterList(isGetter ? SyntaxFactory.ParameterList() : CreateSetterParameterList(binding));
+            .WithParameterList(isGetter ? SyntaxFactory.ParameterList() : CreateSetterParameterList(binding.Declaration.Type));
         method = ApplyBody(method, rewrittenBody);
         IMethodSymbol accessorSymbol = isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod;
         return ShimMethodFactory.ToShimMethod(method, accessorSymbol);
     }
 
-    private static ParameterListSyntax CreateSetterParameterList(AddedPropertyBinding binding)
+    // What: the single `value` parameter a setter shim takes, typed as the property.
+    internal static ParameterListSyntax CreateSetterParameterList(TypeSyntax propertyType)
     {
         ParameterSyntax parameter = SyntaxFactory.Parameter(SyntaxFactory.Identifier("value"))
-            .WithType(binding.Declaration.Type.WithoutTrivia());
+            .WithType(propertyType.WithoutTrivia());
         return SyntaxFactory.ParameterList(SyntaxFactory.SingletonSeparatedList(parameter));
     }
 
