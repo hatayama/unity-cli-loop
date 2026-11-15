@@ -265,3 +265,46 @@ func TestExtendPausePointExpiryBeforeWaitReportsAnUnansweredExtension(t *testing
 		})
 	}
 }
+
+// Verifies an early look that found no dialog leaves the wait's watch on its usual schedule: the
+// watch looks once the polls have gone unanswered for its stall threshold, not after its 30-second
+// interval, so a dialog that opened just after the early look still ends the wait.
+func TestWaitForPausePointEarlyLookKeepsTheWatchSchedule(t *testing.T) {
+	fakes, deps := useWaitStartDialogFakes(t, nil, nil, 2)
+	base := time.Unix(1_700_000_000, 0)
+	// One second per query, so the polls' stall grows with the queries and 30 seconds take 30 of them.
+	deps.now = func() time.Time { return base.Add(time.Duration(fakes.queries) * time.Second) }
+
+	_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, true, false))
+
+	_ = assertTriggerNotSentBlockedByDialog(t, err, triggerDialogNotRunStep)
+	if fakes.looks != 2 || fakes.queries >= 25 {
+		t.Fatalf("looks = %d, queries = %d, want the watch's first look within its stall threshold", fakes.looks, fakes.queries)
+	}
+}
+
+// Verifies a --resume-play-only wait that sent its resume keeps the started form when a dialog ends
+// it later, whether Unity was not paused or the resume failed: only a resume never sent is safe to retry.
+func TestPausePointWaitKeepsTheStartedFormAfterASentResume(t *testing.T) {
+	enabled := pausePointStatusResponse{Id: triggerDialogPausePointID, Status: pausePointStatusEnabled}
+	results := map[string]pausePointResumePlayResult{
+		"not paused":    {WasPaused: false},
+		"resume failed": {Error: "control-play-mode failed"},
+	}
+	for name, result := range results {
+		t.Run(name, func(t *testing.T) {
+			_, deps := useWaitStartDialogFakes(t, &enabled, nil, 1)
+			resumePlayModeForPausePoint = func(context.Context, unityipc.Connection) pausePointResumePlayResult {
+				return result
+			}
+
+			_, _, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitStartDialogOptions(deps, false, true))
+
+			cliError := classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName)
+			if !strings.HasSuffix(cliError.Message, "the command had already started and continues in Unity once the dialog is closed.") ||
+				cliError.SafeToRetry {
+				t.Fatalf("Message = %q, SafeToRetry = %v, want the started form", cliError.Message, cliError.SafeToRetry)
+			}
+		})
+	}
+}

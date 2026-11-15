@@ -105,6 +105,7 @@ type pausePointWaitLoopState struct {
 	// skippedTriggerResult is the reason the wait did not send its --trigger, nil when it sent it.
 	skippedTriggerResult *pausePointTriggerResult
 	markerNotArmed       bool
+	resumeSkipped        bool
 	hasResponse          bool
 	baselineSequence     int
 	hasBaseline          bool
@@ -126,6 +127,7 @@ func waitForPausePointStatus(
 		lastResponse:         pausePointStatusResponse{Id: options.id},
 		skippedTriggerResult: sideEffects.skippedTriggerResult,
 		markerNotArmed:       sideEffects.markerNotArmed,
+		resumeSkipped:        sideEffects.resumeSkipped,
 		baselineSequence:     sideEffects.baselineSequence,
 		hasBaseline:          sideEffects.hasBaseline,
 		baselineDecided:      sideEffects.baselineDecided,
@@ -139,8 +141,10 @@ func waitForPausePointStatus(
 	// Why look before the first poll: an arm query Unity did not answer usually means a dialog holds
 	// the main thread, and the watch would otherwise find it only after its stall threshold. Why not
 	// after an unanswered expiry extension: the wait already looked then, and a look takes about 1s.
+	// Why not through the watch: a look there restarts its 30-second interval, so a dialog that opens
+	// just after this look would go unseen until then instead of at the polls' stall threshold.
 	if sideEffects.armQueryUnanswered && !options.expiryExtensionUnanswered {
-		if dialogs := state.dialogWatch.observeUnansweredProbe(waitContext); dialogs != nil {
+		if dialogs := findBlockingDialogs(waitContext, connection, options.dialogWatch); dialogs != nil {
 			response, waitState, waitErr := finishPausePointWaitBehindDialog(
 				ctx, waitContext, connection, options, &state, triggerDone, dialogs, resumeResult)
 			return response, waitState, state.triggerResult, state.hasBaseline, waitErr
@@ -215,7 +219,7 @@ func finishPausePointWaitBehindDialog(
 	resumeResult *pausePointResumePlayResult,
 ) (pausePointStatusResponse, pausePointWaitState, error) {
 	if blocked, unsent := pausePointWaitUnsentBehindDialog(
-		options, dialogs, state.skippedTriggerResult, resumeResult, state.markerNotArmed); unsent {
+		options, dialogs, state.skippedTriggerResult, resumeResult, state.resumeSkipped, state.markerNotArmed); unsent {
 		return state.lastResponse, "", blocked
 	}
 	if state.triggerResult == nil {

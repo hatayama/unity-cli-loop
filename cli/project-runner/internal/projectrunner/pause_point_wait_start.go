@@ -26,6 +26,9 @@ type pausePointWaitSideEffects struct {
 	// skipped without knowing why; a dialog holding the main thread is the usual reason.
 	armQueryUnanswered bool
 
+	// resumeSkipped is true when --resume-play was given and the wait did not send the resume.
+	resumeSkipped bool
+
 	// markerNotArmed is true when Unity answered the arm confirmation and the marker was not armed.
 	markerNotArmed bool
 
@@ -81,6 +84,7 @@ func startPausePointWaitSideEffects(
 			baselineSequence:     -1,
 			armQueryUnanswered:   pausePointArmQueryWentUnanswered(armQueryErr),
 			markerNotArmed:       !pausePointArmQueryWentUnanswered(armQueryErr),
+			resumeSkipped:        options.resumePlay,
 		}
 	}
 

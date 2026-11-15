@@ -144,12 +144,14 @@ func pausePointTriggerNotRunBlockedByDialog(
 // --trigger or resumed PlayMode, and ok false when it did either, or used neither. Nothing reached the
 // game then, so waiting again with the same arguments is safe. Why it does not say the marker stays
 // armed: the trigger was also skipped when Unity answered that the marker is not armed. markerNotArmed
-// is that answer, and makes the last step re-enable the marker before waiting again.
+// is that answer, and makes the last step re-enable the marker before waiting again. resumeSkipped is
+// whether the wait left out the resume it was asked for; a resume it sent may have resumed PlayMode.
 func pausePointWaitUnsentBehindDialog(
 	options waitForPausePointOptions,
 	dialogs []statusDialog,
 	skippedTriggerResult *pausePointTriggerResult,
 	resumeResult *pausePointResumePlayResult,
+	resumeSkipped bool,
 	markerNotArmed bool,
 ) (blockedByDialogError, bool) {
 	details := map[string]any{pausePointDialogIDDetailKey: options.id}
@@ -165,7 +167,7 @@ func pausePointWaitUnsentBehindDialog(
 		if options.resumePlay {
 			sameArguments = "--trigger and --resume-play"
 		}
-	case options.triggerCommand == "" && resumeResult != nil && !resumeResult.Resumed:
+	case options.triggerCommand == "" && resumeSkipped:
 		stoppedFormat, sameArguments = pausePointResumeNotSentStoppedFormat, "--resume-play"
 	default:
 		return blockedByDialogError{}, false
@@ -213,7 +215,7 @@ func pausePointWaitBehindDialogAtStart(
 		resumeResult = &pausePointResumePlayResult{Error: pausePointResumeDialogAtWaitStartError}
 	}
 	response := pausePointStatusResponse{Id: options.id}
-	if blocked, unsent := pausePointWaitUnsentBehindDialog(options, dialogs, triggerResult, resumeResult, false); unsent {
+	if blocked, unsent := pausePointWaitUnsentBehindDialog(options, dialogs, triggerResult, resumeResult, options.resumePlay, false); unsent {
 		return response, "", triggerResult, resumeResult, false, blocked
 	}
 	return response, "", nil, nil, false, pausePointWaitStartedBehindDialog(options, dialogs)
