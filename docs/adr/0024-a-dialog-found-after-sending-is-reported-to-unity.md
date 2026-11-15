@@ -74,6 +74,37 @@ form that the next `uloop compile` reattaches to:
   once per dialog-check interval. Without a dialog it keeps retrying, so its last answer still
   decides between waiting and sending a new compile.
 
+### Pause-Point Trigger
+
+A pause-point wait confirms its marker is armed before it sends its `--trigger` (or resumes PlayMode
+for `--resume-play`). With a dialog already open, the usual case, Unity answers none of the wait's
+first requests, so the wait sends nothing. `await-pause-point` first extends the marker's expiry; when
+that goes unanswered it looks for a dialog at once, and `enable-pause-point --await`, which extends
+nothing, looks after its unanswered arm query instead. A wait looks at most once at its start, since a
+look takes about a second on macOS. Finding a dialog, it ends saying the trigger was not sent and to
+wait again with the same `--trigger` (and `--resume-play` when given); a wait asked for neither gets the
+started form. On macOS this took about 7 seconds: the expiry extension's 5-second timeout, then the look.
+A dialog its later watch finds ends such a wait the same way, and when Unity had answered that the
+marker was not armed, the last step says to re-enable it first. Both need the look to find the dialog:
+Unity 6000.7 and later report their own dialogs, and on older Editors the look reads Unity's windows;
+when it cannot, as with a locked screen, the wait runs on to its own end.
+
+A pause-point wait that did send its `--trigger` sends it through the same dispatch, so the trigger's own send can be
+the one Unity fails with `main_thread_blocked`. The wait reads that result from the trigger's error
+envelope (`BLOCKED_BY_DIALOG` with `Details.CommandNotRun`) and ends at once, saying the trigger was not
+run and to wait again with the same `--trigger`, instead of waiting until its own 30-second-interval
+watch finds the dialog and telling the agent to drop a trigger that was never run. When its own watch
+finds the dialog first and the look's report shows the trigger holding the slot while it waits for the
+main thread, the wait reports the dialog to Unity under the trigger's name and waits up to 6 seconds for
+the trigger's answer (Unity's check, then the trigger's own second look, take about 3 on macOS); a
+`main_thread_blocked` answer ends the wait the same way, naming the watch's dialog when the trigger's
+own look found none. A `main_thread_blocked` answer without any dialog, as after a 30-second stall,
+abandons the wait as a trigger that did not run, the way a rejected trigger does. Why ask Unity instead
+of judging from the look: the look is one moment, and the dialog can close and let the trigger run
+before uloop exits. A request that outlives the disconnect, such as a default `compile`, is not failed
+by the report, so no answer comes. Without that answer, and in every other case, the wait keeps the
+`had already started` form, which never risks sending the trigger twice.
+
 ## Context
 
 A dialog that opened after the check before sending was only noticed

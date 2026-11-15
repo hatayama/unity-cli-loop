@@ -28,13 +28,18 @@ type dialogWatchDeps struct {
 	// canPressDialogs is whether uloop press-dialog-button works on this operating system.
 	canPressDialogs bool
 	now             func() time.Time
+	// reportBlockingDialog tells Unity that a dialog holds its main thread while a request of the named
+	// command waits, so Unity fails that request if it has not started. Only the pause-point wait uses
+	// it, to confirm its --trigger was not run; nil turns that confirmation off.
+	reportBlockingDialog func(context.Context, unityipc.Connection, string) error
 }
 
 func defaultDialogWatchDeps() dialogWatchDeps {
 	return dialogWatchDeps{
-		probeEditorStatus: probeEditorStatusForDialogs,
-		canPressDialogs:   defaultDialogInspector().CanPress(),
-		now:               time.Now,
+		probeEditorStatus:    probeEditorStatusForDialogs,
+		canPressDialogs:      defaultDialogInspector().CanPress(),
+		now:                  time.Now,
+		reportBlockingDialog: sendReportBlockingDialog,
 	}
 }
 
@@ -49,6 +54,8 @@ type dialogBlockWatch struct {
 	lastProbeAt           time.Time
 	unanswered            bool
 	unansweredSince       time.Time
+	// foundReport is the report of the last look that found a dialog; the zero report before one.
+	foundReport statusReport
 }
 
 func newDialogBlockWatch(
@@ -77,7 +84,19 @@ func (watch *dialogBlockWatch) observeStall(ctx context.Context, stallSeconds fl
 	}
 	watch.probed = true
 	watch.lastProbeAt = now
-	return findBlockingDialogs(ctx, watch.connection, watch.deps)
+	report, found := findBlockingDialogReport(ctx, watch.connection, watch.deps)
+	if !found {
+		return nil
+	}
+	watch.foundReport = report
+	return report.Dialogs
+}
+
+// lastFoundReport returns the whole report behind the dialogs the watch last returned from a look,
+// so a wait can also read which command held Unity's command slot then without reading the Editor
+// again. The zero report when no look has found a dialog.
+func (watch *dialogBlockWatch) lastFoundReport() statusReport {
+	return watch.foundReport
 }
 
 // observePoll is observeStall for a wait that polls Unity without learning the stall: a poll that

@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
@@ -20,6 +21,16 @@ type pausePointWaitSideEffects struct {
 	baselineSequence     int
 	hasBaseline          bool
 	baselineDecided      bool
+
+	// armQueryUnanswered is true when the arm confirmation got no answer, so the side effects were
+	// skipped without knowing why; a dialog holding the main thread is the usual reason.
+	armQueryUnanswered bool
+
+	// resumeSkipped is true when --resume-play was given and the wait did not send the resume.
+	resumeSkipped bool
+
+	// markerNotArmed is true when Unity answered the arm confirmation and the marker was not armed.
+	markerNotArmed bool
 
 	// immediateHit is the arm-confirmation response when it already settles the wait: an
 	// already-hit marker that awaits no later hit. It is the wait's answer, so the poll loop must
@@ -71,6 +82,9 @@ func startPausePointWaitSideEffects(
 			skippedTriggerResult: skippedTriggerResult,
 			resumeResult:         resumeResult,
 			baselineSequence:     -1,
+			armQueryUnanswered:   pausePointArmQueryWentUnanswered(armQueryErr),
+			markerNotArmed:       !pausePointArmQueryWentUnanswered(armQueryErr),
+			resumeSkipped:        options.resumePlay,
 		}
 	}
 
@@ -206,4 +220,15 @@ func pausePointNewHitBaseline(response pausePointStatusResponse) (int, bool) {
 		return -1, false
 	}
 	return response.LastHitSequence, true
+}
+
+// pausePointArmQueryWentUnanswered reports that the arm query failed without an answer from Unity.
+// Why an error Unity answered with does not count: Unity's main thread ran to answer it, so no dialog
+// was holding it then.
+func pausePointArmQueryWentUnanswered(err error) bool {
+	if err == nil {
+		return false
+	}
+	var answered *unityipc.RPCError
+	return !errors.As(err, &answered)
 }

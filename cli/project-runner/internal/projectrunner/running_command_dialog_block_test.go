@@ -23,6 +23,8 @@ type fakeDialogLook struct {
 	calls   int
 	clock   time.Time
 	step    time.Duration
+	// report, when set, edits the report a look that finds the dialogs returns.
+	report func(statusReport) statusReport
 }
 
 func newFakeDialogLook(dialogs ...statusDialog) *fakeDialogLook {
@@ -39,7 +41,11 @@ func (look *fakeDialogLook) deps() dialogWatchDeps {
 			if len(look.dialogs) == 0 {
 				return newStatusReport(statusStateMainThreadBlocked, "blocked"), nil
 			}
-			return blockedByDialogStatusReport(look.dialogs...), nil
+			report := blockedByDialogStatusReport(look.dialogs...)
+			if look.report != nil {
+				report = look.report(report)
+			}
+			return report, nil
 		},
 		canPressDialogs: true,
 		now: func() time.Time {
