@@ -174,7 +174,7 @@ internal static class InaccessibleAccessScanner
 
         // Why unreduce: a reduced extension call (x.M()) is not MethodKind.Ordinary, so an
         // inaccessible one was never counted and its body was transplanted unchanged.
-        if (semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol invokedMethod)
+        if (AccessibilityRules.BoundSymbolOrNull(semanticModel, invocation) is not IMethodSymbol invokedMethod)
         {
             return false;
         }
@@ -273,7 +273,8 @@ internal static class InaccessibleAccessScanner
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(memberAccess).Symbol
+        // Why the bound-symbol helper: a method group of a method offered twice binds ambiguously.
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
         if (symbol is IPropertySymbol propertySymbol)
         {

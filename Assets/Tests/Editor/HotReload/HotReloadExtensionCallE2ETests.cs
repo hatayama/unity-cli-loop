@@ -54,6 +54,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda that calls a public extension method of an internal class declared in
+        /// the same file is Skipped, the run reports no failure, and the method keeps returning
+        /// the compiled value instead of throwing MethodAccessException from the shim.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingPublicExtensionOfInternalClassInEditedFile_IsSkippedAndKeepsTheCompiledBody()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5101", "5102");
+
+            AssertKind(result, "ClosureCallsPublicExtensionOfInternalClass", HotReloadMethodOutcomeKind.Skipped);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
+        }
+
+        /// <summary>
         /// What: a method that calls an internal extension method from its own statements is
         /// Patched and returns the edited value; RevertAll restores the compiled value.
         /// </summary>

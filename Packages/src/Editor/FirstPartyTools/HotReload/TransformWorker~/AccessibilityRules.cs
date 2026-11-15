@@ -37,6 +37,81 @@ internal static class AccessibilityRules
             && member.ContainingType.IsValueType;
     }
 
+    /// <summary>
+    /// What: the symbol a call, method group, or member access binds to. When binding failed only
+    /// because the same method is offered twice, returns the copy declared in the edited sources.
+    /// Otherwise the bound symbol, or null when nothing is bound.
+    /// </summary>
+    internal static ISymbol BoundSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        SymbolInfo info = semanticModel.GetSymbolInfo(node);
+        if (info.Symbol != null)
+        {
+            return info.Symbol;
+        }
+
+        // Why: the compiled assembly is referenced beside the edited source of the same file, and
+        // extension lookup gathers methods from both copies of a static class. A public method of
+        // an internal class is imported from metadata and is eligible because the worker binds
+        // with accessibility ignored, so a call to it fails as ambiguous. Treating that as "no
+        // symbol" made every access check pass, and the shim called the method and threw.
+        if (info.CandidateReason != CandidateReason.OverloadResolutionFailure
+            || info.CandidateSymbols.Length < 2)
+        {
+            return null;
+        }
+
+        IMethodSymbol first = info.CandidateSymbols[0] as IMethodSymbol;
+        IMethodSymbol sourceCopy = null;
+        foreach (ISymbol candidate in info.CandidateSymbols)
+        {
+            if (candidate is not IMethodSymbol method
+                || first == null
+                || !IsSameMethodDeclaration(UnreducedMethod(first), UnreducedMethod(method)))
+            {
+                return null;
+            }
+
+            if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, semanticModel.Compilation.Assembly))
+            {
+                sourceCopy = method;
+            }
+        }
+
+        return sourceCopy;
+    }
+
+    // Whether two method symbols from different assemblies declare the same method: same name,
+    // same containing type, same parameter types and ref kinds, same generic arity.
+    private static bool IsSameMethodDeclaration(IMethodSymbol left, IMethodSymbol right)
+    {
+        if (left.Name != right.Name
+            || left.Arity != right.Arity
+            || left.Parameters.Length != right.Parameters.Length
+            || FullyQualified(left.ContainingType) != FullyQualified(right.ContainingType))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Parameters.Length; index++)
+        {
+            IParameterSymbol leftParameter = left.Parameters[index];
+            IParameterSymbol rightParameter = right.Parameters[index];
+            if (leftParameter.RefKind != rightParameter.RefKind
+                || FullyQualified(leftParameter.Type) != FullyQualified(rightParameter.Type))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string FullyQualified(ISymbol symbol)
+    {
+        return symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+    }
+
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
     {
         if (IsNonCrossAssemblySymbol(symbol))

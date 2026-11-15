@@ -211,7 +211,7 @@ internal static class AccessorAccessRegistrar
 
         return TryRegisterUseOutsideAssignment(
             memberAccess,
-            semanticModel.GetSymbolInfo(memberAccess).Symbol
+            AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
             addedMemberAccess,
@@ -394,7 +394,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, invocation);
         if (symbol is not IMethodSymbol invokedMethod)
         {
             return false;
