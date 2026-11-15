@@ -23,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string FixtureFileName = "HotReloadStructMemberAccessorFixture.cs";
 
+        private const string StructMemberNoShapeReason =
+            "inaccessible instance member of a struct has no accessor rewrite shape.";
+
         private HotReloadDomainTestScope _scope;
 
         [SetUp]
@@ -57,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ("return 8901;", "return 8911;"));
 
             AssertNoFailed(result);
-            AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, "ReadField");
+            AssertSkippedForStructMember(result, "ReadField");
             AssertOutcome(result, HotReloadMethodOutcomeKind.Patched, "Ordinary");
             Assert.That(host.Ordinary(), Is.EqualTo(8911));
             Assert.That(host.ReadField(), Is.EqualTo(8101), "The skipped method keeps its compiled body.");
@@ -78,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ("_s.Value = 8501;", "_s.Value = 8511;"));
 
             AssertNoFailed(result);
-            AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Property");
+            AssertSkippedForStructMember(result, "Property");
             Assert.That(new HotReloadStructMemberAccessorHost().Property(), Is.EqualTo(8501));
         }
 
@@ -195,6 +198,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.Fail("Expected " + kind + " for " + methodName + ".\n" + FormatOutcomes(result));
+        }
+
+        // A Skipped row for the method whose reason is the struct-member refusal, so a skip for any
+        // other reason does not pass.
+        private static void AssertSkippedForStructMember(HotReloadOrchestratorResult result, string methodName)
+        {
+            string marker = "." + methodName + "(";
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method != null
+                    && outcome.Method.Contains(marker)
+                    && outcome.Reason != null
+                    && outcome.Reason.Contains(StructMemberNoShapeReason))
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail("Expected Skipped with the struct-member reason for " + methodName + ".\n" + FormatOutcomes(result));
         }
 
         private static string FormatOutcomes(HotReloadOrchestratorResult result)
