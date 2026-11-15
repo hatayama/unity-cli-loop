@@ -918,6 +918,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a bodied property of a nested enum type added in the reload is emitted with the
+        /// type qualified in both shim signatures, so both accessors are reported Added instead of
+        /// failing the shim compile with CS0246.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedNestedTypeBodiedProperty_AccessorsApply()
+        {
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertyAddedNestedType.cs",
+                "        public Mode NestedMode\n",
+                "        public Mode AddedNestedMode\n        {\n            get { return (Mode)(LastNested % 2); }\n            set { LastNested = (int)value + 1818; }\n        }\n\n        public Mode NestedMode\n");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasAdded(patched, "get_AddedNestedMode");
+            AssertHasAdded(patched, "set_AddedNestedMode");
+        }
+
+        /// <summary>
+        /// What: editing the getter of a property typed as a nested enum patches it (the shim names
+        /// the type qualified), the read returns the edited value, and RevertAll restores it.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedNestedTypePropertyGetter_ApplyAndRevert_UpdatesRuntimeValue()
+        {
+            HotReloadPropertySetterNestedTypeFixture fixture = new HotReloadPropertySetterNestedTypeFixture();
+            HotReloadPropertySetterNestedTypeFixture.LastNested = 4;
+            Assert.That(fixture.NestedMode, Is.EqualTo(HotReloadPropertySetterNestedTypeFixture.Mode.On));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertyNestedTypeGetter.cs",
+                "(Mode)(LastNested % 3)",
+                "(Mode)(LastNested % 2)");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "get_NestedMode");
+            Assert.That(fixture.NestedMode, Is.EqualTo(HotReloadPropertySetterNestedTypeFixture.Mode.Off));
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(fixture.NestedMode, Is.EqualTo(HotReloadPropertySetterNestedTypeFixture.Mode.On));
+        }
+
+        /// <summary>
+        /// What: editing the setter of a property typed as a nested enum patches it (the shim's
+        /// value parameter names the type qualified), and RevertAll restores the compiled setter.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedNestedTypePropertySetter_ApplyAndRevert_UpdatesRuntimeBehavior()
+        {
+            HotReloadPropertySetterNestedTypeFixture fixture = new HotReloadPropertySetterNestedTypeFixture();
+            fixture.NestedMode = HotReloadPropertySetterNestedTypeFixture.Mode.On;
+            Assert.That(HotReloadPropertySetterNestedTypeFixture.LastNested, Is.EqualTo(1617));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertyNestedTypeSetter.cs",
+                "(int)value + 1616;",
+                "(int)value + 1626;");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_NestedMode");
+            fixture.NestedMode = HotReloadPropertySetterNestedTypeFixture.Mode.On;
+            Assert.That(HotReloadPropertySetterNestedTypeFixture.LastNested, Is.EqualTo(1627));
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            fixture.NestedMode = HotReloadPropertySetterNestedTypeFixture.Mode.On;
+            Assert.That(HotReloadPropertySetterNestedTypeFixture.LastNested, Is.EqualTo(1617));
+        }
+
+        /// <summary>
         /// What: editing an interface default property setter patches assignments made through the
         /// interface, and RevertAll restores the compiled default setter.
         /// </summary>

@@ -419,7 +419,9 @@ internal static class PropertyGetterEmitter
         // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
         rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);
 
-        TypeSyntax returnType = propertyDeclaration.Type.WithoutTrivia();
+        // Why visit the type with the body's rewriter: a nested type named by its simple name does
+        // not resolve in the hoisted shim class, and the rewriter already qualifies such names.
+        TypeSyntax returnType = ((TypeSyntax)rewriter.Visit(propertyDeclaration.Type)).WithoutTrivia();
         // ToShimMethod forces public static and injects __instance for instance getters.
         MethodDeclarationSyntax method = SyntaxFactory.MethodDeclaration(
                 returnType,

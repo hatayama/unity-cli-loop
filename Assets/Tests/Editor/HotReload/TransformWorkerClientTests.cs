@@ -2484,6 +2484,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the getter and setter shims of a property typed as a nested enum name that type
+        /// qualified in their signatures (return type and value parameter), since the shim class
+        /// sits outside the declaring type.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedTypePropertyAccessorsEdited_ShimSignaturesQualifyTheType()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "NestedTypePropertyAccessors.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "(Mode)(LastNested % 3)", "(Mode)(LastNested % 2)"),
+                    "(int)value + 1616;",
+                    "(int)value + 1626;"));
+
+            string getterHeader = ShimSignatureOf(result, "get_NestedMode");
+            string setterHeader = ShimSignatureOf(result, "set_NestedMode");
+            Assert.That(getterHeader, Does.Contain(nameof(HotReloadPropertySetterNestedTypeFixture) + ".Mode get_NestedMode"));
+            Assert.That(setterHeader, Does.Contain(nameof(HotReloadPropertySetterNestedTypeFixture) + ".Mode value"));
+            Assert.That(setterHeader, Does.Not.Contain(" Mode value"));
+        }
+
+        /// <summary>
         /// What: an edited setter of a struct property is Skipped with the struct-host reason and
         /// emits no entry.
         /// </summary>
@@ -3548,6 +3570,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Fail(
                 "Expected a skip containing '" + methodFragment + "'; got: "
                 + FormatSkippedMethodNames(result.Output.skipped));
+        }
+
+        // The shim method's declaration up to the end of its parameter list, so a Contains check
+        // reads the signature and not the body.
+        private static string ShimSignatureOf(TransformWorkerClientResult result, string methodName)
+        {
+            string slice = SliceShimMethod(result.Output.shimSource, FindEntryNamed(result, methodName).shimMethodName);
+            return slice.Substring(0, slice.IndexOf(')') + 1);
         }
 
         private static int LineNumberAt(string source, int index)

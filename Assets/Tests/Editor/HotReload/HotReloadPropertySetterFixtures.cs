@@ -58,6 +58,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// A property typed as a nested enum, which a shim outside the type can only name qualified.
+    /// </summary>
+    public class HotReloadPropertySetterNestedTypeFixture
+    {
+        public enum Mode
+        {
+            Off,
+            On,
+            Boost
+        }
+
+        public static int LastNested;
+
+        public Mode NestedMode
+        {
+            get { return (Mode)(LastNested % 3); }
+            set { LastNested = (int)value + 1616; }
+        }
+    }
+
+    /// <summary>
     /// A struct host, whose setter stays Skipped because struct methods are not patched.
     /// </summary>
     public struct HotReloadPropertySetterStructFixture

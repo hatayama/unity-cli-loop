@@ -286,7 +286,7 @@ internal static class PropertySetterEmitter
                 SyntaxFactory.TokenList(
                     SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
-            .WithParameterList(AddedPropertyEmitter.CreateSetterParameterList(property.Type));
+            .WithParameterList(AddedPropertyEmitter.CreateSetterParameterList(((TypeSyntax)rewriter.Visit(property.Type)).WithoutTrivia()));
 
         if (rewrittenBody is BlockSyntax blockBody)
         {
