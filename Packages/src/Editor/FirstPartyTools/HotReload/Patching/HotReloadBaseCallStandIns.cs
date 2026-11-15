@@ -117,11 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Why skip the first parameter: it is the stand-in's receiver, not a base method parameter.
-            Type[] parameterTypes = standIn.GetParameters()
-                .Skip(1)
-                .Select(parameter => parameter.ParameterType)
-                .ToArray();
-            MethodInfo baseMethod = FindDeclaredNonGenericMethodOrNull(ancestor, methodName, parameterTypes);
+            ParameterInfo[] standInParameters = standIn.GetParameters().Skip(1).ToArray();
+            MethodInfo baseMethod = FindDeclaredNonGenericMethodOrNull(ancestor, methodName, standInParameters);
             if (baseMethod == null || baseMethod.IsAbstract || baseMethod.ReturnType != standIn.ReturnType)
             {
                 return null;
@@ -132,14 +129,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why not Type.GetMethod: a base type that also declares M<T> with the same parameter types
         // makes that lookup throw AmbiguousMatchException, and a stand-in never targets a generic method.
-        private static MethodInfo FindDeclaredNonGenericMethodOrNull(Type declaringType, string methodName, Type[] parameterTypes)
+        private static MethodInfo FindDeclaredNonGenericMethodOrNull(
+            Type declaringType,
+            string methodName,
+            ParameterInfo[] standInParameters)
         {
             MethodInfo[] candidates = declaringType.GetMethods(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             return candidates.FirstOrDefault(candidate =>
                 candidate.Name == methodName
                 && !candidate.IsGenericMethodDefinition
-                && candidate.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameterTypes));
+                && ParametersMatch(candidate.GetParameters(), standInParameters));
+        }
+
+        // Why compare IsOut and IsIn too: ref, out and in share one by-reference type, so M(out T)
+        // and M(ref int) are indistinguishable by type once T is int.
+        private static bool ParametersMatch(ParameterInfo[] candidateParameters, ParameterInfo[] standInParameters)
+        {
+            if (candidateParameters.Length != standInParameters.Length)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < candidateParameters.Length; index++)
+            {
+                ParameterInfo candidate = candidateParameters[index];
+                ParameterInfo standIn = standInParameters[index];
+                if (candidate.ParameterType != standIn.ParameterType
+                    || candidate.IsOut != standIn.IsOut
+                    || candidate.IsIn != standIn.IsIn)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

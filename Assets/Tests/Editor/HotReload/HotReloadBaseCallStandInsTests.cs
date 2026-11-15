@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
+using HarmonyLib;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -78,6 +81,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(error, Is.Null);
         }
 
+        /// <summary>
+        /// What: a ref stand-in is redirected to the ref overload, not to an out overload whose
+        /// parameter has the same by-reference type once the base's type argument is substituted.
+        /// </summary>
+        [Test]
+        public void RedirectToBaseMethods_BaseWithOutAndRefOverloads_PicksTheRefOverload()
+        {
+            MethodInfo shimMethod = ShimMethod(typeof(HotReloadBaseCallRefKindShim), nameof(HotReloadBaseCallRefKindShim.CallsByRef));
+            List<CodeInstruction> transplanted = PatchProcessor.GetOriginalInstructions(shimMethod);
+
+            HotReloadBaseCallStandIns.RedirectToBaseMethods(
+                transplanted,
+                shimMethod,
+                typeof(HotReloadBaseCallRefKindDerived).GetMethod(nameof(HotReloadBaseCallRefKindDerived.Run)));
+
+            MethodInfo redirected = transplanted
+                .Select(instruction => instruction.operand as MethodInfo)
+                .Single(method => method != null && method.DeclaringType == typeof(HotReloadBaseCallRefKindBase<int>));
+            Assert.That(redirected.GetParameters()[0].IsOut, Is.False, "The ref call must not run the out overload.");
+        }
+
         private static MethodInfo ShimMethod(Type shimType, string methodName)
         {
             MethodInfo method = shimType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
@@ -121,6 +145,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         public static int __uloopBaseCall__d1__Overloaded__0(HotReloadBaseCallOverloadDerived self, int input) { throw new InvalidOperationException(); }
         public static int CallsOverloaded(HotReloadBaseCallOverloadDerived self, int input) { return __uloopBaseCall__d1__Overloaded__0(self, input); }
+    }
+
+    /// <summary>
+    /// A base whose out overload, declared first, takes the same int&amp; as the ref overload once
+    /// T is int.
+    /// </summary>
+    public class HotReloadBaseCallRefKindBase<T>
+    {
+        public virtual int Take(out T value) { value = default; return 1; }
+        public virtual int Take(ref int value) { return 2; }
+    }
+
+    /// <summary>The patched type whose base declares the out and ref overloads.</summary>
+    public class HotReloadBaseCallRefKindDerived : HotReloadBaseCallRefKindBase<int>
+    {
+        public int Run(int input) { return input; }
+    }
+
+    /// <summary>A hand-written shim whose stand-in targets the ref overload one type up.</summary>
+    public static class HotReloadBaseCallRefKindShim
+    {
+        public static int __uloopBaseCall__d1__Take__0(HotReloadBaseCallRefKindDerived self, ref int value) { throw new InvalidOperationException(); }
+        public static int CallsByRef(HotReloadBaseCallRefKindDerived self, int input) { int value = input; return __uloopBaseCall__d1__Take__0(self, ref value); }
     }
 
     /// <summary>A shim type that declares no stand-in.</summary>
