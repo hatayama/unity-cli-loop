@@ -13,6 +13,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return value * 2 + add;
         }
+
+        // Why a string receiver: C# cannot form a delegate from an extension method on a value type.
+        internal static int LengthPlus(this string value, int add)
+        {
+            return value.Length + add;
+        }
     }
 
     /// <summary>
@@ -39,6 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadExtensionCallHost
     {
         private int _value = 3;
+
+        private string _label = "abc";
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureReadsPrivateFieldAndCallsInternalExtension()
@@ -78,6 +86,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ClosureCallsInternalExtensionOfPublicClassInStaticForm()
         {
             Func<int> read = () => HotReloadPublicExtensionCallMath.InternalTwice(_value, 4701);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureHoldsInternalExtensionMethodGroup()
+        {
+            Func<int> read = () =>
+            {
+                Func<int, int> lengthPlus = _label.LengthPlus;
+                return lengthPlus(4901);
+            };
             return read();
         }
 
