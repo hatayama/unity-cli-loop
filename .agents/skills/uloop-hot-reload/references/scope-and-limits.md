@@ -4,9 +4,10 @@ Only ordinary method declarations and property getters with a body are patched. 
 property added to a compiled type applies as an added member instead (see below).
 Constructors, finalizers, operators, and explicit event accessors are reported as
 `Skipped` when edited (with a verified baseline, unchanged members of those kinds
-produce no row). Methods and property getters of an `interface`, including default
-interface implementations, are reported as `Skipped` the same way. Use
-`uloop compile` for all of these.
+produce no row). Methods of an `interface`, including default interface
+implementations, are reported as `Skipped` the same way; a default property getter of
+an `interface` is patched like any other getter. Use `uloop compile` for the skipped
+ones.
 Adding a constructor, finalizer, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
 Methods and property getters of `partial` types are patched like any other; the
@@ -169,8 +170,8 @@ A nested type added to a compiled type is named in a `Warnings` line (`Nested ty
 requires a compile`), and its methods are reported as `Skipped`; so are the bodied
 accessors of an added indexer. An added event the store cannot hold (a struct host, a
 delegate type not visible outside the assembly) gets no row of its own: the methods
-that use it are `Skipped` with a reason that names it, and an event nothing uses
-changes no behavior. Land all of these with `uloop compile`.
+that use it are `Skipped`, and an event nothing uses changes no behavior. Land all of
+these with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
 Every other declaration edit — changing a `const` value, a compiled field's
