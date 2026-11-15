@@ -764,6 +764,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     artifact.Assembly.GetType(IntroducedBaseCallerMetadataName, throwOnError: false),
                     Is.Not.Null,
                     "Precondition: the retained artifact must hold " + IntroducedBaseCallerMetadataName + ".");
+                Assert.That(
+                    ReadBaseCallerToString(artifact),
+                    Does.EndWith("a"),
+                    "Precondition: the retained assembly must run the body the first reload compiled.");
 
                 HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateBaseCallerEdits(
                     hostPath,
@@ -784,7 +788,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     toStringRow.Reason,
                     Does.Contain("a member or type hot reload added"),
                     "The skip must name the placement limit of base calls.\n" + DescribeOutcomes(edited));
+                Assert.That(
+                    ReadBaseCallerToString(readArtifact()),
+                    Does.EndWith("a"),
+                    "A skipped body must leave the retained assembly running the original body.");
             });
+        }
+
+        private static string ReadBaseCallerToString(HotReloadIntroducedTypeArtifact artifact)
+        {
+            Assert.That(artifact, Is.Not.Null, "A reload had to introduce the type before this check.");
+            Type introducedType = artifact.Assembly.GetType(IntroducedBaseCallerMetadataName, throwOnError: false);
+            Assert.That(introducedType, Is.Not.Null, "The artifact must hold " + IntroducedBaseCallerMetadataName + ".");
+            return Activator.CreateInstance(introducedType).ToString();
         }
 
         private static HotReloadMethodOutcome FindOutcomeContaining(HotReloadOrchestratorResult result, string fragment)
