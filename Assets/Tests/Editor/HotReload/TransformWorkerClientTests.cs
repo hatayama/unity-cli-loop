@@ -2735,6 +2735,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda in a class nested inside a struct that reads the struct's field-like
+        /// event as its backing field is Skipped and gets no entry. The existing field-like event
+        /// rule refuses it before the struct-member check is reached, so only the row kind is
+        /// pinned here, not its reason text.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedClassLambdaReadingStructEventBackingField_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedStructMemberCopyAsync(
+                "NestedClassStructEventRead.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "? 9001 : 9002", "? 9011 : 9002"));
+
+            bool skipped = false;
+            foreach (TransformWorkerSkippedDto row in result.Output.skipped ?? Array.Empty<TransformWorkerSkippedDto>())
+            {
+                skipped |= row.method != null && row.method.Contains("Watcher.Peek(");
+            }
+
+            Assert.That(skipped, Is.True, "Expected a Skipped row for Watcher.Peek.");
+            AssertNoEntryNamed(result, "Peek");
+        }
+
+        /// <summary>
         /// What: an edited setter of a struct property is Skipped with the struct-host reason and
         /// emits no entry.
         /// </summary>

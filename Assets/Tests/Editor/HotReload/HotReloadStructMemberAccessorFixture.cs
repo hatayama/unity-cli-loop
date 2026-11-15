@@ -40,6 +40,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             X++;
         }
+
+        internal event Action Fired;
+
+        internal void Raise()
+        {
+            Fired?.Invoke();
+        }
+
+        /// <summary>
+        /// A class nested in the struct, which (unlike code outside the struct) may read the
+        /// struct's field-like event as its backing field.
+        /// </summary>
+        public class Watcher
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int Peek(HotReloadStructMemberAccessorStruct target)
+            {
+                Func<bool> unsubscribed = () => target.Fired == null;
+                return unsubscribed() ? 9001 : 9002;
+            }
+        }
     }
 
     /// <summary>
