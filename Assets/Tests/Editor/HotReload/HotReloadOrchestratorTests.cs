@@ -784,6 +784,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing an interface default property getter patches it; a read through the
+        /// interface on a class that does not override the property returns the edited value,
+        /// and RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInterfaceDefaultPropertyGetter_ApplyAndRevert_UpdatesRuntimeValue()
+        {
+            string fixturePath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "            get { return 805; }",
+                "            get { return 806; }",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: getter body must differ.");
+            string editedPath = WriteEditedSource("InterfaceDefaultGetter.cs", editedSource);
+            IHotReloadInterfaceDefaultGetterFixture instance = new HotReloadInterfaceDefaultGetterImplementer();
+
+            Assert.That(instance.DefaultValue, Is.EqualTo(805));
+
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "get_DefaultValue");
+            Assert.That(instance.DefaultValue, Is.EqualTo(806), "Patched interface getter must return the edited literal.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(
+                instance.DefaultValue,
+                Is.EqualTo(805),
+                "RevertAll must restore the compiled interface getter body.");
+        }
+
+        /// <summary>
         /// What: editing a method wrapped in #if UNITY_EDITOR still patches and returns the
         /// edited value. Directive trivia must not be copied onto the shim because the matching
         /// #endif belongs to the next token.

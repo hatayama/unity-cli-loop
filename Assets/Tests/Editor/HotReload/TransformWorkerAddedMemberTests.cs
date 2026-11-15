@@ -1900,11 +1900,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing the body of a compiled interface default property getter is skipped
-        /// with the interface-member reason and does not emit a patch entry.
+        /// What: editing the body of a compiled interface default property getter emits a patch
+        /// entry for the getter and no Skipped row, like an ordinary getter.
         /// </summary>
         [Test]
-        public async Task Skip_CompiledInterfaceDefaultPropertyGetterEdit_UsesInterfaceMemberReason()
+        public async Task CompiledInterfaceDefaultPropertyGetterEdit_EmitsPatchEntry()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -1913,46 +1913,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
-                WriteEdited("SkipCompiledInterfaceDefaultGetter.cs", edited),
+                WriteEdited("CompiledInterfaceDefaultGetterPatch.cs", edited),
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, "get_DefaultValue", "Interface members are not patchable");
-            Assert.That(FindEntry(result, "get_DefaultValue"), Is.Null);
-        }
-
-        /// <summary>
-        /// What: an unedited compiled interface default property getter stays inert against a
-        /// verified baseline: no Skipped row, no patch entry, and no unchanged row.
-        /// </summary>
-        [Test]
-        public async Task Baseline_UnchangedInterfaceDefaultPropertyGetter_ProducesNoRow()
-        {
-            string onDisk = File.ReadAllText(ResolveHostPath());
-            string edited = onDisk.Replace(
-                "        int ExistingDefault() => 1;",
-                "        int ExistingDefault() => 2;",
-                StringComparison.Ordinal);
-            Assert.That(edited, Is.Not.EqualTo(onDisk));
-            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
-                WriteEdited("BaselineUnchangedInterfaceDefaultGetter.cs", edited),
-                HostProjectRelativePath,
-                snapshotSource: onDisk);
-            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_DefaultValue"), Is.Not.Null);
             Assert.That(
                 FindSkipReason(result, "get_DefaultValue"),
                 Is.Null,
-                "An unedited interface getter must not emit a Skipped row.");
-            Assert.That(FindEntry(result, "get_DefaultValue"), Is.Null);
-            TransformWorkerUnchangedMethodDto[] unchangedMethods =
-                result.Output.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
-            foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
-            {
-                Assert.That(
-                    unchanged.methodName,
-                    Is.Not.EqualTo("get_DefaultValue"),
-                    "An unedited interface getter must not emit an unchanged row.");
-            }
+                "An edited interface default getter must not emit a Skipped row.");
         }
 
         /// <summary>

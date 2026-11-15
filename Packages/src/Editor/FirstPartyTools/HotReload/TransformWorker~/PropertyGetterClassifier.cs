@@ -30,36 +30,6 @@ internal static class PropertyGetterClassifier
         string[] parameterTypeFullNames,
         List<WorkerUnchangedMethod> unchangedMethods)
     {
-        if (!IsPropertyGetterUnchangedFromBaseline(
-            hasBaseline,
-            snapshotPropertyMap,
-            plainCurrentPropertyMap,
-            typeMetadataNameFromSyntax,
-            propertyDeclaration))
-        {
-            return false;
-        }
-
-        unchangedMethods.Add(new WorkerUnchangedMethod
-        {
-            SourceProjectRelativePath = sourceProjectRelativePath,
-            TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-            MethodName = getterSymbol.Name,
-            ParameterTypeFullNames = parameterTypeFullNames,
-            GenericArity = getterSymbol.Arity
-        });
-        return true;
-    }
-
-    // What: true when a verified baseline holds this property and its getter is structurally
-    // unchanged against it. Records nothing, so callers that must stay inert can ask too.
-    internal static bool IsPropertyGetterUnchangedFromBaseline(
-        bool hasBaseline,
-        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-        string typeMetadataNameFromSyntax,
-        PropertyDeclarationSyntax propertyDeclaration)
-    {
         if (!hasBaseline
             || snapshotPropertyMap == null
             || plainCurrentPropertyMap == null)
@@ -68,9 +38,22 @@ internal static class PropertyGetterClassifier
         }
 
         string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-        return snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
+        if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
             && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
-            && ArePropertyGettersEquivalent(snapshotProperty, plainProperty);
+            && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
+        {
+            unchangedMethods.Add(new WorkerUnchangedMethod
+            {
+                SourceProjectRelativePath = sourceProjectRelativePath,
+                TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
+                MethodName = getterSymbol.Name,
+                ParameterTypeFullNames = parameterTypeFullNames,
+                GenericArity = getterSymbol.Arity
+            });
+            return true;
+        }
+
+        return false;
     }
 
     internal static (bool SkipGetter, MethodTransformDecision Decision) TrySkipPropertyGetterByDecision(
