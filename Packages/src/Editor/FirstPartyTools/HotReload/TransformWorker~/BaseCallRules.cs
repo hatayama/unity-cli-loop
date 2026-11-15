@@ -269,9 +269,17 @@ internal static class BaseCallRules
         return refKind == RefKind.None || refKind == RefKind.Ref || refKind == RefKind.Out || refKind == RefKind.In;
     }
 
+    // Why look through arrays: an int*[] parameter is as unsafe as int*, and the stand-in would
+    // declare it in a shim compiled without unsafe code.
     private static bool IsPointerLike(ITypeSymbol type)
     {
-        return type.TypeKind == TypeKind.Pointer || type.TypeKind == TypeKind.FunctionPointer;
+        ITypeSymbol elementType = type;
+        while (elementType is IArrayTypeSymbol arrayType)
+        {
+            elementType = arrayType.ElementType;
+        }
+
+        return elementType.TypeKind == TypeKind.Pointer || elementType.TypeKind == TypeKind.FunctionPointer;
     }
 
     private static bool TargetIsCompiled(INamedTypeSymbol typeSymbol, INamedTypeSymbol compiledType, IMethodSymbol target)

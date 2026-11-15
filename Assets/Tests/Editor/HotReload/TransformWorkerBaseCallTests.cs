@@ -256,6 +256,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a base call to a method taking an array of pointers is Skipped for its argument shape,
+        /// because the stand-in cannot declare that parameter in a shim compiled without unsafe code.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToPointerArrayParameter_IsSkippedAsArgumentShape()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "BaseCallToPointerArrayParameter.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        source,
+                        "        public virtual int Keyword(int @event) { return @event + 600; }\n",
+                        "        public virtual int Keyword(int @event) { return @event + 600; }\n"
+                        + "        public virtual unsafe int Pointers(int*[] values) { return 0; }\n"),
+                    "return base.Keyword(input) + 6125;",
+                    "return base.Pointers(null) + 7125;"));
+
+            AssertSkippedWithCode(
+                result,
+                nameof(HotReloadBaseCallDerivedFixture.CallKeywordParameter),
+                HotReloadWorkerReasonCode.MethodTransformBaseCallArgumentShape);
+        }
+
+        /// <summary>
         /// What: a stand-in for a base method whose parameter name is a C# keyword names its
         /// parameters by position, so the shim source stays valid C#.
         /// </summary>
