@@ -2805,6 +2805,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding an indexer with a bodied getter and setter to a compiled type reports
+        /// both accessors as Skipped with the accessor reason.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedIndexerWithBodies_SkipsEachAccessor()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindAddedIndexer.cs",
+                "            Marker = value;\n        }",
+                "            Marker = value;\n        }\n\n"
+                + "        public int this[int index] { get { return index; } set { Marker = value; } }");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindCtorFixture.get_Item",
+                ExpectedExplicitAccessorSkipReason);
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindCtorFixture.set_Item",
+                ExpectedExplicitAccessorSkipReason);
+        }
+
+        /// <summary>
         /// What: a compiled type with no verified baseline still reports its finalizer as
         /// Skipped, the same as a constructor, because nothing says the finalizer on disk is
         /// the one the loaded assembly already runs.
