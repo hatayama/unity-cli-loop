@@ -278,7 +278,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + ExpectedListEnumeratorFullName);
 
             Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
-            AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBase), "base");
+            // Why an entry: a direct base call in a compiled method's own statements is patched
+            // through a base-call stand-in; the same call inside a lambda stays skipped.
+            TransformWorkerEntryDto callsBaseEntry = FindEntryNamed(result, nameof(HotReloadE2EFixture.CallsBase));
+            Assert.That(callsBaseEntry, Is.Not.Null, "CallsBase must be an entry.");
+            Assert.That(callsBaseEntry.patchKind, Is.EqualTo("transplant"));
+            AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBaseInLambda), "Calls a base method from a lambda");
             AssertHasSkip(result, "ExplicitPing", "Explicit interface");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncConditionalPrivateField), "conditional access");
