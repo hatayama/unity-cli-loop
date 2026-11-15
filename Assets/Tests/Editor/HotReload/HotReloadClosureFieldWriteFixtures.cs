@@ -64,7 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int FieldAssignmentValueUsedInLambda()
         {
             Func<int> assign = () => _value = 7501;
-            return assign();
+            int returned = assign();
+            // Why both: the returned value pins the assignment's result and _value pins the store.
+            return returned * 10000 + _value;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

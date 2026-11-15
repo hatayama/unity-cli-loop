@@ -80,13 +80,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a Func lambda that returns the value of an assignment to a private field is
-        /// Patched and returns the edited value.
+        /// Patched, returns the edited value, and stores it in the field.
         /// </summary>
         [Test]
         public async Task Run_LambdaReturningAssignmentToPrivateField_IsPatchedAndReverts()
         {
             HotReloadClosureFieldWriteHost host = new HotReloadClosureFieldWriteHost();
-            await AssertPatchedAndRevertsAsync("FieldAssignmentValueUsedInLambda", host.FieldAssignmentValueUsedInLambda, "7501", "7502", 7501, 7502);
+            await AssertPatchedAndRevertsAsync("FieldAssignmentValueUsedInLambda", host.FieldAssignmentValueUsedInLambda, "7501", "7502", 75017501, 75027502);
         }
 
         /// <summary>
