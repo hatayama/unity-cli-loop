@@ -655,10 +655,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // resident worker host serializes requests, so only cutting the request count speeds the
             // run up; running the batches in order also keeps the failure report easy to read.
             List<string> failures = new List<string>();
-            for (int start = 0; start < sources.Count; start += SelfSnapshotBatchSize)
+            foreach (List<SelfSnapshotSource> batch in BuildSelfSnapshotBatches(sources))
             {
-                int batchLength = Math.Min(SelfSnapshotBatchSize, sources.Count - start);
-                List<SelfSnapshotSource> batch = sources.GetRange(start, batchLength);
                 TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                     BuildInputForSelfSnapshotSources(batch),
                     CancellationToken.None);
@@ -670,6 +668,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Empty,
                 "Self-snapshot must treat every HotReload test source as unchanged:\n"
                 + string.Join("\n", failures));
+        }
+
+        /// <summary>
+        /// Cuts the sources into batches of about SelfSnapshotBatchSize, keeping every file of one
+        /// stem (Fixture.cs, Fixture.Other.cs) in the same batch. Why: the parts of a partial type
+        /// are compared together, and a part whose sibling lands in another batch reads as declaration
+        /// drift, so a cut that fell between them failed whenever a new file shifted the order.
+        /// </summary>
+        private static List<List<SelfSnapshotSource>> BuildSelfSnapshotBatches(List<SelfSnapshotSource> sources)
+        {
+            List<List<SelfSnapshotSource>> batches = new List<List<SelfSnapshotSource>>();
+            List<SelfSnapshotSource> current = new List<SelfSnapshotSource>();
+            string currentStem = null;
+            foreach (SelfSnapshotSource source in sources)
+            {
+                string fileName = Path.GetFileName(source.FullPath);
+                string stem = fileName.Substring(0, fileName.IndexOf('.'));
+                if (current.Count >= SelfSnapshotBatchSize && stem != currentStem)
+                {
+                    batches.Add(current);
+                    current = new List<SelfSnapshotSource>();
+                }
+
+                current.Add(source);
+                currentStem = stem;
+            }
+
+            if (current.Count > 0)
+            {
+                batches.Add(current);
+            }
+
+            return batches;
         }
 
         /// <summary>
