@@ -40,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
         private const string PropertyIncrementNoShape = "inaccessible property increment/decrement has no accessor rewrite shape";
         private const string ExtensionMethodNotRewritten = "inaccessible extension method calls are not rewritten";
+        private const string MethodGroupNoShape = "inaccessible method group 'LengthPlus' (non-invocation) has no accessor rewrite shape";
         private const string BodyTypeNotVisible = "body uses a type that is not visible from an external assembly";
 
         /// <summary>
@@ -624,6 +625,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 "ClosureCallsInternalExtensionOfPublicClassInStaticForm(",
                 ExtensionMethodNotRewritten);
+        }
+
+        /// <summary>
+        /// What: a lambda that converts an internal extension method in reduced form to a delegate
+        /// (a method group, no call) is skipped with the method-group reason.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureHoldingInternalExtensionMethodGroup_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4901", "4902");
+
+            AssertHasSkip(result, "ClosureHoldsInternalExtensionMethodGroup(", MethodGroupNoShape);
+            Assert.That(FindEntry(result, "ClosureHoldsInternalExtensionMethodGroup"), Is.Null);
         }
 
         /// <summary>

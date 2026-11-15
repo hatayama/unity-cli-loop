@@ -3300,7 +3300,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return BuildInputForSource(ResolveE2EFixturePath(), ResolveE2EFixtureProjectRelativePath());
         }
 
-        private static TransformWorkerInputDto BuildInputForSource(
+        // Shared with worker tests in other classes that run one edited source against this assembly.
+        internal static TransformWorkerInputDto BuildInputForSource(
             string sourcePath,
             string projectRelativePath,
             string snapshotSource = null,
