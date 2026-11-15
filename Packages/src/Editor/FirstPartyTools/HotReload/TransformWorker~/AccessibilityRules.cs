@@ -19,6 +19,13 @@ internal static class AccessibilityRules
 {
     // What: the method an invocation really calls. A reduced extension call (x.M()) binds to a
     // ReducedExtension symbol; its static definition is the method the shim would have to reach.
+    internal static IMethodSymbol UnreducedMethod(IMethodSymbol method)
+    {
+        return method.MethodKind == MethodKind.ReducedExtension && method.ReducedFrom != null
+            ? method.ReducedFrom
+            : method;
+    }
+
     // What: whether an accessor for this inaccessible member would need an instance of a struct
     // as its receiver. Why such accessors are refused: Harmony cannot build a field ref whose
     // instance type is a value type, so the shim fails to bind, and a property or method delegate
@@ -28,13 +35,6 @@ internal static class AccessibilityRules
         return !member.IsStatic
             && member.ContainingType != null
             && member.ContainingType.IsValueType;
-    }
-
-    internal static IMethodSymbol UnreducedMethod(IMethodSymbol method)
-    {
-        return method.MethodKind == MethodKind.ReducedExtension && method.ReducedFrom != null
-            ? method.ReducedFrom
-            : method;
     }
 
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
