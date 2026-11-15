@@ -2,12 +2,12 @@
 
 Only ordinary method declarations and property getters with a body are patched. A
 property added to a compiled type applies as an added member instead (see below).
-Constructors, operators, and explicit event accessors are reported as `Skipped`
-when edited (with a verified baseline, unchanged members of those kinds produce
-no row). Finalizers and `interface` members (including default interface
-implementations) are never scanned: **edits** to them produce **no per-method
-entry at all** and are silently not applied — use `uloop compile` for those.
-Adding a constructor, operator, or explicit event accessor is reported as
+Constructors, finalizers, operators, and explicit event accessors are reported as
+`Skipped` when edited (with a verified baseline, unchanged members of those kinds
+produce no row). Methods and property getters of an `interface`, including default
+interface implementations, are reported as `Skipped` the same way. Use
+`uloop compile` for all of these.
+Adding a constructor, finalizer, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
 Methods and property getters of `partial` types are patched like any other; the
 other parts of the type are read from the assembly's source files.
@@ -118,7 +118,7 @@ compiled source) removes it from the ledger on that run. Deleting a *compiled*
 member is reported in `Warnings`, but its IL remains callable from unedited code
 until `uloop compile`.
 
-Adding a constructor, operator, or explicit event accessor is still out of
+Adding a constructor, finalizer, operator, or explicit event accessor is still out of
 scope and is reported as `Skipped`, same as edits to them. With a verified
 baseline, event declarations are compared per accessor, so only the edited
 add or remove appears as a `Skipped` row. A newly added explicit event, or
@@ -165,10 +165,12 @@ pattern that matches the property, `nameof`, `ref`/`out`/`in`, and conditional a
 on the property itself. A compound assignment or increment keeps hot reloading when it is
 rewritten as a plain assignment statement (`X = X + 1;`).
 
-Types, indexers, and added events the store cannot hold (a struct host, a delegate type not
-visible outside the assembly) are not reported per member — no `Skipped` row names them;
-at most they surface as outside-body drift in `Warnings`. Treat their silence
-as "not applied" and land them with `uloop compile`.
+A nested type added to a compiled type is named in a `Warnings` line (`Nested type
+requires a compile`), and its methods are reported as `Skipped`; so are the bodied
+accessors of an added indexer. An added event the store cannot hold (a struct host, a
+delegate type not visible outside the assembly) gets no row of its own: the methods
+that use it are `Skipped` with a reason that names it, and an event nothing uses
+changes no behavior. Land all of these with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
 Every other declaration edit — changing a `const` value, a compiled field's
@@ -446,7 +448,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | An added member's body cannot be fully bound in the hot-reload compilation | Hot reload cannot verify a member it cannot bind. A common cause: another file of the same reload, passed or pulled back in because it holds active patches, declares a compiled type from source, while a compiled API the body calls still names the compiled copy (for example, a lambda handed to a compiled `Register(Action<T>)`). The reason then names both types and the file declaring the compiled API. When the called member belongs to a type an earlier reload introduced and its signature was bound to the compiled copy, the reason names the introduced type and that compiled type instead. Either way the `Skipped` row names the step for that run (pass the file declaring the compiled API, leave the file declaring the type out, undo its edit and leave it out, or `uloop compile`), chosen from whether each file was passed, carried in, or already holds patches; a row about an added property's body points to the row of its accessor instead. A file passed this way is brought back by every later reload of the assembly while it stays unchanged, including the reload that re-applies after `--revert-all` or Play entry, until the next successful compile. When the skip deactivated added members an earlier reload applied, the next reload of the assembly retries their unchanged file once, so passing only the declaring file applies them again |
 | Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |
-| Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Skipped; `uloop compile` applies these edits |
+| Constructor (instance or static), finalizer, operator, conversion operator, or explicit event accessor (add/remove) | Skipped; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an added event the added-field store cannot hold leave nothing for the shim's Harmony accessor to bind |
 | Method raises or reads a field-like event through a conditional receiver (`other?.E`) | The shim has no name for the conditional receiver to pass to the accessor call |
 | Method names a field-like event inside `nameof` | The shim is a different type and cannot keep the bare event name |
