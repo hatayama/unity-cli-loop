@@ -2758,6 +2758,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda that takes an internal instance method of a struct as a method group is Skipped with the struct-member reason, not the method-group reason that suggests a lambda (which would be refused too).
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaTakingInternalStructMethodGroup_IsSkippedWithStructMemberReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedStructMemberCopyAsync(
+                "LambdaTakingInternalStructMethodGroup_IsSkippedWithStructMemberReason.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "compute(8451)", "compute(8461)"));
+
+            AssertSkippedReasonContains(result, ".MethodGroup(", StructMemberNoShapeReason);
+            Assert.That(SkippedReasonTextOf(result, ".MethodGroup("), Does.Not.Contain("lambda"));
+            AssertNoEntryNamed(result, "MethodGroup");
+        }
+
+        /// <summary>
+        /// What: a lambda deconstructing into an internal instance property of a struct is Skipped with the struct-member reason, not the deconstruction reason that suggests a separate statement (which would be refused too).
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaDeconstructingIntoInternalStructProperty_IsSkippedWithStructMemberReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedStructMemberCopyAsync(
+                "LambdaDeconstructingIntoInternalStructProperty_IsSkippedWithStructMemberReason.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "(8561, 1)", "(8562, 1)"));
+
+            AssertSkippedReasonContains(result, ".DeconstructProperty(", StructMemberNoShapeReason);
+            Assert.That(SkippedReasonTextOf(result, ".DeconstructProperty("), Does.Not.Contain("own statement"));
+            AssertNoEntryNamed(result, "DeconstructProperty");
+        }
+
+        /// <summary>
+        /// What: a lambda incrementing a struct property whose setter is internal is Skipped with the struct-member reason, not the increment reason that suggests '+= 1' (which would be refused too).
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaIncrementingStructPropertyWithInternalSetter_IsSkippedWithStructMemberReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedStructMemberCopyAsync(
+                "LambdaIncrementingStructPropertyWithInternalSetter_IsSkippedWithStructMemberReason.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "return 8571;", "return 8581;"));
+
+            AssertSkippedReasonContains(result, ".IncrementProperty(", StructMemberNoShapeReason);
+            Assert.That(SkippedReasonTextOf(result, ".IncrementProperty("), Does.Not.Contain("+= 1"));
+            AssertNoEntryNamed(result, "IncrementProperty");
+        }
+
+        /// <summary>
+        /// What: a lambda in a nested class that declares its own field-like event with the same name
+        /// and type as its struct's, reading the struct's event, is Skipped with the struct-member
+        /// reason instead of binding a field ref on the struct and failing.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedTwinEventClassReadingStructEvent_IsSkippedWithStructMemberReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedStructMemberCopyAsync(
+                "NestedTwinEventStructEventRead.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "? 9101 : 9102", "? 9111 : 9102"));
+
+            AssertSkippedReasonContains(result, "TwinWatcher.Peek(", StructMemberNoShapeReason);
+            AssertNoEntryNamed(result, "Peek");
+        }
+
+        /// <summary>
+        /// What: a lambda in that nested class assigning the struct's event as its backing field is
+        /// Skipped with the struct-member reason, through the event-assignment registration.
+        /// </summary>
+        [Test]
+        public async Task Run_NestedTwinEventClassAssigningStructEvent_IsSkippedWithStructMemberReason()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedStructMemberCopyAsync(
+                "NestedTwinEventStructEventAssign.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "return 9201;", "return 9211;"));
+
+            AssertSkippedReasonContains(result, "TwinWatcher.Clear(", StructMemberNoShapeReason);
+            AssertNoEntryNamed(result, "Clear");
+        }
+
+        /// <summary>
         /// What: an edited setter of a struct property is Skipped with the struct-host reason and
         /// emits no entry.
         /// </summary>
@@ -3787,6 +3863,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StructMemberFixtureProjectRelativePath,
                 fileName,
                 edit);
+        }
+
+        // The rendered reason of the first skipped row for the method, or an empty string.
+        private static string SkippedReasonTextOf(TransformWorkerClientResult result, string methodFragment)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped ?? Array.Empty<TransformWorkerSkippedDto>())
+            {
+                if (skipped.method != null && skipped.method.Contains(methodFragment) && skipped.reason != null)
+                {
+                    return HotReloadWorkerReasonText.Render(skipped.reason);
+                }
+            }
+
+            return string.Empty;
         }
 
         // A skipped row for the method whose rendered reason contains the fragment, so a reason that

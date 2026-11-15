@@ -27,7 +27,7 @@ internal static class AccessorReadRegistrar
 
         if (symbol is IEventSymbol eventSymbol)
         {
-            return TryRegisterEventRead(eventSymbol, plan, addedMemberAccess);
+            return TryRegisterEventRead(eventSymbol, plan, addedMemberAccess, out rejectReason);
         }
 
         if (symbol is IMethodSymbol methodSymbol
@@ -62,6 +62,12 @@ internal static class AccessorReadRegistrar
         if (AccessibilityRules.UnreducedMethod(methodSymbol).IsExtensionMethod)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
+        }
+
+        // Why the struct reason: a lambda calling an instance method of a struct is refused too.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
         }
 
         if (handlerAssignmentKind == SyntaxKind.SubtractAssignmentExpression)
@@ -101,12 +107,22 @@ internal static class AccessorReadRegistrar
     private static bool TryRegisterEventRead(
         IEventSymbol eventSymbol,
         AccessorPlan plan,
-        AddedMemberAccessLookup addedMemberAccess)
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
     {
+        rejectReason = null;
         // An added event the store keeps has no backing field to reach; its reads become
         // store calls any assembly can compile.
         if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
         {
+            return false;
+        }
+
+        // Why: only code inside the struct's text (a nested class) can read its event as a
+        // field, and the backing field of a struct instance has no field ref to bind.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(eventSymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
             return false;
         }
 

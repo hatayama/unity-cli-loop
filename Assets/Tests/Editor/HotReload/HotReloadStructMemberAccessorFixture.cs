@@ -21,6 +21,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             set { X = value; }
         }
 
+        public int Level
+        {
+            get { return X; }
+            internal set { X = value; }
+        }
+
         internal static int StaticCompute(int input)
         {
             return input * 2;
@@ -46,6 +52,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         internal void Raise()
         {
             Fired?.Invoke();
+        }
+
+        /// <summary>
+        /// A class nested in the struct that declares its own field-like event with the same name
+        /// and type as the struct's, so a lookup on the edited type alone finds a backing field.
+        /// </summary>
+        public class TwinWatcher
+        {
+            internal event Action Fired;
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int Peek(HotReloadStructMemberAccessorStruct target)
+            {
+                Fired?.Invoke();
+                Func<bool> unsubscribed = () => target.Fired == null;
+                return unsubscribed() ? 9101 : 9102;
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int Clear(HotReloadStructMemberAccessorStruct target)
+            {
+                Func<int> clear = () =>
+                {
+                    target.Fired = null;
+                    return 9201;
+                };
+                return clear();
+            }
         }
 
         /// <summary>
@@ -127,6 +161,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Func<int> read = () => _s.Value + 8541;
             return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int MethodGroup()
+        {
+            Func<int> call = () =>
+            {
+                Func<int, int> compute = _s.Compute;
+                return compute(8451);
+            };
+            return call();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int DeconstructProperty()
+        {
+            Func<int> touch = () =>
+            {
+                int other;
+                (_s.Value, other) = (8561, 1);
+                return other;
+            };
+            return touch();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int IncrementProperty()
+        {
+            Func<int> touch = () =>
+            {
+                _s.Level++;
+                return 8571;
+            };
+            return touch();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

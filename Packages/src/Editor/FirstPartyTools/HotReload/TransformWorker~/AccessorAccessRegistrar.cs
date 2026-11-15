@@ -337,30 +337,48 @@ internal static class AccessorAccessRegistrar
 
         if (leftSymbol is IEventSymbol eventSymbol)
         {
-            // An added event the store keeps is written through the store, never a backing field.
-            if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
-            {
-                return false;
-            }
-
-            if (EventAccessorRules.IsSubscriptionAssignment(assignment))
-            {
-                // += / -= stay on the publicized add/remove accessors, which keep the
-                // compiler's Interlocked.CompareExchange loop. Nothing to register.
-                return false;
-            }
-
-            if (!EventAccessorRules.IsBackingFieldWrite(assignment))
-            {
-                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape);
-                return false;
-            }
-
-            plan.GetOrAddEventBackingField(eventSymbol);
-            return true;
+            return TryRegisterEventAssignment(assignment, eventSymbol, plan, addedMemberAccess, out rejectReason);
         }
 
         return false;
+    }
+
+    private static bool TryRegisterEventAssignment(
+        AssignmentExpressionSyntax assignment,
+        IEventSymbol eventSymbol,
+        AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
+    {
+        rejectReason = null;
+        // An added event the store keeps is written through the store, never a backing field.
+        if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
+        {
+            return false;
+        }
+
+        if (EventAccessorRules.IsSubscriptionAssignment(assignment))
+        {
+            // += / -= stay on the publicized add/remove accessors, which keep the
+            // compiler's Interlocked.CompareExchange loop. Nothing to register.
+            return false;
+        }
+
+        if (!EventAccessorRules.IsBackingFieldWrite(assignment))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape);
+            return false;
+        }
+
+        // Why: the backing field of a struct instance has no field ref to bind.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(eventSymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
+        }
+
+        plan.GetOrAddEventBackingField(eventSymbol);
+        return true;
     }
 
     internal static bool TryRegisterInvocation(
