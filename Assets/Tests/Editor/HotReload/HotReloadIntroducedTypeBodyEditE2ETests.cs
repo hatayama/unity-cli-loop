@@ -46,6 +46,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string EditedStructReturn = "10";
         private const int IntroducedStructValue = 5;
         private const string IntroducedBaseCallerSimpleName = "HotReloadBodyEditIntroducedBaseCaller";
+        private const string IntroducedBaseCallerMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload." + IntroducedBaseCallerSimpleName;
         private const string StructHostSkipReason =
             "Struct (value type) methods are skipped; byref instance transplant is unverified.";
 
@@ -745,12 +747,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             await RunInIntroducedTypeDomainAsync(async readArtifact =>
             {
-                await RunReloadAsync(hostPath, callerPath, CreateBaseCallerEdits(
+                HotReloadOrchestratorResult introducing = await RunReloadAsync(hostPath, callerPath, CreateBaseCallerEdits(
                     hostPath,
                     callerPath,
                     "a",
                     "IntroducedBaseCallerHost.cs",
                     "IntroducedBaseCallerCaller.cs"));
+                Assert.That(
+                    CountFailures(introducing),
+                    Is.EqualTo(0),
+                    "Precondition: the first reload must introduce the type without failing.\n"
+                    + DescribeOutcomes(introducing));
+                HotReloadIntroducedTypeArtifact artifact = readArtifact();
+                Assert.That(artifact, Is.Not.Null, "Precondition: the first reload must retain an artifact.");
+                Assert.That(
+                    artifact.Assembly.GetType(IntroducedBaseCallerMetadataName, throwOnError: false),
+                    Is.Not.Null,
+                    "Precondition: the retained artifact must hold " + IntroducedBaseCallerMetadataName + ".");
 
                 HotReloadOrchestratorResult edited = await RunReloadAsync(hostPath, callerPath, CreateBaseCallerEdits(
                     hostPath,
