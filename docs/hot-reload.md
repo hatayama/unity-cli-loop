@@ -474,8 +474,8 @@ Wire details:
   plan, which lets a closure or async body of an `internal` class apply when that is all it
   reaches.
 - Still skipped in v2: bodies using internal types as types (above), private accesses with no
-  accessor-delegate shape (conditional access, indexers, static field writes, and the other
-  condition-b cases in the skill), and event add/remove on inaccessible events.
+  accessor-delegate shape (conditional access, indexers, and the other condition-b cases in
+  the skill), and event add/remove on inaccessible events.
 
 ## Convergence and Lifecycle
 
