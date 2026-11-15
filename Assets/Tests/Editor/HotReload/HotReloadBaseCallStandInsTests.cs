@@ -102,6 +102,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(redirected.GetParameters()[0].IsOut, Is.False, "The ref call must not run the out overload.");
         }
 
+        /// <summary>
+        /// What: a stand-in that matches two base overloads (Pick(T) and Pick(int) on Base&lt;int&gt;) fails
+        /// the preflight with a "matches more than one" message instead of picking one.
+        /// </summary>
+        [Test]
+        public void DescribeUnresolvableCallOrNull_StandInMatchingTwoOverloads_ReportsMoreThanOneMatch()
+        {
+            string error = HotReloadBaseCallStandIns.DescribeUnresolvableCallOrNull(
+                ShimMethod(typeof(HotReloadBaseCallCollidingShim), nameof(HotReloadBaseCallCollidingShim.CallsPick)),
+                typeof(HotReloadBaseCallCollidingDerived).GetMethod(nameof(HotReloadBaseCallCollidingDerived.Run)),
+                HotReloadPatchShape.Transplant);
+
+            Assert.That(error, Does.Contain("matches more than one method"));
+        }
+
         private static MethodInfo ShimMethod(Type shimType, string methodName)
         {
             MethodInfo method = shimType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
@@ -168,6 +183,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         public static int __uloopBaseCall__d1__Take__0(HotReloadBaseCallRefKindDerived self, ref int value) { throw new InvalidOperationException(); }
         public static int CallsByRef(HotReloadBaseCallRefKindDerived self, int input) { int value = input; return __uloopBaseCall__d1__Take__0(self, ref value); }
+    }
+
+    /// <summary>A base whose Pick overloads have the same parameter type once T is int.</summary>
+    public class HotReloadBaseCallCollidingBase<T>
+    {
+        public virtual int Pick(T value) { return 1; }
+        public virtual int Pick(int value) { return 2; }
+    }
+
+    /// <summary>The patched type whose base declares the colliding overloads.</summary>
+    public class HotReloadBaseCallCollidingDerived : HotReloadBaseCallCollidingBase<int>
+    {
+        public int Run(int input) { return input; }
+    }
+
+    /// <summary>A hand-written shim whose stand-in matches both Pick overloads one type up.</summary>
+    public static class HotReloadBaseCallCollidingShim
+    {
+        public static int __uloopBaseCall__d1__Pick__0(HotReloadBaseCallCollidingDerived self, int value) { throw new InvalidOperationException(); }
+        public static int CallsPick(HotReloadBaseCallCollidingDerived self, int input) { return __uloopBaseCall__d1__Pick__0(self, input); }
     }
 
     /// <summary>A shim type that declares no stand-in.</summary>

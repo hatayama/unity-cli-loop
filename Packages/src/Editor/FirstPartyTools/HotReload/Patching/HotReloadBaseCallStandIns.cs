@@ -48,12 +48,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return "A delegating shim cannot call a base method; run 'uloop compile'.";
                 }
 
-                if (ResolveBaseMethodOrNull(standIn, original) == null)
+                MethodInfo[] baseMethods = FindBaseMethodCandidates(standIn, original);
+                if (baseMethods.Length == 1)
                 {
-                    HotReloadBaseCallStandInNames.TryParse(standIn.Name, out int depth, out string methodName);
-                    return $"The base method '{methodName}' this body calls was not found {depth} type(s) above "
-                        + $"'{original.DeclaringType}'; run 'uloop compile'.";
+                    continue;
                 }
+
+                HotReloadBaseCallStandInNames.TryParse(standIn.Name, out int depth, out string methodName);
+                string outcome = baseMethods.Length == 0 ? "was not found" : "matches more than one method";
+                return $"The base method '{methodName}' this body calls {outcome} {depth} type(s) above "
+                    + $"'{original.DeclaringType}'; run 'uloop compile'.";
             }
 
             return null;
@@ -73,16 +77,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                MethodInfo baseMethod = ResolveBaseMethodOrNull(standIn, original);
-                if (baseMethod == null)
+                MethodInfo[] baseMethods = FindBaseMethodCandidates(standIn, original);
+                if (baseMethods.Length != 1)
                 {
                     throw new InvalidOperationException(
-                        "A base-call stand-in passed the preflight but no longer resolves: " + standIn.Name);
+                        "A base-call stand-in passed the preflight but no longer resolves to exactly one method: "
+                        + standIn.Name);
                 }
 
                 // Why keep OpCodes.Call: a non-virtual call is what C# emits for base.M(); callvirt
                 // would re-enter the override.
-                instruction.operand = baseMethod;
+                instruction.operand = baseMethods[0];
             }
         }
 
@@ -99,11 +104,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return method;
         }
 
-        private static MethodInfo ResolveBaseMethodOrNull(MethodInfo standIn, MethodBase original)
+        // What: the callable base methods a stand-in can stand for; exactly one when it resolves.
+        private static MethodInfo[] FindBaseMethodCandidates(MethodInfo standIn, MethodBase original)
         {
             if (!HotReloadBaseCallStandInNames.TryParse(standIn.Name, out int depth, out string methodName))
             {
-                return null;
+                return Array.Empty<MethodInfo>();
             }
 
             Type ancestor = original.DeclaringType;
@@ -112,31 +118,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ancestor = ancestor.BaseType;
                 if (ancestor == null)
                 {
-                    return null;
+                    return Array.Empty<MethodInfo>();
                 }
             }
 
             // Why skip the first parameter: it is the stand-in's receiver, not a base method parameter.
             ParameterInfo[] standInParameters = standIn.GetParameters().Skip(1).ToArray();
-            MethodInfo baseMethod = FindDeclaredNonGenericMethodOrNull(ancestor, methodName, standInParameters);
-            if (baseMethod == null || baseMethod.IsAbstract || baseMethod.ReturnType != standIn.ReturnType)
-            {
-                return null;
-            }
-
-            return baseMethod;
+            return FindDeclaredNonGenericMethods(ancestor, methodName, standInParameters)
+                .Where(baseMethod => !baseMethod.IsAbstract && baseMethod.ReturnType == standIn.ReturnType)
+                .ToArray();
         }
 
         // Why not Type.GetMethod: a base type that also declares M<T> with the same parameter types
         // makes that lookup throw AmbiguousMatchException, and a stand-in never targets a generic method.
-        private static MethodInfo FindDeclaredNonGenericMethodOrNull(
+        private static IEnumerable<MethodInfo> FindDeclaredNonGenericMethods(
             Type declaringType,
             string methodName,
             ParameterInfo[] standInParameters)
         {
             MethodInfo[] candidates = declaringType.GetMethods(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-            return candidates.FirstOrDefault(candidate =>
+            return candidates.Where(candidate =>
                 candidate.Name == methodName
                 && !candidate.IsGenericMethodDefinition
                 && ParametersMatch(candidate.GetParameters(), standInParameters));
