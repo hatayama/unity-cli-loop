@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.26.0](https://github.com/hatayama/unity-cli-loop/compare/v3.25.0...v3.26.0) (2026-11-15)
+
+
+### Features
+
+* Hot reload now applies edits to property setter bodies ([#3511](https://github.com/hatayama/unity-cli-loop/issues/3511)) ([115896c](https://github.com/hatayama/unity-cli-loop/commit/115896cd00d982c2e8b61fbce8a4e3bee6c243d4))
+
 ## [3.25.0](https://github.com/hatayama/unity-cli-loop/compare/v3.24.3...v3.25.0) (2026-11-15)
 
 
