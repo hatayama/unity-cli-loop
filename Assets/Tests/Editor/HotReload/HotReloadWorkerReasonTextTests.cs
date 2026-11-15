@@ -199,7 +199,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformBaseMemberCall,
                 NoArgs,
-                "Methods that call base. members are skipped; C# cannot express base calls outside the type.");
+                "Uses base. for something other than a direct call to a base method (a base property, indexer, "
+                + "event, or method group); C# cannot express that outside the type, so run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallOutsideOwnStatements,
+                NoArgs,
+                "Calls a base method from a lambda, local function, query, async or iterator body, a property "
+                + "accessor, a member or type hot reload added, or a body patched through a delegating shim; "
+                + "hot reload applies a base call only in a compiled method's own statements. Move the call "
+                + "there, or run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallArgumentShape,
+                NoArgs,
+                "Calls a generic or ref-returning base method or one with a params parameter, or passes named "
+                + "or omitted optional arguments to a base method; write every argument positionally, or run "
+                + "'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallTargetNotCompiled,
+                NoArgs,
+                "Calls a base method the compiled assembly does not hold yet (added or re-signatured since the "
+                + "last compile); run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
                 NoArgs,
