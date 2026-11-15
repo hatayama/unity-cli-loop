@@ -77,13 +77,16 @@ form that the next `uloop compile` reattaches to:
 ### Pause-Point Trigger
 
 A pause-point wait confirms its marker is armed before it sends its `--trigger` (or resumes PlayMode
-for `--resume-play`). With a dialog already open, the usual case, that query goes unanswered, so the
-wait sends nothing; it then looks for a dialog once before its first poll and, finding one, ends saying
-the trigger was not sent and to wait again with the same `--trigger` (and `--resume-play` when given).
-On macOS this took about 12 seconds: the expiry extension and the arm query each wait out their
-5-second timeout, then the look. A dialog its later watch finds ends such a wait the same way. Both
-need a look that can read Unity's windows; when it cannot, as with a locked screen, the wait runs on to
-its own end.
+for `--resume-play`). With a dialog already open, the usual case, Unity answers none of the wait's
+first requests, so the wait sends nothing. `await-pause-point` first extends the marker's expiry; when
+that goes unanswered it looks for a dialog at once, and `enable-pause-point --await`, which extends
+nothing, looks after its unanswered arm query instead. A wait looks at most once at its start, since a
+look takes about a second on macOS. Finding a dialog, it ends saying the trigger was not sent and to
+wait again with the same `--trigger` (and `--resume-play` when given); a wait asked for neither gets the
+started form. On macOS this took about 7 seconds: the expiry extension's 5-second timeout, then the look.
+A dialog its later watch finds ends such a wait the same way, and when Unity had answered that the
+marker was not armed, the last step says to re-enable it first. Both need a look that can read Unity's
+windows; when it cannot, as with a locked screen, the wait runs on to its own end.
 
 A pause-point wait that did send its `--trigger` sends it through the same dispatch, so the trigger's own send can be
 the one Unity fails with `main_thread_blocked`. The wait reads that result from the trigger's error
