@@ -17,14 +17,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public virtual int Value { get { return 400; } }
         public int NonVirtual(int input) { return input + 500; }
         public virtual int Keyword(int @event) { return @event + 600; }
+
+        // Why the symbol is never defined: the compiled caller drops these calls and their
+        // argument evaluation, which a hot-reloaded body could not reproduce.
+        [System.Diagnostics.Conditional("ULOOP_UNDEFINED_SYMBOL")]
+        public virtual void Check(int value) { }
+
+        [System.Diagnostics.Conditional("ULOOP_UNDEFINED_SYMBOL")]
+        public virtual void CheckThroughOverride(int value) { }
     }
 
     /// <summary>
-    /// Intermediate type without overrides, so a base call from the derived fixture binds two
-    /// types up.
+    /// Intermediate type that overrides only CheckThroughOverride, so every other base call from
+    /// the derived fixture binds two types up.
     /// </summary>
     public class HotReloadBaseCallMiddleFixture : HotReloadBaseCallBaseFixture
     {
+        // An override of a conditional method is conditional too, without carrying the attribute.
+        public override void CheckThroughOverride(int value) { }
     }
 
     /// <summary>
@@ -136,6 +146,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int CallParamsExpanded(int input) { return base.WithParams(input) + 6126; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallConditional(int input) { int count = input; base.Check(++count); return count + 6127; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallConditionalOverride(int input) { int count = input; base.CheckThroughOverride(++count); return count + 6128; }
     }
 
     /// <summary>Generic base type for a base call that binds through a constructed generic type.</summary>

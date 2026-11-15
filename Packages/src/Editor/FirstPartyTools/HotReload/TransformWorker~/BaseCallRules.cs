@@ -39,6 +39,7 @@ internal static class BaseCallRules
         }
 
         return FindPlacementReason(methodDeclaration, bodyNode, compiledType, baseExpressions)
+            ?? FindConditionalTargetReason(calls)
             ?? FindArgumentShapeReason(calls)
             ?? FindTargetReason(typeSymbol, compiledType, calls);
     }
@@ -158,6 +159,37 @@ internal static class BaseCallRules
         }
 
         return null;
+    }
+
+    // Why refused: the compiler drops a call to a [Conditional] method, and its argument
+    // evaluation, when the symbol is undefined; the stand-in call would run both.
+    private static WorkerReason FindConditionalTargetReason(List<BaseCall> calls)
+    {
+        foreach (BaseCall call in calls)
+        {
+            if (IsConditional(call.Target))
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseCallConditionalTarget);
+            }
+        }
+
+        return null;
+    }
+
+    // Why walk OverriddenMethod: an override of a [Conditional] method is conditional too, but the
+    // attribute stays on the method it overrides.
+    private static bool IsConditional(IMethodSymbol target)
+    {
+        for (IMethodSymbol method = target; method != null; method = method.OverriddenMethod)
+        {
+            if (method.GetAttributes().Any(attribute =>
+                attribute.AttributeClass?.ToDisplayString() == "System.Diagnostics.ConditionalAttribute"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static WorkerReason FindArgumentShapeReason(List<BaseCall> calls)

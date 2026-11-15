@@ -220,6 +220,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Calls a base method the compiled assembly does not hold yet (added or re-signatured since the "
                 + "last compile); run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallConditionalTarget,
+                NoArgs,
+                "Calls a base method marked [Conditional]; the compiler removes such a call when the symbol is "
+                + "not defined, and hot reload cannot do the same; run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
                 NoArgs,
                 "Lambda, local-function, or query-expression bodies that access private/internal members "

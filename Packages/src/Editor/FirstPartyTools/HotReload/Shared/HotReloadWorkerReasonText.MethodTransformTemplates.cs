@@ -60,6 +60,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "last compile); run 'uloop compile'.",
                     0));
             templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallConditionalTarget,
+                Plain(
+                    "Calls a base method marked [Conditional]; the compiler removes such a call when the symbol is "
+                    + "not defined, and hot reload cannot do the same; run 'uloop compile'.",
+                    0));
+            templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
                 Composing(
                     "Lambda, local-function, or query-expression bodies that access private/internal members "

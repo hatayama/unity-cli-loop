@@ -230,6 +230,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a base call to a method marked [Conditional] is Skipped, because the compiler drops the
+        /// call and its argument evaluation when the symbol is undefined and hot reload cannot.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToConditionalMethod_IsSkippedAsConditionalTarget()
+        {
+            await AssertEditIsSkippedWithCode(
+                "6127",
+                nameof(HotReloadBaseCallDerivedFixture.CallConditional),
+                HotReloadWorkerReasonCode.MethodTransformBaseCallConditionalTarget);
+        }
+
+        /// <summary>
+        /// What: a base call to an override of a [Conditional] method is Skipped too, although the
+        /// override itself carries no attribute.
+        /// </summary>
+        [Test]
+        public async Task Run_BaseCallToOverrideOfConditionalMethod_IsSkippedAsConditionalTarget()
+        {
+            await AssertEditIsSkippedWithCode(
+                "6128",
+                nameof(HotReloadBaseCallDerivedFixture.CallConditionalOverride),
+                HotReloadWorkerReasonCode.MethodTransformBaseCallConditionalTarget);
+        }
+
+        /// <summary>
         /// What: a stand-in for a base method whose parameter name is a C# keyword names its
         /// parameters by position, so the shim source stays valid C#.
         /// </summary>
@@ -268,9 +294,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "BaseCallToMethodAddedSinceCompile.cs",
                 source => ReplaceUniqueFragment(
                     ReplaceUniqueFragment(source, "6101", "7101"),
-                    "    public class HotReloadBaseCallMiddleFixture : HotReloadBaseCallBaseFixture\n    {\n    }",
-                    "    public class HotReloadBaseCallMiddleFixture : HotReloadBaseCallBaseFixture\n    {\n"
-                    + "        public override int Compute(int input) { return input + 6142; }\n    }"));
+                    "        public override void CheckThroughOverride(int value) { }\n",
+                    "        public override void CheckThroughOverride(int value) { }\n"
+                    + "        public override int Compute(int input) { return input + 6142; }\n"));
 
             AssertSkippedWithCode(
                 result,
