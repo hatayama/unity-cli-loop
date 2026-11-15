@@ -18,7 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// Worker coverage for bodies that reach private members through accessor shapes: added
     /// members are rewritten to public shim calls, compiled private static properties go through
     /// receiver-less accessor delegates, and a compiled private method call with ref or out
-    /// arguments stays refused.
+    /// arguments stays refused. Also covers inaccessible extension method calls, which have no
+    /// accessor shape in any call form.
     /// </summary>
     public class TransformWorkerAddedMemberAccessTests
     {
@@ -38,6 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
         private const string PropertyIncrementNoShape = "inaccessible property increment/decrement has no accessor rewrite shape";
+        private const string ExtensionMethodNotRewritten = "inaccessible extension method calls are not rewritten";
+        private const string BodyTypeNotVisible = "body uses a type that is not visible from an external assembly";
 
         /// <summary>
         /// What: an added method that reads an added private static property is added, not
@@ -544,6 +547,145 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindSkipReason(result, "AddedDetach"), Does.Not.Contain("keeps hot reloading"));
         }
 
+        /// <summary>
+        /// What: a lambda that reads a private field and calls an internal extension method in
+        /// reduced form (x.M()) is skipped with the extension-method reason instead of being
+        /// patched into a shim that cannot call the method.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureReadingPrivateFieldAndCallingInternalExtension_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4101", "4102");
+
+            AssertHasSkip(result, "ClosureReadsPrivateFieldAndCallsInternalExtension(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureReadsPrivateFieldAndCallsInternalExtension"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda whose only inaccessible use is an internal extension method called in
+        /// reduced form is skipped with the extension-method reason.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingOnlyInternalExtension_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4201", "4202");
+
+            AssertHasSkip(result, "ClosureCallsOnlyInternalExtension(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsOnlyInternalExtension"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: an async method that calls an internal extension method in reduced form is
+        /// skipped with the extension-method reason.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_AsyncMethodCallingInternalExtension_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4301", "4302");
+
+            AssertHasSkip(result, "AsyncCallsInternalExtension(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "AsyncCallsInternalExtension"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a method that calls an internal extension method in reduced form from its own
+        /// statements, with no lambda, stays a patch entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_OwnStatementCallingInternalExtension_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4401", "4402");
+
+            AssertEntryAndNotSkipped(result, "OwnStatementCallsInternalExtension");
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an internal extension method in static form through its
+        /// internal class is skipped because the body names a type no other assembly can see.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureNamingInternalExtensionClass_IsSkippedForTheInvisibleType()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4501", "4502");
+
+            AssertHasSkip(result, "ClosureCallsInternalExtensionInStaticForm(", BodyTypeNotVisible);
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an internal extension method of a public class in static form
+        /// is skipped with the extension-method reason.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingInternalExtensionOfPublicClassInStaticForm_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4701", "4702");
+
+            AssertHasSkip(
+                result,
+                "ClosureCallsInternalExtensionOfPublicClassInStaticForm(",
+                ExtensionMethodNotRewritten);
+        }
+
+        /// <summary>
+        /// What: a lambda that reads a private field and calls a public extension method in
+        /// reduced form stays a patch entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingPublicExtension_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4601", "4602");
+
+            AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsPublicExtension");
+        }
+
+        /// <summary>
+        /// What: a method added in this reload that calls an internal extension method in reduced
+        /// form is skipped with the extension-method reason instead of being added as a shim
+        /// method that cannot call it.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_AddedMethodCallingInternalExtension_IsSkipped()
+        {
+            string fixturePath = ResolveTestSourcePath("HotReloadExtensionCallFixtures.cs");
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "            return _value.Twice(4401);\n        }",
+                "            return _value.Twice(4401);\n        }\n\n"
+                + "        public int AddedCallsInternalExtension()\n        {\n"
+                + "            return _value.Twice(4801);\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the anchor must be in the fixture.");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ExtensionCallHostWithAddedMethod.cs", edited),
+                "Assets/Tests/Editor/HotReload/HotReloadExtensionCallFixtures.cs",
+                snapshotSource: onDisk);
+
+            AssertHasSkip(result, "AddedCallsInternalExtension(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "AddedCallsInternalExtension"), Is.Null);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunExtensionCallHostEditAsync(
+            string originalToken,
+            string editedToken)
+        {
+            string fixturePath = ResolveTestSourcePath("HotReloadExtensionCallFixtures.cs");
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(originalToken, editedToken, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the token must be in the fixture.");
+            return await RunWorkerOnSourceAsync(
+                WriteEdited("ExtensionCallHost.cs", edited),
+                "Assets/Tests/Editor/HotReload/HotReloadExtensionCallFixtures.cs",
+                snapshotSource: onDisk);
+        }
+
+        private static void AssertEntryAndNotSkipped(TransformWorkerClientResult result, string methodName)
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipReason(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
+        }
+
         private static void AssertAddedAndNotSkipped(TransformWorkerClientResult result, string methodNameFragment)
         {
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -659,6 +801,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 "HotReloadAddedMemberHost.cs");
             Assert.That(File.Exists(path), Is.True, "Added-member host source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveTestSourcePath(string fileName)
+        {
+            string path = Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName);
+            Assert.That(File.Exists(path), Is.True, "Test source missing: " + path);
             return Path.GetFullPath(path);
         }
 

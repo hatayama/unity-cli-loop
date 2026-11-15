@@ -17,6 +17,15 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class AccessibilityRules
 {
+    // What: the method an invocation really calls. A reduced extension call (x.M()) binds to a
+    // ReducedExtension symbol; its static definition is the method the shim would have to reach.
+    internal static IMethodSymbol UnreducedMethod(IMethodSymbol method)
+    {
+        return method.MethodKind == MethodKind.ReducedExtension && method.ReducedFrom != null
+            ? method.ReducedFrom
+            : method;
+    }
+
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
     {
         if (IsNonCrossAssemblySymbol(symbol))
