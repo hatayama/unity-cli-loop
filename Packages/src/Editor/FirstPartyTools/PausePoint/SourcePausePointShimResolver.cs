@@ -59,6 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (MethodDefinition containingMethod, SequencePoint sequencePoint) =
                 FindClosestSequencePointInMethodRange(
                     assemblyDefinition.MainModule,
+                    methodEntry.ShimMethod,
                     normalizedFilePath,
                     line,
                     methodEntry.SourceEndLine);
@@ -199,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static (MethodDefinition method, SequencePoint sequencePoint)
             FindClosestSequencePointInMethodRange(
                 ModuleDefinition module,
+                MethodBase shimMethod,
                 string normalizedFilePath,
                 int line,
                 int sourceEndLine)
@@ -208,6 +210,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (MethodDefinition method in SourcePausePointResolver.EnumerateMethodsInModule(module))
             {
+                // Why only the entry's own shim: the closing brace of the shim declared above maps
+                // onto the next source line, so a module-wide search can pick that other method's
+                // shim for a one-line method directly below it and arm the wrong member.
+                if (!IsOwnedByShimMethod(method, shimMethod))
+                {
+                    continue;
+                }
+
                 SequencePoint sequencePoint = SourcePausePointCecilSequencePointSelector.SelectInMethod(
                     method,
                     normalizedFilePath,
@@ -226,6 +236,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return (bestMethod, bestSequencePoint);
+        }
+
+        // What: whether a method is the shim method itself or a compiler-generated body of it
+        // (lambda, local function, async or iterator state machine), which carries
+        // "<ShimMethodName>" in its own name or in a nested declaring type's name.
+        private static bool IsOwnedByShimMethod(MethodDefinition method, MethodBase shimMethod)
+        {
+            if (method.MetadataToken.ToInt32() == shimMethod.MetadataToken)
+            {
+                return true;
+            }
+
+            TypeDefinition outermost = method.DeclaringType;
+            while (outermost.DeclaringType != null)
+            {
+                outermost = outermost.DeclaringType;
+            }
+
+            // Why compare top-level types: Cecil nests with '/' and reflection with '+', but a
+            // top-level type spells the same in both.
+            Type shimOutermost = shimMethod.DeclaringType;
+            while (shimOutermost.DeclaringType != null)
+            {
+                shimOutermost = shimOutermost.DeclaringType;
+            }
+
+            if (outermost.FullName != shimOutermost.FullName)
+            {
+                return false;
+            }
+
+            string marker = "<" + shimMethod.Name + ">";
+            if (method.Name.Contains(marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            for (TypeDefinition type = method.DeclaringType; type != outermost; type = type.DeclaringType)
+            {
+                if (type.Name.Contains(marker, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
