@@ -311,7 +311,7 @@ func waitForPausePointStatusBehindDialog(
 		}
 	}
 	unity.handle = handle
-	response, state, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+	response, state, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, pausePointWaitSideEffects{triggerHandle: handle, baselineDecided: true})
 	return response, state, err
 }
 
@@ -415,7 +415,7 @@ func TestPausePointWaitReadsATriggerResultThatArrivesDuringTheLook(t *testing.T)
 	}
 
 	_, _, triggerResult, _, err := waitForPausePointStatus(
-		context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+		context.Background(), unansweredIPCConnection(t), options, pausePointWaitSideEffects{triggerHandle: handle, baselineDecided: true})
 
 	cliError := assertTriggerNotRunBlockedByDialog(t, err)
 	if triggerResult != notRun || cliError.Details["TriggerResult"] != notRun {
@@ -445,7 +445,7 @@ func TestPausePointWaitReadsATriggerResultThatArrivesJustAfterTheLook(t *testing
 	}
 
 	_, _, triggerResult, _, err := waitForPausePointStatus(
-		context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+		context.Background(), unansweredIPCConnection(t), options, pausePointWaitSideEffects{triggerHandle: handle, baselineDecided: true})
 
 	cliError := assertTriggerNotRunBlockedByDialog(t, err)
 	if triggerResult != notRun || cliError.Details["TriggerResult"] != notRun {
@@ -480,7 +480,7 @@ func TestPausePointWaitStopsWaitingForUnitysAnswerAtItsDeadline(t *testing.T) {
 	}
 
 	startedAt := time.Now()
-	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, handle, nil, 0, false, true)
+	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, pausePointWaitSideEffects{triggerHandle: handle, baselineDecided: true})
 	elapsed := time.Since(startedAt)
 
 	if len(unity.reported) != 1 {

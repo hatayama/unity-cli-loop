@@ -65,9 +65,7 @@ func waitForPausePoint(
 	}
 
 	resumeResult := sideEffects.resumeResult
-	response, state, polledTriggerResult, hasBaseline, err := waitForPausePointStatus(
-		ctx, connection, options, sideEffects.triggerHandle, resumeResult,
-		sideEffects.baselineSequence, sideEffects.hasBaseline, sideEffects.baselineDecided)
+	response, state, polledTriggerResult, hasBaseline, err := waitForPausePointStatus(ctx, connection, options, sideEffects)
 
 	if state == pausePointWaitStateTriggerFailed && resumeResult != nil && resumeResult.Resumed {
 		repaused := repausePlayModeAfterAbandonedWait(ctx, connection, *resumeResult)
@@ -94,41 +92,50 @@ func waitForPausePoint(
 // the same fields, and passing them as a bag of locals kept waitForPausePointStatus
 // above the cyclop limit.
 type pausePointWaitLoopState struct {
-	lastResponse     pausePointStatusResponse
-	lastErr          error
-	triggerResult    *pausePointTriggerResult
-	hasResponse      bool
-	baselineSequence int
-	hasBaseline      bool
-	baselineDecided  bool
-	exitWatch        *clicore.UnityExitWatch
-	dialogWatch      *dialogBlockWatch
+	lastResponse  pausePointStatusResponse
+	lastErr       error
+	triggerResult *pausePointTriggerResult
+	// skippedTriggerResult is the reason the wait did not send its --trigger, nil when it sent it.
+	skippedTriggerResult *pausePointTriggerResult
+	hasResponse          bool
+	baselineSequence     int
+	hasBaseline          bool
+	baselineDecided      bool
+	exitWatch            *clicore.UnityExitWatch
+	dialogWatch          *dialogBlockWatch
 }
 
 func waitForPausePointStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
-	triggerHandle *pausePointTriggerHandle,
-	resumeResult *pausePointResumePlayResult,
-	baselineSequence int,
-	hasBaseline bool,
-	baselineDecided bool,
+	sideEffects pausePointWaitSideEffects,
 ) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, bool, error) {
 	waitContext, cancel := context.WithTimeout(ctx, options.timeout)
 	defer cancel()
 
 	state := pausePointWaitLoopState{
-		lastResponse:     pausePointStatusResponse{Id: options.id},
-		baselineSequence: baselineSequence,
-		hasBaseline:      hasBaseline,
-		baselineDecided:  baselineDecided,
-		exitWatch:        newUnityExitWatch(connection),
+		lastResponse:         pausePointStatusResponse{Id: options.id},
+		skippedTriggerResult: sideEffects.skippedTriggerResult,
+		baselineSequence:     sideEffects.baselineSequence,
+		hasBaseline:          sideEffects.hasBaseline,
+		baselineDecided:      sideEffects.baselineDecided,
+		exitWatch:            newUnityExitWatch(connection),
 		// Why the longer interval: a pause point holds the main thread on purpose, so most looks
 		// while this wait's polls go unanswered find no dialog.
 		dialogWatch: newDialogBlockWatch(connection, options.dialogWatch, pausePointDialogWatchInterval, dialogWatchStallThresholdSeconds),
 	}
-	triggerDone := triggerHandle.doneChannel()
+	resumeResult := sideEffects.resumeResult
+	triggerDone := sideEffects.triggerHandle.doneChannel()
+	// Why look before the first poll: an arm query Unity did not answer usually means a dialog holds
+	// the main thread, and the watch would otherwise find it only after its stall threshold.
+	if sideEffects.armQueryUnanswered {
+		if dialogs := state.dialogWatch.observeUnansweredProbe(waitContext); dialogs != nil {
+			response, waitState, waitErr := finishPausePointWaitBehindDialog(
+				ctx, waitContext, connection, options, &state, triggerDone, dialogs, resumeResult)
+			return response, waitState, state.triggerResult, state.hasBaseline, waitErr
+		}
+	}
 	ticker := time.NewTicker(pausePointStatusPoll)
 	defer ticker.Stop()
 	for {
@@ -197,6 +204,9 @@ func finishPausePointWaitBehindDialog(
 	dialogs []statusDialog,
 	resumeResult *pausePointResumePlayResult,
 ) (pausePointStatusResponse, pausePointWaitState, error) {
+	if blocked, unsent := pausePointWaitUnsentBehindDialog(options, dialogs, state.skippedTriggerResult, resumeResult); unsent {
+		return state.lastResponse, "", blocked
+	}
 	if state.triggerResult == nil {
 		state.triggerResult = awaitPausePointTriggerResultBehindDialog(
 			waitContext, connection, options, state.dialogWatch.lastFoundReport(), triggerDone)

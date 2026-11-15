@@ -26,6 +26,13 @@ const (
 	pausePointResumePlayResultDetailKey         = "ResumePlayResult"
 )
 
+const (
+	pausePointTriggerNotSentStoppedFormat   = "uloop %s stopped waiting; its --trigger command was not sent."
+	pausePointResumeNotSentStoppedFormat    = "uloop %s stopped waiting; --resume-play did not resume PlayMode."
+	pausePointNotSentClosedNextActionFormat = "After the dialog is closed, run uloop await-pause-point --id %s " +
+		"again with the same %s."
+)
+
 // pausePointTriggerNotRunBehindDialog returns the dialogs to report when a --trigger command was kept
 // from running by a dialog, and ok false for every other result. It accepts the trigger's
 // BLOCKED_BY_DIALOG envelope with Details.CommandNotRun, which names the dialogs itself, and, when
@@ -126,4 +133,44 @@ func pausePointTriggerNotRunBlockedByDialog(
 		safeToRetry:            true,
 		details:                details,
 	}
+}
+
+// pausePointWaitUnsentBehindDialog is the error of a wait that a dialog ended before it sent its
+// --trigger or resumed PlayMode, and ok false when it did either, or used neither. Nothing reached the
+// game then, so waiting again with the same arguments is safe. Why it does not say the marker stays
+// armed: the trigger was also skipped when Unity answered that the marker is not armed.
+func pausePointWaitUnsentBehindDialog(
+	options waitForPausePointOptions,
+	dialogs []statusDialog,
+	skippedTriggerResult *pausePointTriggerResult,
+	resumeResult *pausePointResumePlayResult,
+) (blockedByDialogError, bool) {
+	details := map[string]any{pausePointDialogIDDetailKey: options.id}
+	if resumeResult != nil {
+		details[pausePointResumePlayResultDetailKey] = resumeResult
+	}
+	var stoppedFormat, sameArguments string
+	switch {
+	case skippedTriggerResult != nil:
+		details[commandNotRunDetailKey] = true
+		details[pausePointTriggerResultDetailKey] = skippedTriggerResult
+		stoppedFormat, sameArguments = pausePointTriggerNotSentStoppedFormat, "--trigger"
+		if options.resumePlay {
+			sameArguments = "--trigger and --resume-play"
+		}
+	case options.triggerCommand == "" && resumeResult != nil && !resumeResult.Resumed:
+		stoppedFormat, sameArguments = pausePointResumeNotSentStoppedFormat, "--resume-play"
+	default:
+		return blockedByDialogError{}, false
+	}
+	return blockedByDialogError{
+		command:          options.commandName(),
+		dialogs:          dialogs,
+		canPress:         options.dialogWatch.canPressDialogs,
+		stopped:          fmt.Sprintf(stoppedFormat, options.commandName()),
+		closedNextAction: fmt.Sprintf(pausePointNotSentClosedNextActionFormat, shellSafePausePointID(options.id), sameArguments),
+		phase:            clierrors.ErrorPhaseResponseWaiting,
+		safeToRetry:      true,
+		details:          details,
+	}, true
 }

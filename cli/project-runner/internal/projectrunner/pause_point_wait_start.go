@@ -21,6 +21,10 @@ type pausePointWaitSideEffects struct {
 	hasBaseline          bool
 	baselineDecided      bool
 
+	// armQueryUnanswered is true when the arm confirmation got no answer, so the side effects were
+	// skipped without knowing why; a dialog holding the main thread is the usual reason.
+	armQueryUnanswered bool
+
 	// immediateHit is the arm-confirmation response when it already settles the wait: an
 	// already-hit marker that awaits no later hit. It is the wait's answer, so the poll loop must
 	// not run at all — see waitForPausePoint.
@@ -71,6 +75,7 @@ func startPausePointWaitSideEffects(
 			skippedTriggerResult: skippedTriggerResult,
 			resumeResult:         resumeResult,
 			baselineSequence:     -1,
+			armQueryUnanswered:   armQueryErr != nil,
 		}
 	}
 

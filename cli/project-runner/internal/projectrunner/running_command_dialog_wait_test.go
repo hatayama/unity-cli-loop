@@ -154,7 +154,7 @@ func TestPausePointWaitStopsWhenADialogHoldsUnity(t *testing.T) {
 		dialogWatch: newFakeDialogLook(commandDialogPlayerStoppedDialog()).deps(),
 	}
 
-	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, nil, 0, false, true)
+	_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, pausePointWaitSideEffects{baselineDecided: true})
 
 	assertStartedBlockedByDialog(t, classifyStartedDialogError(t, err, clicore.PausePointAwaitCommandName),
 		`After the dialog is closed, run uloop pause-point-status --id pause_point_dialog to see whether the marker was hit; `+
@@ -484,7 +484,7 @@ func TestStartedCommandWaitsKeepTheirOwnEndWithoutADialog(t *testing.T) {
 			useUnityProcessLookup(t, runningUnityProcessLookup)
 			options := waitForPausePointOptions{id: "pause_point_dialog", timeout: 300 * time.Millisecond, dialogWatch: look.deps()}
 			// The timeout's own final status query goes unanswered too, so the wait ends with that.
-			_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, nil, nil, 0, false, true)
+			_, _, _, _, err := waitForPausePointStatus(context.Background(), unansweredIPCConnection(t), options, pausePointWaitSideEffects{baselineDecided: true})
 			return err
 		},
 	}
