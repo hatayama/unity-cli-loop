@@ -2678,16 +2678,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
                 "ExplicitInterfacePropertyGetterEdited.cs",
-                onDisk => ReplaceUniqueFragment(
-                    onDisk,
-                    "get { return _stored; }\n            set { _stored = value + 9009; }",
-                    "get { return _stored + 1; }\n            set { _stored = value + 9009; }"));
+                onDisk => ReplaceExplicitContractGetterBody(onDisk));
 
             AssertSkippedWithCode(
                 result,
                 "get_Contract",
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
             AssertNoEntryFragment(result, "get_Contract");
+        }
+
+        // Why search from the explicit property's header: the getter line appears in several
+        // fixtures of that file, and a two-line fragment would depend on the line endings.
+        private static string ReplaceExplicitContractGetterBody(string onDisk)
+        {
+            const string getter = "get { return _stored; }";
+            int header = onDisk.IndexOf("int IHotReloadPropertySetterExplicitContract.Contract", StringComparison.Ordinal);
+            Assert.That(header, Is.GreaterThanOrEqualTo(0), "Precondition: the explicit property must exist.");
+            int index = onDisk.IndexOf(getter, header, StringComparison.Ordinal);
+            Assert.That(index, Is.GreaterThan(header), "Precondition: the explicit property must hold its getter.");
+            return onDisk.Substring(0, index) + "get { return _stored + 1; }" + onDisk.Substring(index + getter.Length);
         }
 
         /// <summary>

@@ -162,6 +162,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.Read(), Is.EqualTo(7 + 8109), "RevertAll must restore the compiled body.");
         }
 
+        /// <summary>
+        /// What: respelling the interface with global:: while editing the body still patches the
+        /// compiled implementation, and RevertAll restores it.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitImplementationRespelledWithGlobal_ApplyAndRevert_RunsTheEditedBody()
+        {
+            IHotReloadExplicitRunner runner = new HotReloadExplicitRunnerFixture();
+            Assert.That(runner.Run(), Is.EqualTo(8101));
+
+            await ApplyEditAsync(
+                "ExplicitE2EGlobal.cs",
+                "int IHotReloadExplicitRunner.Run() { return 8101; }",
+                "int global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadExplicitRunner.Run() { return 9101; }",
+                "IHotReloadExplicitRunner.Run(");
+
+            Assert.That(runner.Run(), Is.EqualTo(9101));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(runner.Run(), Is.EqualTo(8101), "RevertAll must restore the compiled body.");
+        }
+
         private static async Task ApplyEditAsync(
             string editedFileName,
             string token,

@@ -50,6 +50,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         int Read();
     }
 
+    /// <summary>Interface with a generic method.</summary>
+    public interface IHotReloadExplicitFactory
+    {
+        T Make<T>();
+    }
+
     /// <summary>Interface implemented by the fixture whose explicit body calls a base method.</summary>
     public interface IHotReloadExplicitBaseCaller
     {
@@ -131,6 +137,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Func<int> read = () => _seed;
             return read() + 8109;
         }
+    }
+
+    /// <summary>An explicit implementation on a generic class, which the generic gate keeps Skipped.</summary>
+    public class HotReloadExplicitGenericHostFixture<T> : IHotReloadExplicitRunner
+    {
+        int IHotReloadExplicitRunner.Run() { return 8110; }
+    }
+
+    /// <summary>A generic explicit method, which the generic gate keeps Skipped.</summary>
+    public class HotReloadExplicitGenericMethodFixture : IHotReloadExplicitFactory
+    {
+        T IHotReloadExplicitFactory.Make<T>() { int marker = 8111; return marker > 0 ? default(T) : default(T); }
     }
 
     /// <summary>An explicit implementation whose body calls a base method.</summary>

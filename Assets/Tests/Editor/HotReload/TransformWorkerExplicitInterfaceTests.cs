@@ -101,8 +101,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ExplicitAlias.cs",
                 source => ReplaceUniqueFragment(
                     ReplaceUniqueFragment(source, RunnerBody, "int RunnerAlias.Run() { return 9101; }"),
-                    "using System;\n",
-                    "using System;\nusing RunnerAlias = " + Namespace + ".IHotReloadExplicitRunner;\n"));
+                    "using System;",
+                    "using System; using RunnerAlias = " + Namespace + ".IHotReloadExplicitRunner;"));
 
             AssertEntry(result, typeof(HotReloadExplicitRunnerFixture), Namespace + ".IHotReloadExplicitRunner.Run", "Run");
         }
@@ -164,6 +164,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Read");
             Assert.That(entry.patchKind, Is.EqualTo("transplant"));
             Assert.That(result.Output.shimSource, Does.Contain("_seed"), result.Output.shimSource);
+        }
+
+        /// <summary>
+        /// What: an edited explicit implementation on a generic class stays Skipped with the generic
+        /// reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitImplementationOnGenericClass_IsSkippedAsGeneric()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitGenericHost.cs",
+                source => ReplaceUniqueFragment(source, "8110", "9110"));
+
+            AssertSkippedAsGeneric(result, "HotReloadExplicitGenericHostFixture");
+        }
+
+        /// <summary>
+        /// What: an edited generic explicit method stays Skipped with the generic reason and emits no
+        /// entry.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedGenericExplicitMethod_IsSkippedAsGeneric()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitGenericMethod.cs",
+                source => ReplaceUniqueFragment(source, "8111", "9111"));
+
+            AssertSkippedAsGeneric(result, "HotReloadExplicitGenericMethodFixture");
+        }
+
+        private static void AssertSkippedAsGeneric(TransformWorkerClientResult result, string fixtureTypeName)
+        {
+            Assert.That(
+                result.Output.entries.Any(entry => entry.typeMetadataName.Contains(fixtureTypeName)),
+                Is.False,
+                "A generic explicit implementation must not be emitted.");
+            Assert.That(
+                result.Output.skipped.Any(skipped =>
+                    skipped.method.Contains(fixtureTypeName)
+                    && skipped.reason?.code == HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType),
+                Is.True,
+                "Skipped=" + FormatSkipped(result));
         }
 
         private static TransformWorkerEntryDto AssertEntry(
