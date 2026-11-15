@@ -2291,7 +2291,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedUnsupportedMemberKindSkipReason =
-            "Constructors, operators, and event accessors are skipped; "
+            "Constructors, finalizers, operators, and event accessors are skipped; "
             + "run 'uloop compile' to apply these edits.";
 
         // Keep in sync with OutsideMethodBodyDriftWarningFormat in
@@ -2736,6 +2736,96 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ExpectedUnsupportedMemberKindSkipReason);
             AssertSkippedDoesNotContain(result, ".ctor()");
             AssertSkippedDoesNotContain(result, ".ctor(System.Int32)");
+        }
+
+        /// <summary>
+        /// What: editing one finalizer body reports that Finalize() as Skipped and omits an
+        /// unedited finalizer on a sibling type in the same file.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_Finalizer_SkipsEditedOmitsUnedited()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindFinalizer.cs",
+                "Marker = 121;",
+                "Marker = 1211;");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindFinalizerFixture.Finalize()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "HotReloadUnsupportedKindUneditedFinalizerFixture.Finalize()");
+        }
+
+        /// <summary>
+        /// What: a finalizer body-only edit reports the finalizer as Skipped and does not emit
+        /// the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_FinalizerBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindFinalizerBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "Marker = 121;",
+                "Marker = 1211;");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindFinalizerFixture.Finalize()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: adding a finalizer to a compiled type whose snapshot has none reports that
+        /// Finalize() as Skipped with the unsupported-member reason (same path as an edit) and
+        /// omits the type's unedited constructors and the unedited finalizers of other types.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_AddedFinalizer_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindAddedFinalizer.cs",
+                "            Marker = value;\n        }",
+                "            Marker = value;\n        }\n\n"
+                + "        ~HotReloadUnsupportedKindCtorFixture()\n"
+                + "        {\n"
+                + "            Marker = 0;\n"
+                + "        }");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindCtorFixture.Finalize()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, ".ctor()");
+            AssertSkippedDoesNotContain(result, ".ctor(System.Int32)");
+            AssertSkippedDoesNotContain(result, "HotReloadUnsupportedKindFinalizerFixture.Finalize()");
+            AssertSkippedDoesNotContain(result, "HotReloadUnsupportedKindUneditedFinalizerFixture.Finalize()");
+        }
+
+        /// <summary>
+        /// What: a compiled type with no verified baseline still reports its finalizer as
+        /// Skipped, the same as a constructor, because nothing says the finalizer on disk is
+        /// the one the loaded assembly already runs.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_CompiledTypeWithoutBaseline_StillSkipsFinalizer()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveUnsupportedKindFixturePath(),
+                ResolveUnsupportedKindFixtureProjectRelativePath(),
+                snapshotSource: null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindFinalizerFixture.Finalize()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindUneditedFinalizerFixture.Finalize()",
+                ExpectedUnsupportedMemberKindSkipReason);
         }
 
         /// <summary>

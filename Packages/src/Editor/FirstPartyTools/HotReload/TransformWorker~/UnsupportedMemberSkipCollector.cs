@@ -307,7 +307,7 @@ internal static class UnsupportedMemberSkipCollector
 
     // What: reports instance/static constructors, operators, conversion operators, and
     // explicit event accessors as Skipped. Unchanged members matching a verified snapshot
-    // are omitted. Field-like events and finalizers are not listed.
+    // are omitted. Field-like events are not listed.
     internal static void AppendUnsupportedMemberKindSkips(
         string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
@@ -315,9 +315,11 @@ internal static class UnsupportedMemberSkipCollector
         SemanticModel semanticModel,
         List<WorkerSkipped> skipped,
         Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> snapshotDestructorMap,
         Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
         Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
         Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> plainCurrentDestructorMap,
         Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
         Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap,
         bool servedByRetainedArtifact)
@@ -339,6 +341,13 @@ internal static class UnsupportedMemberSkipCollector
             skipped,
             snapshotConstructorMap,
             plainCurrentConstructorMap);
+        AppendFinalizerSkips(
+            typeDeclaration,
+            typeMetadataNameFromSyntax,
+            semanticModel,
+            skipped,
+            snapshotDestructorMap,
+            plainCurrentDestructorMap);
         AppendOperatorSkips(
             typeDeclaration,
             typeMetadataNameFromSyntax,
@@ -398,6 +407,38 @@ internal static class UnsupportedMemberSkipCollector
             }
 
             IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(constructorDeclaration);
+            AppendUnsupportedKindSkip(skipped, methodSymbol);
+        }
+    }
+
+    // Why the same branches as AppendConstructorSkips: a finalizer row must appear under exactly
+    // the conditions a constructor row does (edited, added, or no verified baseline).
+    internal static void AppendFinalizerSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped,
+        Dictionary<string, DestructorDeclarationSyntax> snapshotDestructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> plainCurrentDestructorMap)
+    {
+        foreach (DestructorDeclarationSyntax destructorDeclaration in typeDeclaration.Members
+            .OfType<DestructorDeclarationSyntax>())
+        {
+            string destructorKey = WorkerSyntaxIndex.BuildSyntaxDestructorKey(typeMetadataNameFromSyntax);
+            if (snapshotDestructorMap != null
+                && plainCurrentDestructorMap != null
+                && snapshotDestructorMap.TryGetValue(
+                    destructorKey,
+                    out DestructorDeclarationSyntax snapshotDestructor)
+                && plainCurrentDestructorMap.TryGetValue(
+                    destructorKey,
+                    out DestructorDeclarationSyntax plainDestructor)
+                && SyntaxFactory.AreEquivalent(snapshotDestructor, plainDestructor, topLevel: false))
+            {
+                continue;
+            }
+
+            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(destructorDeclaration);
             AppendUnsupportedKindSkip(skipped, methodSymbol);
         }
     }

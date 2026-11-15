@@ -83,13 +83,28 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
     }
 
-    // Why strip ctor/operator/event-accessor bodies: those members are reported as
+    // Why strip ctor/finalizer/operator/event-accessor bodies: those members are reported as
     // per-member Skipped, so a body-only edit must not also look like outside-body drift.
     // Signature, attributes, and constructor initializers stay so those edits still warn.
     public override SyntaxNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
     {
         ConstructorDeclarationSyntax visited =
             (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node);
+        if (visited.Body == null && visited.ExpressionBody == null)
+        {
+            return visited;
+        }
+
+        return visited
+            .WithExpressionBody(null)
+            .WithSemicolonToken(default(SyntaxToken))
+            .WithBody(SyntaxFactory.Block());
+    }
+
+    public override SyntaxNode VisitDestructorDeclaration(DestructorDeclarationSyntax node)
+    {
+        DestructorDeclarationSyntax visited =
+            (DestructorDeclarationSyntax)base.VisitDestructorDeclaration(node);
         if (visited.Body == null && visited.ExpressionBody == null)
         {
             return visited;

@@ -672,7 +672,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Constructors, operators, and event accessors are skipped; "
+                "Constructors, finalizers, operators, and event accessors are skipped; "
                 + "run 'uloop compile' to apply these edits.";
             AssertHasSkipped(result, ".ctor()", expectedReason);
 
