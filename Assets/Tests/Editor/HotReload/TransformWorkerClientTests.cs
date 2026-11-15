@@ -2374,6 +2374,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a source set accessor whose compiled accessor is init-only stays Skipped with the
+        /// accessor reason and no entry, since the compiled property has no ordinary setter to patch.
+        /// </summary>
+        [Test]
+        public async Task Run_CompiledInitAccessorNowSetInSource_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "CompiledInitNowSet.cs",
+                onDisk => ReplaceUniqueFragment(
+                    onDisk,
+                    "init { _stored = value + 5005; }",
+                    "set { _stored = value + 5006; }"));
+
+            AssertSkippedContains(result, "set_InitStored", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_InitStored");
+        }
+
+        /// <summary>
+        /// What: a setter whose property became static since the last compile stays Skipped with the
+        /// accessor reason and no entry, since a static shim would not match the compiled instance
+        /// setter's shape.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterOfPropertyMadeStatic_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "SetterOfPropertyMadeStatic.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "public int Widened", "public static int Widened"),
+                    "value + 1212",
+                    "value + 1213"));
+
+            AssertSkippedContains(result, "set_Widened", ExpectedExplicitAccessorSkipReason);
+            AssertNoEntryNamed(result, "set_Widened");
+        }
+
+        /// <summary>
         /// What: a setter-body-only edit is not read as an edit outside method bodies, because the
         /// patched setter body is stripped before the declaration compare.
         /// </summary>
