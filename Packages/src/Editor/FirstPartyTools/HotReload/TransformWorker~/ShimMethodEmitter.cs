@@ -56,6 +56,18 @@ internal static class ShimMethodEmitter
                 shimTypes,
                 assemblyGlobalUsings,
                 shimNames);
+            PropertySetterEmitter.EmitPropertySettersForType(
+                typeState,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                addedPropertyCatalog,
+                input,
+                entries,
+                skipped,
+                unchangedMethods,
+                shimTypes,
+                assemblyGlobalUsings,
+                shimNames);
         }
     }
 

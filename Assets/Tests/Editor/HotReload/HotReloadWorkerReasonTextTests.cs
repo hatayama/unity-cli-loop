@@ -568,7 +568,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor,
                 NoArgs,
-                "Property setter, init, or indexer accessors are skipped; "
+                "Property init accessors, indexer accessors, and setters the compiled property does not have yet are skipped; "
                 + "run 'uloop compile' to apply accessor edits.");
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind,

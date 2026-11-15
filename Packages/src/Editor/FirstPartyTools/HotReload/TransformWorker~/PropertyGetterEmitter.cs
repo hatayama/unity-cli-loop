@@ -304,7 +304,22 @@ internal static class PropertyGetterEmitter
 
         string shimMethodName = shimNames.NextShimMethodName(getterSymbol.Name);
 
-        FileLinePositionSpan originalSpan = propertyDeclaration.GetLocation().GetLineSpan();
+        // Why narrow to the get accessor only beside a bodied set: the setter gets an entry of its
+        // own, and overlapping spans leave compile-error attribution and pause-point resolution
+        // unable to tell the two apart. Decided from syntax alone so it does not depend on whether
+        // the setter was actually patched in this run.
+        SyntaxNode spanNode = propertyDeclaration;
+        if (PropertySetterClassifier.FindBodiedSetAccessorOrNull(propertyDeclaration) != null)
+        {
+            AccessorDeclarationSyntax getAccessor = propertyDeclaration.AccessorList.Accessors
+                .FirstOrDefault(accessor => accessor.IsKind(SyntaxKind.GetAccessorDeclaration));
+            if (getAccessor != null)
+            {
+                spanNode = getAccessor;
+            }
+        }
+
+        FileLinePositionSpan originalSpan = spanNode.GetLocation().GetLineSpan();
         int sourceStartLine = originalSpan.StartLinePosition.Line + 1;
         int sourceEndLine = originalSpan.EndLinePosition.Line + 1;
 

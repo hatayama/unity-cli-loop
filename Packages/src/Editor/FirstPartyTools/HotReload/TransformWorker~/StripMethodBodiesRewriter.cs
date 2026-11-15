@@ -39,8 +39,9 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             .WithBody(SyntaxFactory.Block());
     }
 
-    // Why strip getters only: patched getter edits must not look like outside-body drift.
-    // Setter/init/indexer bodies stay so those still-unapplied edits keep the warning.
+    // Why strip getter and setter bodies only: both are patched now, so their body edits must not
+    // look like outside-body drift. Init and indexer bodies stay so those still-unapplied edits
+    // keep the warning.
     public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
     {
         PropertyDeclarationSyntax visited = (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node);
@@ -64,8 +65,9 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
         List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
         foreach (AccessorDeclarationSyntax accessor in visited.AccessorList.Accessors)
         {
-            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
-                && (accessor.Body != null || accessor.ExpressionBody != null))
+            bool isGetOrSet = accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.SetAccessorDeclaration);
+            if (isGetOrSet && (accessor.Body != null || accessor.ExpressionBody != null))
             {
                 accessors.Add(
                     accessor

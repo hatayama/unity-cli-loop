@@ -558,11 +558,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: property getters with bodies are Patched; property setters and indexer getters
-        /// with bodies stay Skipped with the accessor reason; auto-property accessors stay unlisted.
+        /// What: property getters and setters with bodies are Patched; indexer getters with bodies
+        /// stay Skipped with the accessor reason; auto-property accessors stay unlisted.
         /// </summary>
         [Test]
-        public async Task Run_PropertyGettersPatched_SetterAndIndexerAccessorsSkipped()
+        public async Task Run_PropertyGettersAndSettersPatched_IndexerAccessorsSkipped()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -580,7 +580,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            get { return _secret + 1; }\n"
                     + "        }\n"
                     + "\n"
-                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped.\n"
+                    + "        // Explicit-body setter — worker must patch set_ExplicitBodySetter.\n"
                     + "        public int ExplicitBodySetter\n"
                     + "        {\n"
                     + "            set { _secret = value + 1; }\n"
@@ -598,7 +598,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Property setter, init, or indexer accessors are skipped; "
+                "Property init accessors, indexer accessors, and setters the compiled property does not have yet are skipped; "
                 + "run 'uloop compile' to apply accessor edits.";
             bool foundPropertyGetterPatched = false;
             bool foundIndexerGetter = false;
@@ -619,7 +619,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundIndexerGetter = true;
                 }
 
-                if (skippedWithAccessorReason && outcome.Method.Contains("set_ExplicitBodySetter"))
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("set_ExplicitBodySetter"))
                 {
                     foundPropertySetter = true;
                 }
@@ -641,7 +642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 foundPropertySetter,
                 Is.True,
-                "Expected the explicit-body setter (set_ExplicitBodySetter) to be Skipped with the accessor out-of-scope reason.");
+                "Expected the explicit-body setter (set_ExplicitBodySetter) to be Patched; got: " + FormatOutcomes(result));
             Assert.That(
                 foundAutoPropertyAccessor,
                 Is.False,
@@ -817,6 +818,129 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 instance.DefaultValue,
                 Is.EqualTo(805),
                 "RevertAll must restore the compiled interface getter body.");
+        }
+
+        /// <summary>
+        /// What: editing a compiled property's setter body patches the next assignment, --status
+        /// lists the Active set_ row with its parameter type, and RevertAll restores the compiled
+        /// setter body.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedPropertySetter_ApplyStatusRevert_UpdatesRuntimeBehavior()
+        {
+            HotReloadPropertySetterFixture before = new HotReloadPropertySetterFixture();
+            before.Stored = 1;
+            Assert.That(before.Stored, Is.EqualTo(1002));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterStored.cs",
+                "value + 1001",
+                "value + 1002");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_Stored");
+            HotReloadPropertySetterFixture after = new HotReloadPropertySetterFixture();
+            after.Stored = 1;
+            Assert.That(after.Stored, Is.EqualTo(1003), "Patched setter must run the edited body.");
+
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse status = baseResponse as HotReloadResponse;
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Success, Is.True);
+            bool foundActiveSetter = false;
+            foreach (HotReloadMethodResult method in status.Methods)
+            {
+                if (method.Kind == "Active" && method.Method.Contains("set_Stored(System.Int32)"))
+                {
+                    foundActiveSetter = true;
+                }
+            }
+
+            Assert.That(foundActiveSetter, Is.True, "Status must list the Active set_Stored(System.Int32) row.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            HotReloadPropertySetterFixture reverted = new HotReloadPropertySetterFixture();
+            reverted.Stored = 1;
+            Assert.That(reverted.Stored, Is.EqualTo(1002), "RevertAll must restore the compiled setter body.");
+        }
+
+        /// <summary>
+        /// What: after a setter patch, applying the source restored to the baseline records the
+        /// setter as unchanged, which removes its patch and runs the compiled body again.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedSetterRestoredToBaseline_RevertsThePatch()
+        {
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterRestored.cs",
+                "value + 1001",
+                "value + 1002");
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_Stored");
+
+            string fixturePath = ResolveSetterFixturePath();
+            string restoredPath = WriteEditedSource("PropertySetterRestored.cs", File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult restored = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                restoredPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(restored);
+            HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
+            fixture.Stored = 1;
+            Assert.That(fixture.Stored, Is.EqualTo(1002), "A setter restored to the baseline must run the compiled body.");
+            foreach (HotReloadActivePatchInfo active in HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches())
+            {
+                Assert.That(active.MethodKey, Does.Not.Contain("set_Stored("), "The restored setter must have no active patch.");
+            }
+        }
+
+        /// <summary>
+        /// What: an edited setter whose lambda reads a private field is accessor-rewritten and
+        /// patched, so the next assignment runs the edited body.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterWithLambdaPrivateAccess_AccessorizesAndPatches()
+        {
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterLambdaStored.cs",
+                "_stored + 6006",
+                "_stored + 6106");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_LambdaStored");
+            HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
+            fixture.LambdaStored = 1;
+            Assert.That(fixture.LambdaStored, Is.EqualTo(6107), "Patched setter must run the edited lambda.");
+        }
+
+        /// <summary>
+        /// What: editing an interface default property setter patches assignments made through the
+        /// interface, and RevertAll restores the compiled default setter.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInterfaceDefaultPropertySetter_ApplyAndRevert_UpdatesRuntimeBehavior()
+        {
+            IHotReloadPropertySetterInterfaceFixture target = new HotReloadPropertySetterInterfaceImpl();
+            target.Sink = 1;
+            Assert.That(HotReloadPropertySetterInterfaceSink.Last, Is.EqualTo(8009));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterInterfaceSink.cs",
+                "value + 8008",
+                "value + 8009");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_Sink");
+            target.Sink = 1;
+            Assert.That(HotReloadPropertySetterInterfaceSink.Last, Is.EqualTo(8010), "Patched default setter must run the edited body.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            target.Sink = 1;
+            Assert.That(HotReloadPropertySetterInterfaceSink.Last, Is.EqualTo(8009), "RevertAll must restore the compiled default setter.");
         }
 
         /// <summary>
@@ -8899,6 +9023,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReloadCoreFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "Core fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSetterFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadPropertySetterFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Setter fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        /// <summary>
+        /// Applies the setter fixture with one unique fragment replaced, through the orchestrator.
+        /// </summary>
+        private static async Task<HotReloadOrchestratorResult> ApplyEditedSetterFixtureAsync(
+            string fileName,
+            string fragment,
+            string replacement)
+        {
+            string fixturePath = ResolveSetterFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            Assert.That(
+                onDisk.IndexOf(fragment, StringComparison.Ordinal),
+                Is.EqualTo(onDisk.LastIndexOf(fragment, StringComparison.Ordinal)).And.GreaterThanOrEqualTo(0),
+                "Precondition: the fixture must hold " + fragment + " exactly once.");
+            string editedPath = WriteEditedSource(fileName, onDisk.Replace(fragment, replacement, StringComparison.Ordinal));
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
         }
 
         private static string ResolveShapeFixturePath()
