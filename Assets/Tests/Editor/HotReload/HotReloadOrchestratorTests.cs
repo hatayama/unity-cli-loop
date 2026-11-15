@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9333,12 +9334,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Precondition: compiled sibling const declaration must still be on disk.");
             EditorApplication.LockReloadAssemblies();
+            FileRestoreScope restore = new FileRestoreScope(new[] { path });
             File.WriteAllText(
                 path,
                 original.Replace(
                     compiledDeclaration,
                     "public const int SiblingTuning = " + newValue + ";"));
-            return new FileRestoreScope(new[] { path }, new[] { original });
+            return restore;
         }
 
         private static IDisposable MutateSiblingDefinitionsToAddConst()
@@ -9351,12 +9353,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Precondition: compiled sibling const declaration must still be on disk.");
             EditorApplication.LockReloadAssemblies();
+            FileRestoreScope restore = new FileRestoreScope(new[] { path });
             File.WriteAllText(
                 path,
                 original.Replace(
                     compiledDeclaration,
                     compiledDeclaration + "\n        public const int AddedSiblingTuning = 9;"));
-            return new FileRestoreScope(new[] { path }, new[] { original });
+            return restore;
         }
 
         private static string ResolveSiblingEnumDefinitionsPath()
@@ -9399,15 +9402,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Precondition: compiled sibling enum fixtures must still be on disk.");
             EditorApplication.LockReloadAssemblies();
+            FileRestoreScope restore = new FileRestoreScope(new[] { definitionsPath, userPath });
             File.WriteAllText(
                 definitionsPath,
                 originalDefinitions.Replace(compiledMember, compiledMember + ",\n        Third = 3"));
             File.WriteAllText(
                 userPath,
                 originalUser.Replace(compiledUse, "(int)HotReloadSiblingEnum.Third"));
-            return new FileRestoreScope(
-                new[] { definitionsPath, userPath },
-                new[] { originalDefinitions, originalUser });
+            return restore;
+        }
+
+        /// <summary>
+        /// What: touching a fixture file and disposing the restore scope leaves its bytes exactly as
+        /// they were, including a UTF-8 BOM and CRLF line endings.
+        /// </summary>
+        [Test]
+        public void TouchFilesWithTrailingComment_OnBomCrlfFile_RestoresOriginalBytes()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "uloop-restore-bytes-" + Guid.NewGuid().ToString("N") + ".cs");
+            byte[] original = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'a', (byte)'\r', (byte)'\n', (byte)'b', (byte)'\r', (byte)'\n' };
+            File.WriteAllBytes(path, original);
+            try
+            {
+                using (TouchFilesWithTrailingComment(new[] { path }))
+                {
+                    Assert.That(File.ReadAllBytes(path), Is.Not.EqualTo(original), "Precondition: the touch changes the file.");
+                }
+
+                Assert.That(File.ReadAllBytes(path), Is.EqualTo(original));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         private static IDisposable TouchSmallestSiblingsWithTrailingComment(
@@ -9455,17 +9482,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // contains multi-thousand-line test files that would dominate runtime without
             // changing what the cap warning asserts.
             siblingPaths.Sort(CompareByFileLengthThenPath);
-            string[] paths = new string[siblingCount];
-            string[] originals = new string[siblingCount];
+            return TouchFilesWithTrailingComment(siblingPaths.GetRange(0, siblingCount).ToArray());
+        }
+
+        // What: appends a probe comment to each file and returns the scope that restores them.
+        private static IDisposable TouchFilesWithTrailingComment(string[] paths)
+        {
             EditorApplication.LockReloadAssemblies();
-            for (int index = 0; index < siblingCount; index++)
+            FileRestoreScope restore = new FileRestoreScope(paths);
+            // Why append: the original bytes stay untouched, so the file keeps its BOM and line endings.
+            UTF8Encoding withoutBom = new UTF8Encoding(false);
+            foreach (string path in paths)
             {
-                paths[index] = siblingPaths[index];
-                originals[index] = File.ReadAllText(paths[index]);
-                File.WriteAllText(paths[index], originals[index] + "\n// sibling-scan-cap-probe");
+                File.AppendAllText(path, "\n// sibling-scan-cap-probe", withoutBom);
             }
 
-            return new FileRestoreScope(paths, originals);
+            return restore;
         }
 
         private static int CompareByFileLengthThenPath(string left, string right)
@@ -9508,19 +9540,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new DirectoryRestoreScope(snapshotDirectory, hiddenDirectory);
         }
 
+        // What: holds the files' original bytes from construction and writes them back on Dispose.
+        // Why bytes: a string round trip through File.WriteAllText drops a UTF-8 BOM, so a restored
+        // fixture would differ from the committed one.
         private sealed class FileRestoreScope : IDisposable
         {
             private readonly string[] _paths;
-            private readonly string[] _originals;
+            private readonly byte[][] _originals;
             private bool _disposed;
 
-            public FileRestoreScope(string[] paths, string[] originals)
+            public FileRestoreScope(string[] paths)
             {
                 Debug.Assert(paths != null, "paths must not be null.");
-                Debug.Assert(originals != null, "originals must not be null.");
-                Debug.Assert(paths.Length == originals.Length, "paths and originals must be the same length.");
                 _paths = paths;
-                _originals = originals;
+                _originals = new byte[paths.Length][];
+                for (int index = 0; index < paths.Length; index++)
+                {
+                    _originals[index] = File.ReadAllBytes(paths[index]);
+                }
             }
 
             public void Dispose()
@@ -9533,7 +9570,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 _disposed = true;
                 for (int index = 0; index < _paths.Length; index++)
                 {
-                    File.WriteAllText(_paths[index], _originals[index]);
+                    File.WriteAllBytes(_paths[index], _originals[index]);
                 }
 
                 EditorApplication.UnlockReloadAssemblies();
