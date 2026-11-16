@@ -78,7 +78,7 @@ changed are patched (`UnchangedTotal` counts the rest).
   patched every live compiled caller, none in another assembly; a rename or parameter change
   applies as an added method and warns about call sites left on the old signature.
 - Constructors, finalizers, operators, struct methods, interface methods, compiled
-  init/indexer accessors, and event accessors are `Skipped`.
+  init accessors, and event accessors are `Skipped`.
 - A reload applies each file all-or-nothing: a `Failed` method leaves that file unapplied,
   a `Failed` type leaves every file of its assembly unapplied.
 

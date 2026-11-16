@@ -455,6 +455,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
         }
 
+        /// <summary>
+        /// What: a pause point on the line of a patched indexer getter resolves to get_Item, is
+        /// retargeted to the patch, and is hit by an index read.
+        /// </summary>
+        [Test]
+        public async Task EnablePausePoint_OnPatchedIndexerGetterLine_ResolvesToTheIndexerGetter()
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", IndexerFixtureProjectRelativePath));
+            string onDisk = File.ReadAllText(fixturePath);
+            const string EditedGetter = "get => Stored + i + 1110;";
+            string editedSource = onDisk.Replace("get => Stored + i + 1100;", EditedGetter, StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: the getter must be in the fixture.");
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [fixturePath] = HotReloadTestSourceWriter.WriteEditedSource("E2E_indexer_getter_line.cs", editedSource)
+                });
+            Assert.That(
+                result.Methods.Count(m => m.Kind == HotReloadMethodOutcomeKind.Patched
+                    && m.Method.Contains("HotReloadIndexerSingle.get_Item(")),
+                Is.EqualTo(1),
+                FormatHotReloadOutcomes(result));
+            int getterLine = FindLineNumber(editedSource, EditedGetter);
+
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(IndexerFixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            SourcePausePointShimResolution resolution =
+                SourcePausePointShimResolver.Resolve(lookup, IndexerFixtureProjectRelativePath, getterLine);
+            Assert.That(resolution.LogicalOwner?.Name, Is.EqualTo("get_Item"), resolution.ErrorMessage);
+
+            PausePointResponse enable = EnableContinuousInFile(IndexerFixtureProjectRelativePath, getterLine);
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+            Assert.That(new HotReloadIndexerSingle()[1], Is.EqualTo(1111));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        private const string IndexerFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadIndexerAccessorFixture.cs";
+
         private const string SetterFixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadPropertySetterFixtures.cs";
 

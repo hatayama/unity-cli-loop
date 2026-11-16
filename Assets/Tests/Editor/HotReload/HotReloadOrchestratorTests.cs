@@ -556,11 +556,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: property getters and setters with bodies are Patched; indexer getters with bodies
-        /// stay Skipped with the accessor reason; auto-property accessors stay unlisted.
+        /// What: property getters and setters with bodies and an edited expression-bodied indexer
+        /// getter are Patched; auto-property accessors stay unlisted.
         /// </summary>
         [Test]
-        public async Task Run_PropertyGettersAndSettersPatched_IndexerAccessorsSkipped()
+        public async Task Run_PropertyGettersSettersAndIndexerGetterPatched()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -595,9 +595,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
 
-            const string expectedReason =
-                "Property init accessors, indexer accessors, and setters with no matching setter on the compiled property are skipped; "
-                + "run 'uloop compile' to apply accessor edits.";
             bool foundPropertyGetterPatched = false;
             bool foundIndexerGetter = false;
             bool foundPropertySetter = false;
@@ -610,9 +607,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundPropertyGetterPatched = true;
                 }
 
-                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Reason == expectedReason;
-                if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("get_Item"))
                 {
                     foundIndexerGetter = true;
                 }
@@ -636,7 +632,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 foundIndexerGetter,
                 Is.True,
-                "Expected the expression-bodied indexer getter (get_Item) to be Skipped with the accessor out-of-scope reason.");
+                "Expected the edited expression-bodied indexer getter (get_Item) to be Patched; got: " + FormatOutcomes(result));
             Assert.That(
                 foundPropertySetter,
                 Is.True,

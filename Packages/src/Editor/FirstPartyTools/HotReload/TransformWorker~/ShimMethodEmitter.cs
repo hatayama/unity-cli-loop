@@ -68,6 +68,18 @@ internal static class ShimMethodEmitter
                 shimTypes,
                 assemblyGlobalUsings,
                 shimNames);
+            IndexerAccessorEmitter.EmitIndexerAccessorsForType(
+                typeState,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                addedPropertyCatalog,
+                input,
+                entries,
+                skipped,
+                unchangedMethods,
+                shimTypes,
+                assemblyGlobalUsings,
+                shimNames);
         }
     }
 
