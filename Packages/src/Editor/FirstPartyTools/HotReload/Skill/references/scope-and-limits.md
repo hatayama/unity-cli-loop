@@ -10,6 +10,7 @@ setter of an `interface` is patched like any other. Use `uloop compile` for the
 skipped ones.
 Adding a constructor, finalizer, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
+An edited explicit interface method (`void IFoo.Run()`) is patched like an ordinary method; its row reads `Ns.Type.Ns.IFoo.Run()`. Explicit interface property accessors are reported as `Skipped`.
 Methods and property getters of `partial` types are patched like any other; the
 other parts of the type are read from the assembly's source files.
 
@@ -450,7 +451,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Method or getter on a `partial` type whose body uses an `internal` member of a type in another assembly (through `InternalsVisibleTo`) | Reported as a name no source file of the `partial` type declares; hot reload does not patch this use from a `partial` type yet. Run `uloop compile` |
 | Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
-| Explicit interface implementation | Dotted metadata names cannot be expressed as shim identifiers |
+| Explicit interface method the compiled assembly does not hold yet, or an accessor of an explicit interface property | Only the body of an explicit interface method the compiled type already implements is patched. Run `uloop compile` |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body uses `base.` for something other than a direct call to a base method (a base property, indexer, event, or method group) | C# cannot express that outside the type; run `uloop compile` |
 | Base method call in a lambda, local function, query, async or iterator body, a property accessor, a member or type hot reload added, or a body patched through a delegating shim | A base call is applied only in a compiled method's own statements; move the call there, or run `uloop compile` |

@@ -136,7 +136,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     0).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
-                Plain("Explicit interface implementations are skipped.", 0));
+                Plain(
+                    "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
+                    + "of explicit interface properties, are skipped.",
+                    0).EndingWith(CompileCallToAction));
             // Why {2} is not a worker value: it is the file that declares the compiled type,
             // which only the Editor resolves, and TransformWorkerCompiledTypeFileCompleter appends it.
             templates.Add(

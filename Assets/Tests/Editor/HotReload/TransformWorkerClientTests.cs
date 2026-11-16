@@ -285,7 +285,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(callsBaseEntry, Is.Not.Null, "CallsBase must be an entry.");
             Assert.That(callsBaseEntry.patchKind, Is.EqualTo("transplant"));
             AssertHasSkip(result, nameof(HotReloadE2EFixture.CallsBaseInLambda), "Calls a base method from a lambda");
-            AssertHasSkip(result, "ExplicitPing", "Explicit interface");
+            // Why an entry named by the compiled metadata name: an explicit implementation the
+            // compiled type already has is patched, and the Editor finds it by that name.
+            TransformWorkerEntryDto explicitPingEntry =
+                FindEntryNamed(result, typeof(IHotReloadE2EMarker).FullName + ".ExplicitPing");
+            Assert.That(explicitPingEntry.shimMethodName, Does.StartWith("ExplicitPing__shim"));
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncReadPrivateIndexer), "private/internal");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncConditionalPrivateField), "conditional access");
             AssertHasSkip(result, nameof(HotReloadE2EFixture.AsyncNullCoalesceAssignPrivateProperty), "null-coalescing");
@@ -656,10 +660,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // resident worker host serializes requests, so only cutting the request count speeds the
             // run up; running the batches in order also keeps the failure report easy to read.
             List<string> failures = new List<string>();
-            for (int start = 0; start < sources.Count; start += SelfSnapshotBatchSize)
+            foreach (List<SelfSnapshotSource> batch in BuildSelfSnapshotBatches(sources))
             {
-                int batchLength = Math.Min(SelfSnapshotBatchSize, sources.Count - start);
-                List<SelfSnapshotSource> batch = sources.GetRange(start, batchLength);
                 TransformWorkerClientResult result = await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(
                     BuildInputForSelfSnapshotSources(batch),
                     CancellationToken.None);
@@ -671,6 +673,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Empty,
                 "Self-snapshot must treat every HotReload test source as unchanged:\n"
                 + string.Join("\n", failures));
+        }
+
+        /// <summary>
+        /// Cuts the sources into batches of about SelfSnapshotBatchSize, keeping every file of one
+        /// stem (Fixture.cs, Fixture.Other.cs) in the same batch. Why: an unchanged part of a partial
+        /// type sent without its sibling reports declaration drift (a known false positive fixed
+        /// separately), so a cut between the parts would make this test about that bug. Why order
+        /// by stem first: Directory.GetFiles does not promise an order that keeps siblings adjacent.
+        /// </summary>
+        private static List<List<SelfSnapshotSource>> BuildSelfSnapshotBatches(List<SelfSnapshotSource> sources)
+        {
+            List<List<SelfSnapshotSource>> batches = new List<List<SelfSnapshotSource>>();
+            List<SelfSnapshotSource> current = new List<SelfSnapshotSource>();
+            string currentStem = null;
+            List<SelfSnapshotSource> ordered = new List<SelfSnapshotSource>(sources);
+            ordered.Sort((left, right) =>
+            {
+                int byStem = string.CompareOrdinal(SelfSnapshotStem(left), SelfSnapshotStem(right));
+                return byStem != 0
+                    ? byStem
+                    : string.CompareOrdinal(Path.GetFileName(left.FullPath), Path.GetFileName(right.FullPath));
+            });
+            foreach (SelfSnapshotSource source in ordered)
+            {
+                string stem = SelfSnapshotStem(source);
+                if (current.Count >= SelfSnapshotBatchSize && stem != currentStem)
+                {
+                    batches.Add(current);
+                    current = new List<SelfSnapshotSource>();
+                }
+
+                current.Add(source);
+                currentStem = stem;
+            }
+
+            if (current.Count > 0)
+            {
+                batches.Add(current);
+            }
+
+            return batches;
+        }
+
+        private static string SelfSnapshotStem(SelfSnapshotSource source)
+        {
+            string fileName = Path.GetFileName(source.FullPath);
+            return fileName.Substring(0, fileName.IndexOf('.'));
         }
 
         /// <summary>
@@ -2864,6 +2913,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "set_Contract",
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
             AssertNoEntryFragment(result, "set_Contract");
+        }
+
+        /// <summary>
+        /// What: an edited getter of an explicit interface property is Skipped with the
+        /// explicit-implementation reason and emits no entry, while explicit methods are patched.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitInterfacePropertyGetterEdited_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "ExplicitInterfacePropertyGetterEdited.cs",
+                onDisk => ReplaceExplicitContractGetterBody(onDisk));
+
+            AssertSkippedWithCode(
+                result,
+                "get_Contract",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+            AssertNoEntryFragment(result, "get_Contract");
+        }
+
+        // Why search from the explicit property's header: the getter line appears in several
+        // fixtures of that file, and a two-line fragment would depend on the line endings.
+        private static string ReplaceExplicitContractGetterBody(string onDisk)
+        {
+            const string getter = "get { return _stored; }";
+            int header = onDisk.IndexOf("int IHotReloadPropertySetterExplicitContract.Contract", StringComparison.Ordinal);
+            Assert.That(header, Is.GreaterThanOrEqualTo(0), "Precondition: the explicit property must exist.");
+            int index = onDisk.IndexOf(getter, header, StringComparison.Ordinal);
+            Assert.That(index, Is.GreaterThan(header), "Precondition: the explicit property must hold its getter.");
+            return onDisk.Substring(0, index) + "get { return _stored + 1; }" + onDisk.Substring(index + getter.Length);
         }
 
         /// <summary>

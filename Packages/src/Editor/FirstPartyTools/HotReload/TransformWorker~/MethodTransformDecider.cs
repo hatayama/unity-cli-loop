@@ -256,14 +256,6 @@ internal static class MethodTransformDecider
             return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType);
         }
 
-        // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
-        // not valid C# identifiers for shim method names; sanitizing would also desync the
-        // matcher (Cecil MethodDefinition.Name). They are skipped with an explicit reason.
-        if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
-        {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
-        }
-
         return null;
     }
 
@@ -504,6 +496,13 @@ internal static class MethodTransformDecider
             return WorkerReason.Of(
                 HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved,
                 unresolvedType.ToDisplayString());
+        }
+
+        // Why refused: the compiled type's interface map has no slot for an implementation added
+        // since the last compile, so nothing would dispatch to it.
+        if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
         }
 
         if (methodSymbol.IsAbstract || methodSymbol.IsVirtual || methodSymbol.IsOverride)

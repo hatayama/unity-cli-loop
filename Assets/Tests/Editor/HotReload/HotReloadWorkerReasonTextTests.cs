@@ -304,7 +304,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 NoArgs,
-                "Explicit interface implementations are skipped.");
+                "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
+                + "of explicit interface properties, are skipped. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformSiblingBodyBindsCompiledType,
                 new[] { "CS1061: 'Host' does not contain a definition for 'Hit'", "'Host'", "'Assets/Host.cs'" },
