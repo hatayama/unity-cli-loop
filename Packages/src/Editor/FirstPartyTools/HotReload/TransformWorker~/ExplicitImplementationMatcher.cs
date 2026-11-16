@@ -48,8 +48,10 @@ internal static class ExplicitImplementationMatcher
     private static bool ImplementsSameMember(IMethodSymbol compiledMethod, IMethodSymbol sourceMember)
     {
         string sourceInterface = sourceMember.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        // Why arity too: M(int) and M<T>(int) of one interface share a name and parameter types.
         return compiledMethod.ExplicitInterfaceImplementations.Any(implemented =>
             implemented.Name == sourceMember.Name
+            && implemented.Arity == sourceMember.Arity
             && implemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == sourceInterface);
     }
 
