@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.27.2](https://github.com/hatayama/unity-cli-loop/compare/v3.27.1...v3.27.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda that reaches an internal member of a struct instead of failing the whole file ([#3521](https://github.com/hatayama/unity-cli-loop/issues/3521)) ([158b4e4](https://github.com/hatayama/unity-cli-loop/commit/158b4e44fc1598e03b4ea1e25a2ca05b60108aa7))
+
 ## [3.27.1](https://github.com/hatayama/unity-cli-loop/compare/v3.27.0...v3.27.1) (2026-11-15)
 
 
