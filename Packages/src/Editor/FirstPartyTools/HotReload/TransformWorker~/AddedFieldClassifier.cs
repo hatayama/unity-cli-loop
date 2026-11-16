@@ -31,7 +31,8 @@ internal static class AddedFieldClassifier
                 }
 
                 CompiledFieldMatch fieldMatch = CompiledMemberMatcher.MatchCompiledField(compiledType, fieldSymbol);
-                if (fieldMatch == CompiledFieldMatch.Matched || IsTypeUnboundForUntrustedParts(typeState, fieldMatch, fieldSymbol))
+                if (fieldMatch == CompiledFieldMatch.Matched
+                    || IsTypeUnboundForUntrustedParts(typeState, fieldMatch, fieldSymbol, fieldDeclaration))
                 {
                     continue;
                 }
@@ -59,11 +60,41 @@ internal static class AddedFieldClassifier
     private static bool IsTypeUnboundForUntrustedParts(
         TypeEmitState typeState,
         CompiledFieldMatch fieldMatch,
-        IFieldSymbol fieldSymbol)
+        IFieldSymbol fieldSymbol,
+        FieldDeclarationSyntax fieldDeclaration)
     {
         return fieldMatch == CompiledFieldMatch.FieldTypeChanged
             && UnresolvedSignatureTypes.TryFind(fieldSymbol.Type, out ITypeSymbol _)
-            && typeState.SourceUnit.PartialTypeParts.FindUntrustedOtherPartReasonOrNull(typeState.TypeDeclaration) != null;
+            && typeState.SourceUnit.PartialTypeParts.FindUntrustedOtherPartReasonOrNull(typeState.TypeDeclaration) != null
+            && SnapshotDeclaresSameFieldType(typeState, fieldSymbol.Name, fieldDeclaration);
+    }
+
+    // Why the snapshot must agree: an unresolved type alone does not prove the type is unchanged.
+    // A field whose declared type really changed to one from the unbound part must stay an
+    // unavailable added binding, so a body of another type that uses it is skipped. Without a
+    // snapshot nothing proves the type unchanged, so the field keeps that path too.
+    private static bool SnapshotDeclaresSameFieldType(
+        TypeEmitState typeState,
+        string fieldName,
+        FieldDeclarationSyntax fieldDeclaration)
+    {
+        BaselineSnapshotState baseline = typeState.SourceUnit.Baseline;
+        if (!baseline.HasBaseline || baseline.SnapshotRoot == null)
+        {
+            return false;
+        }
+
+        Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
+            WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldName);
+        if (snapshotFieldMap == null
+            || !snapshotFieldMap.TryGetValue(syntaxKey, out VariableDeclaratorSyntax snapshotVariable)
+            || !(snapshotVariable.Parent is VariableDeclarationSyntax snapshotDeclaration))
+        {
+            return false;
+        }
+
+        return SyntaxFactory.AreEquivalent(snapshotDeclaration.Type, fieldDeclaration.Declaration.Type, topLevel: false);
     }
 
     /// <summary>

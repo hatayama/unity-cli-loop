@@ -64,6 +64,7 @@ internal static class OrdinaryMethodQueue
             methodKey,
             typeState,
             snapshotMethodMap,
+            plainCurrentMethodMap,
             addedMethodCatalog,
             skipped))
         {
