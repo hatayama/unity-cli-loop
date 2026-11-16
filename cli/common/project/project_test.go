@@ -431,24 +431,37 @@ func TestResolveConnection_WhenNoProjectEnclosesStartPath_ShouldReturnProjectNot
 	assertProjectNotFound(t, err)
 }
 
-func TestFindProjectRoot_WhenStartedInsideProject_ShouldReturnEnclosingProject(t *testing.T) {
-	// Verifies the upward search returns the nearest enclosing Unity project root.
-	projectRoot := filepath.Join(createGitBoundedDir(t), "Game")
+func TestResolveConnection_WhenStartedAtRepositoryRootAboveProject_ShouldResolveChildProject(t *testing.T) {
+	// Verifies implicit resolution from a repository root finds the Unity project one level below it.
+	repositoryRoot := createGitBoundedDir(t)
+	projectRoot := filepath.Join(repositoryRoot, "UnityProject")
 	createUnityProject(t, projectRoot)
-	startPath := filepath.Join(projectRoot, "Assets", "Scripts")
-	mkdirAll(t, startPath)
 
-	resolved, err := FindProjectRoot(startPath)
+	connection, err := ResolveConnection(repositoryRoot, "")
 	if err != nil {
-		t.Fatalf("FindProjectRoot failed: %v", err)
+		t.Fatalf("ResolveConnection failed: %v", err)
 	}
-	if resolved != projectRoot {
-		t.Fatalf("project root mismatch: %s", resolved)
-	}
+
+	assertProjectConnection(t, connection, projectRoot)
 }
 
-func TestFindProjectRoot_WhenGitRootIsReachedFirst_ShouldStopSearching(t *testing.T) {
-	// Verifies the upward search stops at a .git boundary even when a Unity project exists above it.
+func TestResolveConnection_WhenStartedInsideProjectWithNestedProjectShape_ShouldPreferEnclosingProject(t *testing.T) {
+	// Verifies implicit resolution keeps the enclosing project instead of a nested Unity-shaped fixture folder.
+	projectRoot := filepath.Join(createGitBoundedDir(t), "UnityProject")
+	createUnityProject(t, projectRoot)
+	startPath := filepath.Join(projectRoot, "ci")
+	createUnityProject(t, filepath.Join(startPath, "fixtures", "NestedApp"))
+
+	connection, err := ResolveConnection(startPath, "")
+	if err != nil {
+		t.Fatalf("ResolveConnection failed: %v", err)
+	}
+
+	assertProjectConnection(t, connection, projectRoot)
+}
+
+func TestResolveConnection_WhenGitRootIsReachedBeforeEnclosingProject_ShouldReturnProjectNotFoundError(t *testing.T) {
+	// Verifies implicit resolution stops at a .git boundary even when a Unity project exists above it.
 	outerProject := t.TempDir()
 	createUnityProject(t, outerProject)
 	repositoryRoot := filepath.Join(outerProject, "repo")
@@ -456,16 +469,7 @@ func TestFindProjectRoot_WhenGitRootIsReachedFirst_ShouldStopSearching(t *testin
 	startPath := filepath.Join(repositoryRoot, "src")
 	mkdirAll(t, startPath)
 
-	_, err := FindProjectRoot(startPath)
-
-	assertProjectNotFound(t, err)
-}
-
-func TestFindProjectRoot_WhenFilesystemRootIsReached_ShouldReturnProjectNotFoundError(t *testing.T) {
-	// Verifies the upward search terminates at the filesystem root instead of looping forever.
-	root := filesystemRootWithoutProject(t)
-
-	_, err := FindProjectRoot(root)
+	_, err := ResolveConnection(startPath, "")
 
 	assertProjectNotFound(t, err)
 }
