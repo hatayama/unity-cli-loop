@@ -57,8 +57,9 @@ func TestPressInDialogTitledOnWindowsPressesIgnoreInTheSafeModePrompt(t *testing
 	got, err := inspector.PressInDialogTitled(context.Background(), "/project", "Enter Safe Mode?", "Ignore")
 
 	assertPressResult(t, got, err, PressResult{DialogFound: true, Pressed: true, Dialog: win32SafeModePromptDialog})
-	if len(pressed) != 1 {
-		t.Fatalf("pressed %d times, want once", len(pressed))
+	// "&Ignore" has control ID 3 in the prompt.
+	if len(pressed) != 1 || pressed[0].ButtonID != 3 || pressed[0].Dialog.Title != "Enter Safe Mode?" || pressed[0].ButtonDisabled {
+		t.Fatalf("pressed = %#v, want one press of the prompt's Ignore button", pressed)
 	}
 }
 
