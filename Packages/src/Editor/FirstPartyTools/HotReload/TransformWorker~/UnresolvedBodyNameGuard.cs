@@ -55,12 +55,27 @@ internal static class UnresolvedBodyNameGuard
                 continue;
             }
 
+            string diagnosticText = diagnostic.Id + ": " + diagnostic.GetMessage(CultureInfo.InvariantCulture);
+
+            // Why before the name check: a call the compiler generates has no name in the source,
+            // and the error its missing method raises varies with what else is in scope.
+            UnpassedInternalMemberUse implicitCall = UnpassedImplicitCallLookup.FindUseOrNull(
+                diagnostic,
+                semanticModel,
+                bodyNode,
+                methodDeclarationOrNull,
+                decision,
+                targetAssembly);
+            if (implicitCall != null && !IsWithinReach(implicitCall, isPartial))
+            {
+                return Describe(implicitCall, isPartial, diagnosticText);
+            }
+
             if (!UnresolvedNameDiagnosticIds.Contains(diagnostic.Id))
             {
                 continue;
             }
 
-            string diagnosticText = diagnostic.Id + ": " + diagnostic.GetMessage(CultureInfo.InvariantCulture);
             UnpassedInternalMemberUse use = UnpassedInternalMemberUse.FindOrNull(
                 diagnostic,
                 semanticModel,
@@ -87,14 +102,19 @@ internal static class UnresolvedBodyNameGuard
                 continue;
             }
 
-            return WorkerReason.Of(
-                ChooseReasonCode(use, isPartial),
-                diagnosticText,
-                "'" + use.DeclaringType.Name + "'",
-                "'" + use.MemberName + "'");
+            return Describe(use, isPartial, diagnosticText);
         }
 
         return null;
+    }
+
+    private static WorkerReason Describe(UnpassedInternalMemberUse use, bool isPartial, string diagnosticText)
+    {
+        return WorkerReason.Of(
+            ChooseReasonCode(use, isPartial),
+            diagnosticText,
+            "'" + use.DeclaringType.Name + "'",
+            "'" + use.MemberName + "'");
     }
 
     // The reason whose last sentence names the change that brings this use within reach. Why only a
