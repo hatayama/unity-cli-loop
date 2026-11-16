@@ -292,6 +292,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller in another file of the run that calls a method newly added to a part with
+        /// unscanned siblings is skipped, not emitted, because that method does not exist at run time.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerOfOtherPartTypedAddedMethodWithIncompleteScan_IsNotEmitted()
+        {
+            string fixtureOnDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string fixtureEdited = ReplaceOnce(
+                fixtureOnDisk,
+                "        public int TakesOtherPartNested(OtherPartNested value)",
+                "        public int TakesOtherPartNestedAdded(OtherPartNested value) { return 1; }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int TakesOtherPartNested(OtherPartNested value)");
+            const string callerFileName = "HotReloadPausePointAdjacentMethodsFixture.cs";
+            string callerOnDisk = File.ReadAllText(ResolveFixturePath(callerFileName));
+            string callerEdited = ReplaceOnce(
+                callerOnDisk,
+                "public int Second() { return 4102; }",
+                "public int Second() { return new HotReloadPartialTypeFixture().TakesOtherPartNestedAdded(null); }");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(
+                new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = WriteEdited("PartialAddedCalleeIncompleteScan.cs", fixtureEdited),
+                        projectRelativePath = FixtureProjectRelativePath,
+                        snapshotSource = fixtureOnDisk
+                    },
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = WriteEdited("PartialAddedCallerIncompleteScan.cs", callerEdited),
+                        projectRelativePath = "Assets/Tests/Editor/HotReload/" + callerFileName,
+                        snapshotSource = callerOnDisk
+                    }
+                },
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "Second"), Is.Null, "The caller of a method that does not exist yet must not be applied.");
+            Assert.That(FindSkipped(result, "Second"), Is.Not.Null, FormatSkipped(result));
+        }
+
+        /// <summary>
         /// What: the same unchanged part with a complete scan reports no drift warning and no row for
         /// the method whose parameter type lives in the other part.
         /// </summary>

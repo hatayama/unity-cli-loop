@@ -60,7 +60,7 @@ internal static class OrdinaryMethodQueue
             methodSymbol);
         if (isAddedMethod && TrySkipSignatureUnboundForUntrustedParts(methodDeclaration, methodSymbol, typeState, skipped))
         {
-            RecordGenuinelyAddedSyntaxKey(typeState, methodDeclaration, snapshotMethodMap, addedMethodCatalog);
+            RecordGenuinelyAddedMethod(typeState, methodDeclaration, methodKey, snapshotMethodMap, addedMethodCatalog);
             return;
         }
 
@@ -259,21 +259,33 @@ internal static class OrdinaryMethodQueue
         return true;
     }
 
-    // Why only when the snapshot lacks it: a method the snapshot does not hold was really added, and
-    // its skip row already explains it, so the drift check must not report the addition again. A
-    // method the snapshot holds is the compiled one seen through unbound parts, so its key stays
-    // unrecorded and both trees keep it.
-    private static void RecordGenuinelyAddedSyntaxKey(
+    // A method the snapshot does not hold was really added. It is classified added, so a patched
+    // caller of it is skipped rather than calling a method the running assembly lacks, and its
+    // syntax key is recorded, so the drift check does not report the addition its skip row explains.
+    // Without a snapshot nothing tells the two apart, so the method is classified added, the safe
+    // side for callers. A method the snapshot holds is the compiled one seen through unbound parts:
+    // nothing is recorded, so both trees keep it and its callers bind to the compiled method.
+    private static void RecordGenuinelyAddedMethod(
         TypeEmitState typeState,
         MethodDeclarationSyntax methodDeclaration,
+        string methodKey,
         Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
         AddedMethodCatalog addedMethodCatalog)
     {
-        string syntaxMethodKey = WorkerSyntaxIndex.BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration);
-        if (snapshotMethodMap != null && !snapshotMethodMap.ContainsKey(syntaxMethodKey))
+        if (snapshotMethodMap == null)
         {
-            addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+            addedMethodCatalog.MarkClassifiedAdded(methodKey);
+            return;
         }
+
+        string syntaxMethodKey = WorkerSyntaxIndex.BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration);
+        if (snapshotMethodMap.ContainsKey(syntaxMethodKey))
+        {
+            return;
+        }
+
+        addedMethodCatalog.MarkClassifiedAdded(methodKey);
+        addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
     }
 
     internal static bool TrySkipExcludedOrdinaryMethod(
