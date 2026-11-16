@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.13.1...uloop-project-runner-v3.14.0) (2026-11-16)
+
+
+### Features
+
+* uloop launch presses Ignore on Unity's "Enter Safe Mode?" prompt ([#3551](https://github.com/hatayama/unity-cli-loop/issues/3551)) ([be86be7](https://github.com/hatayama/unity-cli-loop/commit/be86be7fdf79cff73204ec4484e10844dfc530eb))
+
+
+### Bug Fixes
+
+* Tool commands now find the Unity project from a repository root that keeps it in a subdirectory ([#3552](https://github.com/hatayama/unity-cli-loop/issues/3552)) ([9cf84f2](https://github.com/hatayama/unity-cli-loop/commit/9cf84f2eed51587872c776b1e9d4a0ade669c6df))
+
 ## [3.13.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.13.0...uloop-project-runner-v3.13.1) (2026-11-15)
 
 
