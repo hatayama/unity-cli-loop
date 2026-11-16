@@ -54,6 +54,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda that calls a public extension method of an internal class declared in
+        /// the same file is Skipped, the run reports no failure, and the method keeps returning
+        /// the compiled value instead of throwing MethodAccessException from the shim.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingPublicExtensionOfInternalClassInEditedFile_IsSkippedAndKeepsTheCompiledBody()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5101", "5102");
+
+            AssertKind(result, "ClosureCallsPublicExtensionOfInternalClass", HotReloadMethodOutcomeKind.Skipped);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an overloaded extension method of an internal class declared
+        /// in the same file is Skipped, the run reports no failure, and the method keeps returning
+        /// the compiled value instead of throwing MethodAccessException from the shim.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingOverloadedExtensionOfInternalClassInEditedFile_IsSkippedAndKeepsTheCompiledBody()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureCallsOverloadedExtensionOfInternalClass(), Is.EqualTo(5410));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5401", "5402");
+
+            AssertKind(result, "ClosureCallsOverloadedExtensionOfInternalClass", HotReloadMethodOutcomeKind.Skipped);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsOverloadedExtensionOfInternalClass(), Is.EqualTo(5410));
+        }
+
+        /// <summary>
+        /// What: a lambda that reads a private field and calls an overloaded public extension
+        /// method of a public class in the same file is Patched and returns the edited value;
+        /// RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingOverloadedPublicExtensionOfPublicClass_IsPatchedAndReverts()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension(), Is.EqualTo(5613));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5601", "5602");
+
+            AssertKind(result, "ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension(), Is.EqualTo(5614));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(host.ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension(), Is.EqualTo(5613));
+        }
+
+        /// <summary>
         /// What: a method that calls an internal extension method from its own statements is
         /// Patched and returns the edited value; RevertAll restores the compiled value.
         /// </summary>

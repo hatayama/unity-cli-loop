@@ -22,6 +22,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal class whose extension methods are public, declared in the same file as the host.
+    /// The compiled assembly exports public members of an internal class, so the edited copy of
+    /// this file and the compiled one both offer these methods to a reduced call.
+    /// </summary>
+    internal static class HotReloadInternalClassExtensionCallMath
+    {
+        public static int Thrice(this int value, int add)
+        {
+            return value * 3 + add;
+        }
+
+        // Why a string receiver: C# cannot form a delegate from an extension method on a value type.
+        public static int LengthTimesTwo(this string value, int add)
+        {
+            return value.Length * 2 + add;
+        }
+
+        // Overloads with different parameter types: the call binds ambiguously against every
+        // overload of both copies, not only against the twin of the overload it picks.
+        public static int Step(this int value, int add)
+        {
+            return value * 3 + add;
+        }
+
+        public static int Step(this int value, string add)
+        {
+            return value + add.Length;
+        }
+
+        // Overloads that both apply to an int argument; the int one is the better match.
+        public static int Pick(this int value, int add)
+        {
+            return value + add;
+        }
+
+        public static int Pick(this int value, long add)
+        {
+            return value + (int)add + 1000;
+        }
+    }
+
+    /// <summary>
     /// Public extension method the extension-call tests use as the accessible control, beside an
     /// internal one whose class is visible, so a call naming the class reaches the call check.
     /// </summary>
@@ -35,6 +77,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         internal static int InternalTwice(this int value, int add)
         {
             return value * 2 + add;
+        }
+
+        public static int PublicStep(this int value, int add)
+        {
+            return value * 4 + add;
+        }
+
+        public static int PublicStep(this int value, string add)
+        {
+            return value + add.Length;
         }
     }
 
@@ -114,6 +166,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private int AddSeven(int value)
         {
             return value + 7;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsPublicExtensionOfInternalClass()
+        {
+            Func<int> read = () => _value.Thrice(5101);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsSameNamedExtensionOfSecondClass()
+        {
+            Func<int> read = () => _value.Thrice("ab") + 5701;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncCallsPublicExtensionOfInternalClass(int seed)
+        {
+            await Task.Yield();
+            return seed.Thrice(5201);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureHoldsPublicExtensionOfInternalClassMethodGroup()
+        {
+            Func<int> read = () =>
+            {
+                Func<int, int> lengthTimesTwo = _label.LengthTimesTwo;
+                return lengthTimesTwo(5301);
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsOverloadedExtensionOfInternalClass()
+        {
+            Func<int> read = () => _value.Step(5401);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsBetterOverloadOfExtensionOfInternalClass()
+        {
+            Func<int> read = () => _value.Pick(5501);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension()
+        {
+            Func<int> read = () => _value.PublicStep(5601);
+            return read();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

@@ -37,6 +37,83 @@ internal static class AccessibilityRules
             && member.ContainingType.IsValueType;
     }
 
+    /// <summary>
+    /// What: the symbol a call, method group, or member access binds to, or null when nothing is
+    /// bound. When binding failed because a static class is offered twice (the edited source and
+    /// its compiled copy) and such a compiled class is not externally visible, returns one of its
+    /// methods from that compiled class, the one the running code would call. That method shares the
+    /// containing type of the overload the compiler would pick but is not necessarily that overload,
+    /// so it is only good for deciding refusal.
+    /// </summary>
+    internal static ISymbol BoundSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        SymbolInfo info = semanticModel.GetSymbolInfo(node);
+        if (info.Symbol != null)
+        {
+            return info.Symbol;
+        }
+
+        // Why: the compiled assembly is referenced beside the edited source of the same file, and
+        // extension lookup gathers methods from both copies of a static class, every overload of
+        // each. A public method of an internal class is imported from metadata and is eligible
+        // because the worker binds with accessibility ignored, so a call to it fails as ambiguous.
+        // Treating that as "no symbol" made every access check pass, and the shim called the
+        // method and threw.
+        if (info.CandidateReason != CandidateReason.OverloadResolutionFailure)
+        {
+            return null;
+        }
+
+        return FindTwinCandidateToRefuseOrNull(semanticModel.Compilation.Assembly, info.CandidateSymbols);
+    }
+
+    // Why per containing type: the candidates are the whole method group, so they include every
+    // overload and every same-named extension of every static class in scope, not only the ones
+    // that tied. A class with a candidate from the edited source and one from another assembly is
+    // a twin class; only twins can make binding fail without a real ambiguity, which Unity's
+    // compiler would reject too, so other classes are ignored. Only public members are imported
+    // from metadata, so a twin call is inaccessible exactly when the compiled class is not
+    // externally visible; when any twin class is hidden, the call is refused (fail closed).
+    // Why the compiled copy's class: the running code calls the compiled class, and one edit may
+    // make the edited class public while the compiled one stays internal.
+    private static IMethodSymbol FindTwinCandidateToRefuseOrNull(
+        IAssemblySymbol editedAssembly,
+        ImmutableArray<ISymbol> candidates)
+    {
+        HashSet<string> editedTypes = new HashSet<string>(StringComparer.Ordinal);
+        Dictionary<string, IMethodSymbol> hiddenCompiledCandidates =
+            new Dictionary<string, IMethodSymbol>(StringComparer.Ordinal);
+        foreach (ISymbol candidate in candidates)
+        {
+            // A method with no containing type (a function pointer signature) has no twin.
+            if (candidate is not IMethodSymbol method
+                || UnreducedMethod(method).ContainingType is not INamedTypeSymbol candidateType)
+            {
+                continue;
+            }
+
+            string typeName = candidateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, editedAssembly))
+            {
+                editedTypes.Add(typeName);
+            }
+            else if (!IsExternallyVisibleType(candidateType))
+            {
+                hiddenCompiledCandidates[typeName] = method;
+            }
+        }
+
+        foreach (KeyValuePair<string, IMethodSymbol> hidden in hiddenCompiledCandidates)
+        {
+            if (editedTypes.Contains(hidden.Key))
+            {
+                return hidden.Value;
+            }
+        }
+
+        return null;
+    }
+
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
     {
         if (IsNonCrossAssemblySymbol(symbol))

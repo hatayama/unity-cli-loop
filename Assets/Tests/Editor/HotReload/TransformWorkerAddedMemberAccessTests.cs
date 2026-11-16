@@ -657,6 +657,138 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda that calls, in reduced form, a public extension method of an internal
+        /// class declared in the edited file is skipped with the extension-method reason. The
+        /// edited and compiled copies of the class both offer the method, so the call binds
+        /// ambiguously; it must still be found inaccessible instead of being transplanted, also
+        /// while a public class in another file declares an extension of the same name.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingPublicExtensionOfInternalClassInEditedFile_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5101", "5102");
+
+            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsPublicExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that calls a public extension method of a public class in another file,
+        /// whose name it shares with an internal class's twins in the edited file, binds to it
+        /// uniquely and stays a patch entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingSameNamedExtensionOfSecondClass_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5701", "5702");
+
+            AssertEntryAndNotSkipped(result, "ClosureCallsSameNamedExtensionOfSecondClass");
+        }
+
+        /// <summary>
+        /// What: an async method that calls, in reduced form, a public extension method of an
+        /// internal class declared in the edited file is skipped with the extension-method reason
+        /// and produces no entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_AsyncMethodCallingPublicExtensionOfInternalClassInEditedFile_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5201", "5202");
+
+            AssertHasSkip(result, "AsyncCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "AsyncCallsPublicExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that holds, as a method group, a public extension method of an internal
+        /// class declared in the edited file is skipped with the extension-method reason and
+        /// produces no entry, although the method group binds ambiguously.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureHoldingPublicExtensionOfInternalClassMethodGroup_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5301", "5302");
+
+            AssertHasSkip(
+                result,
+                "ClosureHoldsPublicExtensionOfInternalClassMethodGroup(",
+                ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureHoldsPublicExtensionOfInternalClassMethodGroup"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method of an internal class in the edited file,
+        /// whose overloads take different parameter types, is skipped with the extension-method
+        /// reason and produces no entry. The ambiguous binding lists every overload of both copies.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingOverloadedExtensionOfInternalClassInEditedFile_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5401", "5402");
+
+            AssertHasSkip(result, "ClosureCallsOverloadedExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsOverloadedExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method of an internal class in the edited file,
+        /// where two overloads apply and one is the better match, is skipped with the
+        /// extension-method reason and produces no entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingBetterOverloadOfExtensionOfInternalClassInEditedFile_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5501", "5502");
+
+            AssertHasSkip(
+                result,
+                "ClosureCallsBetterOverloadOfExtensionOfInternalClass(",
+                ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsBetterOverloadOfExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: when the same edit makes the internal extension class public and changes a lambda
+        /// that calls it, the call is still skipped with the extension-method reason. The running
+        /// code calls the compiled class, which is still internal.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingExtensionOfClassMadePublicInSameEdit_IsSkipped()
+        {
+            string fixturePath = ResolveTestSourcePath("HotReloadExtensionCallFixtures.cs");
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "    internal static class HotReloadInternalClassExtensionCallMath",
+                    "    public static class HotReloadInternalClassExtensionCallMath",
+                    StringComparison.Ordinal)
+                .Replace("5101", "5102", StringComparison.Ordinal);
+            Assert.That(edited, Does.Contain("public static class HotReloadInternalClassExtensionCallMath"));
+            Assert.That(edited, Does.Contain("5102"));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ExtensionCallHostClassMadePublic.cs", edited),
+                "Assets/Tests/Editor/HotReload/HotReloadExtensionCallFixtures.cs",
+                snapshotSource: onDisk);
+
+            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsPublicExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that reads a private field and calls an overloaded public extension
+        /// method of a public class in the edited file stays a patch entry, although the call
+        /// binds ambiguously against both copies of the class.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingOverloadedPublicExtensionOfPublicClass_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5601", "5602");
+
+            AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension");
+        }
+
+        /// <summary>
         /// What: a lambda that reads a private field and calls a public extension method in
         /// reduced form stays a patch entry.
         /// </summary>
