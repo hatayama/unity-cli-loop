@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.30.1](https://github.com/hatayama/unity-cli-loop/compare/v3.30.0...v3.30.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose await, foreach, deconstruction, collection initializer, or query calls an internal method instead of failing at run time ([#3532](https://github.com/hatayama/unity-cli-loop/issues/3532)) ([1e9c70a](https://github.com/hatayama/unity-cli-loop/commit/1e9c70a26ab83f0d24daea85a8db350a82652e4f))
+
 ## [3.30.0](https://github.com/hatayama/unity-cli-loop/compare/v3.29.0...v3.30.0) (2026-11-16)
 
 
