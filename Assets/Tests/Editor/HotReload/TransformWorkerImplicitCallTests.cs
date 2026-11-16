@@ -61,7 +61,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("9301", "ClosureAwaitUsesInternalDisposeAsync", "DisposeAsync", "await using")]
         [TestCase("9311", "AsyncAwaitUsingDeclarationWithInternalDisposeAsync", "DisposeAsync", "await using")]
         [TestCase("9431", "ClosureAwaitUsesInheritedInternalDisposeAsync", "DisposeAsync", "await using")]
-        [TestCase("9441", "ClosureAwaitUsesPatternDisposeAsyncBeforeInterface", "DisposeAsync", "await using")]
         [TestCase("9451", "ClosureAwaitUsesOptionalParameterDisposeAsync", "DisposeAsync", "await using")]
         [TestCase("9321", "ClosureMatchesIsPositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
         [TestCase("9331", "ClosureMatchesSwitchArmPositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
@@ -94,13 +93,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a lambda that reads a private field and uses the same constructs through public
         /// methods (a public Deconstruct, a List collection initializer, LINQ to objects, awaiting a
-        /// Task, foreach over a List) stays a patch entry.
+        /// Task, foreach over a List) stays a patch entry, as does an await using on a resource that
+        /// implements IAsyncDisposable beside an internal pattern DisposeAsync (the compiled call goes
+        /// through the public interface method).
         /// </summary>
         [TestCase("6801", "ClosureDeconstructsThroughPublicMethod")]
         [TestCase("6811", "ClosureFillsPublicList")]
         [TestCase("6821", "ClosureQueriesPublicList")]
         [TestCase("6831", "ClosureAwaitsPublicTask")]
         [TestCase("6841", "ClosureLoopsOverPublicList")]
+        [TestCase("9441", "ClosureAwaitUsesInterfaceDisposeAsyncBesideInternalPattern")]
         public async Task ImplicitCallToPublicMethod_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);

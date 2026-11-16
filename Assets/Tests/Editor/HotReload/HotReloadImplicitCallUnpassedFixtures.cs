@@ -214,6 +214,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Pair with a public Deconstruct whose first part is a pair with an internal Deconstruct,
+    /// declared in an unpassed file.
+    /// </summary>
+    public sealed class HotReloadUnpassedOuterPair
+    {
+        public void Deconstruct(out HotReloadUnpassedInternalPair inner, out int extra)
+        {
+            inner = new HotReloadUnpassedInternalPair();
+            extra = 61;
+        }
+    }
+
+    /// <summary>
     /// Ref struct resource whose pattern Dispose is internal, declared in an unpassed file.
     /// </summary>
     public ref struct HotReloadUnpassedRefResource

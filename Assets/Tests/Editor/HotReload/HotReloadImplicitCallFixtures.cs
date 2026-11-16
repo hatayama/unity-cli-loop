@@ -321,7 +321,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
     /// <summary>
     /// Resource that implements IAsyncDisposable and also has an internal parameterless
-    /// DisposeAsync; await using binds the pattern method before the interface.
+    /// DisposeAsync; the Unity compiler's await using calls the interface method, not the pattern.
     /// </summary>
     public sealed class HotReloadImplicitInterfaceAndPatternResource : IAsyncDisposable
     {
@@ -845,7 +845,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public Task<int> ClosureAwaitUsesPatternDisposeAsyncBeforeInterface()
+        public Task<int> ClosureAwaitUsesInterfaceDisposeAsyncBesideInternalPattern()
         {
             Func<Task<int>> read = async () =>
             {

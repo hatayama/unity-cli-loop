@@ -262,6 +262,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsNestedThroughPublicOuterDeconstruct()
+        {
+            Func<int> read = () =>
+            {
+                ((int first, int second), int extra) = new HotReloadUnpassedOuterPair();
+                return first + second + extra + 8391;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public Task<int> ClosureAwaitsThroughUnpassedGetResult()
         {
             Func<Task<int>> read = async () => await new HotReloadUnpassedInternalResultAwaitable() + 8351;

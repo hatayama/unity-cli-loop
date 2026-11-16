@@ -128,28 +128,32 @@ internal static class UnpassedImplicitCallLookup
         AssignmentExpressionSyntax assignment)
     {
         List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
-        ITypeSymbol right = TypeOf(semanticModel, assignment.Right);
-        if (right is INamedTypeSymbol { IsTupleType: true } tuple)
-        {
-            AddMissingNestedDeconstructCalls(assignment.Left, tuple, missing);
-        }
-        else if (semanticModel.GetDeconstructionInfo(assignment).Method == null)
-        {
-            missing.Add((right, "Deconstruct"));
-        }
-
+        AddMissingDeconstructCalls(
+            assignment.Left,
+            TypeOf(semanticModel, assignment.Right),
+            semanticModel.GetDeconstructionInfo(assignment),
+            missing);
         return missing;
     }
 
-    // Why the tuple's element types: a tuple splits without a method, so each nested target on the
-    // left deconstructs the matching element, whose Deconstruct is the call that may be missing.
-    private static void AddMissingNestedDeconstructCalls(
+    // Why element types are traced: each nested target on the left deconstructs one part of the
+    // value, a tuple element or an out parameter of the Deconstruct that bound, and that part's
+    // Deconstruct is the call that may be missing.
+    private static void AddMissingDeconstructCalls(
         SyntaxNode left,
-        INamedTypeSymbol tuple,
+        ITypeSymbol value,
+        DeconstructionInfo info,
         List<(ITypeSymbol, string)> missing)
     {
+        IReadOnlyList<ITypeSymbol> parts = PartTypesOrNull(value, info);
+        if (parts == null)
+        {
+            missing.Add((value, "Deconstruct"));
+            return;
+        }
+
         IReadOnlyList<SyntaxNode> targets = DeconstructionTargetsOrNull(left);
-        if (targets == null || targets.Count != tuple.TupleElements.Length)
+        if (targets == null || targets.Count != parts.Count)
         {
             return;
         }
@@ -161,15 +165,28 @@ internal static class UnpassedImplicitCallLookup
                 continue;
             }
 
-            ITypeSymbol element = tuple.TupleElements[index].Type;
-            if (element is INamedTypeSymbol { IsTupleType: true } nestedTuple)
-            {
-                AddMissingNestedDeconstructCalls(targets[index], nestedTuple, missing);
-                continue;
-            }
-
-            missing.Add((element, "Deconstruct"));
+            DeconstructionInfo nested = info.Nested.Length == targets.Count ? info.Nested[index] : default;
+            AddMissingDeconstructCalls(targets[index], parts[index], nested, missing);
         }
+    }
+
+    // The types a value splits into, or null when no Deconstruct bound for it.
+    private static IReadOnlyList<ITypeSymbol> PartTypesOrNull(ITypeSymbol value, DeconstructionInfo info)
+    {
+        if (value is INamedTypeSymbol { IsTupleType: true } tuple)
+        {
+            return tuple.TupleElements.Select(element => element.Type).ToList();
+        }
+
+        if (info.Method == null)
+        {
+            return null;
+        }
+
+        return info.Method.Parameters
+            .Where(parameter => parameter.RefKind == RefKind.Out)
+            .Select(parameter => parameter.Type)
+            .ToList();
     }
 
     private static IReadOnlyList<SyntaxNode> DeconstructionTargetsOrNull(SyntaxNode target)
