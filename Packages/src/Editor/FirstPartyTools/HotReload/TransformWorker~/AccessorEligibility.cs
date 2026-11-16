@@ -102,10 +102,10 @@ internal static class AccessorEligibility
             }
         }
 
-        if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode, addedMemberAccess))
+        WorkerReason incrementReject = FindPropertyIncrementRejectReasonOrNull(semanticModel, bodyNode, addedMemberAccess);
+        if (incrementReject != null)
         {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
+            rejectReason = incrementReject;
             return false;
         }
 
@@ -282,7 +282,10 @@ internal static class AccessorEligibility
         return true;
     }
 
-    private static bool NeedsPropertyIncrementRewrite(
+    // What: the reason an increment or decrement of an inaccessible property in the body cannot be
+    // rewritten, or null when there is none. Why the struct reason for a struct instance property:
+    // the increment reason suggests '+= 1', which is refused as well for such a property.
+    private static WorkerReason FindPropertyIncrementRejectReasonOrNull(
         SemanticModel semanticModel,
         SyntaxNode bodyNode,
         AddedMemberAccessLookup addedMemberAccess)
@@ -308,11 +311,13 @@ internal static class AccessorEligibility
                     || AccessibilityRules.IsInaccessibleAccessor(
                         AssignmentTargetRules.AccessorCalledByWrite(propertySymbol))))
             {
-                return true;
+                return WorkerReason.Of(AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol)
+                    ? HotReloadWorkerReasonCode.AccessorStructMemberNoShape
+                    : HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
             }
         }
 
-        return false;
+        return null;
     }
 
     private static ExpressionSyntax FindIncrementOrDecrementOperand(SyntaxNode node)

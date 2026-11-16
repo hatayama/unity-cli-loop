@@ -67,6 +67,12 @@ internal static class AccessorPropertyWriteRules
             return false;
         }
 
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
+        }
+
         if (setterInaccessible)
         {
             if (propertySymbol.SetMethod == null)
@@ -102,6 +108,14 @@ internal static class AccessorPropertyWriteRules
         rejectReason = null;
         if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
         {
+            return false;
+        }
+
+        // Why the struct reason first: the deconstruction reason suggests setting the property in
+        // its own statement, which is refused as well for an instance property of a struct.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
             return false;
         }
 

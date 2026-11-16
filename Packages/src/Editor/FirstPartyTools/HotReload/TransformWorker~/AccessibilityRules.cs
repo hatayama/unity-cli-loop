@@ -26,6 +26,17 @@ internal static class AccessibilityRules
             : method;
     }
 
+    // What: whether an accessor for this inaccessible member would need an instance of a struct
+    // as its receiver. Why such accessors are refused: Harmony cannot build a field ref whose
+    // instance type is a value type, so the shim fails to bind, and a property or method delegate
+    // takes the struct by value, so a write through it lands on a copy and is lost.
+    internal static bool NeedsStructInstanceReceiver(ISymbol member)
+    {
+        return !member.IsStatic
+            && member.ContainingType != null
+            && member.ContainingType.IsValueType;
+    }
+
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
     {
         if (IsNonCrossAssemblySymbol(symbol))

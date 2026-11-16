@@ -690,6 +690,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "inaccessible indexer access has no accessor rewrite shape.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorStructMemberNoShape,
+                NoArgs,
+                "inaccessible instance member of a struct has no accessor rewrite shape.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape,
                 NoArgs,
                 "compound assignment to an event has no accessor rewrite shape.");
