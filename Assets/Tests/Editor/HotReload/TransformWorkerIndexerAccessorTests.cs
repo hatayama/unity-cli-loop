@@ -164,6 +164,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: a file declaring an explicit interface indexer raises no "compiled property was
+        /// removed" warning, because the indexer is still declared.
+        /// </summary>
+        [Test]
+        public async Task Run_FileWithExplicitInterfaceIndexer_RaisesNoRemovedPropertyWarning()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("i + 1500", "i + 1510");
+
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                foreach (string warning in file.declarationDriftWarnings ?? Array.Empty<string>())
+                {
+                    Assert.That(warning, Does.Not.Contain("was removed or redeclared"));
+                }
+            }
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string anchor, string replacement)
         {
             string fixturePath = Path.GetFullPath(
