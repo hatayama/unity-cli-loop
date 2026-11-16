@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.31.0](https://github.com/hatayama/unity-cli-loop/compare/v3.30.1...v3.31.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to init accessor bodies ([#3536](https://github.com/hatayama/unity-cli-loop/issues/3536)) ([b3e3ab8](https://github.com/hatayama/unity-cli-loop/commit/b3e3ab848c619994f8930af9d71ae49961698b89))
+
 ## [3.30.1](https://github.com/hatayama/unity-cli-loop/compare/v3.30.0...v3.30.1) (2026-11-16)
 
 
