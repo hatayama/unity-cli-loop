@@ -171,6 +171,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             init { Position.x++; Plain = value + 3510; }
         }
 
+        public int MemberOfParenthesizedReadonlyStruct
+        {
+            get { return Position.x; }
+            init { (Position).x = value + 3540; }
+        }
+
         public int ThroughReferenceInReadonlyStruct
         {
             get { return Holder.Box.Value; }

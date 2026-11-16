@@ -263,6 +263,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an init body that writes a member of a parenthesized readonly struct field is refused
+        /// with the init-only-member reason, since parentheses do not change the write target.
+        /// </summary>
+        [Test]
+        public async Task Run_InitAssigningMemberOfParenthesizedReadonlyStructField_IsRefused()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3540", "value + 3541");
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitPublicWrites", "set_MemberOfParenthesizedReadonlyStruct", InitOnlyMemberReason);
+        }
+
+        /// <summary>
         /// What: an init body that writes through a class reference held by a readonly struct field is
         /// an entry, because the write changes the referenced object, not the readonly field.
         /// </summary>

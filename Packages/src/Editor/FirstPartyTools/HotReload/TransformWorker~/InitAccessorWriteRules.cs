@@ -62,8 +62,10 @@ internal static class InitAccessorWriteRules
     // What: whether the write target, or a value-type receiver the write goes through, is a readonly
     // field or an init-only property. Why the receivers: writing a member of a struct stored in a
     // readonly field writes the field itself.
-    private static bool WritesThroughInitOnlyMember(ExpressionSyntax target, SemanticModel semanticModel)
+    private static bool WritesThroughInitOnlyMember(ExpressionSyntax writeTarget, SemanticModel semanticModel)
     {
+        // Why unwrap: parentheses do not change which storage a write reaches.
+        ExpressionSyntax target = AssignmentTargetRules.Unparenthesized(writeTarget);
         if (IsInitOnlyMember(semanticModel.GetSymbolInfo(target).Symbol))
         {
             return true;
@@ -71,7 +73,7 @@ internal static class InitAccessorWriteRules
 
         // Why stop at the first receiver that is not a value-type member: past a class reference the
         // write changes the referenced object, not the storage that holds the reference.
-        ExpressionSyntax receiver = (target as MemberAccessExpressionSyntax)?.Expression;
+        ExpressionSyntax receiver = Unparenthesized((target as MemberAccessExpressionSyntax)?.Expression);
         while (receiver is MemberAccessExpressionSyntax or IdentifierNameSyntax)
         {
             ISymbol symbol = semanticModel.GetSymbolInfo(receiver).Symbol;
@@ -85,10 +87,15 @@ internal static class InitAccessorWriteRules
                 return true;
             }
 
-            receiver = (receiver as MemberAccessExpressionSyntax)?.Expression;
+            receiver = Unparenthesized((receiver as MemberAccessExpressionSyntax)?.Expression);
         }
 
         return false;
+    }
+
+    private static ExpressionSyntax Unparenthesized(ExpressionSyntax expression)
+    {
+        return expression == null ? null : AssignmentTargetRules.Unparenthesized(expression);
     }
 
     private static bool IsValueTypeMember(ISymbol symbol)
