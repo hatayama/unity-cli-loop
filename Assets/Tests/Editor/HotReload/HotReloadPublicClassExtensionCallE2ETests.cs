@@ -240,11 +240,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
         }
 
+        /// <summary>
+        /// What: a lambda that calls a generic extension method added in the same reload on a
+        /// receiver is Skipped with the generic-method reason, since writing the static form would
+        /// not help, and keeps its compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingAddedGenericExtensionOnReceiver_IsSkippedWithTheGenericReason()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                ClosureCall,
+                "Func<int> read = () => _value.AddedEcho(7101);",
+                "        internal static int AddedEcho<T>(this T value, int add)\n"
+                + "        {\n"
+                + "            return add;\n"
+                + "        }\n\n");
+
+            AssertSkippedWithReason(
+                result,
+                "ClosureCallsInternalExtension",
+                "inaccessible generic method calls are not rewritten.");
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+        }
+
         // Adds an extension method to the extensions class, rewrites one call to use it, and edits
         // another method of the file so the test can see that the rest of the file applied.
         private static async Task<HotReloadOrchestratorResult> RunWithAddedExtensionAsync(
             string originalCall,
-            string editedCall)
+            string editedCall,
+            string addedSource = AddedExtensionSource)
         {
             string fixturePath = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
@@ -252,7 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(onDisk.Contains(AddedExtensionAnchor), "Precondition: the anchor must be in the fixture.");
             Assert.That(onDisk.Contains(originalCall), "Precondition: the call must be in the fixture.");
             string edited = onDisk
-                .Replace(AddedExtensionAnchor, AddedExtensionSource + AddedExtensionAnchor)
+                .Replace(AddedExtensionAnchor, addedSource + AddedExtensionAnchor)
                 .Replace(originalCall, editedCall)
                 .Replace("7121", "7122");
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource("PublicClassAddedExtensionE2E.cs", edited);

@@ -58,11 +58,13 @@ internal sealed class AddedMemberAccessLookup
 
     // Why any declaring type, unlike IsAddedMethod: an extension method lives in its own static
     // class, and whether that class's compiled counterpart holds it is answered from that class
-    // alone. A class new to the Editor is left to the introduced-type paths.
+    // alone. A class new to the Editor is left to the introduced-type paths. A generic one is
+    // left to the generic-method reason, which a static-form call would meet as well.
     public bool IsAddedExtensionMethod(IMethodSymbol methodSymbol)
     {
         if (methodSymbol == null
             || !methodSymbol.IsExtensionMethod
+            || methodSymbol.IsGenericMethod
             || methodSymbol.MethodKind != MethodKind.Ordinary
             || methodSymbol.DeclaringSyntaxReferences.IsEmpty)
         {
