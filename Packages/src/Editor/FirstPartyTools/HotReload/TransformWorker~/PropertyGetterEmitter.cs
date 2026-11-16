@@ -191,6 +191,21 @@ internal static class PropertyGetterEmitter
             return currentShimType;
         }
 
+        WorkerReason unpatchableGetter = PropertyGetterClassifier.DescribeUnpatchableGetterOrNull(
+            propertySymbol,
+            compiledType,
+            homeAssemblyName);
+        if (unpatchableGetter != null)
+        {
+            skipped.Add(new WorkerSkipped
+            {
+                SourceProjectRelativePath = sourceProjectRelativePath,
+                Method = WorkerMethodKeys.FormatRowLabel(compiledType, getterSymbol),
+                Reason = unpatchableGetter
+            });
+            return currentShimType;
+        }
+
         // Why body stays on the property tree: SemanticModel rejects nodes re-parented onto a
         // synthetic MethodDeclaration ("Syntax node is not within syntax tree").
         SyntaxNode getterBodyNode = (SyntaxNode)propertyDeclaration.ExpressionBody

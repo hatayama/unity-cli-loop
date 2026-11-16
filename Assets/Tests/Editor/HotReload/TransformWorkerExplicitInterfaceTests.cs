@@ -512,6 +512,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FormatSkipped(result));
         }
 
+        /// <summary>
+        /// What: a getter added by the edit to an explicit write-only property is Skipped with the
+        /// explicit-implementation reason and emits no entry, because the compiled property has no
+        /// getter; the other edits of the file still apply.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAddedToExplicitSetOnlyProperty_IsSkippedWithoutEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitSetOnlyAddsGetter.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        ReplaceUniqueFragment(source, "int Written { set; }", "int Written { get; set; }"),
+                        "set { _stored = value + 8208; }",
+                        "get { return _stored; } set { _stored = value + 8208; }"),
+                    "8101",
+                    "9101"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitSetOnlyValueFixture));
+            AssertSkippedWith(
+                result,
+                Namespace + ".IHotReloadExplicitSetOnlyValue.get_Written",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+            AssertEntry(result, typeof(HotReloadExplicitRunnerFixture), Namespace + ".IHotReloadExplicitRunner.Run", "Run");
+        }
+
+        /// <summary>
+        /// What: a getter added by the edit to an ordinary write-only property is Skipped as an
+        /// unsupported accessor and emits no entry, because the compiled property has no getter for
+        /// the Editor to find.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAddedToOrdinarySetOnlyProperty_IsSkippedWithoutEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "OrdinarySetOnlyAddsGetter.cs",
+                source => ReplaceUniqueFragment(
+                    source,
+                    "set { _stored = value + 8209; }",
+                    "get { return _stored; } set { _stored = value + 8209; }"));
+
+            AssertNoEntryFor(result, typeof(HotReloadOrdinarySetOnlyValueFixture));
+            AssertSkippedWith(result, "get_OrdinaryWritten", HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
+        }
+
         private static void AssertNoEntryFor(TransformWorkerClientResult result, Type fixtureType)
         {
             Assert.That(

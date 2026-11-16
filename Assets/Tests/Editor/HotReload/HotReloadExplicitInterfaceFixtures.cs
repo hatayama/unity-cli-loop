@@ -50,6 +50,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         int Value { get; init; }
     }
 
+    /// <summary>Interface with a write-only property.</summary>
+    public interface IHotReloadExplicitSetOnlyValue
+    {
+        int Written { set; }
+    }
+
     /// <summary>Generic interface with a read-write property.</summary>
     public interface IHotReloadExplicitBoxValue<T>
     {
@@ -217,6 +223,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         int IHotReloadExplicitReadOnlyValue.Reading
         {
             get { return 8204; }
+        }
+    }
+
+    /// <summary>An explicit write-only property, which an edit may give a getter.</summary>
+    public class HotReloadExplicitSetOnlyValueFixture : IHotReloadExplicitSetOnlyValue
+    {
+        private int _stored;
+
+        int IHotReloadExplicitSetOnlyValue.Written
+        {
+            set { _stored = value + 8208; }
+        }
+    }
+
+    /// <summary>An ordinary write-only property, which an edit may give a getter.</summary>
+    public class HotReloadOrdinarySetOnlyValueFixture
+    {
+        private int _stored;
+
+        public int OrdinaryWritten
+        {
+            set { _stored = value + 8209; }
         }
     }
 

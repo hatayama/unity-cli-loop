@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -328,6 +329,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(value.Value, Is.EqualTo(1 + 9201));
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(value.Value, Is.EqualTo(1 + 8201), "RevertAll must restore the compiled getter.");
+        }
+
+        /// <summary>
+        /// What: a getter added to an ordinary write-only property is Skipped, not Failed, and the
+        /// other edit of the same file is still Patched.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAddedToOrdinarySetOnlyProperty_IsSkippedAndTheFileStillApplies()
+        {
+            IHotReloadExplicitRunner runner = new HotReloadExplicitRunnerFixture();
+            string fixturePath = ResolveFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "set { _stored = value + 8209; }",
+                    "get { return _stored; } set { _stored = value + 8209; }",
+                    StringComparison.Ordinal)
+                .Replace("8101", "9101", StringComparison.Ordinal);
+            Assert.That(edited, Does.Contain("get { return _stored; } set { _stored = value + 8209; }"), "Precondition: getter added.");
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                HotReloadTestSourceWriter.WriteEditedSource("ExplicitE2EOrdinarySetOnly.cs", edited),
+                CancellationToken.None);
+
+            AssertHasPatched(result, "IHotReloadExplicitRunner.Run(");
+            Assert.That(
+                result.Methods.Any(outcome =>
+                    outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains("get_OrdinaryWritten", StringComparison.Ordinal)),
+                Is.True,
+                FormatOutcomes(result));
+            Assert.That(runner.Run(), Is.EqualTo(9101));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         private static async Task ApplyEditAsync(

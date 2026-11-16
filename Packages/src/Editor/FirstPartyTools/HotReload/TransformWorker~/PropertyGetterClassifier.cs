@@ -57,6 +57,43 @@ internal static class PropertyGetterClassifier
         return false;
     }
 
+    // What: why a getter of a compiled property cannot be patched, or null when it can.
+    // Why each case: an entry for a getter the compiled property lacks (a getter added to a
+    // write-only property) fails the Editor's lookup and turns the whole file into Failed, while
+    // Skipped keeps pointing the reader at 'uloop compile'. An explicit getter on a type a retained
+    // artifact serves stays Skipped as its setter does: explicit accessors are patched only on
+    // compiled types.
+    internal static WorkerReason DescribeUnpatchableGetterOrNull(
+        IPropertySymbol propertySymbol,
+        INamedTypeSymbol compiledType,
+        string homeAssemblyName)
+    {
+        bool isExplicit = propertySymbol.ExplicitInterfaceImplementations.Length > 0;
+        if (isExplicit && homeAssemblyName != null)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+        }
+
+        if (compiledType == null || homeAssemblyName != null)
+        {
+            return null;
+        }
+
+        IPropertySymbol compiledProperty = isExplicit
+            ? ExplicitImplementationMatcher.FindCompiledPropertyImplementation(compiledType, propertySymbol)
+            : compiledType.GetMembers(propertySymbol.Name)
+                .OfType<IPropertySymbol>()
+                .FirstOrDefault(candidate => !candidate.IsIndexer);
+        if (compiledProperty == null || compiledProperty.GetMethod != null)
+        {
+            return null;
+        }
+
+        return WorkerReason.Of(isExplicit
+            ? HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation
+            : HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
+    }
+
     // What: runs a property accessor body through the same transform decision and name/added-call
     // guards as an ordinary method, adding the skip row itself when one applies.
     internal static (bool SkipAccessor, MethodTransformDecision Decision) TrySkipPropertyAccessorByDecision(
