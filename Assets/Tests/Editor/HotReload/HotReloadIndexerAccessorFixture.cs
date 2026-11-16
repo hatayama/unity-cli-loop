@@ -53,6 +53,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
+    public class HotReloadIndexerParams
+    {
+        internal int Stored;
+
+        public int this[params int[] xs]
+        {
+            get => xs.Length + 1800;
+            set => Stored = value + xs.Length + 1850;
+        }
+    }
+
+    public class HotReloadIndexerDefaultParameter
+    {
+        internal int Stored;
+
+        public int this[int i, int j = 0]
+        {
+            get => i + j + 1900;
+            set => Stored = value + i + j + 1950;
+        }
+    }
+
     public class HotReloadIndexerExpressionBodied
     {
         public int this[int i] => i + 1500;

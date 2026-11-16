@@ -88,6 +88,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an edited setter of an indexer with a default index value stores the edited value
+        /// after the apply and the compiled value after RevertAll.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedDefaultParameterIndexerSetter_AppliesAndReverts()
+        {
+            HotReloadIndexerDefaultParameter target = new HotReloadIndexerDefaultParameter();
+            target[2] = 3;
+            Assert.That(target.Stored, Is.EqualTo(1955), "Precondition: compiled setter.");
+
+            HotReloadOrchestratorResult result = await RunEditedAsync(
+                "IndexerDefaultSetterE2E.cs",
+                "value + i + j + 1950",
+                "value + i + j + 1960");
+
+            AssertPatched(result, "HotReloadIndexerDefaultParameter.set_Item(System.Int32,System.Int32,System.Int32)");
+            target[2] = 3;
+            Assert.That(target.Stored, Is.EqualTo(1965), "The patched setter must run.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            target[2] = 3;
+            Assert.That(target.Stored, Is.EqualTo(1955), "RevertAll must restore the compiled setter.");
+        }
+
+        /// <summary>
         /// What: with two indexer overloads, editing the string getter changes only that overload;
         /// the int overload keeps its compiled body, and RevertAll restores the string one.
         /// </summary>

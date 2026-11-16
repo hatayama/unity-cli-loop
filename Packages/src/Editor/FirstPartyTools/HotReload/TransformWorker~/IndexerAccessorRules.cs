@@ -104,9 +104,12 @@ internal static class IndexerAccessorRules
             && !compiledIndexer.SetMethod.IsInitOnly;
     }
 
-    // What: the compiled indexer with the same index parameter types (in order) and element type as
-    // the source indexer, or null. Why not by name: every overload shares the name, so the index
-    // parameters are what identify the compiled accessor the Editor looks up.
+    // What: the compiled indexer with the same metadata name, index parameter types (in order), and
+    // element type as the source indexer, or null. Why not by name alone: every overload shares the
+    // name, so the index parameters are what tell overloads apart. Why the name too: the entry
+    // carries the source accessor name, so an [IndexerName] added, removed, or changed since the
+    // compile would name a method the Editor cannot find. Why the element type: the Editor's lookup
+    // ignores return types, so a re-typed getter would be patched into the compiled one.
     internal static IPropertySymbol FindCompiledPeerOrNull(INamedTypeSymbol compiledType, IPropertySymbol sourceIndexer)
     {
         string[] sourceParameterTypes = ToParameterTypeFullNames(sourceIndexer);
@@ -114,6 +117,7 @@ internal static class IndexerAccessorRules
         return compiledType.GetMembers()
             .OfType<IPropertySymbol>()
             .FirstOrDefault(candidate => candidate.IsIndexer
+                && candidate.MetadataName == sourceIndexer.MetadataName
                 && candidate.IsStatic == sourceIndexer.IsStatic
                 && CecilTypeNames.ToCecilFullName(candidate.Type) == sourceElementType
                 && ToParameterTypeFullNames(candidate).SequenceEqual(sourceParameterTypes));

@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
         private const string Int32 = "System.Int32";
         private const string BaseMemberReason = "Uses base. for something other than a direct call to a base method";
+        private const string NoMatchingAccessorReason = "with no matching accessor on the compiled type";
         private const string ExplicitInterfaceReason = "accessors of explicit interface properties, are skipped";
 
         /// <summary>
@@ -99,10 +100,86 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync("this[int x, int y]", "this[short x, short y]");
 
-            const string NoMatchingAccessor = "with no matching accessor on the compiled type";
-            AssertSkipped(result, "HotReloadIndexerTwoParameters.get_Item(", NoMatchingAccessor);
-            AssertSkipped(result, "HotReloadIndexerTwoParameters.set_Item(", NoMatchingAccessor);
+            AssertSkipped(result, "HotReloadIndexerTwoParameters.get_Item(", NoMatchingAccessorReason);
+            AssertSkipped(result, "HotReloadIndexerTwoParameters.set_Item(", NoMatchingAccessorReason);
             Assert.That(FindEntries(result, "HotReloadIndexerTwoParameters", null).Count, Is.EqualTo(0), Describe(result));
+        }
+
+        /// <summary>
+        /// What: an indexer whose element type changed since the last compile has no matching
+        /// compiled accessor, so its getter stays Skipped with the accessor reason and is not an
+        /// entry (the Editor's lookup ignores return types, so the worker must refuse it).
+        /// </summary>
+        [Test]
+        public async Task Run_IndexerWithChangedElementType_IsSkippedWithTheAccessorReason()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "public int this[int i] => i + 1500;",
+                "public long this[int i] => i + 1510L;");
+
+            AssertSkipped(result, "HotReloadIndexerExpressionBodied.get_Item(", NoMatchingAccessorReason);
+            Assert.That(FindEntries(result, "HotReloadIndexerExpressionBodied", null).Count, Is.EqualTo(0), Describe(result));
+        }
+
+        /// <summary>
+        /// What: an indexer given an [IndexerName] since the last compile has no compiled accessor
+        /// under the new name, so its edited getter stays Skipped with the accessor reason and is not
+        /// an entry.
+        /// </summary>
+        [Test]
+        public async Task Run_IndexerNameAdded_IsSkippedWithTheAccessorReason()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "public int this[int i]\n        {\n            get => Stored + i + 1100;",
+                "[System.Runtime.CompilerServices.IndexerName(\"Row\")]\n        public int this[int i]\n        {\n            get => Stored + i + 1110;");
+
+            AssertSkipped(result, "HotReloadIndexerSingle.get_Row(", NoMatchingAccessorReason);
+            Assert.That(FindEntries(result, "HotReloadIndexerSingle", null).Count, Is.EqualTo(0), Describe(result));
+        }
+
+        /// <summary>
+        /// What: an indexer whose [IndexerName] was removed since the last compile has no compiled
+        /// get_Item, so its edited getter stays Skipped with the accessor reason and is not an entry.
+        /// </summary>
+        [Test]
+        public async Task Run_IndexerNameRemoved_IsSkippedWithTheAccessorReason()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "[IndexerName(\"Cell\")]\n        public int this[int i]\n        {\n            get => i + 1300;",
+                "public int this[int i]\n        {\n            get => i + 1310;");
+
+            AssertSkipped(result, "HotReloadIndexerNamed.get_Item(", NoMatchingAccessorReason);
+            Assert.That(FindEntries(result, "HotReloadIndexerNamed", null).Count, Is.EqualTo(0), Describe(result));
+        }
+
+        /// <summary>
+        /// What: edited getter and setter of a params indexer are entries, and the setter shim drops
+        /// params so the appended value parameter compiles.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedParamsIndexerAccessors_AreEntries()
+        {
+            TransformWorkerClientResult getter = await RunEditedFixtureAsync("xs.Length + 1800", "xs.Length + 1810");
+            AssertSingleEntry(getter, "HotReloadIndexerParams", "get_Item", "System.Int32[]");
+
+            TransformWorkerClientResult setter = await RunEditedFixtureAsync("value + xs.Length + 1850", "value + xs.Length + 1860");
+            AssertSingleEntry(setter, "HotReloadIndexerParams", "set_Item", "System.Int32[]", Int32);
+            Assert.That(setter.Output.shimSource, Does.Not.Contain("params "));
+        }
+
+        /// <summary>
+        /// What: edited getter and setter of an indexer with a default index value are entries, and
+        /// the setter shim drops the default so the appended value parameter compiles.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedDefaultParameterIndexerAccessors_AreEntries()
+        {
+            TransformWorkerClientResult getter = await RunEditedFixtureAsync("i + j + 1900", "i + j + 1910");
+            AssertSingleEntry(getter, "HotReloadIndexerDefaultParameter", "get_Item", Int32, Int32);
+
+            TransformWorkerClientResult setter = await RunEditedFixtureAsync("value + i + j + 1950", "value + i + j + 1960");
+            AssertSingleEntry(setter, "HotReloadIndexerDefaultParameter", "set_Item", Int32, Int32, Int32);
+            Assert.That(setter.Output.shimSource, Does.Not.Contain("int j = 0"));
         }
 
         /// <summary>

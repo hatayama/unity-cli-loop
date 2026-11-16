@@ -274,8 +274,15 @@ internal static class IndexerAccessorEmitter
         List<ParameterSyntax> parameters = new List<ParameterSyntax>();
         foreach (ParameterSyntax parameter in target.Indexer.ParameterList.Parameters)
         {
+            // Why drop params and default values: the setter shim appends value after the index
+            // parameters, where neither may precede it (CS0231, CS1737), and the patch, not the
+            // user, calls the shim with every argument. The in modifier stays, so the signature
+            // still matches the compiled accessor.
             parameters.Add(parameter
                 .WithAttributeLists(default)
+                .WithModifiers(SyntaxFactory.TokenList(
+                    parameter.Modifiers.Where(modifier => !modifier.IsKind(SyntaxKind.ParamsKeyword))))
+                .WithDefault(null)
                 .WithType(((TypeSyntax)rewriter.Visit(parameter.Type)).WithoutTrivia())
                 .WithoutTrivia());
         }
