@@ -191,7 +191,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunEditedFixtureAsync("i + 1500", "i + 1510");
 
             AssertSingleEntry(result, "HotReloadIndexerExpressionBodied", "get_Item", Int32);
-            Assert.That(result.Output.shimSource, Does.Contain("#line "), "The arrow body must map back to the edited source.");
+            string shimMethodName = FindEntries(result, "HotReloadIndexerExpressionBodied", "get_Item")[0].shimMethodName;
+            string shimSource = result.Output.shimSource;
+            int methodStart = shimSource.IndexOf(" " + shimMethodName + "(", StringComparison.Ordinal);
+            Assert.That(methodStart, Is.GreaterThanOrEqualTo(0), "The shim must declare " + shimMethodName + ".");
+            int methodEnd = shimSource.IndexOf("#line default", methodStart, StringComparison.Ordinal);
+            Assert.That(methodEnd, Is.GreaterThan(methodStart), "The shim method must end with #line default.");
+            string expectedDirective = "#line " + FindFixtureLineNumber("public int this[int i] => i + 1500;")
+                + " \"" + FixtureProjectRelativePath + "\"";
+            Assert.That(
+                shimSource.Substring(methodStart, methodEnd - methodStart),
+                Does.Contain(expectedDirective),
+                "The arrow body must map back to its line in the edited source.");
         }
 
         /// <summary>
@@ -278,6 +289,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        private static int FindFixtureLineNumber(string fragment)
+        {
+            string[] lines = File.ReadAllLines(Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName)));
+            int index = Array.FindIndex(lines, line => line.Contains(fragment));
+            Assert.That(index, Is.GreaterThanOrEqualTo(0), "Precondition: the fixture must hold: " + fragment);
+            return index + 1;
         }
 
         private static List<TransformWorkerEntryDto> FindEntries(
