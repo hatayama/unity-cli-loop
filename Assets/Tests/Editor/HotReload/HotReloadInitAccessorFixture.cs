@@ -142,9 +142,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     // Why public readonly fields on a public type: the shim writes such a field directly, while an
     // internal one is reached through a field reference, so only this shape shows the writes the
     // shim cannot compile.
+    public class HotReloadInitBox
+    {
+        public int Value;
+    }
+
+    public struct HotReloadInitHolder
+    {
+        public HotReloadInitBox Box;
+    }
+
     public class HotReloadInitPublicWrites
     {
         public readonly HotReloadInitPoint Position;
+        public readonly HotReloadInitHolder Holder;
         public readonly int Locked;
         public int Plain;
 
@@ -158,6 +169,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             get { return Position.x; }
             init { Position.x++; Plain = value + 3510; }
+        }
+
+        public int ThroughReferenceInReadonlyStruct
+        {
+            get { return Holder.Box.Value; }
+            init { Holder.Box.Value = value + 3530; }
         }
 
         public int RefToReadonly

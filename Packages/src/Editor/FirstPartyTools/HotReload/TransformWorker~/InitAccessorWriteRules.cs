@@ -69,11 +69,18 @@ internal static class InitAccessorWriteRules
             return true;
         }
 
+        // Why stop at the first receiver that is not a value-type member: past a class reference the
+        // write changes the referenced object, not the storage that holds the reference.
         ExpressionSyntax receiver = (target as MemberAccessExpressionSyntax)?.Expression;
         while (receiver is MemberAccessExpressionSyntax or IdentifierNameSyntax)
         {
             ISymbol symbol = semanticModel.GetSymbolInfo(receiver).Symbol;
-            if (IsInitOnlyMember(symbol) && IsValueTypeMember(symbol))
+            if (!IsValueTypeMember(symbol))
+            {
+                return false;
+            }
+
+            if (IsInitOnlyMember(symbol))
             {
                 return true;
             }

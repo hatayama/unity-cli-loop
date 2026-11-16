@@ -263,6 +263,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an init body that writes through a class reference held by a readonly struct field is
+        /// an entry, because the write changes the referenced object, not the readonly field.
+        /// </summary>
+        [Test]
+        public async Task Run_InitWritingThroughReferenceInReadonlyStructField_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3530", "value + 3531");
+
+            AssertEntry(result, "HotReloadInitPublicWrites", "set_ThroughReferenceInReadonlyStruct");
+        }
+
+        /// <summary>
         /// What: an edited explicit interface init accessor renders the accessor reason that names
         /// explicit interface init accessors, not only the reason code.
         /// </summary>
