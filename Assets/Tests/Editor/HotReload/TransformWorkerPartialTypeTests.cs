@@ -394,6 +394,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertCallerSkippedWith(result, HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged);
         }
 
+        /// <summary>
+        /// What: an unchanged field typed from the unscanned part under an escaped identifier is found
+        /// in the snapshot, so a user of it in another file of the run is not skipped as using a field
+        /// whose type changed.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedEscapedFieldWithIncompleteScan_DoesNotSkipUserAsFieldTypeChanged()
+        {
+            TransformWorkerClientResult result = await RunOtherPartEditWithCallerAsync(
+                "PartialEscapedField",
+                fixture => fixture,
+                "public int Second() { return new HotReloadPartialTypeFixture().@event == null ? 1 : 0; }");
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Second");
+            Assert.That(
+                skipped == null ? null : (HotReloadWorkerReasonCode?)skipped.reason.code,
+                Is.Not.EqualTo(HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged),
+                FormatSkipped(result));
+        }
+
         // What: runs an edit of the partial fixture under an incomplete scan, together with an edit of
         // the adjacent-methods fixture whose Second body is replaced by callerBody.
         private static async Task<TransformWorkerClientResult> RunOtherPartEditWithCallerAsync(

@@ -32,7 +32,7 @@ internal static class AddedFieldClassifier
 
                 CompiledFieldMatch fieldMatch = CompiledMemberMatcher.MatchCompiledField(compiledType, fieldSymbol);
                 if (fieldMatch == CompiledFieldMatch.Matched
-                    || IsTypeUnboundForUntrustedParts(typeState, fieldMatch, fieldSymbol, fieldDeclaration))
+                    || IsTypeUnboundForUntrustedParts(typeState, fieldMatch, fieldSymbol, fieldDeclaration, variable))
                 {
                     continue;
                 }
@@ -61,12 +61,13 @@ internal static class AddedFieldClassifier
         TypeEmitState typeState,
         CompiledFieldMatch fieldMatch,
         IFieldSymbol fieldSymbol,
-        FieldDeclarationSyntax fieldDeclaration)
+        FieldDeclarationSyntax fieldDeclaration,
+        VariableDeclaratorSyntax variable)
     {
         return fieldMatch == CompiledFieldMatch.FieldTypeChanged
             && UnresolvedSignatureTypes.TryFind(fieldSymbol.Type, out ITypeSymbol _)
             && typeState.SourceUnit.PartialTypeParts.FindUntrustedOtherPartReasonOrNull(typeState.TypeDeclaration) != null
-            && SnapshotDeclaresSameFieldType(typeState, fieldSymbol.Name, fieldDeclaration);
+            && SnapshotDeclaresSameFieldType(typeState, fieldDeclaration, variable);
     }
 
     // Why the snapshot must agree: an unresolved type alone does not prove the type is unchanged.
@@ -75,8 +76,8 @@ internal static class AddedFieldClassifier
     // snapshot nothing proves the type unchanged, so the field keeps that path too.
     private static bool SnapshotDeclaresSameFieldType(
         TypeEmitState typeState,
-        string fieldName,
-        FieldDeclarationSyntax fieldDeclaration)
+        FieldDeclarationSyntax fieldDeclaration,
+        VariableDeclaratorSyntax variable)
     {
         BaselineSnapshotState baseline = typeState.SourceUnit.Baseline;
         if (!baseline.HasBaseline || baseline.SnapshotRoot == null)
@@ -86,7 +87,9 @@ internal static class AddedFieldClassifier
 
         Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
             WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
-        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldName);
+        // Why the identifier text, not the symbol name: the snapshot map is keyed by the text as
+        // written, which keeps the @ of an escaped identifier such as @event.
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, variable.Identifier.Text);
         if (snapshotFieldMap == null
             || !snapshotFieldMap.TryGetValue(syntaxKey, out VariableDeclaratorSyntax snapshotVariable)
             || !(snapshotVariable.Parent is VariableDeclarationSyntax snapshotDeclaration))
