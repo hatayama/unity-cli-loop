@@ -385,7 +385,7 @@ patched with a warning, until the next compile.
 Property getters and setters with a body (including expression-bodied ones) are patched
 like ordinary methods; a setter's row reads `Ns.Type.set_X(<type>)`. Indexer accessors
 are patched the same way; their rows read `Ns.Type.get_Item(<index types>)` and
-`Ns.Type.set_Item(<index types>,<type>)`, or use the `[IndexerName]` name. A patched
+`Ns.Type.set_Item(<index types>,<type>)`, or use the `[IndexerName]` name. On a type an earlier reload introduced, indexer accessors stay `Skipped`; run `uloop compile`. A patched
 setter changes what the next assignment does: values stored by earlier assignments stay
 as they are. Editing a compiled property's `init` accessor is reported per-accessor as
 `Skipped`, and so is a setter or indexer accessor with no matching accessor on the
