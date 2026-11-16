@@ -60,6 +60,7 @@ internal static class OrdinaryMethodQueue
             methodSymbol);
         if (isAddedMethod && TrySkipSignatureUnboundForUntrustedParts(methodDeclaration, methodSymbol, typeState, skipped))
         {
+            RecordGenuinelyAddedSyntaxKey(typeState, methodDeclaration, snapshotMethodMap, addedMethodCatalog);
             return;
         }
 
@@ -256,6 +257,23 @@ internal static class OrdinaryMethodQueue
             Reason = untrustedPart
         });
         return true;
+    }
+
+    // Why only when the snapshot lacks it: a method the snapshot does not hold was really added, and
+    // its skip row already explains it, so the drift check must not report the addition again. A
+    // method the snapshot holds is the compiled one seen through unbound parts, so its key stays
+    // unrecorded and both trees keep it.
+    private static void RecordGenuinelyAddedSyntaxKey(
+        TypeEmitState typeState,
+        MethodDeclarationSyntax methodDeclaration,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        AddedMethodCatalog addedMethodCatalog)
+    {
+        string syntaxMethodKey = WorkerSyntaxIndex.BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration);
+        if (snapshotMethodMap != null && !snapshotMethodMap.ContainsKey(syntaxMethodKey))
+        {
+            addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+        }
     }
 
     internal static bool TrySkipExcludedOrdinaryMethod(

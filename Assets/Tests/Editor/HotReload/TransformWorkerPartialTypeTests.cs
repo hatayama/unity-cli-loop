@@ -260,6 +260,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a method newly added to a part, whose parameter type lives in the other part, is
+        /// skipped with the partial-parts reason under an incomplete scan, and the addition itself is
+        /// not reported again as an edit outside method bodies.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedOtherPartTypedMethodWithIncompleteScan_SkipsAsUncheckedWithoutDrift()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string edited = ReplaceOnce(
+                onDisk,
+                "        public int TakesOtherPartNested(OtherPartNested value)",
+                "        public int TakesOtherPartNestedAdded(OtherPartNested value) { return 1; }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int TakesOtherPartNested(OtherPartNested value)");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialAddedIncompleteScan.cs", edited),
+                FixtureProjectRelativePath,
+                onDisk,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoDriftWarnings(result, FixtureProjectRelativePath);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "TakesOtherPartNestedAdded");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
         /// What: the same unchanged part with a complete scan reports no drift warning and no row for
         /// the method whose parameter type lives in the other part.
         /// </summary>
