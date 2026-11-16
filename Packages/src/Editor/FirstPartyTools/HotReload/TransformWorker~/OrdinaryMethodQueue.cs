@@ -58,6 +58,19 @@ internal static class OrdinaryMethodQueue
             methodDeclaration,
             compiledType,
             methodSymbol);
+        if (isAddedMethod && UnboundPartialSignatureSkip.TrySkip(
+            methodDeclaration,
+            methodSymbol,
+            methodKey,
+            typeState,
+            snapshotMethodMap,
+            plainCurrentMethodMap,
+            addedMethodCatalog,
+            skipped))
+        {
+            return;
+        }
+
         bool bodylessNotCompared = IsBodylessCompiledMethodWithoutBaseline(
             isAddedMethod,
             hasBaseline,

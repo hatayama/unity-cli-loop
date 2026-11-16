@@ -233,6 +233,278 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an unchanged part sent alone while the list of changed files may be incomplete gets
+        /// no declaration-drift warning (the part holds a field typed from the other part, too), and its
+        /// method whose parameter type lives in the other part is skipped with the reason that the
+        /// parts were not checked, not as an added method.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedPartAloneWithIncompleteScan_SkipsOtherPartTypedMethodAsUncheckedWithoutDrift()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialUnchangedIncompleteScan.cs", onDisk),
+                FixtureProjectRelativePath,
+                onDisk,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoDriftWarnings(result, FixtureProjectRelativePath);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "TakesOtherPartNested");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a method newly added to a part, whose parameter type lives in the other part, is
+        /// skipped with the partial-parts reason under an incomplete scan, and the addition itself is
+        /// not reported again as an edit outside method bodies.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedOtherPartTypedMethodWithIncompleteScan_SkipsAsUncheckedWithoutDrift()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string edited = ReplaceOnce(
+                onDisk,
+                "        public int TakesOtherPartNested(OtherPartNested value)",
+                "        public int TakesOtherPartNestedAdded(OtherPartNested value) { return 1; }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int TakesOtherPartNested(OtherPartNested value)");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialAddedIncompleteScan.cs", edited),
+                FixtureProjectRelativePath,
+                onDisk,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoDriftWarnings(result, FixtureProjectRelativePath);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "TakesOtherPartNestedAdded");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a caller in another file of the run that calls a method newly added to a part with
+        /// unscanned siblings is skipped, not emitted, because that method does not exist at run time.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerOfOtherPartTypedAddedMethodWithIncompleteScan_IsNotEmitted()
+        {
+            string fixtureOnDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            string fixtureEdited = ReplaceOnce(
+                fixtureOnDisk,
+                "        public int TakesOtherPartNested(OtherPartNested value)",
+                "        public int TakesOtherPartNestedAdded(OtherPartNested value) { return 1; }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int TakesOtherPartNested(OtherPartNested value)");
+            const string callerFileName = "HotReloadPausePointAdjacentMethodsFixture.cs";
+            string callerOnDisk = File.ReadAllText(ResolveFixturePath(callerFileName));
+            string callerEdited = ReplaceOnce(
+                callerOnDisk,
+                "public int Second() { return 4102; }",
+                "public int Second() { return new HotReloadPartialTypeFixture().TakesOtherPartNestedAdded(null); }");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(
+                new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = WriteEdited("PartialAddedCalleeIncompleteScan.cs", fixtureEdited),
+                        projectRelativePath = FixtureProjectRelativePath,
+                        snapshotSource = fixtureOnDisk
+                    },
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = WriteEdited("PartialAddedCallerIncompleteScan.cs", callerEdited),
+                        projectRelativePath = "Assets/Tests/Editor/HotReload/" + callerFileName,
+                        snapshotSource = callerOnDisk
+                    }
+                },
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "Second"), Is.Null, "The caller of a method that does not exist yet must not be applied.");
+            Assert.That(FindSkipped(result, "Second"), Is.Not.Null, FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a method whose return type really changed to a type from the unscanned part keeps the
+        /// added classification, so a caller in another file of the run is skipped as calling an
+        /// unavailable added method.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChangedToOtherPartTypeWithIncompleteScan_SkipsCallerInAnotherFile()
+        {
+            TransformWorkerClientResult result = await RunOtherPartEditWithCallerAsync(
+                "PartialReturnTypeChanged",
+                fixture => ReplaceOnce(
+                    ReplaceOnce(
+                        fixture,
+                        "public int TakesOtherPartNested(OtherPartNested value)",
+                        "public OtherPartNested TakesOtherPartNested(OtherPartNested value)"),
+                    "return value.Number;",
+                    "return value;"),
+                "public int Second() { return new HotReloadPartialTypeFixture().TakesOtherPartNested(null) == null ? 1 : 0; }");
+
+            AssertCallerSkippedWith(result, HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall);
+        }
+
+        /// <summary>
+        /// What: a method made static whose signature names a type from the unscanned part keeps the
+        /// added classification, so a caller in another file of the run is skipped.
+        /// </summary>
+        [Test]
+        public async Task Run_MethodMadeStaticWithIncompleteScan_SkipsCallerInAnotherFile()
+        {
+            TransformWorkerClientResult result = await RunOtherPartEditWithCallerAsync(
+                "PartialMadeStatic",
+                fixture => ReplaceOnce(
+                    fixture,
+                    "public int TakesOtherPartNested(OtherPartNested value)",
+                    "public static int TakesOtherPartNested(OtherPartNested value)"),
+                "public int Second() { return HotReloadPartialTypeFixture.TakesOtherPartNested(null); }");
+
+            AssertCallerSkippedWith(result, HotReloadWorkerReasonCode.AddedMethodUnavailableAddedCall);
+        }
+
+        /// <summary>
+        /// What: a field whose declared type really changed to another type from the unscanned part
+        /// stays an unavailable added field, so a method of a non-partial type in another file of the
+        /// run that uses it is skipped.
+        /// </summary>
+        [Test]
+        public async Task Run_FieldTypeChangedToOtherPartTypeWithIncompleteScan_SkipsUserInAnotherFile()
+        {
+            TransformWorkerClientResult result = await RunOtherPartEditWithCallerAsync(
+                "PartialFieldTypeChanged",
+                fixture => ReplaceOnce(
+                    fixture,
+                    "public OtherPartNested OtherPartTypedField;",
+                    "public OtherPartNested[] OtherPartTypedField;"),
+                "public int Second() { return new HotReloadPartialTypeFixture().OtherPartTypedField == null ? 1 : 0; }");
+
+            AssertCallerSkippedWith(result, HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged);
+        }
+
+        /// <summary>
+        /// What: an unchanged field typed from the unscanned part under an escaped identifier is found
+        /// in the snapshot, so a user of it in another file of the run is not skipped as using a field
+        /// whose type changed.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedEscapedFieldWithIncompleteScan_DoesNotSkipUserAsFieldTypeChanged()
+        {
+            TransformWorkerClientResult result = await RunOtherPartEditWithCallerAsync(
+                "PartialEscapedField",
+                fixture => fixture,
+                "public int Second() { return new HotReloadPartialTypeFixture().@event == null ? 1 : 0; }");
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Second");
+            Assert.That(
+                skipped == null ? null : (HotReloadWorkerReasonCode?)skipped.reason.code,
+                Is.Not.EqualTo(HotReloadWorkerReasonCode.AddedFieldFieldTypeChanged),
+                FormatSkipped(result));
+        }
+
+        // What: runs an edit of the partial fixture under an incomplete scan, together with an edit of
+        // the adjacent-methods fixture whose Second body is replaced by callerBody.
+        private static async Task<TransformWorkerClientResult> RunOtherPartEditWithCallerAsync(
+            string scenarioName,
+            Func<string, string> editFixture,
+            string callerBody)
+        {
+            string fixtureOnDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+            const string callerFileName = "HotReloadPausePointAdjacentMethodsFixture.cs";
+            string callerOnDisk = File.ReadAllText(ResolveFixturePath(callerFileName));
+            string callerEdited = ReplaceOnce(callerOnDisk, "public int Second() { return 4102; }", callerBody);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(
+                new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = WriteEdited(scenarioName + "Callee.cs", editFixture(fixtureOnDisk)),
+                        projectRelativePath = FixtureProjectRelativePath,
+                        snapshotSource = fixtureOnDisk
+                    },
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = WriteEdited(scenarioName + "Caller.cs", callerEdited),
+                        projectRelativePath = "Assets/Tests/Editor/HotReload/" + callerFileName,
+                        snapshotSource = callerOnDisk
+                    }
+                },
+                changedSiblingScanComplete: false);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            return result;
+        }
+
+        private static void AssertCallerSkippedWith(TransformWorkerClientResult result, HotReloadWorkerReasonCode code)
+        {
+            Assert.That(FindEntry(result, "Second"), Is.Null, "The caller must not be applied. " + FormatSkipped(result));
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "Second");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(skipped.reason.code, Is.EqualTo(code), FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: the same unchanged part with a complete scan reports no drift warning and no row for
+        /// the method whose parameter type lives in the other part.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedPartAloneWithCompleteScan_ReportsNoRowForOtherPartTypedMethod()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialUnchangedCompleteScan.cs", onDisk),
+                FixtureProjectRelativePath,
+                onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoDriftWarnings(result, FixtureProjectRelativePath);
+            Assert.That(FindSkipped(result, "TakesOtherPartNested"), Is.Null, FormatSkipped(result));
+            Assert.That(FindEntry(result, "TakesOtherPartNested"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a method added to a type that is not partial, whose parameter type resolves nowhere,
+        /// keeps the added-method unresolved-signature reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMethodOnNonPartialTypeWithUnresolvedParameter_KeepsUnresolvedSignatureReason()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/HotReloadPausePointAdjacentMethodsFixture.cs";
+            string onDisk = File.ReadAllText(ResolveFixturePath("HotReloadPausePointAdjacentMethodsFixture.cs"));
+            string edited = ReplaceOnce(
+                onDisk,
+                "public int Second() { return 4102; }",
+                "public int Second() { return 4102; } public int TakesMissing(NoSuchTypeAnywhere value) { return 1; }");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("NonPartialAddedUnresolved.cs", edited),
+                projectRelativePath,
+                onDisk,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "TakesMissing");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
         /// What: when a part of the type is in no source file the run can see (the stand-in for a part
         /// generated at compile time), only the body that names that part's member is skipped, with
         /// the unresolved-name diagnostic, and the other edited method of the file is still emitted.
@@ -1526,6 +1798,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static void AssertNoDriftWarnings(TransformWorkerClientResult result, string projectRelativePath)
+        {
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                if (file.projectRelativePath == projectRelativePath)
+                {
+                    Assert.That(file.declarationDriftWarnings, Is.Empty);
+                    return;
+                }
+            }
+
+            Assert.Fail("Missing file row for " + projectRelativePath);
         }
 
         private static string FormatSkipped(TransformWorkerClientResult result)
