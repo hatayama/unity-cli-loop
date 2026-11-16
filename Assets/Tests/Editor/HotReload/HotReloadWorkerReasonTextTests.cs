@@ -695,6 +695,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "inaccessible instance member of a struct has no accessor rewrite shape.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
+                new[] { "GetEnumerator", "foreach" },
+                "inaccessible method 'GetEnumerator' that the compiler calls for foreach has no accessor rewrite shape.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape,
                 NoArgs,
                 "compound assignment to an event has no accessor rewrite shape.");

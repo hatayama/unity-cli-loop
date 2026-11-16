@@ -50,6 +50,11 @@ internal static class InaccessibleAccessScanner
     /// </summary>
     internal static bool HasInaccessibleAccessAtNode(SemanticModel semanticModel, SyntaxNode node)
     {
+        if (ImplicitCallTargets.FindInaccessibleCallReasonOrNull(semanticModel, node) != null)
+        {
+            return true;
+        }
+
         if (node is AssignmentExpressionSyntax assignment)
         {
             return IsInaccessibleAssignment(semanticModel, assignment);
