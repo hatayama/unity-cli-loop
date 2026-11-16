@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(
                 "public int this[int i] => i + 1500;",
-                "public ref int this[int i] => ref new int[i + 1510][i];");
+                "public ref int this[int i] => ref (new int[i + 1510])[i];");
 
             AssertSkipped(result, "HotReloadIndexerExpressionBodied.get_Item(", NoMatchingAccessorReason);
             Assert.That(FindEntries(result, "HotReloadIndexerExpressionBodied", "get_Item").Count, Is.EqualTo(0), Describe(result));
