@@ -388,8 +388,9 @@ are patched the same way; their rows read `Ns.Type.get_Item(<index types>)` and
 `Ns.Type.set_Item(<index types>,<type>)`, or use the `[IndexerName]` name. On a type an earlier reload introduced, indexer accessors stay `Skipped`; run `uloop compile`. A patched
 setter changes what the next assignment does: values stored by earlier assignments stay
 as they are. Editing a compiled property's `init` accessor is reported per-accessor as
-`Skipped`, and so is a setter or indexer accessor with no matching accessor on the
-compiled type (a `set` added to a getter-only property or indexer, one that was `init`
+`Skipped`, and so is a getter, setter, or indexer accessor with no matching accessor on
+the compiled type (a `get` added to a write-only property, a `set` added to a
+getter-only property or indexer, one that was `init`
 at the last compile, or one whose property changed its type, index parameters, or
 `static` modifier since then), so an edited accessor never disappears from the response
 silently; with a verified baseline, accessors unchanged from it produce no row. A
