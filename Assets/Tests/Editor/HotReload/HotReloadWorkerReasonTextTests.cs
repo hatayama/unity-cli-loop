@@ -709,9 +709,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "compound assignment to an event has no accessor rewrite shape.");
             yield return Case(
-                HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten,
+                HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape,
                 NoArgs,
-                "inaccessible extension method calls are not rewritten.");
+                "inaccessible extension method used as a method group (not called) has no accessor rewrite shape.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                new[] { "AddedTriple", "Extensions" },
+                "extension method 'AddedTriple' added in this reload has no rewrite shape when called on a receiver; write the call as 'Extensions.AddedTriple(receiver, ...)'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 NoArgs,
@@ -776,6 +780,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 NoArgs,
                 "inaccessible methods that return by ref have no accessor rewrite shape.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten,
+                NoArgs,
+                "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them when the condition symbol is not defined.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape,
+                NoArgs,
+                "inaccessible method with a ref struct parameter or return type has no accessor rewrite shape.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 NoArgs,

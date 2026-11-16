@@ -13,6 +13,7 @@ using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -203,7 +204,9 @@ internal static class AccessorAccessRegistrar
         if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
             && parentInvocation.Expression == memberAccess)
         {
-            ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+            // Why the bound symbol: a call into a static class seen twice binds to no symbol, and
+            // the method would otherwise be taken for a method group here.
+            ISymbol invocationTarget = AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
                 ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
             if (invocationTarget is IMethodSymbol)
             {
@@ -420,6 +423,29 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        // Why refuse here: the shim rewrite leaves a call on a conditional-access spine as written,
+        // anywhere down its receiver chain, so registering it would transplant a direct call the
+        // shim cannot make.
+        if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(invocation))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalAccessNoShape);
+            return false;
+        }
+
+        // Why only the receiver form: its accessor finds no compiled method to bind, because the
+        // compiled class does not hold a method this reload adds, and the shim fails at binding.
+        // A call written in the static form applies (measured in a lambda and an async body).
+        if (invokedMethod.MethodKind == MethodKind.ReducedExtension
+            && addedMemberAccess != null
+            && addedMemberAccess.IsAddedExtensionMethod(methodSymbol))
+        {
+            rejectReason = WorkerReason.Of(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                methodSymbol.Name,
+                methodSymbol.ContainingType.Name);
+            return false;
+        }
+
         rejectReason = FindMethodShapeRejectReason(methodSymbol);
         if (rejectReason != null)
         {
@@ -434,30 +460,15 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        rejectReason = FindDelegateCallRejectReason(methodSymbol);
+        if (rejectReason != null)
         {
-            if (parameter.RefKind != RefKind.None)
-            {
-                rejectReason =
-                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
-                return false;
-            }
+            return false;
         }
 
-        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        rejectReason = FindArgumentRejectReason(semanticModel, invocation, invokedMethod, methodSymbol);
+        if (rejectReason != null)
         {
-            if (argument.NameColon != null)
-            {
-                rejectReason =
-                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
-                return false;
-            }
-        }
-
-        if (invocation.ArgumentList.Arguments.Count != methodSymbol.Parameters.Length)
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
             return false;
         }
 
@@ -465,16 +476,65 @@ internal static class AccessorAccessRegistrar
         return true;
     }
 
+    // The accessor delegate takes exactly the method's parameters by value, in order.
+    private static WorkerReason FindArgumentRejectReason(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol invokedMethod,
+        IMethodSymbol methodSymbol)
+    {
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            if (parameter.RefKind != RefKind.None)
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
+            }
+        }
+
+        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.NameColon != null)
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
+            }
+        }
+
+        // A reduced extension call passes its receiver as the first parameter, outside the list.
+        int receiverArgumentCount = invokedMethod.MethodKind == MethodKind.ReducedExtension ? 1 : 0;
+        if (invocation.ArgumentList.Arguments.Count + receiverArgumentCount != methodSymbol.Parameters.Length
+            || HasExpandedParamsArgument(semanticModel, invocation))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
+        }
+
+        return null;
+    }
+
+    // Why the bound form and not the count: one element passed to a params parameter matches the
+    // parameter count, yet the accessor delegate takes the array, so the element must be refused.
+    private static bool HasExpandedParamsArgument(SemanticModel semanticModel, InvocationExpressionSyntax invocation)
+    {
+        if (semanticModel.GetOperation(invocation) is not IInvocationOperation operation)
+        {
+            return false;
+        }
+
+        foreach (IArgumentOperation argument in operation.Arguments)
+        {
+            if (argument.ArgumentKind == ArgumentKind.ParamArray)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static WorkerReason FindMethodShapeRejectReason(IMethodSymbol methodSymbol)
     {
         if (AccessibilityRules.NeedsStructInstanceReceiver(methodSymbol))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
-        }
-
-        if (methodSymbol.IsExtensionMethod)
-        {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
         }
 
         if (methodSymbol.IsGenericMethod)
@@ -487,6 +547,50 @@ internal static class AccessorAccessRegistrar
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape);
         }
 
+        // Why refuse: the accessor call is an ordinary delegate call, so it would run the method
+        // and evaluate its arguments where the compiler omits the call. Why before the added-method
+        // exemption: the added-method rewrite also runs the call (measured), so an added
+        // [Conditional] method is refused too.
+        if (BaseCallRules.IsConditional(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten);
+        }
+
         return null;
+    }
+
+    // What: refuses a method whose call an accessor delegate cannot carry. Only asked for a
+    // method the compiled assembly holds; a method added in the same reload is called directly.
+    private static WorkerReason FindDelegateCallRejectReason(IMethodSymbol methodSymbol)
+    {
+
+        // Why refuse: the accessor is a Func or Action, and a ref struct cannot be a generic
+        // type argument, so the shim would not compile. Why parameters too, though no call reaches
+        // them today: a call with a ref struct argument does not bind in the worker yet, and once
+        // it does, the same delegate would not compile.
+        if (HasRefLikeSignature(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape);
+        }
+
+        return null;
+    }
+
+    private static bool HasRefLikeSignature(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.ReturnType.IsRefLikeType)
+        {
+            return true;
+        }
+
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            if (parameter.Type.IsRefLikeType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

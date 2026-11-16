@@ -137,6 +137,7 @@ internal static class AddedPropertyAccessorGuard
             return null;
         }
 
+        AddedMemberAccessLookup accessorBodyLookup = AddedMemberAccessLookup.ForAccessorBody(typeState.AddedEvents);
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
             typeState.TypeDeclaration,
             typeState.TypeSymbol,
@@ -145,7 +146,7 @@ internal static class AddedPropertyAccessorGuard
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             typeState.CompiledType,
-            addedMemberAccess: null,
+            accessorBodyLookup,
             typeState.AddedEvents,
             typeState.SourceUnit.PartialTypeParts);
         if (decision.SkipReason != null)
@@ -159,7 +160,7 @@ internal static class AddedPropertyAccessorGuard
             bodyNode,
             typeState.SourceUnit.SemanticModel,
             decision,
-            addedMemberAccess: null,
+            accessorBodyLookup,
             typeState.SourceUnit,
             typeState.TargetAssembly);
         if (decision.SkipReason != null)
