@@ -81,31 +81,15 @@ internal static class UnsupportedMemberSkipCollector
 
             if (member is IndexerDeclarationSyntax indexerDeclaration)
             {
-                string indexerKey = WorkerSyntaxIndex.BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration);
-                if (snapshotIndexerMap != null
-                    && plainCurrentIndexerMap != null
-                    && snapshotIndexerMap.TryGetValue(
-                        indexerKey,
-                        out IndexerDeclarationSyntax snapshotIndexer)
-                    && plainCurrentIndexerMap.TryGetValue(
-                        indexerKey,
-                        out IndexerDeclarationSyntax plainIndexer)
-                    && SyntaxFactory.AreEquivalent(snapshotIndexer, plainIndexer, topLevel: false))
-                {
-                    continue;
-                }
-
-                AppendExplicitAccessorSkipsForProperty(
+                AppendIndexerAccessorSkips(
                     indexerDeclaration,
                     semanticModel.GetDeclaredSymbol(indexerDeclaration),
                     skipped,
                     typeMetadataNameFromSyntax,
-                    snapshotPropertyMap,
-                    addedMethodCatalog,
-                    snapshotProperty: null,
-                    plainCurrentProperty: null,
-                    compiledType: null,
-                    servedByRetainedArtifact: false);
+                    snapshotIndexerMap,
+                    plainCurrentIndexerMap,
+                    compiledType,
+                    servedByRetainedArtifact);
             }
         }
 
@@ -129,13 +113,6 @@ internal static class UnsupportedMemberSkipCollector
     {
         if (propertySymbol == null)
         {
-            return;
-        }
-
-        // Indexers: keep reporting every explicit-body accessor (including expression-bodied).
-        if (propertyDeclaration is IndexerDeclarationSyntax indexerDeclaration)
-        {
-            AppendIndexerExplicitAccessorSkips(indexerDeclaration, propertySymbol, skipped);
             return;
         }
 
@@ -277,38 +254,43 @@ internal static class UnsupportedMemberSkipCollector
         return null;
     }
 
-    internal static void AppendIndexerExplicitAccessorSkips(
+    // What: a Skipped row for each bodied indexer accessor that changed since the verified snapshot
+    // and that the indexer emitter does not report itself (no matching compiled accessor, an init
+    // accessor, or a type a retained artifact serves).
+    private static void AppendIndexerAccessorSkips(
         IndexerDeclarationSyntax indexerDeclaration,
-        IPropertySymbol propertySymbol,
-        List<WorkerSkipped> skipped)
+        IPropertySymbol indexerSymbol,
+        List<WorkerSkipped> skipped,
+        string typeMetadataNameFromSyntax,
+        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
+        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
-        if (indexerDeclaration.ExpressionBody != null)
-        {
-            if (propertySymbol.GetMethod != null)
-            {
-                skipped.Add(new WorkerSkipped
-                {
-                    Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
-                    Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
-                });
-            }
-
-            return;
-        }
-
-        if (indexerDeclaration.AccessorList == null)
+        if (indexerSymbol == null)
         {
             return;
         }
 
-        foreach (AccessorDeclarationSyntax accessor in indexerDeclaration.AccessorList.Accessors)
+        foreach (IndexerBodiedAccessor accessor in IndexerAccessorRules.FindBodiedAccessors(indexerDeclaration))
         {
-            if (accessor.Body == null && accessor.ExpressionBody == null)
+            if (IndexerAccessorRules.IsAccessorUnchangedFromBaseline(
+                    typeMetadataNameFromSyntax,
+                    indexerDeclaration,
+                    accessor.Kind,
+                    snapshotIndexerMap,
+                    plainCurrentIndexerMap)
+                || IndexerAccessorRules.IsReportedByEmitter(
+                    indexerDeclaration,
+                    indexerSymbol,
+                    accessor.Kind,
+                    compiledType,
+                    servedByRetainedArtifact))
             {
                 continue;
             }
 
-            IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(propertySymbol, accessor.Kind());
+            IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(indexerSymbol, accessor.Kind);
             if (accessorMethod == null)
             {
                 continue;

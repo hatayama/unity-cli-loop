@@ -1526,7 +1526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedExplicitAccessorSkipReason =
-            "Property init accessors, indexer accessors, and setters with no matching setter on the compiled property are skipped; "
+            "Property init accessors, and setters or indexer accessors with no matching accessor on the compiled type, are skipped; "
             + "run 'uloop compile' to apply accessor edits.";
 
         private const string ExpectedSetOnlyPropertySkipReason =
