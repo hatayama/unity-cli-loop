@@ -167,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync("value + i + 2900", "value + i + 2910");
 
-            AssertSkippedWithoutEntry(result, "HotReloadInitIndexer", "set_Item", "and indexer init accessors, are skipped");
+            AssertSkippedWithoutEntry(result, "HotReloadInitIndexer", "set_Item", "and explicit interface or indexer init accessors, are skipped");
         }
 
         /// <summary>
