@@ -557,6 +557,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertSkippedWith(result, "get_OrdinaryWritten", HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
         }
 
+        /// <summary>
+        /// What: an edited accessor of an explicit interface indexer stays Skipped with the
+        /// explicit-implementation reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitIndexerAccessor_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitIndexed.cs",
+                source => ReplaceUniqueFragment(source, "8210", "9210"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitIndexedFixture));
+            AssertSkippedWith(
+                result,
+                Namespace + ".IHotReloadExplicitIndexed.get_Item",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+        }
+
         private static void AssertNoEntryFor(TransformWorkerClientResult result, Type fixtureType)
         {
             Assert.That(

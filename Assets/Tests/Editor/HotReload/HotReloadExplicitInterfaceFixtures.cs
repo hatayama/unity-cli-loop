@@ -56,6 +56,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         int Written { set; }
     }
 
+    /// <summary>Interface with an indexer.</summary>
+    public interface IHotReloadExplicitIndexed
+    {
+        int this[int index] { get; }
+    }
+
     /// <summary>Generic interface with a read-write property.</summary>
     public interface IHotReloadExplicitBoxValue<T>
     {
@@ -245,6 +251,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int OrdinaryWritten
         {
             set { _stored = value + 8209; }
+        }
+    }
+
+    /// <summary>An explicit indexer, whose accessors stay Skipped.</summary>
+    public class HotReloadExplicitIndexedFixture : IHotReloadExplicitIndexed
+    {
+        int IHotReloadExplicitIndexed.this[int index]
+        {
+            get { return index + 8210; }
         }
     }
 
