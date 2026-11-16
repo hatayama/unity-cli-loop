@@ -71,9 +71,8 @@ internal static class UnpassedImplicitCallLookup
     {
         switch (construct)
         {
-            case AwaitExpressionSyntax awaitExpression
-                when semanticModel.GetAwaitExpressionInfo(awaitExpression).GetAwaiterMethod == null:
-                return Single(TypeOf(semanticModel, awaitExpression.Expression), "GetAwaiter");
+            case AwaitExpressionSyntax awaitExpression:
+                return MissingAwaitCalls(semanticModel, awaitExpression);
             case CommonForEachStatementSyntax forEach:
                 return MissingForEachCalls(semanticModel, forEach);
             case AssignmentExpressionSyntax assignment
@@ -98,6 +97,31 @@ internal static class UnpassedImplicitCallLookup
             default:
                 return Array.Empty<(ITypeSymbol, string)>();
         }
+    }
+
+    private static IEnumerable<(ITypeSymbol, string)> MissingAwaitCalls(
+        SemanticModel semanticModel,
+        AwaitExpressionSyntax awaitExpression)
+    {
+        AwaitExpressionInfo info = semanticModel.GetAwaitExpressionInfo(awaitExpression);
+        if (info.GetAwaiterMethod == null)
+        {
+            return Single(TypeOf(semanticModel, awaitExpression.Expression), "GetAwaiter");
+        }
+
+        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
+        ITypeSymbol awaiter = info.GetAwaiterMethod.ReturnType;
+        if (info.IsCompletedProperty == null)
+        {
+            missing.Add((awaiter, "IsCompleted"));
+        }
+
+        if (info.GetResultMethod == null)
+        {
+            missing.Add((awaiter, "GetResult"));
+        }
+
+        return missing;
     }
 
     private static IEnumerable<(ITypeSymbol, string)> MissingForEachCalls(
@@ -165,42 +189,63 @@ internal static class UnpassedImplicitCallLookup
         return Array.Empty<(ITypeSymbol, string)>();
     }
 
-    // Why every clause against the source type: a clause after a failed one has no receiver type,
-    // and a query over one source type usually calls each query method on that type.
+    // Why the receiver is carried: each clause calls its query method on what the previous call
+    // returned. After a clause that binds to nothing, the last type known stands in, which is right
+    // for a query whose methods all return the same sequence type.
     private static IEnumerable<(ITypeSymbol, string)> MissingQueryCalls(
         SemanticModel semanticModel,
         QueryExpressionSyntax query)
     {
-        ITypeSymbol source = TypeOf(semanticModel, query.FromClause.Expression);
+        ITypeSymbol receiver = TypeOf(semanticModel, query.FromClause.Expression);
         List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
-        if (query.FromClause.Type != null && semanticModel.GetQueryClauseInfo(query.FromClause).CastInfo.Symbol == null)
+        if (query.FromClause.Type != null)
         {
-            missing.Add((source, "Cast"));
+            receiver = CallOrRecordMissing(
+                semanticModel.GetQueryClauseInfo(query.FromClause).CastInfo.Symbol,
+                receiver,
+                "Cast",
+                missing);
         }
 
         foreach (QueryClauseSyntax clause in query.Body.Clauses)
         {
-            AddMissingClauseCalls(semanticModel, clause, source, missing);
+            receiver = AddMissingClauseCalls(semanticModel, clause, receiver, missing);
         }
 
-        if (semanticModel.GetSymbolInfo(query.Body.SelectOrGroup).Symbol == null)
-        {
-            missing.Add((source, query.Body.SelectOrGroup is GroupClauseSyntax ? "GroupBy" : "Select"));
-        }
-
+        CallOrRecordMissing(
+            semanticModel.GetSymbolInfo(query.Body.SelectOrGroup).Symbol,
+            receiver,
+            query.Body.SelectOrGroup is GroupClauseSyntax ? "GroupBy" : "Select",
+            missing);
         return missing;
     }
 
-    private static void AddMissingClauseCalls(
+    // The type the query goes on with: the bound method's return type, or the receiver unchanged
+    // after recording the method as missing.
+    private static ITypeSymbol CallOrRecordMissing(
+        ISymbol bound,
+        ITypeSymbol receiver,
+        string methodName,
+        List<(ITypeSymbol, string)> missing)
+    {
+        if (bound is IMethodSymbol method)
+        {
+            return method.ReturnType;
+        }
+
+        missing.Add((receiver, methodName));
+        return receiver;
+    }
+
+    private static ITypeSymbol AddMissingClauseCalls(
         SemanticModel semanticModel,
         QueryClauseSyntax clause,
-        ITypeSymbol source,
+        ITypeSymbol receiver,
         List<(ITypeSymbol, string)> missing)
     {
         if (clause is OrderByClauseSyntax orderBy)
         {
-            AddMissingOrderingCalls(semanticModel, orderBy, source, missing);
-            return;
+            return AddMissingOrderingCalls(semanticModel, orderBy, receiver, missing);
         }
 
         QueryClauseInfo info = semanticModel.GetQueryClauseInfo(clause);
@@ -214,32 +259,26 @@ internal static class UnpassedImplicitCallLookup
             missing.Add((TypeOf(semanticModel, from.Expression), "Cast"));
         }
 
-        if (info.OperationInfo.Symbol == null)
-        {
-            missing.Add((source, OperationName(clause)));
-        }
+        return CallOrRecordMissing(info.OperationInfo.Symbol, receiver, OperationName(clause), missing);
     }
 
-    private static void AddMissingOrderingCalls(
+    private static ITypeSymbol AddMissingOrderingCalls(
         SemanticModel semanticModel,
         OrderByClauseSyntax orderBy,
-        ITypeSymbol source,
+        ITypeSymbol receiver,
         List<(ITypeSymbol, string)> missing)
     {
         for (int index = 0; index < orderBy.Orderings.Count; index++)
         {
             OrderingSyntax ordering = orderBy.Orderings[index];
-            if (semanticModel.GetSymbolInfo(ordering).Symbol != null)
-            {
-                continue;
-            }
-
             bool descending = ordering.AscendingOrDescendingKeyword.IsKind(SyntaxKind.DescendingKeyword);
             string name = index == 0
                 ? (descending ? "OrderByDescending" : "OrderBy")
                 : (descending ? "ThenByDescending" : "ThenBy");
-            missing.Add((source, name));
+            receiver = CallOrRecordMissing(semanticModel.GetSymbolInfo(ordering).Symbol, receiver, name, missing);
         }
+
+        return receiver;
     }
 
     private static string OperationName(QueryClauseSyntax clause)
@@ -287,13 +326,20 @@ internal static class UnpassedImplicitCallLookup
             return null;
         }
 
-        if (UnpassedInternalMemberUse.FindInternalMemberOfUnpassedTypeOrNull(
-                namedReceiver,
-                methodName,
-                semanticModel,
-                targetAssembly) is IMethodSymbol instanceMethod)
+        ISymbol member = UnpassedInternalMemberUse.FindInternalMemberOfUnpassedTypeOrNull(
+            namedReceiver,
+            methodName,
+            semanticModel,
+            targetAssembly);
+        if (member is IMethodSymbol instanceMethod)
         {
             return instanceMethod;
+        }
+
+        // An awaiter's IsCompleted is a property; the compiler calls its getter.
+        if (member is IPropertySymbol { GetMethod: not null } property)
+        {
+            return property.GetMethod;
         }
 
         return FindInternalExtensionOrNull(namedReceiver, methodName, targetAssembly);

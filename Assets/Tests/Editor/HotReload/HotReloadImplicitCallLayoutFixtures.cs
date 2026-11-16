@@ -86,6 +86,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Partial pair whose internal Deconstruct is declared in its other part, in a file the run
+    /// does not pass.
+    /// </summary>
+    public sealed partial class HotReloadSplitPair
+    {
+        public int First = 23;
+        public int Second = 33;
+    }
+
+    /// <summary>
     /// Compiled host whose lambdas reach an internal method only through a call the compiler
     /// generates, touching no private member: the methods live either in a file the run does not
     /// pass or in an internal class of this file. Each body holds a 4-digit token unique in this
@@ -237,6 +247,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Func<int> read = () => new HotReloadUnpassedInternalPair() is (int first, int second)
                 ? first + second + 8341
                 : 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitsThroughUnpassedGetResult()
+        {
+            Func<Task<int>> read = async () => await new HotReloadUnpassedInternalResultAwaitable() + 8351;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureQueriesThroughUnpassedSelectAfterPublicWhere()
+        {
+            Func<int> read = () =>
+                (from value in new HotReloadUnpassedChainSource() where value > 0 select value + 8361).Value;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsThroughDeconstructOfOtherPartialPart()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadSplitPair();
+                return first + second + 8371;
+            };
             return read();
         }
 

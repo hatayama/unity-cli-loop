@@ -41,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("8341", "ClosureMatchesPositionalPatternThroughUnpassedDeconstruct", "Deconstruct")]
         [TestCase("8171", "ClosureUsesUnpassedRefStructWithInternalDispose", "Dispose")]
         [TestCase("8181", "ClosureAwaitUsesUnpassedInternalDisposeAsync", "DisposeAsync")]
+        [TestCase("8351", "ClosureAwaitsThroughUnpassedGetResult", "GetResult")]
+        [TestCase("8361", "ClosureQueriesThroughUnpassedSelectAfterPublicWhere", "Select")]
         public async Task ClosureImplicitCallToUnpassedInternalMethod_IsSkippedWithTheInsideClosureReason(
             string token,
             string methodName,

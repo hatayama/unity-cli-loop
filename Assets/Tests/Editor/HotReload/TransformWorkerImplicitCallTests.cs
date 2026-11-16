@@ -60,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("9191", "ClosureOnlyAwaitForEachesThroughInternalGetAsyncEnumerator", "GetAsyncEnumerator", "foreach")]
         [TestCase("9301", "ClosureAwaitUsesInternalDisposeAsync", "DisposeAsync", "await using")]
         [TestCase("9311", "AsyncAwaitUsingDeclarationWithInternalDisposeAsync", "DisposeAsync", "await using")]
+        [TestCase("9431", "ClosureAwaitUsesInheritedInternalDisposeAsync", "DisposeAsync", "await using")]
         [TestCase("9321", "ClosureMatchesIsPositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
         [TestCase("9331", "ClosureMatchesSwitchArmPositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
         [TestCase("9341", "ClosureMatchesCasePositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]

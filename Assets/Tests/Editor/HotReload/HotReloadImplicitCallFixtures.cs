@@ -320,6 +320,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Base resource whose pattern DisposeAsync is internal, inherited by the resource below.
+    /// </summary>
+    public class HotReloadImplicitAsyncResourceBase
+    {
+        internal ValueTask DisposeAsync()
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Resource without IAsyncDisposable that inherits an internal pattern DisposeAsync.
+    /// </summary>
+    public sealed class HotReloadImplicitDerivedAsyncResource : HotReloadImplicitAsyncResourceBase
+    {
+    }
+
+    /// <summary>
     /// Query source whose only query method is an internal extension OrderBy.
     /// </summary>
     public sealed class HotReloadImplicitOrderedSource
@@ -780,6 +798,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.Yield();
             await using HotReloadImplicitAsyncResource resource = new HotReloadImplicitAsyncResource();
             return 9311;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesInheritedInternalDisposeAsync()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9431;
+                await using (HotReloadImplicitDerivedAsyncResource resource = new HotReloadImplicitDerivedAsyncResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

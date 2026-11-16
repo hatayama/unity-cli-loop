@@ -72,6 +72,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda that deconstructs a partial type whose internal Deconstruct is declared
+        /// in its other part, in a file the run is not given, is Skipped: the run reads the other
+        /// part, so the method is seen and refused. The method keeps its compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureDeconstructingThroughDeconstructOfOtherPartialPart_IsSkippedAndKeepsTheCompiledBody()
+        {
+            HotReloadImplicitCallLayoutHost host = new HotReloadImplicitCallLayoutHost();
+            Assert.That(host.ClosureDeconstructsThroughDeconstructOfOtherPartialPart(), Is.EqualTo(8427));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("8371", "8372");
+
+            AssertKind(result, "ClosureDeconstructsThroughDeconstructOfOtherPartialPart", HotReloadMethodOutcomeKind.Skipped);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureDeconstructsThroughDeconstructOfOtherPartialPart(), Is.EqualTo(8427));
+        }
+
+        /// <summary>
         /// What: a lambda whose foreach runs over an int, which has no GetEnumerator anywhere, still
         /// Fails with the compiler's message instead of being skipped as an internal call.
         /// </summary>

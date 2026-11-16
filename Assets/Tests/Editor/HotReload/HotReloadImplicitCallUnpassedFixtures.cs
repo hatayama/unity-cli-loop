@@ -37,6 +37,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadUnpassedSource { Value = selector(source.Value) };
         }
 
+        internal static HotReloadUnpassedChainResult Select(
+            this HotReloadUnpassedChainResult source,
+            Func<int, int> selector)
+        {
+            return new HotReloadUnpassedChainResult { Value = selector(source.Value) };
+        }
+
         internal static HotReloadUnpassedFilterSource Where(
             this HotReloadUnpassedFilterSource source,
             Func<int, bool> predicate)
@@ -130,6 +137,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadUnpassedFilterSource
     {
         public int Value = 10;
+    }
+
+    /// <summary>
+    /// Awaitable with a public GetAwaiter whose awaiter has an internal GetResult, declared in an
+    /// unpassed file.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalResultAwaitable
+    {
+        public int Value = 13;
+
+        public HotReloadUnpassedInternalResultAwaiter GetAwaiter()
+        {
+            return new HotReloadUnpassedInternalResultAwaiter(Value);
+        }
+    }
+
+    /// <summary>
+    /// Completed awaiter whose GetResult is internal, declared in an unpassed file.
+    /// </summary>
+    public readonly struct HotReloadUnpassedInternalResultAwaiter : System.Runtime.CompilerServices.INotifyCompletion
+    {
+        private readonly int _value;
+
+        public HotReloadUnpassedInternalResultAwaiter(int value)
+        {
+            _value = value;
+        }
+
+        public bool IsCompleted => true;
+
+        internal int GetResult()
+        {
+            return _value;
+        }
+
+        public void OnCompleted(Action continuation)
+        {
+            continuation();
+        }
+    }
+
+    /// <summary>
+    /// Query source whose public Where returns a sequence whose Select is an internal extension
+    /// method, declared in an unpassed file.
+    /// </summary>
+    public sealed class HotReloadUnpassedChainSource
+    {
+        public int Value = 14;
+
+        public HotReloadUnpassedChainResult Where(Func<int, bool> predicate)
+        {
+            return new HotReloadUnpassedChainResult { Value = predicate(Value) ? Value : 0 };
+        }
+    }
+
+    /// <summary>
+    /// Result of the public Where, queried further through an internal Select.
+    /// </summary>
+    public sealed class HotReloadUnpassedChainResult
+    {
+        public int Value;
+    }
+
+    /// <summary>
+    /// The other part of a partial pair whose first part is in the edited file; this part declares
+    /// the internal Deconstruct.
+    /// </summary>
+    public sealed partial class HotReloadSplitPair
+    {
+        internal void Deconstruct(out int first, out int second)
+        {
+            first = First;
+            second = Second;
+        }
     }
 
     /// <summary>

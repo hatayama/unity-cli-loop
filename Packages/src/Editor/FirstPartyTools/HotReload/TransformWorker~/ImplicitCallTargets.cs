@@ -206,11 +206,21 @@ internal static class ImplicitCallTargets
         return type.AllInterfaces.Any(candidate => candidate.ToDisplayString() == interfaceFullName);
     }
 
+    // Why base types too: a pattern method may be inherited, and the compiler finds it there.
     private static IMethodSymbol FindParameterlessInstanceMethodOrNull(ITypeSymbol type, string name)
     {
-        return type.GetMembers(name)
-            .OfType<IMethodSymbol>()
-            .FirstOrDefault(method => !method.IsStatic && method.Parameters.Length == 0);
+        for (ITypeSymbol current = type; current != null; current = current.BaseType)
+        {
+            IMethodSymbol method = current.GetMembers(name)
+                .OfType<IMethodSymbol>()
+                .FirstOrDefault(candidate => !candidate.IsStatic && candidate.Parameters.Length == 0);
+            if (method != null)
+            {
+                return method;
+            }
+        }
+
+        return null;
     }
 
     private static IEnumerable<(IMethodSymbol, string)> Single(ISymbol symbol, string construct)

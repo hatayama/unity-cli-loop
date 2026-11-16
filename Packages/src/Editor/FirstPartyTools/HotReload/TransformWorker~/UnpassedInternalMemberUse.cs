@@ -161,7 +161,7 @@ internal sealed class UnpassedInternalMemberUse
         bool mayRunOutsideThePatchedMethod = runPlace != UseRunPlace.PatchedMethod;
         return new UnpassedInternalMemberUse(
             method.ContainingType,
-            method.Name,
+            method.AssociatedSymbol?.Name ?? method.Name,
             ChooseForm(runPlace, isSimpleNameLookup: false),
             isOfAPatchableKind: true,
             canBePatchedInPlace: !mayRunOutsideThePatchedMethod,
