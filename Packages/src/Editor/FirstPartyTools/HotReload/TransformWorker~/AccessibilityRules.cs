@@ -40,8 +40,8 @@ internal static class AccessibilityRules
     /// <summary>
     /// What: the symbol a call, method group, or member access binds to, or null when nothing is
     /// bound. When binding failed only because a static class is offered twice (the edited source
-    /// and its compiled copy) and the compiled class is not externally visible, returns one of its
-    /// methods from the compiled copy, the one the running code would call. That method shares the
+    /// and its compiled copy) and a compiled class is not externally visible, returns one of its
+    /// methods from that compiled class, the one the running code would call. That method shares the
     /// containing type of the overload the compiler would pick but is not necessarily that overload,
     /// so it is only good for deciding refusal.
     /// </summary>
@@ -79,7 +79,7 @@ internal static class AccessibilityRules
     {
         string containingType = null;
         IMethodSymbol editedCopy = null;
-        IMethodSymbol compiledCopy = null;
+        IMethodSymbol hiddenCompiledCopy = null;
         foreach (ISymbol candidate in candidates)
         {
             if (candidate is not IMethodSymbol method)
@@ -106,20 +106,16 @@ internal static class AccessibilityRules
             {
                 editedCopy = method;
             }
-            else
+            else if (!IsExternallyVisibleType(candidateType))
             {
-                compiledCopy = method;
+                // Why any hidden copy and not one chosen copy: another referenced assembly may
+                // declare a class of the same name, and keeping only one copy let its order
+                // decide. Refusing when any compiled copy is hidden fails closed.
+                hiddenCompiledCopy = method;
             }
         }
 
-        if (editedCopy == null
-            || compiledCopy == null
-            || IsExternallyVisibleType(UnreducedMethod(compiledCopy).ContainingType))
-        {
-            return null;
-        }
-
-        return compiledCopy;
+        return editedCopy == null ? null : hiddenCompiledCopy;
     }
 
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
