@@ -29,6 +29,13 @@ internal static class PropertySetterClassifier
             return false;
         }
 
+        // Why an explicit interface init stays with the accessor row: init patching covers ordinary
+        // properties only; an explicit interface init accessor is not part of that support yet.
+        if (propertySymbol.SetMethod.IsInitOnly && propertySymbol.ExplicitInterfaceImplementations.Length > 0)
+        {
+            return false;
+        }
+
         // Why not a retained artifact's type: the fingerprint comparison that serves those types
         // reports their accessor edits, and the baseline this emitter reads is not theirs.
         if (compiledType == null || servedByRetainedArtifact)

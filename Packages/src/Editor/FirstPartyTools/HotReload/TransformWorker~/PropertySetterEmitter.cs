@@ -110,7 +110,7 @@ internal static class PropertySetterEmitter
         if (setterSymbol.IsInitOnly
             && InitAccessorWriteRules.WritesInitOnlyMember(setterBodyNode, typeState.SourceUnit.SemanticModel))
         {
-            AddSkip(skipped, sourceProjectRelativePath, setterSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember));
+            AddSkip(skipped, sourceProjectRelativePath, typeState.CompiledType, setterSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember));
             return;
         }
 
