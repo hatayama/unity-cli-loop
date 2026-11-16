@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.29.0](https://github.com/hatayama/unity-cli-loop/compare/v3.28.2...v3.29.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to indexer accessor bodies ([#3528](https://github.com/hatayama/unity-cli-loop/issues/3528)) ([8bf68fe](https://github.com/hatayama/unity-cli-loop/commit/8bf68fe37ac853fe709550dd6ea3b0e51325bb73))
+
 ## [3.28.2](https://github.com/hatayama/unity-cli-loop/compare/v3.28.1...v3.28.2) (2026-11-16)
 
 
