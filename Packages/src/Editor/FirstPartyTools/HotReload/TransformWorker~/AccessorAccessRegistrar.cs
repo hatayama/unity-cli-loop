@@ -13,6 +13,7 @@ using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -423,8 +424,9 @@ internal static class AccessorAccessRegistrar
         }
 
         // Why refuse here: the shim rewrite leaves a call on a conditional-access spine as written,
-        // so registering it would transplant a direct call the shim cannot make.
-        if (invocation.Expression is MemberBindingExpressionSyntax)
+        // anywhere down its receiver chain, so registering it would transplant a direct call the
+        // shim cannot make.
+        if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(invocation))
         {
             rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalAccessNoShape);
             return false;
@@ -458,7 +460,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        rejectReason = FindArgumentRejectReason(invocation, invokedMethod, methodSymbol);
+        rejectReason = FindArgumentRejectReason(semanticModel, invocation, invokedMethod, methodSymbol);
         if (rejectReason != null)
         {
             return false;
@@ -470,6 +472,7 @@ internal static class AccessorAccessRegistrar
 
     // The accessor delegate takes exactly the method's parameters by value, in order.
     private static WorkerReason FindArgumentRejectReason(
+        SemanticModel semanticModel,
         InvocationExpressionSyntax invocation,
         IMethodSymbol invokedMethod,
         IMethodSymbol methodSymbol)
@@ -492,12 +495,33 @@ internal static class AccessorAccessRegistrar
 
         // A reduced extension call passes its receiver as the first parameter, outside the list.
         int receiverArgumentCount = invokedMethod.MethodKind == MethodKind.ReducedExtension ? 1 : 0;
-        if (invocation.ArgumentList.Arguments.Count + receiverArgumentCount != methodSymbol.Parameters.Length)
+        if (invocation.ArgumentList.Arguments.Count + receiverArgumentCount != methodSymbol.Parameters.Length
+            || HasExpandedParamsArgument(semanticModel, invocation))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
         }
 
         return null;
+    }
+
+    // Why the bound form and not the count: one element passed to a params parameter matches the
+    // parameter count, yet the accessor delegate takes the array, so the element must be refused.
+    private static bool HasExpandedParamsArgument(SemanticModel semanticModel, InvocationExpressionSyntax invocation)
+    {
+        if (semanticModel.GetOperation(invocation) is not IInvocationOperation operation)
+        {
+            return false;
+        }
+
+        foreach (IArgumentOperation argument in operation.Arguments)
+        {
+            if (argument.ArgumentKind == ArgumentKind.ParamArray)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static WorkerReason FindMethodShapeRejectReason(IMethodSymbol methodSymbol)

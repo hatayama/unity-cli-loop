@@ -38,6 +38,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return value == null ? add + 1000 : value.Length + add;
         }
 
+        internal static int SumAll(this int value, params int[] values)
+        {
+            int sum = value;
+            foreach (int item in values)
+            {
+                sum += item;
+            }
+
+            return sum;
+        }
+
         internal static int GenericEcho<T>(this T value, int add)
         {
             return add;
@@ -120,6 +131,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ClosureCallsInternalExtensionConditionally()
         {
             Func<int> read = () => _label?.NullableLengthPlus(7151) ?? 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsInternalExtensionAfterConditionalAccess()
+        {
+            Func<int> read = () => _label?.Length.TriplePlus(7221) ?? 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsParamsInternalExtensionExpanded()
+        {
+            Func<int> read = () => _value.SumAll(7231);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsParamsInternalExtensionWithArray()
+        {
+            Func<int> read = () => _value.SumAll(new[] { 7241 });
             return read();
         }
 
