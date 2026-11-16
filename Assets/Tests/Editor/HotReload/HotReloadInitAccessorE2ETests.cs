@@ -101,10 +101,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(new HotReloadInitWrites { AssignReadonly = 5 }.LockedValue, Is.EqualTo(2105), "The skipped init keeps its compiled body.");
         }
 
+        /// <summary>
+        /// What: an edited init body that writes a member of a public readonly struct field is Skipped
+        /// with the init-only member reason, no row is Failed, and an init edit of another type in the
+        /// same file is still patched.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInitWritingMemberOfReadonlyStructField_IsSkippedAndTheRestOfTheFileApplies()
+        {
+            Assert.That(new HotReloadInitPublicWrites { MemberOfReadonlyStruct = 5 }.Position.x, Is.EqualTo(3505), "Precondition: compiled init.");
+
+            HotReloadOrchestratorResult result = await RunEditedAsync(
+                "ReadonlyStructMemberE2E.cs",
+                "value + 3500",
+                "value + 3501",
+                ("value + 1700", "value + 1710"));
+
+            AssertOutcome(result, HotReloadMethodOutcomeKind.Skipped, "HotReloadInitPublicWrites.set_MemberOfReadonlyStruct(System.Int32)");
+            AssertOutcome(result, HotReloadMethodOutcomeKind.Patched, "HotReloadInitClass.set_X(System.Int32)");
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(outcome.Kind, Is.Not.EqualTo(HotReloadMethodOutcomeKind.Failed), FormatOutcomes(result));
+            }
+
+            Assert.That(new HotReloadInitPublicWrites { MemberOfReadonlyStruct = 5 }.Position.x, Is.EqualTo(3505), "The skipped init keeps its compiled body.");
+            Assert.That(new HotReloadInitClass { X = 5 }.X, Is.EqualTo(1715), "The other init in the file is patched.");
+        }
+
         private static async Task<HotReloadOrchestratorResult> RunEditedAsync(
             string editedFileName,
             string anchor,
-            string replacement)
+            string replacement,
+            params (string Anchor, string Replacement)[] alsoReplace)
         {
             string fixturePath = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
@@ -114,6 +142,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(onDisk.LastIndexOf(anchor, StringComparison.Ordinal)).And.GreaterThanOrEqualTo(0),
                 "Precondition: the fixture must hold the anchor exactly once: " + anchor);
             string edited = onDisk.Replace(anchor, replacement, StringComparison.Ordinal);
+            foreach ((string Anchor, string Replacement) extra in alsoReplace)
+            {
+                Assert.That(edited, Does.Contain(extra.Anchor), "Precondition: the fixture must hold " + extra.Anchor);
+                edited = edited.Replace(extra.Anchor, extra.Replacement, StringComparison.Ordinal);
+            }
+
             return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 contentPathOverride: null,

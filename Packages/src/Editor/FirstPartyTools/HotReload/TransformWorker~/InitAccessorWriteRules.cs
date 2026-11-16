@@ -5,17 +5,18 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 // What: finds writes in an init accessor body that only the declaring type's own constructors and
 // init accessors may make: a readonly field or an init-only property as the target of an
-// assignment, a compound assignment, ++/--, a deconstruction, or a ref/out argument.
+// assignment, a compound assignment, ++/--, a deconstruction, a ref/out argument, or a ref
+// expression, or as a value-type receiver a write goes through (Position.x = 1 writes Position).
 // Why these refuse the accessor: the shim that replaces the body is compiled outside the type, so
-// such a write does not compile there (CS0191 for a readonly field, CS8852 for an init-only
-// property) and would fail the whole file instead of skipping one accessor.
+// such a write does not compile there (CS0191 / CS1648 / CS0192 for a readonly field, CS8852 for an
+// init-only property) and would fail the whole file instead of skipping one accessor.
 internal static class InitAccessorWriteRules
 {
     internal static bool WritesInitOnlyMember(SyntaxNode bodyNode, SemanticModel semanticModel)
     {
         foreach (ExpressionSyntax target in CollectWriteTargets(bodyNode))
         {
-            if (IsInitOnlyMember(semanticModel.GetSymbolInfo(target).Symbol))
+            if (WritesThroughInitOnlyMember(target, semanticModel))
             {
                 return true;
             }
@@ -49,8 +50,48 @@ internal static class InitAccessorWriteRules
                     || argument.RefKindKeyword.IsKind(SyntaxKind.OutKeyword):
                     yield return argument.Expression;
                     break;
+                // Why every ref expression, ref readonly locals included: refusing a readable ref
+                // only skips the accessor, while missing a writable one fails the whole file.
+                case RefExpressionSyntax reference:
+                    yield return reference.Expression;
+                    break;
             }
         }
+    }
+
+    // What: whether the write target, or a value-type receiver the write goes through, is a readonly
+    // field or an init-only property. Why the receivers: writing a member of a struct stored in a
+    // readonly field writes the field itself.
+    private static bool WritesThroughInitOnlyMember(ExpressionSyntax target, SemanticModel semanticModel)
+    {
+        if (IsInitOnlyMember(semanticModel.GetSymbolInfo(target).Symbol))
+        {
+            return true;
+        }
+
+        ExpressionSyntax receiver = (target as MemberAccessExpressionSyntax)?.Expression;
+        while (receiver is MemberAccessExpressionSyntax or IdentifierNameSyntax)
+        {
+            ISymbol symbol = semanticModel.GetSymbolInfo(receiver).Symbol;
+            if (IsInitOnlyMember(symbol) && IsValueTypeMember(symbol))
+            {
+                return true;
+            }
+
+            receiver = (receiver as MemberAccessExpressionSyntax)?.Expression;
+        }
+
+        return false;
+    }
+
+    private static bool IsValueTypeMember(ISymbol symbol)
+    {
+        return symbol switch
+        {
+            IFieldSymbol field => field.Type.IsValueType,
+            IPropertySymbol property => property.Type.IsValueType,
+            _ => false
+        };
     }
 
     // What: the assigned expressions of a deconstruction target such as (a, (b, c)), or the target

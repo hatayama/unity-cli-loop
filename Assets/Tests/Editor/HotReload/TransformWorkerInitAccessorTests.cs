@@ -171,6 +171,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an init body that passes a readonly field as a ref argument is refused with the init-only-member reason.
+        /// </summary>
+        [Test]
+        public async Task Run_InitRefArgumentOfReadonlyField_IsRefused()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3400", "value + 3401");
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitWrites", "set_RefArgumentReadonly", InitOnlyMemberReason);
+        }
+
+        /// <summary>
+        /// What: an init body that pre-increments a readonly field is refused with the init-only-member reason.
+        /// </summary>
+        [Test]
+        public async Task Run_InitPreIncrementOfReadonlyField_IsRefused()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3410", "value + 3411");
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitWrites", "set_PreIncrementReadonly", InitOnlyMemberReason);
+        }
+
+        /// <summary>
+        /// What: an init body that pre-decrements a readonly field is refused with the init-only-member reason.
+        /// </summary>
+        [Test]
+        public async Task Run_InitPreDecrementOfReadonlyField_IsRefused()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3420", "value + 3421");
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitWrites", "set_PreDecrementReadonly", InitOnlyMemberReason);
+        }
+
+        /// <summary>
+        /// What: an init body that post-decrements a readonly field is refused with the init-only-member reason.
+        /// </summary>
+        [Test]
+        public async Task Run_InitPostDecrementOfReadonlyField_IsRefused()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3430", "value + 3431");
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitWrites", "set_PostDecrementReadonly", InitOnlyMemberReason);
+        }
+
+        /// <summary>
+        /// What: an init body that assigns a member of a public readonly struct field is refused with the init-only-member reason, and an init
+        /// edit of another type in the same file still becomes an entry.
+        /// </summary>
+        [Test]
+        public async Task Run_InitAssigningMemberOfReadonlyStructField_IsRefusedAndTheRestOfTheFileApplies()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "value + 3500",
+                "value + 3501",
+                ("value + 1700", "value + 1710"));
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitPublicWrites", "set_MemberOfReadonlyStruct", InitOnlyMemberReason);
+            AssertEntry(result, "HotReloadInitClass", "set_X");
+        }
+
+        /// <summary>
+        /// What: an init body that increments a member of a public readonly struct field is refused with the init-only-member reason, and an init
+        /// edit of another type in the same file still becomes an entry.
+        /// </summary>
+        [Test]
+        public async Task Run_InitIncrementingMemberOfReadonlyStructField_IsRefusedAndTheRestOfTheFileApplies()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "value + 3510",
+                "value + 3511",
+                ("value + 1700", "value + 1710"));
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitPublicWrites", "set_IncrementMemberOfReadonlyStruct", InitOnlyMemberReason);
+            AssertEntry(result, "HotReloadInitClass", "set_X");
+        }
+
+        /// <summary>
+        /// What: an init body that takes a ref to a public readonly field is refused with the init-only-member reason, and an init
+        /// edit of another type in the same file still becomes an entry.
+        /// </summary>
+        [Test]
+        public async Task Run_InitTakingRefToReadonlyField_IsRefusedAndTheRestOfTheFileApplies()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "value + 3520",
+                "value + 3521",
+                ("value + 1700", "value + 1710"));
+
+            AssertSkippedWithoutEntry(result, "HotReloadInitPublicWrites", "set_RefToReadonly", InitOnlyMemberReason);
+            AssertEntry(result, "HotReloadInitClass", "set_X");
+        }
+
+        /// <summary>
+        /// What: an edited explicit interface init accessor renders the accessor reason that names
+        /// explicit interface init accessors, not only the reason code.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitInterfaceInitAccessor_RendersTheExplicitInterfaceInitText()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("value + 3600", "value + 3601");
+
+            AssertSkippedWithoutEntry(
+                result,
+                "HotReloadInitExplicitInterface",
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadInitContract.set_Value",
+                "and explicit interface or indexer init accessors, are skipped");
+        }
+
+        /// <summary>
         /// What: a patched init body edit raises no "edits outside method bodies" warning, because
         /// the edit is applied.
         /// </summary>
@@ -191,7 +299,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
-        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string anchor, string replacement)
+        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(
+            string anchor,
+            string replacement,
+            params (string Anchor, string Replacement)[] alsoReplace)
         {
             string fixturePath = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
@@ -201,6 +312,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(onDisk.LastIndexOf(anchor, StringComparison.Ordinal)).And.GreaterThanOrEqualTo(0),
                 "Precondition: the fixture must hold the anchor exactly once: " + anchor);
             string edited = onDisk.Replace(anchor, replacement, StringComparison.Ordinal);
+            foreach ((string Anchor, string Replacement) extra in alsoReplace)
+            {
+                Assert.That(edited, Does.Contain(extra.Anchor), "Precondition: the fixture must hold " + extra.Anchor);
+                edited = edited.Replace(extra.Anchor, extra.Replacement, StringComparison.Ordinal);
+            }
+
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource("InitAccessorWorker.cs", edited);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildInputForSource(
                 editedPath,

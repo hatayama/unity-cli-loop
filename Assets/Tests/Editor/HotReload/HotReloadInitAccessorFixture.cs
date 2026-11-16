@@ -85,6 +85,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             init { Plain = value + 2700; }
         }
 
+        public int RefArgumentReadonly
+        {
+            get { return Locked; }
+            init { Overwrite(ref Locked, value + 3400); }
+        }
+
+        public int PreIncrementReadonly
+        {
+            get { return Locked; }
+            init { ++Locked; Plain = value + 3410; }
+        }
+
+        public int PreDecrementReadonly
+        {
+            get { return Locked; }
+            init { --Locked; Plain = value + 3420; }
+        }
+
+        public int PostDecrementReadonly
+        {
+            get { return Locked; }
+            init { Locked--; Plain = value + 3430; }
+        }
+
+        private static void Overwrite(ref int target, int replacement)
+        {
+            target = replacement;
+        }
+
         internal HotReloadInitChild Child;
 
         public int BuildChild
@@ -102,6 +131,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             get { return Stored; }
             init { Stored = value + i + 2900; }
+        }
+    }
+
+    public struct HotReloadInitPoint
+    {
+        public int x;
+    }
+
+    // Why public readonly fields on a public type: the shim writes such a field directly, while an
+    // internal one is reached through a field reference, so only this shape shows the writes the
+    // shim cannot compile.
+    public class HotReloadInitPublicWrites
+    {
+        public readonly HotReloadInitPoint Position;
+        public readonly int Locked;
+        public int Plain;
+
+        public int MemberOfReadonlyStruct
+        {
+            get { return Position.x; }
+            init { Position.x = value + 3500; }
+        }
+
+        public int IncrementMemberOfReadonlyStruct
+        {
+            get { return Position.x; }
+            init { Position.x++; Plain = value + 3510; }
+        }
+
+        public int RefToReadonly
+        {
+            get { return Locked; }
+            init { ref int slot = ref Locked; slot = value + 3520; }
+        }
+    }
+
+    public interface IHotReloadInitContract
+    {
+        int Value { get; init; }
+    }
+
+    public class HotReloadInitExplicitInterface : IHotReloadInitContract
+    {
+        internal int Stored;
+
+        int IHotReloadInitContract.Value
+        {
+            get { return Stored; }
+            init { Stored = value + 3600; }
         }
     }
 
