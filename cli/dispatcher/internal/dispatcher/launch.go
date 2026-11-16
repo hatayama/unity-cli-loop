@@ -257,12 +257,13 @@ func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid
 	spinner := ui.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps); err != nil {
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	spinner.Stop()
-	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid)
+	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid, readiness)
 }
 
 func startUnityAndWaitForReadiness(
@@ -332,7 +333,8 @@ func startUnityAndWaitForReadiness(
 	}
 	logLaunchFreshFocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, options.restart, deps); err != nil {
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, options.restart, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -341,7 +343,7 @@ func startUnityAndWaitForReadiness(
 	if runningProcess != nil {
 		previousPid = &runningProcess.Pid
 	}
-	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid)
+	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid, readiness)
 }
 
 // uloopLaunchMarkerArg tells an Editor started by uloop launch apart from one started by

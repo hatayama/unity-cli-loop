@@ -19,6 +19,8 @@ const (
 	launchQuitStoppedMessage         = "Unity quit. It saved its window layout and discarded unsaved scene changes."
 	launchForceKillStoppedMessage    = "Unity was force-killed. Its window layout was not saved, and unsaved scene changes were lost."
 	launchNoProcessMessage           = "No matching Unity process was found; it may have already exited."
+	launchSafeModePromptIgnoredNote  = "uloop pressed Ignore on Unity's \"Enter Safe Mode?\" prompt, so the project " +
+		"still has compile errors; run uloop compile to list them."
 )
 
 type launchReadyResponse struct {
@@ -33,8 +35,11 @@ type launchReadyResponse struct {
 	PreviousProcessId *int   `json:"PreviousProcessId,omitempty"`
 	StopMethod        string `json:"StopMethod,omitempty"`
 	CurrentProcessId  *int   `json:"CurrentProcessId,omitempty"`
-	ProjectRoot       string `json:"ProjectRoot"`
-	Message           string `json:"Message"`
+	// SafeModePromptIgnored is left out unless launch pressed Ignore on Unity's Safe Mode prompt, so
+	// a launch that pressed nothing keeps the output it always had.
+	SafeModePromptIgnored bool   `json:"SafeModePromptIgnored,omitempty"`
+	ProjectRoot           string `json:"ProjectRoot"`
+	Message               string `json:"Message"`
 }
 
 func writeLaunchReadinessWait(stdout io.Writer, spinner *ui.TerminalSpinner) {
@@ -60,17 +65,30 @@ func writeDetectionFallbackLaunchReadyResponse(stdout io.Writer, stderr io.Write
 	})
 }
 
-func writeExistingLaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string, currentPid int) int {
+func writeExistingLaunchReadyResponse(
+	stdout io.Writer, stderr io.Writer, projectRoot string, currentPid int, readiness launchReadiness,
+) int {
 	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
-		Success:          true,
-		Ready:            true,
-		ServerReady:      true,
-		ProjectIpcReady:  true,
-		AlreadyRunning:   true,
-		CurrentProcessId: &currentPid,
-		ProjectRoot:      projectRoot,
-		Message:          launchAlreadyRunningReadyMessage,
+		Success:               true,
+		Ready:                 true,
+		ServerReady:           true,
+		ProjectIpcReady:       true,
+		AlreadyRunning:        true,
+		CurrentProcessId:      &currentPid,
+		SafeModePromptIgnored: readiness.safeModePromptIgnored,
+		ProjectRoot:           projectRoot,
+		Message:               launchReadyMessageAfter(launchAlreadyRunningReadyMessage, readiness),
 	})
+}
+
+// launchReadyMessageAfter adds to message what the wait did on the way that the caller must act on.
+// Why the note: Ignore lets the Editor open with the compile errors still there, and the caller must
+// fix them before the project behaves.
+func launchReadyMessageAfter(message string, readiness launchReadiness) string {
+	if !readiness.safeModePromptIgnored {
+		return message
+	}
+	return message + " " + launchSafeModePromptIgnoredNote
 }
 
 func writeExistingV2LaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string, currentPid int) int {
@@ -93,19 +111,21 @@ func writeLaunchedReadyResponse(
 	previousPid *int,
 	previousStop launchStopMethod,
 	currentPid int,
+	readiness launchReadiness,
 ) int {
 	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
-		Success:           true,
-		Ready:             true,
-		ServerReady:       true,
-		ProjectIpcReady:   true,
-		Launched:          true,
-		Restarted:         previousPid != nil,
-		PreviousProcessId: previousPid,
-		StopMethod:        string(previousStop),
-		CurrentProcessId:  &currentPid,
-		ProjectRoot:       projectRoot,
-		Message:           launchReadyMessage,
+		Success:               true,
+		Ready:                 true,
+		ServerReady:           true,
+		ProjectIpcReady:       true,
+		Launched:              true,
+		Restarted:             previousPid != nil,
+		PreviousProcessId:     previousPid,
+		StopMethod:            string(previousStop),
+		CurrentProcessId:      &currentPid,
+		SafeModePromptIgnored: readiness.safeModePromptIgnored,
+		ProjectRoot:           projectRoot,
+		Message:               launchReadyMessageAfter(launchReadyMessage, readiness),
 	})
 }
 
