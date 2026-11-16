@@ -142,6 +142,33 @@ internal sealed class UnpassedInternalMemberUse
             isSimpleNameLookup);
     }
 
+    /// <summary>
+    /// The use of <paramref name="method"/>, an internal method of a compiled type of the target
+    /// assembly, by a call the compiler generates for <paramref name="construct"/> (an await, a
+    /// foreach, a deconstruction, ...). Such a call has a receiver and no name in the source, so
+    /// its form is never the bare name.
+    /// </summary>
+    internal static UnpassedInternalMemberUse ForImplicitCall(
+        IMethodSymbol method,
+        SyntaxNode construct,
+        SyntaxNode bodyNode,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        SemanticModel semanticModel)
+    {
+        Debug.Assert(method != null, "method must not be null.");
+        UseRunPlace runPlace = FindWhereTheUseMayRun(construct, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+        bool mayRunOutsideThePatchedMethod = runPlace != UseRunPlace.PatchedMethod;
+        return new UnpassedInternalMemberUse(
+            method.ContainingType,
+            method.AssociatedSymbol?.Name ?? method.Name,
+            ChooseForm(runPlace, isSimpleNameLookup: false),
+            isOfAPatchableKind: true,
+            canBePatchedInPlace: !mayRunOutsideThePatchedMethod,
+            mayRunOutsideThePatchedMethod,
+            isSimpleNameLookup: false);
+    }
+
     // Why this order: in a state machine or a delegating shim, neither moving the use nor
     // qualifying it brings it within reach. Inside a closure, a qualified name still runs outside
     // the patched method, so moving the use out is the change that helps. Qualifying a bare name
@@ -216,7 +243,7 @@ internal sealed class UnpassedInternalMemberUse
         return type;
     }
 
-    private static ISymbol FindInternalMemberOfUnpassedTypeOrNull(
+    internal static ISymbol FindInternalMemberOfUnpassedTypeOrNull(
         INamedTypeSymbol start,
         string memberName,
         SemanticModel semanticModel,

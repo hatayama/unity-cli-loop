@@ -30,7 +30,14 @@ internal static class AccessorAccessRegistrar
         AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
-        rejectReason = null;
+        // Why first: a call the compiler generates has no syntax this registrar could rewrite, and
+        // the node that causes it (a deconstruction assignment, a collection initializer) would
+        // otherwise be taken by the branches below.
+        rejectReason = ImplicitCallTargets.FindInaccessibleCallReasonOrNull(semanticModel, node);
+        if (rejectReason != null)
+        {
+            return false;
+        }
 
         if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
         {

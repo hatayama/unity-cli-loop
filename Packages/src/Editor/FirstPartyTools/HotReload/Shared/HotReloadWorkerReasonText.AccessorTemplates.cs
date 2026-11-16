@@ -129,6 +129,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorStructMemberNoShape,
                 Plain("inaccessible instance member of a struct has no accessor rewrite shape.", 0));
             templates.Add(
+                HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
+                Plain(
+                    "inaccessible method '{0}' that the compiler calls for {1} has no accessor rewrite shape.",
+                    2));
+            templates.Add(
                 HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape,
                 Plain("compound assignment to an event has no accessor rewrite shape.", 0));
             templates.Add(

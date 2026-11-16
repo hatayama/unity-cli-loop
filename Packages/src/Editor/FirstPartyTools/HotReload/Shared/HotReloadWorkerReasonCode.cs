@@ -105,6 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AccessorBodyTypeNotVisible,
         AccessorIndexerNoShape,
         AccessorStructMemberNoShape,
+        AccessorImplicitCallNoShape,
         AccessorEventCompoundAssignmentNoShape,
         AccessorExtensionMethodNotRewritten,
         AccessorGenericMethodNotRewritten,
