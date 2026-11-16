@@ -27,6 +27,7 @@ internal static class PropertyGetterClassifier
         PropertyDeclarationSyntax propertyDeclaration,
         INamedTypeSymbol typeSymbol,
         IMethodSymbol getterSymbol,
+        string getterRowName,
         string[] parameterTypeFullNames,
         List<WorkerUnchangedMethod> unchangedMethods)
     {
@@ -46,7 +47,7 @@ internal static class PropertyGetterClassifier
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-                MethodName = getterSymbol.Name,
+                MethodName = getterRowName,
                 ParameterTypeFullNames = parameterTypeFullNames,
                 GenericArity = getterSymbol.Arity
             });
@@ -90,7 +91,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
                 Reason = decision.SkipReason
             });
             return (true, decision);
@@ -109,7 +110,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
                 Reason = unresolvedNameSkip
             });
             return (true, MethodTransformDecision.Skip(unresolvedNameSkip));
@@ -130,12 +131,12 @@ internal static class PropertyGetterClassifier
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
             Reason = addedCallSiteSkip,
             CalledAddedMethodKey = calledAddedMethodKey,
             MethodKey = calledAddedMethodKey == null
                 ? null
-                : WorkerMethodKeys.BuildMethodKeyFromSymbol(accessorSymbol)
+                : WorkerMethodKeys.BuildRowMethodKey(compiledType, accessorSymbol)
         });
         return (true, decision);
     }

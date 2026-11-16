@@ -36,9 +36,13 @@ internal static class PropertySetterClassifier
             return false;
         }
 
-        IPropertySymbol compiledProperty = compiledType.GetMembers(propertySymbol.Name)
-            .OfType<IPropertySymbol>()
-            .FirstOrDefault(candidate => !candidate.IsIndexer);
+        // Why the matcher for an explicit property: its name follows the specifier's spelling, so a
+        // respelled specifier would not find the compiled property by name.
+        IPropertySymbol compiledProperty = propertySymbol.ExplicitInterfaceImplementations.Length > 0
+            ? ExplicitImplementationMatcher.FindCompiledPropertyImplementation(compiledType, propertySymbol)
+            : compiledType.GetMembers(propertySymbol.Name)
+                .OfType<IPropertySymbol>()
+                .FirstOrDefault(candidate => !candidate.IsIndexer);
         return compiledProperty != null
             && HasMatchingOrdinarySetter(compiledProperty, propertySymbol);
     }

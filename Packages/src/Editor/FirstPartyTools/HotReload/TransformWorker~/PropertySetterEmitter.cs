@@ -74,9 +74,11 @@ internal static class PropertySetterEmitter
         IMethodSymbol setterSymbol = propertySymbol.SetMethod;
         string typeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol);
         string[] parameterTypeFullNames = new[] { CecilTypeNames.ToCecilFullName(propertySymbol.Type) };
+        // Why the row name: as for the getter, the Editor knows the setter by its compiled name.
+        string setterRowName = ExplicitImplementationMatcher.RowMethodName(typeState.CompiledType, setterSymbol);
         string methodKey = WorkerMethodKeys.BuildMethodKey(
             typeMetadataName,
-            setterSymbol.Name,
+            setterRowName,
             parameterTypeFullNames,
             setterSymbol.Arity);
         if (input.ExcludedMethodKeys.Contains(methodKey))
@@ -94,16 +96,10 @@ internal static class PropertySetterEmitter
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
                 TypeMetadataName = typeMetadataName,
-                MethodName = setterSymbol.Name,
+                MethodName = setterRowName,
                 ParameterTypeFullNames = parameterTypeFullNames,
                 GenericArity = setterSymbol.Arity
             });
-            return;
-        }
-
-        if (property.ExplicitInterfaceSpecifier != null)
-        {
-            AddSkip(skipped, sourceProjectRelativePath, setterSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation));
             return;
         }
 
@@ -134,7 +130,7 @@ internal static class PropertySetterEmitter
             shimNames,
             assemblyGlobalUsings);
         ShimTypeBuilder shimType = typeState.CurrentShimType;
-        string shimMethodName = shimNames.NextShimMethodName(setterSymbol.Name);
+        string shimMethodName = shimNames.NextShimMethodName(PropertyGetterEmitter.ShimBaseName(setterSymbol));
         MethodDeclarationSyntax rewrittenMethod = RewritePropertySetterBody(
             property,
             setterBodyNode,
@@ -155,7 +151,7 @@ internal static class PropertySetterEmitter
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
             TypeMetadataName = typeMetadataName,
-            MethodName = setterSymbol.Name,
+            MethodName = setterRowName,
             ParameterTypeFullNames = parameterTypeFullNames,
             GenericArity = setterSymbol.Arity,
             ShimTypeName = shimType.ShimTypeName,
@@ -225,7 +221,7 @@ internal static class PropertySetterEmitter
             return decision;
         }
 
-        AddSkip(skipped, sourceProjectRelativePath, setterSymbol, siblingSkip);
+        AddSkip(skipped, sourceProjectRelativePath, typeState.CompiledType, setterSymbol, siblingSkip);
         return null;
     }
 
@@ -315,13 +311,14 @@ internal static class PropertySetterEmitter
     private static void AddSkip(
         List<WorkerSkipped> skipped,
         string sourceProjectRelativePath,
+        INamedTypeSymbol compiledType,
         IMethodSymbol setterSymbol,
         WorkerReason reason)
     {
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(setterSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(compiledType, setterSymbol),
             Reason = reason
         });
     }

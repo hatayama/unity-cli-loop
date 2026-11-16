@@ -2898,40 +2898,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an edited setter of an explicit interface implementation is Skipped with the
-        /// explicit-implementation reason and emits no entry.
+        /// What: an edited setter of an explicit interface property emits a set_ entry under the
+        /// compiled accessor name and no skip row.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitInterfacePropertySetterEdited_IsSkipped()
+        public async Task Run_ExplicitInterfacePropertySetterEdited_EmitsSetAccessorEntry()
         {
             TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
                 "ExplicitInterfacePropertySetterEdited.cs",
                 onDisk => ReplaceUniqueFragment(onDisk, "value + 9009", "value + 9010"));
 
-            AssertSkippedWithCode(
-                result,
-                "set_Contract",
-                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
-            AssertNoEntryFragment(result, "set_Contract");
+            Assert.That(FindEntryNamed(result, ExplicitContractPrefix + "set_Contract"), Is.Not.Null, FormatEntryMethodNames(result.Output.entries));
+            Assert.That(Array.Exists(result.Output.skipped, skipped => skipped.method.Contains("set_Contract")), Is.False);
         }
 
         /// <summary>
-        /// What: an edited getter of an explicit interface property is Skipped with the
-        /// explicit-implementation reason and emits no entry, while explicit methods are patched.
+        /// What: an edited getter of an explicit interface property emits a get_ entry under the
+        /// compiled accessor name and no skip row.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitInterfacePropertyGetterEdited_IsSkipped()
+        public async Task Run_ExplicitInterfacePropertyGetterEdited_EmitsGetAccessorEntry()
         {
             TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
                 "ExplicitInterfacePropertyGetterEdited.cs",
                 onDisk => ReplaceExplicitContractGetterBody(onDisk));
 
-            AssertSkippedWithCode(
-                result,
-                "get_Contract",
-                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
-            AssertNoEntryFragment(result, "get_Contract");
+            Assert.That(FindEntryNamed(result, ExplicitContractPrefix + "get_Contract"), Is.Not.Null, FormatEntryMethodNames(result.Output.entries));
+            Assert.That(Array.Exists(result.Output.skipped, skipped => skipped.method.Contains("get_Contract")), Is.False);
         }
+
+        private const string ExplicitContractPrefix =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadPropertySetterExplicitContract.";
 
         // Why search from the explicit property's header: the getter line appears in several
         // fixtures of that file, and a two-line fragment would depend on the line endings.

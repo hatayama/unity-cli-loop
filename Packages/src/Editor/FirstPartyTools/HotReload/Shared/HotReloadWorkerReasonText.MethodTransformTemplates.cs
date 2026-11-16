@@ -138,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 Plain(
                     "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
-                    + "of explicit interface properties, are skipped.",
+                    + "of explicit interface indexers, are skipped.",
                     0).EndingWith(CompileCallToAction));
             // Why {2} is not a worker value: it is the file that declares the compiled type,
             // which only the Editor resolves, and TransformWorkerCompiledTypeFileCompleter appends it.
