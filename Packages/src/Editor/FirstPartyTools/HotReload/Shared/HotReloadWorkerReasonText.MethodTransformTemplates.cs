@@ -140,6 +140,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
                     + "of explicit interface indexers, are skipped.",
                     0).EndingWith(CompileCallToAction));
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember,
+                Plain(
+                    "Init accessors that assign a readonly field or an init-only property are skipped; the patch "
+                    + "is compiled outside the type, where only the type's own constructors and init accessors "
+                    + "may assign them.",
+                    0).EndingWith(CompileCallToAction));
             // Why {2} is not a worker value: it is the file that declares the compiled type,
             // which only the Editor resolves, and TransformWorkerCompiledTypeFileCompleter appends it.
             templates.Add(

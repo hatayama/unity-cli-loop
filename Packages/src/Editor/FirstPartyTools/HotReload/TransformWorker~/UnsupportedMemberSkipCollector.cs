@@ -177,7 +177,7 @@ internal static class UnsupportedMemberSkipCollector
             }
 
             // The setter emitter reports this accessor (entry, unchanged row, or its own skip).
-            if (accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
+            if ((accessor.IsKind(SyntaxKind.SetAccessorDeclaration) || accessor.IsKind(SyntaxKind.InitAccessorDeclaration))
                 && propertyDeclaration is PropertyDeclarationSyntax namedProperty
                 && PropertySetterClassifier.IsPatchableCompiledSetter(
                     namedProperty,

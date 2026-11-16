@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor,
                 Plain(
-                    "Property init accessors, and getters, setters or indexer accessors with no matching accessor on the compiled type, are skipped; "
+                    "Getters, setters, property init accessors, and indexer accessors with no matching accessor on the compiled type, and indexer init accessors, are skipped; "
                     + "run 'uloop compile' to apply accessor edits.",
                     0));
             templates.Add(

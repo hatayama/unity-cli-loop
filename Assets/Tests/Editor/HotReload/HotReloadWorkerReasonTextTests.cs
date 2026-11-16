@@ -307,6 +307,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
                 + "of explicit interface indexers, are skipped. Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember,
+                NoArgs,
+                "Init accessors that assign a readonly field or an init-only property are skipped; the patch "
+                + "is compiled outside the type, where only the type's own constructors and init accessors "
+                + "may assign them. Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformSiblingBodyBindsCompiledType,
                 new[] { "CS1061: 'Host' does not contain a definition for 'Hit'", "'Host'", "'Assets/Host.cs'" },
                 "This file was brought back to re-bind its active patches, but this method's body no longer "
@@ -599,7 +605,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor,
                 NoArgs,
-                "Property init accessors, and getters, setters or indexer accessors with no matching accessor on the compiled type, are skipped; "
+                "Getters, setters, property init accessors, and indexer accessors with no matching accessor on the compiled type, and indexer init accessors, are skipped; "
                 + "run 'uloop compile' to apply accessor edits.");
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind,
