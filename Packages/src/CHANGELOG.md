@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.28.1](https://github.com/hatayama/unity-cli-loop/compare/v3.28.0...v3.28.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload no longer applies a lambda that calls an extension method of an internal class declared in the edited file and then fails at run time ([#3525](https://github.com/hatayama/unity-cli-loop/issues/3525)) ([006e867](https://github.com/hatayama/unity-cli-loop/commit/006e867741bce5224c7aa367f23d4b0021543161))
+
 ## [3.28.0](https://github.com/hatayama/unity-cli-loop/compare/v3.27.2...v3.28.0) (2026-11-16)
 
 
