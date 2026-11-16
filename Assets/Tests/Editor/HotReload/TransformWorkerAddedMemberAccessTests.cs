@@ -734,6 +734,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the same edit makes the internal extension class public and changes a lambda
+        /// that calls it, the call is still skipped with the extension-method reason. The running
+        /// code calls the compiled class, which is still internal.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingExtensionOfClassMadePublicInSameEdit_IsSkipped()
+        {
+            string fixturePath = ResolveTestSourcePath("HotReloadExtensionCallFixtures.cs");
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "    internal static class HotReloadInternalClassExtensionCallMath",
+                    "    public static class HotReloadInternalClassExtensionCallMath",
+                    StringComparison.Ordinal)
+                .Replace("5101", "5102", StringComparison.Ordinal);
+            Assert.That(edited, Does.Contain("public static class HotReloadInternalClassExtensionCallMath"));
+            Assert.That(edited, Does.Contain("5102"));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ExtensionCallHostClassMadePublic.cs", edited),
+                "Assets/Tests/Editor/HotReload/HotReloadExtensionCallFixtures.cs",
+                snapshotSource: onDisk);
+
+            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsPublicExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
         /// What: a lambda that reads a private field and calls an overloaded public extension
         /// method of a public class in the edited file stays a patch entry, although the call
         /// binds ambiguously against both copies of the class.

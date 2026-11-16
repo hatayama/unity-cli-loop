@@ -40,9 +40,10 @@ internal static class AccessibilityRules
     /// <summary>
     /// What: the symbol a call, method group, or member access binds to, or null when nothing is
     /// bound. When binding failed only because a static class is offered twice (the edited source
-    /// and its compiled copy) and that class is not externally visible, returns one of its methods
-    /// from the edited source. That method shares the containing type of the overload the compiler
-    /// would pick but is not necessarily that overload, so it is only good for deciding refusal.
+    /// and its compiled copy) and the compiled class is not externally visible, returns one of its
+    /// methods from the compiled copy, the one the running code would call. That method shares the
+    /// containing type of the overload the compiler would pick but is not necessarily that overload,
+    /// so it is only good for deciding refusal.
     /// </summary>
     internal static ISymbol BoundSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
@@ -70,13 +71,15 @@ internal static class AccessibilityRules
     // twins are public methods, and an extension class is top-level. A twin call into a public
     // class is accessible (nothing to refuse); into a class that is not externally visible, every
     // overload is inaccessible. An internal overload exists once and binds without ambiguity.
+    // Why the compiled copy's class: the running code calls the compiled class, and one edit may
+    // make the edited class public while the compiled one stays internal.
     private static IMethodSymbol FindTwinCandidateToRefuseOrNull(
         IAssemblySymbol editedAssembly,
         ImmutableArray<ISymbol> candidates)
     {
         string containingType = null;
         IMethodSymbol editedCopy = null;
-        bool hasCompiledCopy = false;
+        IMethodSymbol compiledCopy = null;
         foreach (ISymbol candidate in candidates)
         {
             if (candidate is not IMethodSymbol method)
@@ -85,6 +88,12 @@ internal static class AccessibilityRules
             }
 
             INamedTypeSymbol candidateType = UnreducedMethod(method).ContainingType;
+            if (candidateType == null)
+            {
+                // A method with no containing type (a function pointer signature) has no twin.
+                return null;
+            }
+
             string candidateTypeName = candidateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             if (containingType != null && containingType != candidateTypeName)
             {
@@ -99,18 +108,18 @@ internal static class AccessibilityRules
             }
             else
             {
-                hasCompiledCopy = true;
+                compiledCopy = method;
             }
         }
 
         if (editedCopy == null
-            || !hasCompiledCopy
-            || IsExternallyVisibleType(UnreducedMethod(editedCopy).ContainingType))
+            || compiledCopy == null
+            || IsExternallyVisibleType(UnreducedMethod(compiledCopy).ContainingType))
         {
             return null;
         }
 
-        return editedCopy;
+        return compiledCopy;
     }
 
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
