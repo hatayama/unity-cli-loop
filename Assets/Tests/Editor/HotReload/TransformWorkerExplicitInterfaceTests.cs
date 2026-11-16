@@ -208,6 +208,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Skipped=" + FormatSkipped(result));
         }
 
+        /// <summary>
+        /// What: an unchanged explicit implementation spelled with global:: in both the baseline and
+        /// the current source is reported unchanged under the compiled metadata name, the same name an
+        /// entry for it carries, so restoring the body can revert its patch.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedExplicitImplementationRespelledWithGlobal_ReportsCompiledName()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string onDisk = File.ReadAllText(Path.Combine(
+                projectRoot,
+                FixtureProjectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            string respelled = ReplaceUniqueFragment(
+                onDisk,
+                RunnerBody,
+                "int global::" + Namespace + ".IHotReloadExplicitRunner.Run() { return 8101; }");
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "ExplicitGlobalUnchanged.cs");
+            File.WriteAllText(sourcePath, respelled);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(sourcePath, respelled);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string[] runnerRows = result.Output.unchangedMethods
+                .Where(row => row.typeMetadataName == typeof(HotReloadExplicitRunnerFixture).FullName)
+                .Select(row => row.methodName)
+                .ToArray();
+            Assert.That(runnerRows, Is.EqualTo(new[] { Namespace + ".IHotReloadExplicitRunner.Run" }));
+        }
+
         private static TransformWorkerEntryDto AssertEntry(
             TransformWorkerClientResult result,
             Type fixtureType,

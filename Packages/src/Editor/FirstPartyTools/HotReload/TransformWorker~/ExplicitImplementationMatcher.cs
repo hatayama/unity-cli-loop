@@ -39,6 +39,25 @@ internal static class ExplicitImplementationMatcher
         return null;
     }
 
+    /// <summary>
+    /// The method name a worker row carries for <paramref name="sourceMethod"/>: the compiled
+    /// metadata name for an explicit implementation the compiled type holds, else the source name.
+    /// </summary>
+    /// <remarks>
+    /// Why: the Editor resolves and reverts patches by the compiled name, and a source spelled
+    /// <c>global::Ns.IFoo.Run</c> has a different name from the compiled <c>Ns.IFoo.Run</c>.
+    /// </remarks>
+    internal static string RowMethodName(INamedTypeSymbol compiledType, IMethodSymbol sourceMethod)
+    {
+        if (sourceMethod.MethodKind != MethodKind.ExplicitInterfaceImplementation)
+        {
+            return sourceMethod.Name;
+        }
+
+        IMethodSymbol compiledMethod = FindCompiledImplementation(compiledType, sourceMethod);
+        return compiledMethod == null ? sourceMethod.Name : compiledMethod.MetadataName;
+    }
+
     /// <summary>The name of the interface member a source explicit implementation implements.</summary>
     internal static string ImplementedMemberName(IMethodSymbol sourceMethod)
     {
