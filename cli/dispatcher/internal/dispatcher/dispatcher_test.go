@@ -71,7 +71,39 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	if stderr.String() != "" {
 		t.Fatalf("cached CLI should not write dispatcher download status: %s", stderr.String())
 	}
-	assertStringSliceEqual(t, actualArgs, []string{"compile", "--force-recompile"})
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", canonicalDispatcherTestPath(t, projectRoot), "compile", "--force-recompile"})
+}
+
+func TestRunDispatcherForwardsProjectResolvedFromRepositoryRootToRealCLI(t *testing.T) {
+	// Verifies a command run from a repository root reaches the child Unity project and hands its
+	// root to the runner, so a runner that only searches upward still targets the same project.
+	repositoryRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repositoryRoot, ".git"), 0o755); err != nil {
+		t.Fatalf("failed to create .git: %v", err)
+	}
+	projectRoot := filepath.Join(repositoryRoot, "UnityProject")
+	createDispatcherUnityProjectAt(t, projectRoot)
+	cacheRoot := t.TempDir()
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(repositoryRoot)
+
+	deps := defaultDispatcherRunDeps()
+	var actualArgs []string
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+		actualArgs = append([]string{}, args...)
+		return 0
+	}
+
+	var stderr bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, deps)
+
+	if code != 0 {
+		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
+	}
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", canonicalDispatcherTestPath(t, projectRoot), "compile"})
 }
 
 func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
@@ -185,7 +217,7 @@ func TestRunDispatcherForwardsRunnerOwnedCommandHelpToPinnedRunner(t *testing.T)
 	if code != 0 {
 		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
 	}
-	assertStringSliceEqual(t, actualArgs, []string{clicore.PausePointAwaitCommandName, "--help"})
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", canonicalDispatcherTestPath(t, projectRoot), clicore.PausePointAwaitCommandName, "--help"})
 	if stdout.String() != "" {
 		t.Fatalf("dispatcher must not answer runner-owned command help locally: %s", stdout.String())
 	}
@@ -1537,12 +1569,28 @@ func TestResolveDispatcherProjectRootLaunchDoesNotRequireExistingEndpointDirecto
 func createDispatcherUnityProject(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
+	createDispatcherUnityProjectAt(t, projectRoot)
+	return projectRoot
+}
+
+func createDispatcherUnityProjectAt(t *testing.T, projectRoot string) {
+	t.Helper()
 	for _, dirName := range []string{"Assets", "ProjectSettings"} {
 		if err := os.MkdirAll(filepath.Join(projectRoot, dirName), 0o755); err != nil {
 			t.Fatalf("failed to create Unity project directory: %v", err)
 		}
 	}
-	return projectRoot
+}
+
+// canonicalDispatcherTestPath returns the symlink-free form the dispatcher forwards as the project root
+// (temp directories sit behind a symlink on macOS).
+func canonicalDispatcherTestPath(t *testing.T, path string) string {
+	t.Helper()
+	canonicalPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("failed to canonicalize %s: %v", path, err)
+	}
+	return canonicalPath
 }
 
 func writeDispatcherProjectPin(t *testing.T, projectRoot string, projectRunnerVersion string) {
