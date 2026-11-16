@@ -382,6 +382,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Resource with a public generic DisposeAsync, which a call without arguments cannot bind, and
+    /// an internal one with an optional parameter, which the compiler binds.
+    /// </summary>
+    public sealed class HotReloadImplicitGenericAndOptionalDisposeAsyncResource
+    {
+        public ValueTask DisposeAsync<T>()
+        {
+            return default;
+        }
+
+        internal ValueTask DisposeAsync(int delay = 0)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Resource with an internal DisposeAsync taking two optional parameters and a public params
+    /// one; the compiler binds the internal one, applicable in its normal form.
+    /// </summary>
+    public sealed class HotReloadImplicitOptionalAndParamsDisposeAsyncResource
+    {
+        internal ValueTask DisposeAsync(int first = 0, int second = 0)
+        {
+            return default;
+        }
+
+        public ValueTask DisposeAsync(params int[] values)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
     /// Base resource whose pattern DisposeAsync is internal, inherited by the resource below.
     /// </summary>
     public class HotReloadImplicitAsyncResourceBase
@@ -933,6 +967,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 int result = 9471;
                 await using (HotReloadImplicitParamsAndOptionalDisposeAsyncResource resource = new HotReloadImplicitParamsAndOptionalDisposeAsyncResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesOptionalDisposeAsyncBesideGenericOverload()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9481;
+                await using (HotReloadImplicitGenericAndOptionalDisposeAsyncResource resource = new HotReloadImplicitGenericAndOptionalDisposeAsyncResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesTwoOptionalDisposeAsyncOverParamsOverload()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9491;
+                await using (HotReloadImplicitOptionalAndParamsDisposeAsyncResource resource = new HotReloadImplicitOptionalAndParamsDisposeAsyncResource())
                 {
                     result += 1;
                 }

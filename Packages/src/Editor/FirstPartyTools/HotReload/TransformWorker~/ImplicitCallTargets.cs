@@ -172,7 +172,8 @@ internal static class ImplicitCallTargets
     // calls IDisposable.Dispose or IAsyncDisposable.DisposeAsync through the interface, which is
     // public, whenever the resource implements it, even when a pattern method also exists. A ref
     // struct without IDisposable may offer a pattern Dispose, and an await using on any type without
-    // IAsyncDisposable a pattern DisposeAsync; no semantic API reports which method was bound.
+    // IAsyncDisposable a pattern DisposeAsync. No semantic API reports which method was bound, so
+    // the call is bound speculatively, which applies the compiler's own overload rules.
     private static IEnumerable<(IMethodSymbol, string)> UsingTargets(
         SemanticModel semanticModel,
         TypeSyntax declaredType,
@@ -190,7 +191,7 @@ internal static class ImplicitCallTargets
         {
             return Implements(resourceType, "System.IAsyncDisposable")
                 ? Array.Empty<(IMethodSymbol, string)>()
-                : Single(FindInstanceMethodCallableWithoutArgumentsOrNull(resourceType, "DisposeAsync"), AwaitUsingConstruct);
+                : Single(BindPatternMethodOrNull(semanticModel, typedNode.SpanStart, resourceType, "DisposeAsync"), AwaitUsingConstruct);
         }
 
         if (!resourceType.IsRefLikeType || Implements(resourceType, "System.IDisposable"))
@@ -198,7 +199,7 @@ internal static class ImplicitCallTargets
             return Array.Empty<(IMethodSymbol, string)>();
         }
 
-        return Single(FindInstanceMethodCallableWithoutArgumentsOrNull(resourceType, "Dispose"), UsingConstruct);
+        return Single(BindPatternMethodOrNull(semanticModel, typedNode.SpanStart, resourceType, "Dispose"), UsingConstruct);
     }
 
     private static bool Implements(ITypeSymbol type, string interfaceFullName)
@@ -206,27 +207,21 @@ internal static class ImplicitCallTargets
         return type.AllInterfaces.Any(candidate => candidate.ToDisplayString() == interfaceFullName);
     }
 
-    // Why base types, optional parameters, and the order: the compiler finds an inherited pattern
-    // method, binds one whose parameters all have defaults or are params, and prefers the overload
-    // that needs the fewest omitted arguments, then one callable without expanding a params array.
-    private static IMethodSymbol FindInstanceMethodCallableWithoutArgumentsOrNull(ITypeSymbol type, string name)
+    // The instance method a call without arguments binds to at the using, as the compiler picks
+    // the pattern method: inherited members, defaults, params, and overload preference included.
+    // Why extension methods are dropped: the dispose pattern does not consider them.
+    private static IMethodSymbol BindPatternMethodOrNull(
+        SemanticModel semanticModel,
+        int position,
+        ITypeSymbol resourceType,
+        string methodName)
     {
-        for (ITypeSymbol current = type; current != null; current = current.BaseType)
-        {
-            IMethodSymbol method = current.GetMembers(name)
-                .OfType<IMethodSymbol>()
-                .Where(candidate => !candidate.IsStatic
-                    && candidate.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams))
-                .OrderBy(candidate => candidate.Parameters.Length)
-                .ThenBy(candidate => candidate.Parameters.Any(parameter => parameter.IsParams) ? 1 : 0)
-                .FirstOrDefault();
-            if (method != null)
-            {
-                return method;
-            }
-        }
-
-        return null;
+        ExpressionSyntax call = SyntaxFactory.ParseExpression(
+            "default(" + resourceType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")." + methodName + "()");
+        IMethodSymbol method = semanticModel
+            .GetSpeculativeSymbolInfo(position, call, SpeculativeBindingOption.BindAsExpression)
+            .Symbol as IMethodSymbol;
+        return method == null || method.IsStatic || method.ReducedFrom != null ? null : method;
     }
 
     private static IEnumerable<(IMethodSymbol, string)> Single(ISymbol symbol, string construct)
