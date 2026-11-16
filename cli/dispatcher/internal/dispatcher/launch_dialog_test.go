@@ -470,7 +470,7 @@ func TestLaunchDialogErrorLeavesTheDialogOutOfItsText(t *testing.T) {
 		return blockedReadiness(unitydialog.Dialog{Title: "Unexpected EOF", Buttons: []string{"OK"}})
 	}
 
-	err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), false, deps)
+	_, err := waitForLaunchReadinessWithDeps(context.Background(), t.TempDir(), false, deps)
 
 	if err == nil || strings.Contains(err.Error(), "EOF") || clierrors.IsTransportDisconnectError(err) {
 		t.Fatalf("err = %v, want an error that names no dialog and is no lost connection", err)

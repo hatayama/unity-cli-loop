@@ -47,16 +47,38 @@ func (err PressNotStartedError) Unwrap() error {
 // idx only decides whether to press at all.
 // Why it skips a window with no title and no named button: Unity's splash screen is such a modal
 // AXDialog while a project opens, and pressing must reach the real dialog listed after it.
-const accessibilityPressScript = `function run(argv){const pid=parseInt(argv[0],10);const label=argv[1];const se=Application("System Events");const ps=se.processes.whose({unixId:pid});if(ps.length===0){return JSON.stringify({processFound:false});}const p=ps[0];for(let i=0;i<p.windows.length;i++){const w=p.windows[i];if(w.subrole()!=="AXDialog"){continue;}let modal=false;try{modal=w.attributes.byName("AXModal").value()===true;}catch(e){}if(!modal){continue;}const seen={processFound:true,dialogFound:true,pressed:false,windowTitle:w.title(),texts:w.staticTexts.value(),buttons:w.buttons.name()};if(!seen.windowTitle&&!seen.buttons.some(function(b){return !!b;})){continue;}const idx=seen.buttons.indexOf(label);if(idx<0){return JSON.stringify(seen);}w.buttons.byName(label).click();seen.pressed=true;return JSON.stringify(seen);}return JSON.stringify({processFound:true,dialogFound:false});}`
+// When a third argument is given, it presses only when the dialog's title, decided as
+// accessibilityWindow.dialog decides it, equals that argument. Why the title is compared inside the
+// script: the reading and the click stay in one call, so comparing in Go after a separate reading
+// would leave room for another dialog to take the prompt's place before the click.
+const accessibilityPressScript = `function run(argv){const pid=parseInt(argv[0],10);const label=argv[1];const se=Application("System Events");const ps=se.processes.whose({unixId:pid});if(ps.length===0){return JSON.stringify({processFound:false});}const p=ps[0];for(let i=0;i<p.windows.length;i++){const w=p.windows[i];if(w.subrole()!=="AXDialog"){continue;}let modal=false;try{modal=w.attributes.byName("AXModal").value()===true;}catch(e){}if(!modal){continue;}const seen={processFound:true,dialogFound:true,pressed:false,windowTitle:w.title(),texts:w.staticTexts.value(),buttons:w.buttons.name()};if(!seen.windowTitle&&!seen.buttons.some(function(b){return !!b;})){continue;}const want=argv.length>2?argv[2]:"";if(want){let t=seen.windowTitle||"";if(!t){const ts=seen.texts||[];for(let k=0;k<ts.length;k++){if(ts[k]){t=ts[k];break;}}}if(t!==want){return JSON.stringify(seen);}}const idx=seen.buttons.indexOf(label);if(idx<0){return JSON.stringify(seen);}w.buttons.byName(label).click();seen.pressed=true;return JSON.stringify(seen);}return JSON.stringify({processFound:true,dialogFound:false});}`
 
 // canPress reports whether press works on this operating system.
 func (inspector Inspector) CanPress() bool {
 	return inspector.goos == "darwin" || inspector.goos == "windows"
 }
 
-// press presses the button labeled exactly label in the frontmost modal dialog of this project's
+// Press presses the button labeled exactly label in the frontmost modal dialog of this project's
 // Editor, and returns that dialog as it was before the press.
 func (inspector Inspector) Press(ctx context.Context, projectRoot string, label string) (PressResult, error) {
+	return inspector.press(ctx, projectRoot, "", label)
+}
+
+// PressInDialogTitled presses the button labeled exactly label in the frontmost modal dialog of
+// this project's Editor only when that dialog's title equals title exactly, and returns that
+// dialog as it was before the press. A dialog with another title is returned with Pressed false.
+// An empty title is a caller error: nothing runs and the press did not start.
+func (inspector Inspector) PressInDialogTitled(
+	ctx context.Context, projectRoot string, title string, label string,
+) (PressResult, error) {
+	if title == "" {
+		return PressResult{}, PressNotStartedError{Err: errors.New("a press limited to a dialog title needs the title")}
+	}
+	return inspector.press(ctx, projectRoot, title, label)
+}
+
+// press is Press limited to a dialog titled title, or to any dialog when title is empty.
+func (inspector Inspector) press(ctx context.Context, projectRoot string, title string, label string) (PressResult, error) {
 	if !inspector.CanPress() {
 		return PressResult{}, PressNotStartedError{Err: errDialogPressUnsupported}
 	}
@@ -65,12 +87,16 @@ func (inspector Inspector) Press(ctx context.Context, projectRoot string, label 
 		return PressResult{}, PressNotStartedError{Err: err}
 	}
 	if inspector.goos == "windows" {
-		return inspector.pressWin32Button(ctx, pid, label)
+		return inspector.pressWin32Button(ctx, pid, title, label)
 	}
 	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
-	output, err := inspector.runCommand(
-		pressCtx, "osascript", "-l", "JavaScript", "-e", accessibilityPressScript, strconv.Itoa(pid), label)
+	args := []string{"-l", "JavaScript", "-e", accessibilityPressScript, strconv.Itoa(pid), label}
+	// Why only when given: Press runs the script with exactly the arguments it always had.
+	if title != "" {
+		args = append(args, title)
+	}
+	output, err := inspector.runCommand(pressCtx, "osascript", args...)
 	// Why before err: a stopped command fails with "signal: killed", which hides why it stopped.
 	if stopErr := inspector.stoppedLookError(ctx, pressCtx, "osascript did not answer"); stopErr != nil {
 		return PressResult{}, stopErr

@@ -29,6 +29,11 @@ type launchDeps struct {
 	// lookForDialogs reads the modal dialogs of the Editor that lookupProcess finds, through the
 	// operating system.
 	lookForDialogs func(context.Context, string, unitydialog.ProcessLookup) ([]unitydialog.Dialog, error)
+	// pressDialogButtonInDialogTitled presses label in the frontmost modal dialog of the Editor
+	// lookupProcess finds, only when that dialog's title is title.
+	pressDialogButtonInDialogTitled func(
+		ctx context.Context, projectRoot string, lookupProcess unitydialog.ProcessLookup, title string, label string,
+	) (unitydialog.PressResult, error)
 	// canPressDialogs is whether uloop press-dialog-button works on this operating system.
 	canPressDialogs         bool
 	probeProjectIpcFallback func(context.Context, string) error
@@ -60,14 +65,15 @@ func defaultLaunchDeps() launchDeps {
 		) error {
 			return waitForV2ServerReady(ctx, projectRoot, previousServerSessionID, defaultV2ServerDial, lookout, poll, timeout)
 		},
-		lookForDialogs:          lookForLaunchDialogs,
-		canPressDialogs:         unitydialog.NewInspector(runtime.GOOS, nil).CanPress(),
-		waitForToolReadiness:    clicore.WaitForToolReadinessWithTimeout,
-		probeProjectIpcFallback: clicore.ProbeToolReadinessSequence,
-		removePath:              os.RemoveAll,
-		statPath:                os.Stat,
-		isUnityLockfileHeld:     isUnityLockfileHeld,
-		sleep:                   time.Sleep,
+		lookForDialogs:                  lookForLaunchDialogs,
+		pressDialogButtonInDialogTitled: pressLaunchDialogButtonInDialogTitled,
+		canPressDialogs:                 unitydialog.NewInspector(runtime.GOOS, nil).CanPress(),
+		waitForToolReadiness:            clicore.WaitForToolReadinessWithTimeout,
+		probeProjectIpcFallback:         clicore.ProbeToolReadinessSequence,
+		removePath:                      os.RemoveAll,
+		statPath:                        os.Stat,
+		isUnityLockfileHeld:             isUnityLockfileHeld,
+		sleep:                           time.Sleep,
 	}
 }
 
@@ -78,4 +84,16 @@ func lookForLaunchDialogs(
 	lookupProcess unitydialog.ProcessLookup,
 ) ([]unitydialog.Dialog, error) {
 	return unitydialog.NewInspector(runtime.GOOS, lookupProcess).Inspect(ctx, projectRoot)
+}
+
+// pressLaunchDialogButtonInDialogTitled presses label in the frontmost modal dialog of the Editor
+// lookupProcess finds, only when that dialog's title is title, on this operating system.
+func pressLaunchDialogButtonInDialogTitled(
+	ctx context.Context,
+	projectRoot string,
+	lookupProcess unitydialog.ProcessLookup,
+	title string,
+	label string,
+) (unitydialog.PressResult, error) {
+	return unitydialog.NewInspector(runtime.GOOS, lookupProcess).PressInDialogTitled(ctx, projectRoot, title, label)
 }

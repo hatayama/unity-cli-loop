@@ -240,29 +240,18 @@ func handleExistingLaunchProcess(
 	return stopMethod, false, 0
 }
 
-func launchEditorVersionRequiresRestartError(editorVersion string) error {
-	return &clierrors.ArgumentError{
-		Message:  "--editor-version requires --restart when Unity is already running for this project.",
-		Option:   "--editor-version",
-		Received: editorVersion,
-		Command:  clicore.LaunchCommandName,
-		NextActions: []string{
-			fmt.Sprintf("Run `uloop launch --restart --editor-version %s` to relaunch Unity with the requested Editor version.", editorVersion),
-		},
-	}
-}
-
 func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer, deps launchDeps) int {
 	logLaunchExistingFocusWithDeps(ctx, projectRoot, pid, deps)
 	spinner := ui.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps); err != nil {
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	spinner.Stop()
-	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid)
+	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid, readiness)
 }
 
 func startUnityAndWaitForReadiness(
@@ -332,7 +321,8 @@ func startUnityAndWaitForReadiness(
 	}
 	logLaunchFreshFocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, options.restart, deps); err != nil {
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, options.restart, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -341,7 +331,7 @@ func startUnityAndWaitForReadiness(
 	if runningProcess != nil {
 		previousPid = &runningProcess.Pid
 	}
-	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid)
+	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid, readiness)
 }
 
 // uloopLaunchMarkerArg tells an Editor started by uloop launch apart from one started by
