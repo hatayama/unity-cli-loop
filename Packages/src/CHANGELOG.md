@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.28.2](https://github.com/hatayama/unity-cli-loop/compare/v3.28.1...v3.28.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload no longer treats a partial type's method as added when the type's other parts were not scanned ([#3530](https://github.com/hatayama/unity-cli-loop/issues/3530)) ([3d13da8](https://github.com/hatayama/unity-cli-loop/commit/3d13da81ff529f395b95b91ee6b08e6b0a1aa19c))
+
 ## [3.28.1](https://github.com/hatayama/unity-cli-loop/compare/v3.28.0...v3.28.1) (2026-11-16)
 
 
