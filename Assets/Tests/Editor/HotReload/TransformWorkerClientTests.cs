@@ -1526,7 +1526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedExplicitAccessorSkipReason =
-            "Property init accessors, and getters, setters or indexer accessors with no matching accessor on the compiled type, are skipped; "
+            "Getters, setters, property init accessors, and indexer accessors with no matching accessor on the compiled type, and explicit interface or indexer init accessors, are skipped; "
             + "run 'uloop compile' to apply accessor edits.";
 
         private const string ExpectedSetOnlyPropertySkipReason =
@@ -2415,17 +2415,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an edited init accessor stays Skipped with the accessor reason and emits no entry.
+        /// What: an edited init accessor whose compiled accessor is also init is emitted as an entry
+        /// with no Skipped row.
         /// </summary>
         [Test]
-        public async Task Run_InitAccessorBodyEdited_StaysSkipped()
+        public async Task Run_InitAccessorBodyEdited_IsEmitted()
         {
             TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
                 "InitAccessorBodyEdited.cs",
                 onDisk => ReplaceUniqueFragment(onDisk, "value + 5005", "value + 5006"));
 
-            AssertSkippedContains(result, "set_InitStored", ExpectedExplicitAccessorSkipReason);
-            AssertNoEntryNamed(result, "set_InitStored");
+            AssertEmittedWithoutSkip(result, "set_InitStored");
         }
 
         /// <summary>
@@ -2532,7 +2532,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a property whose bodied get sits beside a bodied init narrows its getter entry to
-        /// the get accessor, so the Skipped init line is not covered by the getter's patch.
+        /// the get accessor, so the unchanged init line is not covered by the getter's patch.
         /// </summary>
         [Test]
         public async Task Run_GetterBesideBodiedInitEdited_EntrySpansOnlyTheGetAccessor()

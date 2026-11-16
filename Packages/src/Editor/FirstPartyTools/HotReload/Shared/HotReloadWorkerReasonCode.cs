@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         MethodTransformStructHost,
         MethodTransformGenericMethodOrType,
         MethodTransformExplicitInterfaceImplementation,
+        MethodTransformInitAccessorWritesInitOnlyMember,
         MethodTransformSiblingBodyBindsCompiledType,
         MethodTransformSiblingBodyUnbound,
         AddedMethodVirtualOrAbstract,

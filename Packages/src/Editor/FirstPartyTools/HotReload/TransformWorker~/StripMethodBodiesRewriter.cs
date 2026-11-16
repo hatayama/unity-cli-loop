@@ -39,9 +39,8 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             .WithBody(SyntaxFactory.Block());
     }
 
-    // Why strip getter and setter bodies only: both are patched now, so their body edits must not
-    // look like outside-body drift. Init bodies stay so those still-unapplied edits keep the
-    // warning.
+    // Why strip get, set, and init bodies: all three are patched now (a refused one is reported as a
+    // per-accessor Skipped row), so their body edits must not look like outside-body drift.
     public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
     {
         PropertyDeclarationSyntax visited = (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node);
@@ -58,12 +57,12 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             return visited;
         }
 
-        return visited.WithAccessorList(StripGetAndSetBodies(visited.AccessorList));
+        return visited.WithAccessorList(StripAccessorBodies(visited.AccessorList));
     }
 
-    // Why strip indexer get and set bodies: both are patched like property accessors, so their body
+    // Why strip indexer accessor bodies: they are patched like property accessors, so their body
     // edits must not look like outside-body drift. The parameter list, element type, and modifiers
-    // stay so those edits still warn, and an init body stays as it does on a property.
+    // stay so those edits still warn.
     public override SyntaxNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
     {
         IndexerDeclarationSyntax visited = (IndexerDeclarationSyntax)base.VisitIndexerDeclaration(node);
@@ -80,7 +79,7 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             return visited;
         }
 
-        return visited.WithAccessorList(StripGetAndSetBodies(visited.AccessorList));
+        return visited.WithAccessorList(StripAccessorBodies(visited.AccessorList));
     }
 
     // What: the accessor list an expression-bodied property or indexer is compared as: one getter
@@ -93,15 +92,16 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
                     .WithBody(SyntaxFactory.Block())));
     }
 
-    // What: the accessor list with every bodied get and set accessor given an empty block body.
-    private static AccessorListSyntax StripGetAndSetBodies(AccessorListSyntax accessorList)
+    // What: the accessor list with every bodied get, set, and init accessor given an empty block body.
+    private static AccessorListSyntax StripAccessorBodies(AccessorListSyntax accessorList)
     {
         List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
         foreach (AccessorDeclarationSyntax accessor in accessorList.Accessors)
         {
-            bool isGetOrSet = accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
-                || accessor.IsKind(SyntaxKind.SetAccessorDeclaration);
-            if (isGetOrSet && (accessor.Body != null || accessor.ExpressionBody != null))
+            bool isGetSetOrInit = accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.InitAccessorDeclaration);
+            if (isGetSetOrInit && (accessor.Body != null || accessor.ExpressionBody != null))
             {
                 accessors.Add(
                     accessor

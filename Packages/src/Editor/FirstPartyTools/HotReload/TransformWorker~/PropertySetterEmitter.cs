@@ -105,8 +105,15 @@ internal static class PropertySetterEmitter
 
         // Why body stays on the property tree: SemanticModel rejects nodes re-parented onto a
         // synthetic MethodDeclaration ("Syntax node is not within syntax tree").
-        AccessorDeclarationSyntax setAccessor = PropertySetterClassifier.FindBodiedSetAccessorOrNull(property);
+        AccessorDeclarationSyntax setAccessor = PropertySetterClassifier.FindBodiedSetOrInitAccessorOrNull(property);
         SyntaxNode setterBodyNode = (SyntaxNode)setAccessor.Body ?? setAccessor.ExpressionBody;
+        if (setterSymbol.IsInitOnly
+            && InitAccessorWriteRules.WritesInitOnlyMember(setterBodyNode, typeState.SourceUnit.SemanticModel))
+        {
+            AddSkip(skipped, sourceProjectRelativePath, typeState.CompiledType, setterSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember));
+            return;
+        }
+
         MethodTransformDecision decision = DecideOrSkip(
             typeState,
             setterSymbol,
@@ -244,8 +251,8 @@ internal static class PropertySetterEmitter
             return false;
         }
 
-        AccessorDeclarationSyntax snapshotSetter = PropertySetterClassifier.FindBodiedSetAccessorOrNull(snapshotProperty);
-        AccessorDeclarationSyntax plainSetter = PropertySetterClassifier.FindBodiedSetAccessorOrNull(plainProperty);
+        AccessorDeclarationSyntax snapshotSetter = PropertySetterClassifier.FindBodiedSetOrInitAccessorOrNull(snapshotProperty);
+        AccessorDeclarationSyntax plainSetter = PropertySetterClassifier.FindBodiedSetOrInitAccessorOrNull(plainProperty);
         return snapshotSetter != null
             && plainSetter != null
             && SyntaxFactory.AreEquivalent(snapshotSetter, plainSetter, topLevel: false);

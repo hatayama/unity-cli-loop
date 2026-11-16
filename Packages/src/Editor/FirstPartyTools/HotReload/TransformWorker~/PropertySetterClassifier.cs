@@ -24,7 +24,14 @@ internal static class PropertySetterClassifier
             return false;
         }
 
-        if (FindBodiedSetAccessorOrNull(propertyDeclaration) == null)
+        if (FindBodiedSetOrInitAccessorOrNull(propertyDeclaration) == null)
+        {
+            return false;
+        }
+
+        // Why an explicit interface init stays with the accessor row: init patching covers ordinary
+        // properties only; an explicit interface init accessor is not part of that support yet.
+        if (propertySymbol.SetMethod.IsInitOnly && propertySymbol.ExplicitInterfaceImplementations.Length > 0)
         {
             return false;
         }
@@ -47,9 +54,9 @@ internal static class PropertySetterClassifier
             && HasMatchingOrdinarySetter(compiledProperty, propertySymbol);
     }
 
-    // What: the set accessor with a block or expression body, or null when the property has no
-    // set accessor, only an auto-implemented one, or only init.
-    internal static AccessorDeclarationSyntax FindBodiedSetAccessorOrNull(PropertyDeclarationSyntax propertyDeclaration)
+    // What: the set or init accessor with a block or expression body, or null when the property
+    // has neither or only an auto-implemented one.
+    internal static AccessorDeclarationSyntax FindBodiedSetOrInitAccessorOrNull(PropertyDeclarationSyntax propertyDeclaration)
     {
         if (propertyDeclaration.AccessorList == null)
         {
@@ -58,8 +65,9 @@ internal static class PropertySetterClassifier
 
         foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
         {
-            if (accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
-                && (accessor.Body != null || accessor.ExpressionBody != null))
+            bool isSetOrInit = accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.InitAccessorDeclaration);
+            if (isSetOrInit && (accessor.Body != null || accessor.ExpressionBody != null))
             {
                 return accessor;
             }
@@ -71,31 +79,18 @@ internal static class PropertySetterClassifier
     // What: whether the property has a set or init accessor with a block or expression body.
     internal static bool HasBodiedSetOrInitAccessor(PropertyDeclarationSyntax propertyDeclaration)
     {
-        if (propertyDeclaration.AccessorList == null)
-        {
-            return false;
-        }
-
-        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
-        {
-            bool isSetOrInit = accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
-                || accessor.IsKind(SyntaxKind.InitAccessorDeclaration);
-            if (isSetOrInit && (accessor.Body != null || accessor.ExpressionBody != null))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return FindBodiedSetOrInitAccessorOrNull(propertyDeclaration) != null;
     }
 
     private static bool HasMatchingOrdinarySetter(IPropertySymbol compiledProperty, IPropertySymbol propertySymbol)
     {
-        // Why each check: a setter added since the last compile, one that was init at the last
-        // compile, and a property re-typed or made (non-)static since then all lack a compiled
-        // set_X with this signature.
+        // Why each check: a setter added since the last compile, a set that was init at the last
+        // compile or the reverse, and a property re-typed or made (non-)static since then all lack
+        // a compiled set_X of the same kind and signature. Why the kind must match: the Editor's
+        // lookup ignores the init modreq, so a set body patched into a compiled init-only set_X (or
+        // the reverse) would change who may call it without failing.
         return compiledProperty.SetMethod != null
-            && !compiledProperty.SetMethod.IsInitOnly
+            && compiledProperty.SetMethod.IsInitOnly == propertySymbol.SetMethod.IsInitOnly
             && compiledProperty.IsStatic == propertySymbol.IsStatic
             && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == CecilTypeNames.ToCecilFullName(propertySymbol.Type);
     }
