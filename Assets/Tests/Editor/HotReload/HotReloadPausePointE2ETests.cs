@@ -493,6 +493,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             PausePointResponse enable = EnableContinuousInFile(IndexerFixtureProjectRelativePath, getterLine);
             Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
             Assert.That(new HotReloadIndexerSingle()[1], Is.EqualTo(1111));
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
         }
