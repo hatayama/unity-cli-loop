@@ -14,6 +14,7 @@ using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 
 /// <summary>
@@ -31,6 +32,8 @@ internal static class ImplicitCallTargets
     private const string CollectionInitializerConstruct = "a collection initializer";
     private const string QueryConstruct = "a query expression";
     private const string UsingConstruct = "using";
+    private const string AwaitUsingConstruct = "await using";
+    private const string PositionalPatternConstruct = "a positional pattern";
 
     /// <summary>
     /// What: the refusal for the first inaccessible method the compiler calls for this node, or
@@ -79,11 +82,23 @@ internal static class ImplicitCallTargets
                 return Single(semanticModel.GetSymbolInfo(ordering).Symbol, QueryConstruct);
             case QueryClauseSyntax queryClause:
                 return QueryClauseTargets(semanticModel.GetQueryClauseInfo(queryClause));
+            case RecursivePatternSyntax pattern when pattern.PositionalPatternClause != null:
+                return Single(
+                    (semanticModel.GetOperation(pattern) as IRecursivePatternOperation)?.DeconstructSymbol,
+                    PositionalPatternConstruct);
             case UsingStatementSyntax usingStatement:
-                return UsingTargets(semanticModel, usingStatement.Declaration?.Type, usingStatement.Expression);
+                return UsingTargets(
+                    semanticModel,
+                    usingStatement.Declaration?.Type,
+                    usingStatement.Expression,
+                    usingStatement.AwaitKeyword != default);
             case LocalDeclarationStatementSyntax localDeclaration
                 when localDeclaration.UsingKeyword != default:
-                return UsingTargets(semanticModel, localDeclaration.Declaration.Type, null);
+                return UsingTargets(
+                    semanticModel,
+                    localDeclaration.Declaration.Type,
+                    null,
+                    localDeclaration.AwaitKeyword != default);
             default:
                 return Array.Empty<(IMethodSymbol, string)>();
         }
@@ -153,27 +168,49 @@ internal static class ImplicitCallTargets
         yield return (info.OperationInfo.Symbol as IMethodSymbol, QueryConstruct);
     }
 
-    // Why only a ref struct without IDisposable: every other using calls IDisposable.Dispose
-    // through the interface, which is public. A ref struct may instead offer a pattern Dispose,
-    // and no semantic API reports which method the compiler bound for it.
+    // Why only these resource types: a using on a type that implements the interface calls
+    // IDisposable.Dispose or IAsyncDisposable.DisposeAsync through it, which is public. A ref struct
+    // without IDisposable may offer a pattern Dispose, and an await using on any type without
+    // IAsyncDisposable a pattern DisposeAsync; no semantic API reports which method the compiler
+    // bound for either.
     private static IEnumerable<(IMethodSymbol, string)> UsingTargets(
         SemanticModel semanticModel,
         TypeSyntax declaredType,
-        ExpressionSyntax resource)
+        ExpressionSyntax resource,
+        bool isAwaitUsing)
     {
         SyntaxNode typedNode = (SyntaxNode)declaredType ?? resource;
         ITypeSymbol resourceType = typedNode == null ? null : semanticModel.GetTypeInfo(typedNode).Type;
-        if (resourceType == null
-            || !resourceType.IsRefLikeType
-            || resourceType.AllInterfaces.Any(type => type.SpecialType == SpecialType.System_IDisposable))
+        if (resourceType == null)
         {
             return Array.Empty<(IMethodSymbol, string)>();
         }
 
-        IMethodSymbol dispose = resourceType.GetMembers("Dispose")
+        if (isAwaitUsing)
+        {
+            return Implements(resourceType, "System.IAsyncDisposable")
+                ? Array.Empty<(IMethodSymbol, string)>()
+                : Single(FindParameterlessInstanceMethodOrNull(resourceType, "DisposeAsync"), AwaitUsingConstruct);
+        }
+
+        if (!resourceType.IsRefLikeType || Implements(resourceType, "System.IDisposable"))
+        {
+            return Array.Empty<(IMethodSymbol, string)>();
+        }
+
+        return Single(FindParameterlessInstanceMethodOrNull(resourceType, "Dispose"), UsingConstruct);
+    }
+
+    private static bool Implements(ITypeSymbol type, string interfaceFullName)
+    {
+        return type.AllInterfaces.Any(candidate => candidate.ToDisplayString() == interfaceFullName);
+    }
+
+    private static IMethodSymbol FindParameterlessInstanceMethodOrNull(ITypeSymbol type, string name)
+    {
+        return type.GetMembers(name)
             .OfType<IMethodSymbol>()
             .FirstOrDefault(method => !method.IsStatic && method.Parameters.Length == 0);
-        return Single(dispose, UsingConstruct);
     }
 
     private static IEnumerable<(IMethodSymbol, string)> Single(ISymbol symbol, string construct)

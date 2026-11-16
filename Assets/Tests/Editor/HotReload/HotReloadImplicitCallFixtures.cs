@@ -51,6 +51,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return new HotReloadImplicitAsyncEnumerator(sequence.Count);
         }
+
+        internal static HotReloadImplicitOrderedSource OrderBy(
+            this HotReloadImplicitOrderedSource source,
+            Func<int, int> keySelector)
+        {
+            return new HotReloadImplicitOrderedSource { Value = keySelector(source.Value) };
+        }
+
+        internal static HotReloadImplicitCastResult Cast<T>(this HotReloadImplicitCastSource source)
+        {
+            return new HotReloadImplicitCastResult { Value = source.Value };
+        }
     }
 
     /// <summary>
@@ -293,6 +305,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _index++;
             return new ValueTask<bool>(_index <= _count);
+        }
+    }
+
+    /// <summary>
+    /// Resource without IAsyncDisposable whose pattern DisposeAsync is internal.
+    /// </summary>
+    public sealed class HotReloadImplicitAsyncResource
+    {
+        internal ValueTask DisposeAsync()
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Query source whose only query method is an internal extension OrderBy.
+    /// </summary>
+    public sealed class HotReloadImplicitOrderedSource
+    {
+        public int Value = 4;
+    }
+
+    /// <summary>
+    /// Query source that a typed range variable converts through an internal extension Cast.
+    /// </summary>
+    public sealed class HotReloadImplicitCastSource
+    {
+        public int Value = 6;
+    }
+
+    /// <summary>
+    /// Result of the internal Cast, with a public Select so only the Cast is inaccessible.
+    /// </summary>
+    public sealed class HotReloadImplicitCastResult
+    {
+        public int Value;
+
+        public HotReloadImplicitCastResult Select(Func<int, int> selector)
+        {
+            return new HotReloadImplicitCastResult { Value = selector(Value) };
+        }
+    }
+
+    /// <summary>
+    /// Query source with a public Join whose inner sequence is the result of the internal Cast.
+    /// </summary>
+    public sealed class HotReloadImplicitJoinSource
+    {
+        public int Value = 6;
+
+        public HotReloadImplicitJoinSource Join(
+            HotReloadImplicitCastResult inner,
+            Func<int, int> outerKeySelector,
+            Func<int, int> innerKeySelector,
+            Func<int, int, int> resultSelector)
+        {
+            int result = outerKeySelector(Value) == innerKeySelector(inner.Value)
+                ? resultSelector(Value, inner.Value)
+                : 0;
+            return new HotReloadImplicitJoinSource { Value = result };
         }
     }
 
@@ -561,6 +633,269 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 return sum;
+            };
+            return read();
+        }
+
+        // The bodies below touch no private member: the only inaccessible use is the call the
+        // compiler generates, so the body reaches the accessor decision through that call alone.
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureOnlyAwaitsThroughInternalGetAwaiter()
+        {
+            Func<Task<int>> read = async () => await new HotReloadImplicitAwaitable() + 9101;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureOnlyAwaitsThroughInternalGetResult()
+        {
+            Func<Task<int>> read = async () => await new HotReloadImplicitInternalResultAwaitable() + 9111;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyLoopsThroughInternalGetEnumerator()
+        {
+            Func<int> read = () =>
+            {
+                int sum = 9121;
+                foreach (int value in new HotReloadImplicitRange())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncOnlyLoopsThroughInternalGetEnumerator()
+        {
+            await Task.Yield();
+            int sum = 9126;
+            foreach (int value in new HotReloadImplicitRange())
+            {
+                sum += value;
+            }
+
+            return sum;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyDeconstructsThroughInternalExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadImplicitExtensionPair();
+                return first + second + 9131;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyDeconstructsThroughInternalInstanceMethod()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadImplicitInternalPair();
+                return first + second + 9141;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyFillsThroughInternalExtensionAdd()
+        {
+            Func<int> read = () => new HotReloadImplicitBag { 9151 }.Sum;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyFillsThroughInternalInstanceAdd()
+        {
+            Func<int> read = () => new HotReloadImplicitInternalAddBag { 9161 }.Sum;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyQueriesThroughInternalSelect()
+        {
+            Func<int> read = () => (from value in new HotReloadImplicitSource() select value + 9171).Value;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOnlyUsesRefStructWithInternalDispose()
+        {
+            Func<int> read = () =>
+            {
+                int result = 9181;
+                using (HotReloadImplicitRefResource resource = new HotReloadImplicitRefResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureOnlyAwaitForEachesThroughInternalGetAsyncEnumerator()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int sum = 9191;
+                await foreach (int value in new HotReloadImplicitAsyncSequence())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesInternalDisposeAsync()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9301;
+                await using (HotReloadImplicitAsyncResource resource = new HotReloadImplicitAsyncResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitUsingDeclarationWithInternalDisposeAsync()
+        {
+            await Task.Yield();
+            await using HotReloadImplicitAsyncResource resource = new HotReloadImplicitAsyncResource();
+            return 9311;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureMatchesIsPositionalPatternThroughInternalDeconstruct()
+        {
+            Func<int> read = () => new HotReloadImplicitInternalPair() is (int first, int second)
+                ? first + second + 9321
+                : 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureMatchesSwitchArmPositionalPatternThroughInternalDeconstruct()
+        {
+            Func<int> read = () => new HotReloadImplicitInternalPair() switch
+            {
+                (int first, int second) => first + second + 9331,
+                _ => 0,
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureMatchesCasePositionalPatternThroughInternalDeconstruct()
+        {
+            Func<int> read = () =>
+            {
+                object pair = new HotReloadImplicitInternalPair();
+                switch (pair)
+                {
+                    case HotReloadImplicitInternalPair(int first, int second):
+                        return first + second + 9341;
+                    default:
+                        return 0;
+                }
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureOrdersThroughInternalOrderBy()
+        {
+            Func<int> read = () =>
+                (from value in new HotReloadImplicitOrderedSource() orderby value + 9351 select value).Value;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureQueriesTypedFromThroughInternalCast()
+        {
+            Func<int> read = () => (from int value in new HotReloadImplicitCastSource() select value + 9361).Value;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureQueriesTypedJoinThroughInternalCast()
+        {
+            Func<int> read = () =>
+                (from value in new HotReloadImplicitJoinSource()
+                 join int other in new HotReloadImplicitCastSource() on value equals other
+                 select value + other + 9371).Value;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureLoopsWithDeconstructionThroughInternalDeconstruct()
+        {
+            Func<int> read = () =>
+            {
+                int sum = 9381;
+                foreach ((int first, int second) in new[] { new HotReloadImplicitInternalPair() })
+                {
+                    sum += first + second;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureUsesVarDeclarationOfRefStructWithInternalDispose()
+        {
+            Func<int> read = () =>
+            {
+                // Why var: the resource type of a using var declaration comes from the initializer,
+                // which is the shape under test.
+                using var resource = new HotReloadImplicitRefResource();
+                return 9401;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureUsesExpressionOfRefStructWithInternalDispose()
+        {
+            Func<int> read = () =>
+            {
+                int result = 9411;
+                using (new HotReloadImplicitRefResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureUsesDeclarationOfRefStructWithInternalDispose()
+        {
+            Func<int> read = () =>
+            {
+                using HotReloadImplicitRefResource resource = new HotReloadImplicitRefResource();
+                return 9421;
             };
             return read();
         }

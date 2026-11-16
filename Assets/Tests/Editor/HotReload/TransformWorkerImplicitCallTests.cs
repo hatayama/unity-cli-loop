@@ -24,9 +24,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
 
         /// <summary>
-        /// What: an edited body whose await, foreach, deconstruction, collection initializer, query
-        /// expression, or ref struct using makes the compiler call an internal method is skipped
-        /// with the implicit-call reason naming that method and construct, and produces no entry.
+        /// What: an edited body whose await, foreach, deconstruction, positional pattern, collection
+        /// initializer, query expression, ref struct using, or await using makes the compiler call
+        /// an internal method is skipped with the implicit-call reason naming that method and
+        /// construct, and produces no entry, whether or not the body also reads a private member.
         /// </summary>
         [TestCase("6101", "ClosureAwaitsThroughInternalGetAwaiter", "GetAwaiter", "await")]
         [TestCase("6111", "AsyncAwaitsThroughInternalGetAwaiter", "GetAwaiter", "await")]
@@ -46,6 +47,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6601", "ClosureUsesRefStructWithInternalDispose", "Dispose", "using")]
         [TestCase("6701", "ClosureAwaitForEachesThroughInternalGetAsyncEnumerator", "GetAsyncEnumerator", "foreach")]
         [TestCase("6711", "AsyncAwaitForEachesThroughInternalGetAsyncEnumerator", "GetAsyncEnumerator", "foreach")]
+        [TestCase("9101", "ClosureOnlyAwaitsThroughInternalGetAwaiter", "GetAwaiter", "await")]
+        [TestCase("9111", "ClosureOnlyAwaitsThroughInternalGetResult", "GetResult", "await")]
+        [TestCase("9121", "ClosureOnlyLoopsThroughInternalGetEnumerator", "GetEnumerator", "foreach")]
+        [TestCase("9126", "AsyncOnlyLoopsThroughInternalGetEnumerator", "GetEnumerator", "foreach")]
+        [TestCase("9131", "ClosureOnlyDeconstructsThroughInternalExtension", "Deconstruct", "a deconstruction")]
+        [TestCase("9141", "ClosureOnlyDeconstructsThroughInternalInstanceMethod", "Deconstruct", "a deconstruction")]
+        [TestCase("9151", "ClosureOnlyFillsThroughInternalExtensionAdd", "Add", "a collection initializer")]
+        [TestCase("9161", "ClosureOnlyFillsThroughInternalInstanceAdd", "Add", "a collection initializer")]
+        [TestCase("9171", "ClosureOnlyQueriesThroughInternalSelect", "Select", "a query expression")]
+        [TestCase("9181", "ClosureOnlyUsesRefStructWithInternalDispose", "Dispose", "using")]
+        [TestCase("9191", "ClosureOnlyAwaitForEachesThroughInternalGetAsyncEnumerator", "GetAsyncEnumerator", "foreach")]
+        [TestCase("9301", "ClosureAwaitUsesInternalDisposeAsync", "DisposeAsync", "await using")]
+        [TestCase("9311", "AsyncAwaitUsingDeclarationWithInternalDisposeAsync", "DisposeAsync", "await using")]
+        [TestCase("9321", "ClosureMatchesIsPositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
+        [TestCase("9331", "ClosureMatchesSwitchArmPositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
+        [TestCase("9341", "ClosureMatchesCasePositionalPatternThroughInternalDeconstruct", "Deconstruct", "a positional pattern")]
+        [TestCase("9351", "ClosureOrdersThroughInternalOrderBy", "OrderBy", "a query expression")]
+        [TestCase("9361", "ClosureQueriesTypedFromThroughInternalCast", "Cast", "a query expression")]
+        [TestCase("9371", "ClosureQueriesTypedJoinThroughInternalCast", "Cast", "a query expression")]
+        [TestCase("9381", "ClosureLoopsWithDeconstructionThroughInternalDeconstruct", "Deconstruct", "a deconstruction")]
+        [TestCase("9401", "ClosureUsesVarDeclarationOfRefStructWithInternalDispose", "Dispose", "using")]
+        [TestCase("9411", "ClosureUsesExpressionOfRefStructWithInternalDispose", "Dispose", "using")]
+        [TestCase("9421", "ClosureUsesDeclarationOfRefStructWithInternalDispose", "Dispose", "using")]
         public async Task ImplicitCallToInternalMethod_IsSkippedWithTheImplicitCallReason(
             string token,
             string methodName,
