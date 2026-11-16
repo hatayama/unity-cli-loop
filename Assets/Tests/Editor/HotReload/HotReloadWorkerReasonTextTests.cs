@@ -775,6 +775,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "inaccessible methods that return by ref have no accessor rewrite shape.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten,
+                NoArgs,
+                "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them when the condition symbol is not defined.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape,
+                NoArgs,
+                "inaccessible method with a ref struct parameter or return type has no accessor rewrite shape.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 NoArgs,
                 "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "

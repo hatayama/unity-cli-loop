@@ -51,7 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a call to an internal extension method of a public class that the accessor cannot
         /// carry (conditional access, also further down the receiver chain, an expanded params
-        /// argument, generic, `this ref`, `this in`, a method group) is skipped
+        /// argument, a [Conditional] method, a ref struct return type, generic, `this ref`,
+        /// `this in`, a method group) is skipped
         /// with the reason of the check that refuses that shape, and produces no entry.
         /// </summary>
         [TestCase("7151", "ClosureCallsInternalExtensionConditionally", "inaccessible member access via conditional access has no rewrite shape.")]
@@ -61,6 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7261", "ClosureCallsInternalExtensionAfterConditionalElement", "inaccessible member access via conditional access has no rewrite shape.")]
         [TestCase("7271", "ClosureCallsInternalMethodAfterConditionalAccess", "inaccessible member access via conditional access has no rewrite shape.")]
         [TestCase("7281", "ClosureCallsParamsInternalExtensionWithNoElements", "inaccessible method calls with omitted optional or expanded params arguments")]
+        [TestCase("7321", "ClosureCallsConditionalInternalExtension", "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them when the condition symbol is not defined.")]
+        [TestCase("7331", "ClosureCallsConditionalInternalMethod", "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them when the condition symbol is not defined.")]
+        [TestCase("7361", "ClosureCallsRefLikeReturningInternalMethod", "inaccessible method with a ref struct parameter or return type has no accessor rewrite shape.")]
         [TestCase("7291", "ClosureCallsParamsInternalMethodExpanded", "inaccessible method calls with omitted optional or expanded params arguments")]
         [TestCase("7161", "ClosureCallsGenericInternalExtension", "inaccessible generic method calls are not rewritten.")]
         [TestCase("7171", "ClosureCallsRefInternalExtension", "inaccessible method calls with ref/out/in parameters are not rewritten")]

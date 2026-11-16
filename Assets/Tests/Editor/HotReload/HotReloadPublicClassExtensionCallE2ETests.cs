@@ -141,6 +141,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a [Conditional] internal method called in a method's own statements, not in a
+        /// lambda, is still omitted after the method is Patched, as the compiler omits it.
+        /// </summary>
+        [Test]
+        public async Task Run_StatementCallingConditionalInternalMethod_IsPatchedAndTheCallStaysOmitted()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.StatementCallsConditionalInternalMethod(), Is.EqualTo(7371));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7371", "8371");
+
+            AssertKind(result, "StatementCallsConditionalInternalMethod", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.StatementCallsConditionalInternalMethod(), Is.EqualTo(8371));
+        }
+
+        /// <summary>
         /// What: a lambda that calls an internal extension method on a null receiver passes the
         /// null through the accessor to the method, as the compiled call does.
         /// </summary>

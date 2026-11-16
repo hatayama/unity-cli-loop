@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
@@ -58,6 +59,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return sum;
+        }
+
+        // The condition symbol is never defined, so the compiler omits every call to these two.
+        [Conditional("ULOOP_HOT_RELOAD_TEST_UNDEFINED_SYMBOL")]
+        internal static void TraceCall(this int value, int add)
+        {
+            throw new InvalidOperationException("A [Conditional] call must be omitted.");
+        }
+
+        [Conditional("ULOOP_HOT_RELOAD_TEST_UNDEFINED_SYMBOL")]
+        internal static void TraceOrdinary(int add)
+        {
+            throw new InvalidOperationException("A [Conditional] call must be omitted.");
+        }
+
+        internal static ReadOnlySpan<int> SpanOf(int[] values)
+        {
+            return new ReadOnlySpan<int>(values);
         }
 
         internal static int GenericEcho<T>(this T value, int add)
@@ -123,6 +142,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private HotReloadExtensionCallBox _box = new HotReloadExtensionCallBox();
 
         private int _stored;
+
+        private int[] _ints = { 1, 2 };
+
+        private int _traceArguments;
 
         private int _receiverCalls;
 
@@ -234,6 +257,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsConditionalInternalExtension()
+        {
+            Action trace = () => _value.TraceCall(RecordTraceArgument(7321));
+            trace();
+            return _traceArguments;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsConditionalInternalMethod()
+        {
+            Action trace = () => HotReloadPublicClassInternalExtensions.TraceOrdinary(RecordTraceArgument(7331));
+            trace();
+            return _traceArguments;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int StatementCallsConditionalInternalMethod()
+        {
+            HotReloadPublicClassInternalExtensions.TraceOrdinary(RecordTraceArgument(1));
+            return _traceArguments + 7371;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsRefLikeReturningInternalMethod()
+        {
+            Func<int> read = () => HotReloadPublicClassInternalExtensions.SpanOf(_ints).Length + 7361;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureCallsParamsInternalExtensionExpanded()
         {
             Func<int> read = () => _value.SumAll(7231);
@@ -298,6 +351,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _order += "r";
             _receiverCalls++;
             return _value;
+        }
+
+        private int RecordTraceArgument(int add)
+        {
+            _traceArguments++;
+            return add;
         }
 
         private int RecordArgument(int add)

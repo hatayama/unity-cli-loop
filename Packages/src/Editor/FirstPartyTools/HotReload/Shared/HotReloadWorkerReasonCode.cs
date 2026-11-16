@@ -124,6 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         AccessorInitializerAssignmentNoShape,
         AccessorConditionalAccessNoShape,
         AccessorRefReturningMethodNoShape,
+        AccessorConditionalMethodNotRewritten,
+        AccessorRefLikeSignatureNoShape,
         AccessorRefOutInParameterNotRewritten,
         AccessorNamedArgumentNotRewritten,
         AccessorOptionalOrParamsArgumentNotRewritten,

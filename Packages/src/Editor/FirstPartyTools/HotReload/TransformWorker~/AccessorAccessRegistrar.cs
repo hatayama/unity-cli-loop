@@ -541,6 +541,40 @@ internal static class AccessorAccessRegistrar
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape);
         }
 
+        // Why refuse: the accessor call is an ordinary delegate call, so it would run the method
+        // and evaluate its arguments where the compiler omits the call.
+        if (BaseCallRules.IsConditional(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten);
+        }
+
+        // Why refuse: the accessor is a Func or Action, and a ref struct cannot be a generic
+        // type argument, so the shim would not compile. Why parameters too, though no call reaches
+        // them today: a call with a ref struct argument does not bind in the worker yet, and once
+        // it does, the same delegate would not compile.
+        if (HasRefLikeSignature(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape);
+        }
+
         return null;
+    }
+
+    private static bool HasRefLikeSignature(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.ReturnType.IsRefLikeType)
+        {
+            return true;
+        }
+
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            if (parameter.Type.IsRefLikeType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -179,7 +179,7 @@ internal static class BaseCallRules
 
     // Why walk OverriddenMethod: an override of a [Conditional] method is conditional too, but the
     // attribute stays on the method it overrides.
-    private static bool IsConditional(IMethodSymbol target)
+    internal static bool IsConditional(IMethodSymbol target)
     {
         for (IMethodSymbol method = target; method != null; method = method.OverriddenMethod)
         {

@@ -204,6 +204,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 Plain("inaccessible methods that return by ref have no accessor rewrite shape.", 0));
             templates.Add(
+                HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten,
+                Plain(
+                    "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them "
+                    + "when the condition symbol is not defined.",
+                    0));
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape,
+                Plain("inaccessible method with a ref struct parameter or return type has no accessor rewrite shape.", 0));
+            templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 Plain(
                     "inaccessible method calls with ref/out/in parameters are not rewritten; the call is "
