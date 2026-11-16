@@ -228,6 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         int IHotReloadExplicitReadOnlyValue.Reading
         {
+            [MethodImpl(MethodImplOptions.NoInlining)]
             get { return 8204; }
         }
     }
@@ -259,6 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         int IHotReloadExplicitIndexed.this[int index]
         {
+            [MethodImpl(MethodImplOptions.NoInlining)]
             get { return index + 8210; }
         }
     }
@@ -284,6 +286,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             [MethodImpl(MethodImplOptions.NoInlining)]
             get { return _stored + 8206; }
+            [MethodImpl(MethodImplOptions.NoInlining)]
             set { _stored = value; }
         }
     }
