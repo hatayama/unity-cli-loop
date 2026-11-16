@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
         private const string Int32 = "System.Int32";
         private const string BaseMemberReason = "Uses base. for something other than a direct call to a base method";
-        private const string ExplicitInterfaceReason = "Explicit interface implementations are skipped.";
+        private const string ExplicitInterfaceReason = "accessors of explicit interface properties, are skipped";
 
         /// <summary>
         /// What: an edited getter of a one-parameter indexer is an entry for get_Item(Int32) whose
