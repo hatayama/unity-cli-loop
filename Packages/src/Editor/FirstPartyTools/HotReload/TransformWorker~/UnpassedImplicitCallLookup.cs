@@ -76,9 +76,8 @@ internal static class UnpassedImplicitCallLookup
             case CommonForEachStatementSyntax forEach:
                 return MissingForEachCalls(semanticModel, forEach);
             case AssignmentExpressionSyntax assignment
-                when assignment.Left is TupleExpressionSyntax or DeclarationExpressionSyntax
-                && semanticModel.GetDeconstructionInfo(assignment).Method == null:
-                return Single(TypeOf(semanticModel, assignment.Right), "Deconstruct");
+                when assignment.Left is TupleExpressionSyntax or DeclarationExpressionSyntax:
+                return MissingDeconstructCalls(semanticModel, assignment);
             case RecursivePatternSyntax pattern when pattern.PositionalPatternClause != null:
                 return MissingPositionalPatternCalls(semanticModel, pattern);
             case InitializerExpressionSyntax initializer
@@ -122,6 +121,70 @@ internal static class UnpassedImplicitCallLookup
         }
 
         return missing;
+    }
+
+    private static IEnumerable<(ITypeSymbol, string)> MissingDeconstructCalls(
+        SemanticModel semanticModel,
+        AssignmentExpressionSyntax assignment)
+    {
+        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
+        ITypeSymbol right = TypeOf(semanticModel, assignment.Right);
+        if (right is INamedTypeSymbol { IsTupleType: true } tuple)
+        {
+            AddMissingNestedDeconstructCalls(assignment.Left, tuple, missing);
+        }
+        else if (semanticModel.GetDeconstructionInfo(assignment).Method == null)
+        {
+            missing.Add((right, "Deconstruct"));
+        }
+
+        return missing;
+    }
+
+    // Why the tuple's element types: a tuple splits without a method, so each nested target on the
+    // left deconstructs the matching element, whose Deconstruct is the call that may be missing.
+    private static void AddMissingNestedDeconstructCalls(
+        SyntaxNode left,
+        INamedTypeSymbol tuple,
+        List<(ITypeSymbol, string)> missing)
+    {
+        IReadOnlyList<SyntaxNode> targets = DeconstructionTargetsOrNull(left);
+        if (targets == null || targets.Count != tuple.TupleElements.Length)
+        {
+            return;
+        }
+
+        for (int index = 0; index < targets.Count; index++)
+        {
+            if (DeconstructionTargetsOrNull(targets[index]) == null)
+            {
+                continue;
+            }
+
+            ITypeSymbol element = tuple.TupleElements[index].Type;
+            if (element is INamedTypeSymbol { IsTupleType: true } nestedTuple)
+            {
+                AddMissingNestedDeconstructCalls(targets[index], nestedTuple, missing);
+                continue;
+            }
+
+            missing.Add((element, "Deconstruct"));
+        }
+    }
+
+    private static IReadOnlyList<SyntaxNode> DeconstructionTargetsOrNull(SyntaxNode target)
+    {
+        switch (target)
+        {
+            case TupleExpressionSyntax tuple:
+                return tuple.Arguments.Select(argument => (SyntaxNode)argument.Expression).ToList();
+            case DeclarationExpressionSyntax { Designation: ParenthesizedVariableDesignationSyntax designation }:
+                return designation.Variables.ToList<SyntaxNode>();
+            case ParenthesizedVariableDesignationSyntax designation:
+                return designation.Variables.ToList<SyntaxNode>();
+            default:
+                return null;
+        }
     }
 
     private static IEnumerable<(ITypeSymbol, string)> MissingForEachCalls(

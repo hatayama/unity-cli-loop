@@ -320,6 +320,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Resource that implements IAsyncDisposable and also has an internal parameterless
+    /// DisposeAsync; await using binds the pattern method before the interface.
+    /// </summary>
+    public sealed class HotReloadImplicitInterfaceAndPatternResource : IAsyncDisposable
+    {
+        internal ValueTask DisposeAsync()
+        {
+            return default;
+        }
+
+        ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Resource whose internal pattern DisposeAsync takes only an optional parameter.
+    /// </summary>
+    public sealed class HotReloadImplicitOptionalParameterResource
+    {
+        internal ValueTask DisposeAsync(int delay = 0)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
     /// Base resource whose pattern DisposeAsync is internal, inherited by the resource below.
     /// </summary>
     public class HotReloadImplicitAsyncResourceBase
@@ -807,6 +835,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 int result = 9431;
                 await using (HotReloadImplicitDerivedAsyncResource resource = new HotReloadImplicitDerivedAsyncResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesPatternDisposeAsyncBeforeInterface()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9441;
+                await using (HotReloadImplicitInterfaceAndPatternResource resource = new HotReloadImplicitInterfaceAndPatternResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesOptionalParameterDisposeAsync()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9451;
+                await using (HotReloadImplicitOptionalParameterResource resource = new HotReloadImplicitOptionalParameterResource())
                 {
                     result += 1;
                 }

@@ -168,11 +168,10 @@ internal static class ImplicitCallTargets
         yield return (info.OperationInfo.Symbol as IMethodSymbol, QueryConstruct);
     }
 
-    // Why only these resource types: a using on a type that implements the interface calls
-    // IDisposable.Dispose or IAsyncDisposable.DisposeAsync through it, which is public. A ref struct
-    // without IDisposable may offer a pattern Dispose, and an await using on any type without
-    // IAsyncDisposable a pattern DisposeAsync; no semantic API reports which method the compiler
-    // bound for either.
+    // Why the pattern method first: for a ref struct or an await using the compiler binds a
+    // Dispose / DisposeAsync callable without arguments before it falls back to IDisposable or
+    // IAsyncDisposable, whose methods are public. Any other using calls IDisposable.Dispose through
+    // the interface. No semantic API reports which method the compiler bound.
     private static IEnumerable<(IMethodSymbol, string)> UsingTargets(
         SemanticModel semanticModel,
         TypeSyntax declaredType,
@@ -188,32 +187,27 @@ internal static class ImplicitCallTargets
 
         if (isAwaitUsing)
         {
-            return Implements(resourceType, "System.IAsyncDisposable")
-                ? Array.Empty<(IMethodSymbol, string)>()
-                : Single(FindParameterlessInstanceMethodOrNull(resourceType, "DisposeAsync"), AwaitUsingConstruct);
+            return Single(FindInstanceMethodCallableWithoutArgumentsOrNull(resourceType, "DisposeAsync"), AwaitUsingConstruct);
         }
 
-        if (!resourceType.IsRefLikeType || Implements(resourceType, "System.IDisposable"))
+        if (!resourceType.IsRefLikeType)
         {
             return Array.Empty<(IMethodSymbol, string)>();
         }
 
-        return Single(FindParameterlessInstanceMethodOrNull(resourceType, "Dispose"), UsingConstruct);
+        return Single(FindInstanceMethodCallableWithoutArgumentsOrNull(resourceType, "Dispose"), UsingConstruct);
     }
 
-    private static bool Implements(ITypeSymbol type, string interfaceFullName)
-    {
-        return type.AllInterfaces.Any(candidate => candidate.ToDisplayString() == interfaceFullName);
-    }
-
-    // Why base types too: a pattern method may be inherited, and the compiler finds it there.
-    private static IMethodSymbol FindParameterlessInstanceMethodOrNull(ITypeSymbol type, string name)
+    // Why base types and optional parameters: the compiler finds an inherited pattern method, and
+    // binds one whose parameters all have defaults or are params.
+    private static IMethodSymbol FindInstanceMethodCallableWithoutArgumentsOrNull(ITypeSymbol type, string name)
     {
         for (ITypeSymbol current = type; current != null; current = current.BaseType)
         {
             IMethodSymbol method = current.GetMembers(name)
                 .OfType<IMethodSymbol>()
-                .FirstOrDefault(candidate => !candidate.IsStatic && candidate.Parameters.Length == 0);
+                .FirstOrDefault(candidate => !candidate.IsStatic
+                    && candidate.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams));
             if (method != null)
             {
                 return method;

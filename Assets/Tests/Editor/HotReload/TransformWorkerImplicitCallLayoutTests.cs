@@ -34,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("8111", "ClosureLoopsThroughUnpassedGetEnumerator", "GetEnumerator")]
         [TestCase("8121", "ClosureDeconstructsThroughUnpassedExtension", "Deconstruct")]
         [TestCase("8131", "ClosureDeconstructsThroughUnpassedInstanceMethod", "Deconstruct")]
+        [TestCase("8381", "ClosureDeconstructsNestedThroughUnpassedInstanceMethod", "Deconstruct")]
         [TestCase("8141", "ClosureFillsThroughUnpassedExtensionAdd", "Add")]
         [TestCase("8151", "ClosureFillsThroughUnpassedInstanceAdd", "Add")]
         [TestCase("8161", "ClosureQueriesThroughUnpassedSelect", "Select")]
