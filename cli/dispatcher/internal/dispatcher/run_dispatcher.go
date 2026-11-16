@@ -13,6 +13,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/product"
 	"github.com/hatayama/unity-cli-loop/common/project"
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
@@ -142,7 +143,18 @@ func runPinnedDispatcherProjectRunner(
 		return 1
 	}
 
-	return deps.runRealCLI(ctx, realCLIPath, args, stdout, stderr)
+	return deps.runRealCLI(ctx, realCLIPath, withResolvedProjectPath(args, projectPath, projectRoot), stdout, stderr)
+}
+
+// withResolvedProjectPath hands the runner the project the dispatcher resolved when the user did
+// not choose one. Left to itself the runner re-resolves from the working directory with the search
+// rules of its own pinned release, so a runner older than the dispatcher could miss a project the
+// dispatcher found (one below the repository root) or settle on a different one than the pin came from.
+func withResolvedProjectPath(args []string, explicitProjectPath string, projectRoot string) []string {
+	if explicitProjectPath != "" {
+		return args
+	}
+	return append([]string{"--" + tooldocs.ProjectPathFlagName, projectRoot}, args...)
 }
 
 // runDispatcherProcessCommand executes dispatcher-owned commands without
