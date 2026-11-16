@@ -122,6 +122,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an indexer that now returns by reference has no matching compiled accessor (the
+        /// compiled getter returns by value), so its getter stays Skipped with the accessor reason
+        /// and is not an entry.
+        /// </summary>
+        [Test]
+        public async Task Run_IndexerNowReturningByRef_IsSkippedWithTheAccessorReason()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "public int this[int i] => i + 1500;",
+                "public ref int this[int i] => ref new int[i + 1510][i];");
+
+            AssertSkipped(result, "HotReloadIndexerExpressionBodied.get_Item(", NoMatchingAccessorReason);
+            Assert.That(FindEntries(result, "HotReloadIndexerExpressionBodied", "get_Item").Count, Is.EqualTo(0), Describe(result));
+        }
+
+        /// <summary>
         /// What: an indexer given an [IndexerName] since the last compile has no compiled accessor
         /// under the new name, so its edited getter stays Skipped with the accessor reason and is not
         /// an entry.
@@ -275,6 +291,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fixturePath = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
             string onDisk = File.ReadAllText(fixturePath);
+            // Why match the fixture's line ending: a multi-line anchor is written with \n, and a CRLF
+            // checkout on Windows would otherwise fail the precondition before the worker runs.
+            string newline = onDisk.Contains("\r\n") ? "\r\n" : "\n";
+            anchor = anchor.Replace("\n", newline);
+            replacement = replacement.Replace("\n", newline);
             Assert.That(
                 onDisk.IndexOf(anchor, StringComparison.Ordinal),
                 Is.EqualTo(onDisk.LastIndexOf(anchor, StringComparison.Ordinal)).And.GreaterThanOrEqualTo(0),

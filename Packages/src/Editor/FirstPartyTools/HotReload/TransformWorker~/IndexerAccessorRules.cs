@@ -109,7 +109,8 @@ internal static class IndexerAccessorRules
     // name, so the index parameters are what tell overloads apart. Why the name too: the entry
     // carries the source accessor name, so an [IndexerName] added, removed, or changed since the
     // compile would name a method the Editor cannot find. Why the element type: the Editor's lookup
-    // ignores return types, so a re-typed getter would be patched into the compiled one.
+    // ignores return types, so a re-typed getter would be patched into the compiled one, and the type
+    // name alone does not tell int from ref int.
     internal static IPropertySymbol FindCompiledPeerOrNull(INamedTypeSymbol compiledType, IPropertySymbol sourceIndexer)
     {
         string[] sourceParameterTypes = ToParameterTypeFullNames(sourceIndexer);
@@ -120,6 +121,7 @@ internal static class IndexerAccessorRules
                 && candidate.MetadataName == sourceIndexer.MetadataName
                 && candidate.IsStatic == sourceIndexer.IsStatic
                 && CecilTypeNames.ToCecilFullName(candidate.Type) == sourceElementType
+                && candidate.RefKind == sourceIndexer.RefKind
                 && ToParameterTypeFullNames(candidate).SequenceEqual(sourceParameterTypes));
     }
 
