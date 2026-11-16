@@ -240,6 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         int IHotReloadExplicitSetOnlyValue.Written
         {
+            [MethodImpl(MethodImplOptions.NoInlining)]
             set { _stored = value + 8208; }
         }
     }

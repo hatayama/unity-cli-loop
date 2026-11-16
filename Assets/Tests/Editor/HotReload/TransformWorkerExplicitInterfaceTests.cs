@@ -526,7 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     ReplaceUniqueFragment(
                         ReplaceUniqueFragment(source, "int Written { set; }", "int Written { get; set; }"),
                         "set { _stored = value + 8208; }",
-                        "get { return _stored; } set { _stored = value + 8208; }"),
+                        "set { _stored = value + 8208; } get { return _stored; }"),
                     "8101",
                     "9101"));
 
