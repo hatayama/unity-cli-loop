@@ -19,6 +19,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string FixtureFileName = "HotReloadPublicClassExtensionCallFixtures.cs";
 
+        private const string AddedExtensionAnchor = "        internal static int PlusOne(this int value, int add)";
+
+        private const string AddedExtensionSource =
+            "        internal static int AddedTriple(this int value, int add)\n"
+            + "        {\n"
+            + "            return value * 3 + add + 1000;\n"
+            + "        }\n\n";
+
+        private const string ClosureCall = "Func<int> read = () => _value.TriplePlus(7101);";
+
+        private const string AsyncCall = "return _value.TriplePlus(7111);";
+
+        private const string AddedExtensionReducedCallReason =
+            "extension method 'AddedTriple' added in this reload has no rewrite shape when called on a receiver; "
+            + "write the call as 'HotReloadPublicClassInternalExtensions.AddedTriple(receiver, ...)'.";
+
         private HotReloadDomainTestScope _scope;
 
         [SetUp]
@@ -138,6 +154,139 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertKind(result, "ClosureCallsInternalExtensionOnNullReceiver", HotReloadMethodOutcomeKind.Patched);
             Assert.That(host.ClosureCallsInternalExtensionOnNullReceiver(), Is.EqualTo(8202));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method added in the same reload on a receiver is
+        /// Skipped with the reason that names the static form, keeps its compiled value, and the
+        /// rest of the file still applies.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                ClosureCall,
+                "Func<int> read = () => _value.AddedTriple(7101);");
+
+            AssertSkippedWithReason(result, "ClosureCallsInternalExtension", AddedExtensionReducedCallReason);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
+        /// <summary>
+        /// What: an async method that calls an extension method added in the same reload on a
+        /// receiver is Skipped with the reason that names the static form, keeps its compiled
+        /// value, and the rest of the file still applies.
+        /// </summary>
+        [Test]
+        public async Task Run_AsyncMethodCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                AsyncCall,
+                "return _value.AddedTriple(7111);");
+
+            AssertSkippedWithReason(result, "AsyncCallsInternalExtension", AddedExtensionReducedCallReason);
+            AssertNoFailedRow(result);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method added in the same reload in its static
+        /// form is Patched and returns the added method's value; RevertAll restores the compiled
+        /// value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingAddedExtensionInStaticForm_IsPatchedAndReverts()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                ClosureCall,
+                "Func<int> read = () => HotReloadPublicClassInternalExtensions.AddedTriple(_value, 7101);");
+
+            AssertKind(result, "ClosureCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(8110));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+        }
+
+        /// <summary>
+        /// What: an async method that calls an extension method added in the same reload in its
+        /// static form is Patched and returns the added method's value; RevertAll restores the
+        /// compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_AsyncMethodCallingAddedExtensionInStaticForm_IsPatchedAndReverts()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                AsyncCall,
+                "return HotReloadPublicClassInternalExtensions.AddedTriple(_value, 7111);");
+
+            AssertKind(result, "AsyncCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(8120));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+        }
+
+        // Adds an extension method to the extensions class, rewrites one call to use it, and edits
+        // another method of the file so the test can see that the rest of the file applied.
+        private static async Task<HotReloadOrchestratorResult> RunWithAddedExtensionAsync(
+            string originalCall,
+            string editedCall)
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
+            string onDisk = File.ReadAllText(fixturePath);
+            Assert.That(onDisk.Contains(AddedExtensionAnchor), "Precondition: the anchor must be in the fixture.");
+            Assert.That(onDisk.Contains(originalCall), "Precondition: the call must be in the fixture.");
+            string edited = onDisk
+                .Replace(AddedExtensionAnchor, AddedExtensionSource + AddedExtensionAnchor)
+                .Replace(originalCall, editedCall)
+                .Replace("7121", "7122");
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource("PublicClassAddedExtensionE2E.cs", edited);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+        }
+
+        private static void AssertSkippedWithReason(
+            HotReloadOrchestratorResult result,
+            string methodName,
+            string expectedReasonPart)
+        {
+            AssertKind(result, methodName, HotReloadMethodOutcomeKind.Skipped);
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method.Contains("." + methodName + "("))
+                {
+                    Assert.That(outcome.Reason, Does.Contain(expectedReasonPart));
+                    return;
+                }
+            }
+        }
+
+        private static void AssertNoFailedRow(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Failed),
+                    outcome.Method + ": " + outcome.Reason);
+            }
         }
 
         private static async Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(

@@ -430,6 +430,20 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        // Why only the receiver form: its accessor finds no compiled method to bind, because the
+        // compiled class does not hold a method this reload adds, and the shim fails at binding.
+        // A call written in the static form applies (measured in a lambda and an async body).
+        if (invokedMethod.MethodKind == MethodKind.ReducedExtension
+            && addedMemberAccess != null
+            && addedMemberAccess.IsAddedExtensionMethod(methodSymbol))
+        {
+            rejectReason = WorkerReason.Of(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                methodSymbol.Name,
+                methodSymbol.ContainingType.Name);
+            return false;
+        }
+
         rejectReason = FindMethodShapeRejectReason(methodSymbol);
         if (rejectReason != null)
         {
@@ -444,13 +458,27 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        rejectReason = FindArgumentRejectReason(invocation, invokedMethod, methodSymbol);
+        if (rejectReason != null)
+        {
+            return false;
+        }
+
+        plan.GetOrAddMethod(methodSymbol);
+        return true;
+    }
+
+    // The accessor delegate takes exactly the method's parameters by value, in order.
+    private static WorkerReason FindArgumentRejectReason(
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol invokedMethod,
+        IMethodSymbol methodSymbol)
+    {
         foreach (IParameterSymbol parameter in methodSymbol.Parameters)
         {
             if (parameter.RefKind != RefKind.None)
             {
-                rejectReason =
-                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
-                return false;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
             }
         }
 
@@ -458,9 +486,7 @@ internal static class AccessorAccessRegistrar
         {
             if (argument.NameColon != null)
             {
-                rejectReason =
-                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
-                return false;
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
             }
         }
 
@@ -468,13 +494,10 @@ internal static class AccessorAccessRegistrar
         int receiverArgumentCount = invokedMethod.MethodKind == MethodKind.ReducedExtension ? 1 : 0;
         if (invocation.ArgumentList.Arguments.Count + receiverArgumentCount != methodSymbol.Parameters.Length)
         {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
-            return false;
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
         }
 
-        plan.GetOrAddMethod(methodSymbol);
-        return true;
+        return null;
     }
 
     private static WorkerReason FindMethodShapeRejectReason(IMethodSymbol methodSymbol)

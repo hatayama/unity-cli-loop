@@ -56,6 +56,26 @@ internal sealed class AddedMemberAccessLookup
             != CompiledMethodMatch.Matched;
     }
 
+    // Why any declaring type, unlike IsAddedMethod: an extension method lives in its own static
+    // class, and whether that class's compiled counterpart holds it is answered from that class
+    // alone. A class new to the Editor is left to the introduced-type paths.
+    public bool IsAddedExtensionMethod(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol == null
+            || !methodSymbol.IsExtensionMethod
+            || methodSymbol.MethodKind != MethodKind.Ordinary
+            || methodSymbol.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return false;
+        }
+
+        INamedTypeSymbol compiledType =
+            _addedEvents.FindCompiledDeclaringTypeOrNull(methodSymbol.ContainingType.OriginalDefinition);
+        return compiledType != null
+            && CompiledMemberMatcher.MatchCompiledOrdinaryMethod(compiledType, methodSymbol)
+                != CompiledMethodMatch.Matched;
+    }
+
     // Why the catalog is enough here: a type's properties are classified before any of its
     // method bodies is decided. Another type's may not be yet, so only this type is asked.
     public bool IsAddedProperty(IPropertySymbol propertySymbol)

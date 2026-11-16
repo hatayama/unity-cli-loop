@@ -140,6 +140,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape,
                 Plain("inaccessible extension method used as a method group (not called) has no accessor rewrite shape.", 0));
             templates.Add(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                Plain(
+                    "extension method '{0}' added in this reload has no rewrite shape when called on a receiver; write the call as '{1}.{0}(receiver, ...)'.",
+                    2));
+            templates.Add(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 Plain("inaccessible generic method calls are not rewritten.", 0));
             templates.Add(
