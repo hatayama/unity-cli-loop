@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string Int32 = "System.Int32";
         private const string BaseMemberReason = "Uses base. for something other than a direct call to a base method";
         private const string NoMatchingAccessorReason = "with no matching accessor on the compiled type";
-        private const string ExplicitInterfaceReason = "accessors of explicit interface properties, are skipped";
+        private const string ExplicitInterfaceReason = "accessors of explicit interface indexers, are skipped";
 
         /// <summary>
         /// What: an edited getter of a one-parameter indexer is an entry for get_Item(Int32) whose

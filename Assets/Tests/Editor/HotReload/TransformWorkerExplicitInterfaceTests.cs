@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/HotReloadExplicitInterfaceFixtures.cs";
         private const string Namespace = "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload";
         private const string RunnerBody = "int IHotReloadExplicitRunner.Run() { return 8101; }";
+        private const string ValueSpecifier = "int IHotReloadExplicitValue.Value";
 
         /// <summary>
         /// What: an edited explicit implementation of a namespaced interface is an entry named by the
@@ -289,6 +290,305 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.skipped.Select(skipped => skipped.method),
                 Does.Contain(expectedLabel),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: an edited getter of an explicit interface property is an entry named by the compiled
+        /// accessor name, with no parameters and a shim named after the interface accessor.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyGetter_EmitsEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitValueGetter.cs",
+                source => ReplaceUniqueFragment(source, "8201", "9201"));
+
+            TransformWorkerEntryDto entry = AssertEntry(
+                result,
+                typeof(HotReloadExplicitValueFixture),
+                Namespace + ".IHotReloadExplicitValue.get_Value",
+                "get_Value");
+            Assert.That(entry.parameterTypeFullNames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: an edited setter of an explicit interface property is an entry named by the compiled
+        /// accessor name, whose single parameter is the property type.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertySetter_EmitsEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitValueSetter.cs",
+                source => ReplaceUniqueFragment(source, "8202", "9202"));
+
+            TransformWorkerEntryDto entry = AssertEntry(
+                result,
+                typeof(HotReloadExplicitValueFixture),
+                Namespace + ".IHotReloadExplicitValue.set_Value",
+                "set_Value");
+            Assert.That(entry.parameterTypeFullNames, Is.EqualTo(new[] { "System.Int32" }));
+        }
+
+        /// <summary>What: an edited expression-bodied explicit property is a getter entry.</summary>
+        [Test]
+        public async Task Run_EditedExpressionBodiedExplicitProperty_EmitsGetterEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitArrowValue.cs",
+                source => ReplaceUniqueFragment(source, "8203", "9203"));
+
+            AssertEntry(
+                result,
+                typeof(HotReloadExplicitArrowValueFixture),
+                Namespace + ".IHotReloadExplicitArrowValue.get_Value",
+                "get_Value");
+        }
+
+        /// <summary>What: an edited explicit property getter of a closed generic interface is an entry.</summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyGetterOfGenericInterface_EmitsEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitBoxValue.cs",
+                source => ReplaceUniqueFragment(source, "8206", "9206"));
+
+            AssertEntry(
+                result,
+                typeof(HotReloadExplicitBoxValueFixture),
+                Namespace + ".IHotReloadExplicitBoxValue<System.Int32>.get_Value",
+                "get_Value");
+        }
+
+        /// <summary>
+        /// What: an edited explicit property getter of a nested interface is an entry whose name joins
+        /// the outer and nested type with a dot.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyGetterOfNestedInterface_EmitsEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitNestedValue.cs",
+                source => ReplaceUniqueFragment(source, "8207", "9207"));
+
+            AssertEntry(
+                result,
+                typeof(HotReloadExplicitNestedValueFixture),
+                Namespace + ".HotReloadExplicitValueOuter.IInnerValue.get_Value",
+                "get_Value");
+        }
+
+        /// <summary>
+        /// What: an explicit property respelled with global:: in the edit still yields a getter entry
+        /// under the compiled name. The known limitation stays visible: the respelled declaration is
+        /// reported as an edit outside method bodies.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitPropertyRespelledWithGlobal_EmitsGetterEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitValueGlobal.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(source, "8201", "9201"),
+                    ValueSpecifier,
+                    "int global::" + Namespace + ".IHotReloadExplicitValue.Value"));
+
+            AssertEntry(
+                result,
+                typeof(HotReloadExplicitValueFixture),
+                Namespace + ".IHotReloadExplicitValue.get_Value",
+                "get_Value");
+            Assert.That(
+                result.Output.files.SelectMany(file => file.declarationDriftWarnings ?? Array.Empty<string>()),
+                Is.Not.Empty,
+                "Known limitation: the respelled specifier changes the syntax key, which the drift check reports.");
+        }
+
+        /// <summary>
+        /// What: an unchanged explicit property spelled with global:: in both the baseline and the
+        /// current source reports its getter and setter unchanged under the compiled names.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedExplicitPropertyRespelledWithGlobal_ReportsCompiledNames()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string onDisk = File.ReadAllText(Path.Combine(
+                projectRoot,
+                FixtureProjectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            string respelled = ReplaceUniqueFragment(
+                onDisk,
+                ValueSpecifier,
+                "int global::" + Namespace + ".IHotReloadExplicitValue.Value");
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, "ExplicitValueGlobalUnchanged.cs");
+            File.WriteAllText(sourcePath, respelled);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(sourcePath, respelled);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string[] valueRows = result.Output.unchangedMethods
+                .Where(row => row.typeMetadataName == typeof(HotReloadExplicitValueFixture).FullName)
+                .Select(row => row.methodName)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            Assert.That(
+                valueRows,
+                Is.EqualTo(new[]
+                {
+                    Namespace + ".IHotReloadExplicitValue.get_Value",
+                    Namespace + ".IHotReloadExplicitValue.set_Value"
+                }));
+        }
+
+        /// <summary>
+        /// What: with the Editor's key for an explicit property getter excluded, a global:: respelled
+        /// edit of it emits no entry, because the worker keys the getter by its compiled name too.
+        /// </summary>
+        [Test]
+        public async Task Run_RespelledExplicitPropertyGetterExcludedByEditorKey_EmitsNoEntry()
+        {
+            string excludedKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                typeof(HotReloadExplicitValueFixture).FullName,
+                Namespace + ".IHotReloadExplicitValue.get_Value",
+                Array.Empty<string>(),
+                0);
+
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitValueGlobalExcluded.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(source, "8201", "9201"),
+                    ValueSpecifier,
+                    "int global::" + Namespace + ".IHotReloadExplicitValue.Value"),
+                new[] { excludedKey });
+
+            // Why only the getter: the respelled specifier also changes the setter's syntax key, so the
+            // unedited setter is re-emitted (the known limitation); only the excluded getter must be absent.
+            Assert.That(
+                result.Output.entries.Any(entry =>
+                    entry.typeMetadataName == typeof(HotReloadExplicitValueFixture).FullName
+                    && entry.methodName == Namespace + ".IHotReloadExplicitValue.get_Value"),
+                Is.False,
+                "The excluded explicit getter must not be emitted.");
+        }
+
+        /// <summary>
+        /// What: an edited init accessor of an explicit property stays Skipped as an unsupported
+        /// accessor and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyInitAccessor_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitInitValue.cs",
+                source => ReplaceUniqueFragment(source, "8205", "9205"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitInitValueFixture));
+            AssertSkippedWith(
+                result,
+                Namespace + ".IHotReloadExplicitInitValue.set_Value",
+                HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
+        }
+
+        /// <summary>
+        /// What: a setter added by the edit to an explicit read-only property is Skipped and emits no
+        /// entry, because the compiled type has no setter to patch.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterAddedToExplicitReadOnlyProperty_IsSkippedWithoutEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitReadOnlyAddsSetter.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(source, "int Reading { get; }", "int Reading { get; set; }"),
+                    "get { return 8204; }",
+                    "get { return 8204; } set { }"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitReadOnlyValueFixture));
+            Assert.That(
+                result.Output.skipped.Any(skipped => skipped.method.Contains("IHotReloadExplicitReadOnlyValue.set_Reading", StringComparison.Ordinal)),
+                Is.True,
+                FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a getter added by the edit to an explicit write-only property is Skipped with the
+        /// explicit-implementation reason and emits no entry, because the compiled property has no
+        /// getter; the other edits of the file still apply.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAddedToExplicitSetOnlyProperty_IsSkippedWithoutEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitSetOnlyAddsGetter.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        ReplaceUniqueFragment(source, "int Written { set; }", "int Written { get; set; }"),
+                        "set { _stored = value + 8208; }",
+                        "set { _stored = value + 8208; } get { return _stored; }"),
+                    "8101",
+                    "9101"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitSetOnlyValueFixture));
+            AssertSkippedWith(
+                result,
+                Namespace + ".IHotReloadExplicitSetOnlyValue.get_Written",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+            AssertEntry(result, typeof(HotReloadExplicitRunnerFixture), Namespace + ".IHotReloadExplicitRunner.Run", "Run");
+        }
+
+        /// <summary>
+        /// What: a getter added by the edit to an ordinary write-only property is Skipped as an
+        /// unsupported accessor and emits no entry, because the compiled property has no getter for
+        /// the Editor to find.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAddedToOrdinarySetOnlyProperty_IsSkippedWithoutEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "OrdinarySetOnlyAddsGetter.cs",
+                source => ReplaceUniqueFragment(
+                    source,
+                    "set { _stored = value + 8209; }",
+                    "get { return _stored; } set { _stored = value + 8209; }"));
+
+            AssertNoEntryFor(result, typeof(HotReloadOrdinarySetOnlyValueFixture));
+            AssertSkippedWith(result, "get_OrdinaryWritten", HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
+        }
+
+        /// <summary>
+        /// What: an edited accessor of an explicit interface indexer stays Skipped with the
+        /// explicit-implementation reason and emits no entry.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitIndexerAccessor_StaysSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitIndexed.cs",
+                source => ReplaceUniqueFragment(source, "8210", "9210"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitIndexedFixture));
+            AssertSkippedWith(
+                result,
+                Namespace + ".IHotReloadExplicitIndexed.get_Item",
+                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+        }
+
+        private static void AssertNoEntryFor(TransformWorkerClientResult result, Type fixtureType)
+        {
+            Assert.That(
+                result.Output.entries.Where(entry => entry.typeMetadataName == fixtureType.FullName).Select(entry => entry.methodName),
+                Is.Empty,
+                "No entry expected for " + fixtureType.Name);
+        }
+
+        private static void AssertSkippedWith(TransformWorkerClientResult result, string methodFragment, HotReloadWorkerReasonCode code)
+        {
+            Assert.That(
+                result.Output.skipped.Any(skipped =>
+                    skipped.method.Contains(methodFragment, StringComparison.Ordinal) && skipped.reason?.code == code),
+                Is.True,
                 FormatSkipped(result));
         }
 

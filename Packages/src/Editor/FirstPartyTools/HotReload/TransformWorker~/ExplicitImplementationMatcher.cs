@@ -49,13 +49,44 @@ internal static class ExplicitImplementationMatcher
     /// </remarks>
     internal static string RowMethodName(INamedTypeSymbol compiledType, IMethodSymbol sourceMethod)
     {
-        if (sourceMethod.MethodKind != MethodKind.ExplicitInterfaceImplementation)
+        // Why not MethodKind: an accessor of an explicit property is PropertyGet or PropertySet,
+        // yet carries the compiled metadata name all the same.
+        if (sourceMethod.ExplicitInterfaceImplementations.Length == 0)
         {
             return sourceMethod.Name;
         }
 
         IMethodSymbol compiledMethod = FindCompiledImplementation(compiledType, sourceMethod);
         return compiledMethod == null ? sourceMethod.Name : compiledMethod.MetadataName;
+    }
+
+    /// <summary>
+    /// The compiled property that explicitly implements the same interface property, with the same
+    /// type, as <paramref name="sourceProperty"/>; null when the compiled type has none.
+    /// </summary>
+    internal static IPropertySymbol FindCompiledPropertyImplementation(INamedTypeSymbol compiledType, IPropertySymbol sourceProperty)
+    {
+        if (compiledType == null || sourceProperty.ExplicitInterfaceImplementations.Length == 0)
+        {
+            return null;
+        }
+
+        IPropertySymbol sourceMember = sourceProperty.ExplicitInterfaceImplementations[0];
+        string sourceInterface = sourceMember.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string sourceType = CecilTypeNames.ToCecilFullName(sourceProperty.Type);
+        foreach (IPropertySymbol compiledProperty in compiledType.GetMembers().OfType<IPropertySymbol>())
+        {
+            bool implementsSameMember = compiledProperty.ExplicitInterfaceImplementations.Any(implemented =>
+                implemented.Name == sourceMember.Name
+                && implemented.IsIndexer == sourceMember.IsIndexer
+                && implemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == sourceInterface);
+            if (implementsSameMember && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == sourceType)
+            {
+                return compiledProperty;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The name of the interface member a source explicit implementation implements.</summary>

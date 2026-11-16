@@ -1526,7 +1526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedExplicitAccessorSkipReason =
-            "Property init accessors, and setters or indexer accessors with no matching accessor on the compiled type, are skipped; "
+            "Property init accessors, and getters, setters or indexer accessors with no matching accessor on the compiled type, are skipped; "
             + "run 'uloop compile' to apply accessor edits.";
 
         private const string ExpectedSetOnlyPropertySkipReason =
@@ -2898,40 +2898,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an edited setter of an explicit interface implementation is Skipped with the
-        /// explicit-implementation reason and emits no entry.
+        /// What: an edited setter of an explicit interface property emits a set_ entry under the
+        /// compiled accessor name and no skip row.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitInterfacePropertySetterEdited_IsSkipped()
+        public async Task Run_ExplicitInterfacePropertySetterEdited_EmitsSetAccessorEntry()
         {
             TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
                 "ExplicitInterfacePropertySetterEdited.cs",
                 onDisk => ReplaceUniqueFragment(onDisk, "value + 9009", "value + 9010"));
 
-            AssertSkippedWithCode(
-                result,
-                "set_Contract",
-                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
-            AssertNoEntryFragment(result, "set_Contract");
+            Assert.That(FindEntryNamed(result, ExplicitContractPrefix + "set_Contract"), Is.Not.Null, FormatEntryMethodNames(result.Output.entries));
+            Assert.That(Array.Exists(result.Output.skipped, skipped => skipped.method.Contains("set_Contract")), Is.False);
         }
 
         /// <summary>
-        /// What: an edited getter of an explicit interface property is Skipped with the
-        /// explicit-implementation reason and emits no entry, while explicit methods are patched.
+        /// What: an edited getter of an explicit interface property emits a get_ entry under the
+        /// compiled accessor name and no skip row.
         /// </summary>
         [Test]
-        public async Task Run_ExplicitInterfacePropertyGetterEdited_IsSkipped()
+        public async Task Run_ExplicitInterfacePropertyGetterEdited_EmitsGetAccessorEntry()
         {
             TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
                 "ExplicitInterfacePropertyGetterEdited.cs",
                 onDisk => ReplaceExplicitContractGetterBody(onDisk));
 
-            AssertSkippedWithCode(
-                result,
-                "get_Contract",
-                HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
-            AssertNoEntryFragment(result, "get_Contract");
+            Assert.That(FindEntryNamed(result, ExplicitContractPrefix + "get_Contract"), Is.Not.Null, FormatEntryMethodNames(result.Output.entries));
+            Assert.That(Array.Exists(result.Output.skipped, skipped => skipped.method.Contains("get_Contract")), Is.False);
         }
+
+        private const string ExplicitContractPrefix =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadPropertySetterExplicitContract.";
 
         // Why search from the explicit property's header: the getter line appears in several
         // fixtures of that file, and a two-line fragment would depend on the line endings.
@@ -2992,6 +2989,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertSkippedContains(result, "set_Widened", ExpectedExplicitAccessorSkipReason);
             AssertNoEntryNamed(result, "set_Widened");
+        }
+
+        /// <summary>
+        /// What: a getter of a property whose type changed since the last compile is Skipped as an
+        /// accessor with no matching compiled accessor and emits no entry, because the compiled
+        /// getter returns the old type.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOfPropertyWhoseTypeChanged_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOfPropertyWhoseTypeChanged.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "public int Widened", "public long Widened"));
+
+            AssertNoEntryNamed(result, "get_Widened");
+            AssertSkippedContains(result, "get_Widened", ExpectedExplicitAccessorSkipReason);
+        }
+
+        /// <summary>
+        /// What: a getter of a property that now returns by reference is Skipped as an accessor with
+        /// no matching compiled accessor and emits no entry, because the compiled getter returns by
+        /// value under the same type name.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOfPropertyNowReturningByRef_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOfPropertyNowReturningByRef.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "public int GetterOnly", "public ref int GetterOnly"),
+                    "return _stored + 4004;",
+                    "return ref _stored;"));
+
+            AssertNoEntryNamed(result, "get_GetterOnly");
+            AssertSkippedContains(result, "get_GetterOnly", ExpectedExplicitAccessorSkipReason);
+        }
+
+        /// <summary>
+        /// What: a getter of a property made static since the last compile is Skipped as an accessor
+        /// with no matching compiled accessor and emits no entry, because the compiled getter is an
+        /// instance method.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOfPropertyMadeStatic_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOfPropertyMadeStatic.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "public int Widened", "public static int Widened"));
+
+            AssertNoEntryNamed(result, "get_Widened");
+            AssertSkippedContains(result, "get_Widened", ExpectedExplicitAccessorSkipReason);
         }
 
         /// <summary>

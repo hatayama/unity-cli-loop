@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -226,6 +227,142 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(caller.Value(1), Is.EqualTo(1 + 100 + 9108), "The earlier patch is still what runs.");
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(caller.Value(1), Is.EqualTo(1 + 100 + 8108));
+        }
+
+        /// <summary>
+        /// What: an edited getter of an explicit interface property is Patched, a read through the
+        /// interface runs the edited body, and RevertAll restores the compiled body.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyGetter_ApplyAndRevert_RunsTheEditedBody()
+        {
+            IHotReloadExplicitValue value = new HotReloadExplicitValueFixture();
+            Assert.That(value.Value, Is.EqualTo(1 + 8201));
+
+            await ApplyEditAsync("ExplicitE2EValueGetter.cs", "8201", "9201", "IHotReloadExplicitValue.get_Value(");
+
+            Assert.That(value.Value, Is.EqualTo(1 + 9201));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(value.Value, Is.EqualTo(1 + 8201), "RevertAll must restore the compiled getter.");
+        }
+
+        /// <summary>
+        /// What: an edited setter of an explicit interface property is Patched, a write through the
+        /// interface runs the edited body, and RevertAll restores the compiled body.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertySetter_ApplyAndRevert_RunsTheEditedBody()
+        {
+            IHotReloadExplicitValue value = new HotReloadExplicitValueFixture();
+
+            await ApplyEditAsync("ExplicitE2EValueSetter.cs", "8202", "9202", "IHotReloadExplicitValue.set_Value(");
+
+            value.Value = 0;
+            Assert.That(value.Value, Is.EqualTo(9202 + 8201));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            value.Value = 0;
+            Assert.That(value.Value, Is.EqualTo(8202 + 8201), "RevertAll must restore the compiled setter.");
+        }
+
+        /// <summary>
+        /// What: an edited expression-bodied explicit property is Patched and a read through the
+        /// interface runs the edited body until RevertAll.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExpressionBodiedExplicitProperty_ApplyAndRevert_RunsTheEditedBody()
+        {
+            IHotReloadExplicitArrowValue value = new HotReloadExplicitArrowValueFixture();
+            Assert.That(value.Value, Is.EqualTo(8203));
+
+            await ApplyEditAsync("ExplicitE2EArrowValue.cs", "8203", "9203", "IHotReloadExplicitArrowValue.get_Value(");
+
+            Assert.That(value.Value, Is.EqualTo(9203));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(value.Value, Is.EqualTo(8203), "RevertAll must restore the compiled getter.");
+        }
+
+        /// <summary>
+        /// What: an edited explicit property getter of a closed generic interface is Patched and a read
+        /// through the interface runs the edited body until RevertAll.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyGetterOfGenericInterface_ApplyAndRevert_RunsTheEditedBody()
+        {
+            IHotReloadExplicitBoxValue<int> box = new HotReloadExplicitBoxValueFixture();
+            Assert.That(box.Value, Is.EqualTo(1 + 8206));
+
+            await ApplyEditAsync(
+                "ExplicitE2EBoxValue.cs",
+                "8206",
+                "9206",
+                "IHotReloadExplicitBoxValue<System.Int32>.get_Value(");
+
+            Assert.That(box.Value, Is.EqualTo(1 + 9206));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(box.Value, Is.EqualTo(1 + 8206), "RevertAll must restore the compiled getter.");
+        }
+
+        /// <summary>
+        /// What: respelling an explicit property's interface with global:: while editing its getter
+        /// still patches the compiled getter, and RevertAll restores it.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitPropertyRespelledWithGlobal_ApplyAndRevert_RunsTheEditedGetter()
+        {
+            IHotReloadExplicitValue value = new HotReloadExplicitValueFixture();
+            string fixturePath = ResolveFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "int IHotReloadExplicitValue.Value",
+                    "int global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadExplicitValue.Value",
+                    StringComparison.Ordinal)
+                .Replace("8201", "9201", StringComparison.Ordinal);
+            Assert.That(edited, Does.Contain("global::").And.Contain("9201"), "Precondition: both edits applied.");
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                HotReloadTestSourceWriter.WriteEditedSource("ExplicitE2EValueGlobal.cs", edited),
+                CancellationToken.None);
+
+            AssertHasPatched(result, "IHotReloadExplicitValue.get_Value(");
+            Assert.That(value.Value, Is.EqualTo(1 + 9201));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(value.Value, Is.EqualTo(1 + 8201), "RevertAll must restore the compiled getter.");
+        }
+
+        /// <summary>
+        /// What: a getter added to an ordinary write-only property is Skipped, not Failed, and the
+        /// other edit of the same file is still Patched.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterAddedToOrdinarySetOnlyProperty_IsSkippedAndTheFileStillApplies()
+        {
+            IHotReloadExplicitRunner runner = new HotReloadExplicitRunnerFixture();
+            string fixturePath = ResolveFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "set { _stored = value + 8209; }",
+                    "get { return _stored; } set { _stored = value + 8209; }",
+                    StringComparison.Ordinal)
+                .Replace("8101", "9101", StringComparison.Ordinal);
+            Assert.That(edited, Does.Contain("get { return _stored; } set { _stored = value + 8209; }"), "Precondition: getter added.");
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                HotReloadTestSourceWriter.WriteEditedSource("ExplicitE2EOrdinarySetOnly.cs", edited),
+                CancellationToken.None);
+
+            AssertHasPatched(result, "IHotReloadExplicitRunner.Run(");
+            Assert.That(
+                result.Methods.Any(outcome =>
+                    outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains("get_OrdinaryWritten", StringComparison.Ordinal)),
+                Is.True,
+                FormatOutcomes(result));
+            Assert.That(runner.Run(), Is.EqualTo(9101));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
         private static async Task ApplyEditAsync(

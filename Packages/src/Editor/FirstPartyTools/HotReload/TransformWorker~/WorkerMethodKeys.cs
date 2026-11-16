@@ -38,12 +38,26 @@ internal static class WorkerMethodKeys
 
     internal static string BuildMethodKeyFromSymbol(IMethodSymbol methodSymbol)
     {
+        return BuildMethodKeyNamed(methodSymbol, methodSymbol.Name);
+    }
+
+    /// <summary>
+    /// The key of a source method as the Editor builds it from the compiled method: an explicit
+    /// implementation the compiled type holds is keyed by its compiled metadata name.
+    /// </summary>
+    internal static string BuildRowMethodKey(INamedTypeSymbol compiledType, IMethodSymbol methodSymbol)
+    {
+        return BuildMethodKeyNamed(methodSymbol, ExplicitImplementationMatcher.RowMethodName(compiledType, methodSymbol));
+    }
+
+    private static string BuildMethodKeyNamed(IMethodSymbol methodSymbol, string methodName)
+    {
         string[] parameterTypeFullNames = methodSymbol.Parameters
             .Select(CecilTypeNames.ToParameterTypeFullName)
             .ToArray();
         return BuildMethodKey(
             CecilTypeNames.ToMetadataName(methodSymbol.ContainingType),
-            methodSymbol.Name,
+            methodName,
             parameterTypeFullNames,
             methodSymbol.Arity);
     }

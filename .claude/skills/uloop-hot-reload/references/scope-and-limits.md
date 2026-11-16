@@ -11,7 +11,7 @@ setter of an `interface` is patched like any other. Use `uloop compile` for the
 skipped ones.
 Adding a constructor, finalizer, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
-An edited explicit interface method (`void IFoo.Run()`) is patched like an ordinary method; its row reads `Ns.Type.Ns.IFoo.Run()`. Explicit interface property accessors are reported as `Skipped`.
+An edited explicit interface method (`void IFoo.Run()`) or property getter or setter (`int IFoo.Value { get; set; }`) is patched like an ordinary one; its row reads `Ns.Type.Ns.IFoo.Run()` or `Ns.Type.Ns.IFoo.get_Value()`. Explicit interface indexer and `init` accessors are reported as `Skipped`.
 Methods and property getters of `partial` types are patched like any other; the
 other parts of the type are read from the assembly's source files.
 
@@ -388,8 +388,9 @@ are patched the same way; their rows read `Ns.Type.get_Item(<index types>)` and
 `Ns.Type.set_Item(<index types>,<type>)`, or use the `[IndexerName]` name. On a type an earlier reload introduced, indexer accessors stay `Skipped`; run `uloop compile`. A patched
 setter changes what the next assignment does: values stored by earlier assignments stay
 as they are. Editing a compiled property's `init` accessor is reported per-accessor as
-`Skipped`, and so is a setter or indexer accessor with no matching accessor on the
-compiled type (a `set` added to a getter-only property or indexer, one that was `init`
+`Skipped`, and so is a getter, setter, or indexer accessor with no matching accessor on
+the compiled type (a `get` added to a write-only property, a `set` added to a
+getter-only property or indexer, one that was `init`
 at the last compile, or one whose property changed its type, index parameters, or
 `static` modifier since then), so an edited accessor never disappears from the response
 silently; with a verified baseline, accessors unchanged from it produce no row. A
@@ -454,7 +455,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Method or getter on a `partial` type whose body uses an `internal` member of a type in another assembly (through `InternalsVisibleTo`) | Reported as a name no source file of the `partial` type declares; hot reload does not patch this use from a `partial` type yet. Run `uloop compile` |
 | Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
-| Explicit interface method the compiled assembly does not hold yet, or an accessor of an explicit interface property | Only the body of an explicit interface method the compiled type already implements is patched. Run `uloop compile` |
+| Explicit interface method or property accessor the compiled assembly does not hold yet, or an accessor of an explicit interface indexer | Only the bodies of explicit interface methods and property getters and setters the compiled type already implements are patched. Run `uloop compile` |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body uses `base.` for something other than a direct call to a base method (a base property, indexer, event, or method group) | C# cannot express that outside the type; run `uloop compile` |
 | Base method call in a lambda, local function, query, async or iterator body, a property accessor, a member or type hot reload added, or a body patched through a delegating shim | A base call is applied only in a compiled method's own statements; move the call there, or run `uloop compile` |

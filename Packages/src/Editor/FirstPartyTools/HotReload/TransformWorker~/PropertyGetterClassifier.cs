@@ -27,6 +27,7 @@ internal static class PropertyGetterClassifier
         PropertyDeclarationSyntax propertyDeclaration,
         INamedTypeSymbol typeSymbol,
         IMethodSymbol getterSymbol,
+        string getterRowName,
         string[] parameterTypeFullNames,
         List<WorkerUnchangedMethod> unchangedMethods)
     {
@@ -46,7 +47,7 @@ internal static class PropertyGetterClassifier
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-                MethodName = getterSymbol.Name,
+                MethodName = getterRowName,
                 ParameterTypeFullNames = parameterTypeFullNames,
                 GenericArity = getterSymbol.Arity
             });
@@ -54,6 +55,56 @@ internal static class PropertyGetterClassifier
         }
 
         return false;
+    }
+
+    // What: why a getter of a compiled property cannot be patched, or null when it can.
+    // Why each case: an entry for a getter the compiled property lacks (a getter added to a
+    // write-only property, or one whose property changed its type or static modifier) fails the
+    // Editor's lookup or patches a method of another signature, while
+    // Skipped keeps pointing the reader at 'uloop compile'. An explicit getter on a type a retained
+    // artifact serves stays Skipped as its setter does: explicit accessors are patched only on
+    // compiled types.
+    internal static WorkerReason DescribeUnpatchableGetterOrNull(
+        IPropertySymbol propertySymbol,
+        INamedTypeSymbol compiledType,
+        string homeAssemblyName)
+    {
+        bool isExplicit = propertySymbol.ExplicitInterfaceImplementations.Length > 0;
+        if (isExplicit && homeAssemblyName != null)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+        }
+
+        if (compiledType == null || homeAssemblyName != null)
+        {
+            return null;
+        }
+
+        IPropertySymbol compiledProperty = isExplicit
+            ? ExplicitImplementationMatcher.FindCompiledPropertyImplementation(compiledType, propertySymbol)
+            : compiledType.GetMembers(propertySymbol.Name)
+                .OfType<IPropertySymbol>()
+                .FirstOrDefault(candidate => !candidate.IsIndexer);
+        if (compiledProperty == null || HasMatchingCompiledGetter(compiledProperty, propertySymbol))
+        {
+            return null;
+        }
+
+        return WorkerReason.Of(isExplicit
+            ? HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation
+            : HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
+    }
+
+    // Why each check: a getter added since the last compile, and a property re-typed, made
+    // (non-)static, or switched to or from returning by reference since then, all lack a compiled
+    // get_X with this signature, as for the setter. RefKind is compared on its own because the
+    // Cecil type name is the same for int and ref int.
+    private static bool HasMatchingCompiledGetter(IPropertySymbol compiledProperty, IPropertySymbol propertySymbol)
+    {
+        return compiledProperty.GetMethod != null
+            && compiledProperty.IsStatic == propertySymbol.IsStatic
+            && compiledProperty.RefKind == propertySymbol.RefKind
+            && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == CecilTypeNames.ToCecilFullName(propertySymbol.Type);
     }
 
     // What: runs a property accessor body through the same transform decision and name/added-call
@@ -90,7 +141,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
                 Reason = decision.SkipReason
             });
             return (true, decision);
@@ -109,7 +160,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
                 Reason = unresolvedNameSkip
             });
             return (true, MethodTransformDecision.Skip(unresolvedNameSkip));
@@ -130,12 +181,12 @@ internal static class PropertyGetterClassifier
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
             Reason = addedCallSiteSkip,
             CalledAddedMethodKey = calledAddedMethodKey,
             MethodKey = calledAddedMethodKey == null
                 ? null
-                : WorkerMethodKeys.BuildMethodKeyFromSymbol(accessorSymbol)
+                : WorkerMethodKeys.BuildRowMethodKey(compiledType, accessorSymbol)
         });
         return (true, decision);
     }
