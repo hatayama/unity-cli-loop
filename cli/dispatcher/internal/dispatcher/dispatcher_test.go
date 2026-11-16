@@ -82,11 +82,7 @@ func TestRunDispatcherForwardsProjectResolvedFromRepositoryRootToRealCLI(t *test
 		t.Fatalf("failed to create .git: %v", err)
 	}
 	projectRoot := filepath.Join(repositoryRoot, "UnityProject")
-	for _, dirName := range []string{"Assets", "ProjectSettings"} {
-		if err := os.MkdirAll(filepath.Join(projectRoot, dirName), 0o755); err != nil {
-			t.Fatalf("failed to create Unity project directory: %v", err)
-		}
-	}
+	createDispatcherUnityProjectAt(t, projectRoot)
 	cacheRoot := t.TempDir()
 	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
 	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
@@ -1573,12 +1569,17 @@ func TestResolveDispatcherProjectRootLaunchDoesNotRequireExistingEndpointDirecto
 func createDispatcherUnityProject(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
+	createDispatcherUnityProjectAt(t, projectRoot)
+	return projectRoot
+}
+
+func createDispatcherUnityProjectAt(t *testing.T, projectRoot string) {
+	t.Helper()
 	for _, dirName := range []string{"Assets", "ProjectSettings"} {
 		if err := os.MkdirAll(filepath.Join(projectRoot, dirName), 0o755); err != nil {
 			t.Fatalf("failed to create Unity project directory: %v", err)
 		}
 	}
-	return projectRoot
 }
 
 // canonicalDispatcherTestPath returns the symlink-free form the dispatcher forwards as the project root
