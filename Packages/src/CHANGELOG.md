@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.30.0](https://github.com/hatayama/unity-cli-loop/compare/v3.29.0...v3.30.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to explicit interface property accessors ([#3535](https://github.com/hatayama/unity-cli-loop/issues/3535)) ([9d9349c](https://github.com/hatayama/unity-cli-loop/commit/9d9349c1114567a53feab6cea303ce4e3ef05ba2))
+
 ## [3.29.0](https://github.com/hatayama/unity-cli-loop/compare/v3.28.2...v3.29.0) (2026-11-16)
 
 
