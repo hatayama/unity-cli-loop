@@ -39,8 +39,8 @@ internal static class AccessibilityRules
 
     /// <summary>
     /// What: the symbol a call, method group, or member access binds to, or null when nothing is
-    /// bound. When binding failed only because a static class is offered twice (the edited source
-    /// and its compiled copy) and a compiled class is not externally visible, returns one of its
+    /// bound. When binding failed because a static class is offered twice (the edited source and
+    /// its compiled copy) and such a compiled class is not externally visible, returns one of its
     /// methods from that compiled class, the one the running code would call. That method shares the
     /// containing type of the overload the compiler would pick but is not necessarily that overload,
     /// so it is only good for deciding refusal.
@@ -67,55 +67,51 @@ internal static class AccessibilityRules
         return FindTwinCandidateToRefuseOrNull(semanticModel.Compilation.Assembly, info.CandidateSymbols);
     }
 
-    // Why the containing type alone decides: only public members are imported from metadata, so
-    // twins are public methods, and an extension class is top-level. A twin call into a public
-    // class is accessible (nothing to refuse); into a class that is not externally visible, every
-    // overload is inaccessible. An internal overload exists once and binds without ambiguity.
+    // Why per containing type: the candidates are the whole method group, so they include every
+    // overload and every same-named extension of every static class in scope, not only the ones
+    // that tied. A class with a candidate from the edited source and one from another assembly is
+    // a twin class; only twins can make binding fail without a real ambiguity, which Unity's
+    // compiler would reject too, so other classes are ignored. Only public members are imported
+    // from metadata, so a twin call is inaccessible exactly when the compiled class is not
+    // externally visible; when any twin class is hidden, the call is refused (fail closed).
     // Why the compiled copy's class: the running code calls the compiled class, and one edit may
     // make the edited class public while the compiled one stays internal.
     private static IMethodSymbol FindTwinCandidateToRefuseOrNull(
         IAssemblySymbol editedAssembly,
         ImmutableArray<ISymbol> candidates)
     {
-        string containingType = null;
-        IMethodSymbol editedCopy = null;
-        IMethodSymbol hiddenCompiledCopy = null;
+        HashSet<string> editedTypes = new HashSet<string>(StringComparer.Ordinal);
+        Dictionary<string, IMethodSymbol> hiddenCompiledCandidates =
+            new Dictionary<string, IMethodSymbol>(StringComparer.Ordinal);
         foreach (ISymbol candidate in candidates)
         {
-            if (candidate is not IMethodSymbol method)
+            // A method with no containing type (a function pointer signature) has no twin.
+            if (candidate is not IMethodSymbol method
+                || UnreducedMethod(method).ContainingType is not INamedTypeSymbol candidateType)
             {
-                return null;
+                continue;
             }
 
-            INamedTypeSymbol candidateType = UnreducedMethod(method).ContainingType;
-            if (candidateType == null)
-            {
-                // A method with no containing type (a function pointer signature) has no twin.
-                return null;
-            }
-
-            string candidateTypeName = candidateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (containingType != null && containingType != candidateTypeName)
-            {
-                // A real ambiguity across types, which the compiler rejects as well.
-                return null;
-            }
-
-            containingType = candidateTypeName;
+            string typeName = candidateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, editedAssembly))
             {
-                editedCopy = method;
+                editedTypes.Add(typeName);
             }
             else if (!IsExternallyVisibleType(candidateType))
             {
-                // Why any hidden copy and not one chosen copy: another referenced assembly may
-                // declare a class of the same name, and keeping only one copy let its order
-                // decide. Refusing when any compiled copy is hidden fails closed.
-                hiddenCompiledCopy = method;
+                hiddenCompiledCandidates[typeName] = method;
             }
         }
 
-        return editedCopy == null ? null : hiddenCompiledCopy;
+        foreach (KeyValuePair<string, IMethodSymbol> hidden in hiddenCompiledCandidates)
+        {
+            if (editedTypes.Contains(hidden.Key))
+            {
+                return hidden.Value;
+            }
+        }
+
+        return null;
     }
 
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)

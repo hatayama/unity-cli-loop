@@ -176,6 +176,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsSameNamedExtensionOfSecondClass()
+        {
+            Func<int> read = () => _value.Thrice("ab") + 5701;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public async Task<int> AsyncCallsPublicExtensionOfInternalClass(int seed)
         {
             await Task.Yield();

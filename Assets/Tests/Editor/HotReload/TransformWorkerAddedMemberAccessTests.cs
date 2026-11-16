@@ -660,7 +660,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a lambda that calls, in reduced form, a public extension method of an internal
         /// class declared in the edited file is skipped with the extension-method reason. The
         /// edited and compiled copies of the class both offer the method, so the call binds
-        /// ambiguously; it must still be found inaccessible instead of being transplanted.
+        /// ambiguously; it must still be found inaccessible instead of being transplanted, also
+        /// while a public class in another file declares an extension of the same name.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureCallingPublicExtensionOfInternalClassInEditedFile_IsSkipped()
@@ -669,6 +670,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
             Assert.That(FindEntry(result, "ClosureCallsPublicExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that calls a public extension method of a public class in another file,
+        /// whose name it shares with an internal class's twins in the edited file, binds to it
+        /// uniquely and stays a patch entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingSameNamedExtensionOfSecondClass_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5701", "5702");
+
+            AssertEntryAndNotSkipped(result, "ClosureCallsSameNamedExtensionOfSecondClass");
         }
 
         /// <summary>
