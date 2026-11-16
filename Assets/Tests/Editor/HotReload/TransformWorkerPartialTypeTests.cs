@@ -233,6 +233,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an unchanged part sent alone while the list of changed files may be incomplete gets
+        /// no declaration-drift warning, and its method whose parameter type lives in the other part
+        /// is skipped with the reason that the parts were not checked, not as an added method.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedPartAloneWithIncompleteScan_SkipsOtherPartTypedMethodAsUncheckedWithoutDrift()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialUnchangedIncompleteScan.cs", onDisk),
+                FixtureProjectRelativePath,
+                onDisk,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoDriftWarnings(result, FixtureProjectRelativePath);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "TakesOtherPartNested");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.MethodTransformPartialOtherPartsUnverified),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: the same unchanged part with a complete scan reports no drift warning and no row for
+        /// the method whose parameter type lives in the other part.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedPartAloneWithCompleteScan_ReportsNoRowForOtherPartTypedMethod()
+        {
+            string onDisk = File.ReadAllText(ResolveFixturePath(FixtureFileName));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialUnchangedCompleteScan.cs", onDisk),
+                FixtureProjectRelativePath,
+                onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertNoDriftWarnings(result, FixtureProjectRelativePath);
+            Assert.That(FindSkipped(result, "TakesOtherPartNested"), Is.Null, FormatSkipped(result));
+            Assert.That(FindEntry(result, "TakesOtherPartNested"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a method added to a type that is not partial, whose parameter type resolves nowhere,
+        /// keeps the added-method unresolved-signature reason.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMethodOnNonPartialTypeWithUnresolvedParameter_KeepsUnresolvedSignatureReason()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/HotReloadPausePointAdjacentMethodsFixture.cs";
+            string onDisk = File.ReadAllText(ResolveFixturePath("HotReloadPausePointAdjacentMethodsFixture.cs"));
+            string edited = ReplaceOnce(
+                onDisk,
+                "public int Second() { return 4102; }",
+                "public int Second() { return 4102; } public int TakesMissing(NoSuchTypeAnywhere value) { return 1; }");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("NonPartialAddedUnresolved.cs", edited),
+                projectRelativePath,
+                onDisk,
+                changedSiblingScanComplete: false);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "TakesMissing");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result));
+            Assert.That(
+                skipped.reason.code,
+                Is.EqualTo(HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
         /// What: when a part of the type is in no source file the run can see (the stand-in for a part
         /// generated at compile time), only the body that names that part's member is skipped, with
         /// the unresolved-name diagnostic, and the other edited method of the file is still emitted.
@@ -1526,6 +1601,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static void AssertNoDriftWarnings(TransformWorkerClientResult result, string projectRelativePath)
+        {
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                if (file.projectRelativePath == projectRelativePath)
+                {
+                    Assert.That(file.declarationDriftWarnings, Is.Empty);
+                    return;
+                }
+            }
+
+            Assert.Fail("Missing file row for " + projectRelativePath);
         }
 
         private static string FormatSkipped(TransformWorkerClientResult result)

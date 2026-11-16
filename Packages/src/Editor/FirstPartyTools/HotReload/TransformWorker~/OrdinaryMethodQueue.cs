@@ -58,6 +58,11 @@ internal static class OrdinaryMethodQueue
             methodDeclaration,
             compiledType,
             methodSymbol);
+        if (isAddedMethod && TrySkipSignatureUnboundForUntrustedParts(methodDeclaration, methodSymbol, typeState, skipped))
+        {
+            return;
+        }
+
         bool bodylessNotCompared = IsBodylessCompiledMethodWithoutBaseline(
             isAddedMethod,
             hasBaseline,
@@ -219,6 +224,38 @@ internal static class OrdinaryMethodQueue
         }
 
         return compiledMethod.MetadataName;
+    }
+
+    // Why not added: when another part of the partial type was not bound (it changed, or the scan
+    // that would prove it unchanged did not finish), a signature naming a type from that part does
+    // not resolve, so the compiled method looks missing. Calling it added gave the wrong reason and
+    // recorded an added key that the drift check strips from the current tree only, which reported
+    // an outside-body edit for a file that had none.
+    private static bool TrySkipSignatureUnboundForUntrustedParts(
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        TypeEmitState typeState,
+        List<WorkerSkipped> skipped)
+    {
+        if (!(methodDeclaration.Parent is TypeDeclarationSyntax typeDeclaration)
+            || !UnresolvedSignatureTypes.TryFindInSignature(methodSymbol, out ITypeSymbol _))
+        {
+            return false;
+        }
+
+        WorkerReason untrustedPart = typeState.SourceUnit.PartialTypeParts.FindUntrustedOtherPartReasonOrNull(typeDeclaration);
+        if (untrustedPart == null)
+        {
+            return false;
+        }
+
+        skipped.Add(new WorkerSkipped
+        {
+            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
+            Method = WorkerMethodKeys.FormatRowLabel(typeState.CompiledType, methodSymbol),
+            Reason = untrustedPart
+        });
+        return true;
     }
 
     internal static bool TrySkipExcludedOrdinaryMethod(
