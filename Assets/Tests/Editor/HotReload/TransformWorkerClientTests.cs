@@ -676,19 +676,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// Cuts the sources into batches of about SelfSnapshotBatchSize, keeping every file of one
-        /// stem (Fixture.cs, Fixture.Other.cs) in the same batch. Why: the parts of a partial type
-        /// are compared together, and a part whose sibling lands in another batch reads as declaration
-        /// drift, so a cut that fell between them failed whenever a new file shifted the order.
+        /// stem (Fixture.cs, Fixture.Other.cs) in the same batch. Why: an unchanged part of a partial
+        /// type sent without its sibling reports declaration drift (a known false positive fixed
+        /// separately), so a cut between the parts would make this test about that bug. Why order
+        /// by stem first: Directory.GetFiles does not promise an order that keeps siblings adjacent.
         /// </summary>
         private static List<List<SelfSnapshotSource>> BuildSelfSnapshotBatches(List<SelfSnapshotSource> sources)
         {
             List<List<SelfSnapshotSource>> batches = new List<List<SelfSnapshotSource>>();
             List<SelfSnapshotSource> current = new List<SelfSnapshotSource>();
             string currentStem = null;
-            foreach (SelfSnapshotSource source in sources)
+            List<SelfSnapshotSource> ordered = new List<SelfSnapshotSource>(sources);
+            ordered.Sort((left, right) =>
             {
-                string fileName = Path.GetFileName(source.FullPath);
-                string stem = fileName.Substring(0, fileName.IndexOf('.'));
+                int byStem = string.CompareOrdinal(SelfSnapshotStem(left), SelfSnapshotStem(right));
+                return byStem != 0
+                    ? byStem
+                    : string.CompareOrdinal(Path.GetFileName(left.FullPath), Path.GetFileName(right.FullPath));
+            });
+            foreach (SelfSnapshotSource source in ordered)
+            {
+                string stem = SelfSnapshotStem(source);
                 if (current.Count >= SelfSnapshotBatchSize && stem != currentStem)
                 {
                     batches.Add(current);
@@ -705,6 +713,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return batches;
+        }
+
+        private static string SelfSnapshotStem(SelfSnapshotSource source)
+        {
+            string fileName = Path.GetFileName(source.FullPath);
+            return fileName.Substring(0, fileName.IndexOf('.'));
         }
 
         /// <summary>
