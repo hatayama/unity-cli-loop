@@ -183,6 +183,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(runner.Run(), Is.EqualTo(8101), "RevertAll must restore the compiled body.");
         }
 
+        /// <summary>
+        /// What: a global:: respelled explicit implementation patched by one reload and Skipped by the
+        /// next is named in the warning that its earlier patch is still what runs.
+        /// </summary>
+        [Test]
+        public async Task Run_RespelledExplicitImplementationSkippedAfterPatch_WarnsThatEarlierPatchStaysActive()
+        {
+            const string original = "int IHotReloadExplicitBaseCaller.Value(int input) { return base.Compute(input) + 8108; }";
+            const string respelledSpecifier =
+                "int global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadExplicitBaseCaller.Value(int input) ";
+            IHotReloadExplicitBaseCaller caller = new HotReloadExplicitBaseCallerFixture();
+
+            await ApplyEditAsync(
+                "ExplicitE2EEarlierPatch1.cs",
+                original,
+                respelledSpecifier + "{ return base.Compute(input) + 9108; }",
+                "IHotReloadExplicitBaseCaller.Value(");
+            Assert.That(caller.Value(1), Is.EqualTo(1 + 100 + 9108));
+
+            string fixturePath = ResolveFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string skippedEdit = onDisk.Replace(
+                original,
+                respelledSpecifier + "{ Func<int> call = () => base.Compute(input); return call() + 9208; }",
+                StringComparison.Ordinal);
+            Assert.That(skippedEdit, Is.Not.EqualTo(onDisk), "Precondition: the fixture must hold the original body.");
+            HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                HotReloadTestSourceWriter.WriteEditedSource("ExplicitE2EEarlierPatch2.cs", skippedEdit),
+                CancellationToken.None);
+
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadExplicitBaseCallerFixture).FullName),
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadExplicitBaseCaller.Value",
+                new[] { "System.Int32" },
+                0);
+            Assert.That(
+                second.Warnings,
+                Does.Contain(string.Format(HotReloadConstants.SkippedMethodKeepsActivePatchWarningFormat, expectedLabel)),
+                "Warnings were:\n" + string.Join("\n", second.Warnings) + "\n" + FormatOutcomes(second));
+            Assert.That(caller.Value(1), Is.EqualTo(1 + 100 + 9108), "The earlier patch is still what runs.");
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(caller.Value(1), Is.EqualTo(1 + 100 + 8108));
+        }
+
         private static async Task ApplyEditAsync(
             string editedFileName,
             string token,

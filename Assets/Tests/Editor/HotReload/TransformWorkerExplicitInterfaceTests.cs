@@ -239,6 +239,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(runnerRows, Is.EqualTo(new[] { Namespace + ".IHotReloadExplicitRunner.Run" }));
         }
 
+        /// <summary>
+        /// What: with the Editor's key for an explicit implementation excluded, a global:: respelled
+        /// edit of it emits no entry, because the worker keys the method by its compiled name too.
+        /// </summary>
+        [Test]
+        public async Task Run_RespelledExplicitImplementationExcludedByEditorKey_EmitsNoEntry()
+        {
+            string excludedKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                typeof(HotReloadExplicitRunnerFixture).FullName,
+                Namespace + ".IHotReloadExplicitRunner.Run",
+                Array.Empty<string>(),
+                0);
+
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitGlobalExcluded.cs",
+                source => ReplaceUniqueFragment(
+                    source,
+                    RunnerBody,
+                    "int global::" + Namespace + ".IHotReloadExplicitRunner.Run() { return 9101; }"),
+                new[] { excludedKey });
+
+            Assert.That(
+                result.Output.entries.Any(entry => entry.typeMetadataName == typeof(HotReloadExplicitRunnerFixture).FullName),
+                Is.False,
+                "The excluded explicit implementation must not be emitted.");
+        }
+
+        /// <summary>
+        /// What: a global:: respelled explicit implementation that is Skipped is labelled with the
+        /// compiled name, the label the Editor builds from the compiled method.
+        /// </summary>
+        [Test]
+        public async Task Run_RespelledExplicitImplementationSkipped_LabelsRowWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitGlobalSkipped.cs",
+                source => ReplaceUniqueFragment(
+                    source,
+                    "int IHotReloadExplicitBaseCaller.Value(int input) { return base.Compute(input) + 8108; }",
+                    "int global::" + Namespace + ".IHotReloadExplicitBaseCaller.Value(int input) "
+                    + "{ Func<int> call = () => base.Compute(input); return call() + 9108; }"));
+
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName(typeof(HotReloadExplicitBaseCallerFixture).FullName),
+                Namespace + ".IHotReloadExplicitBaseCaller.Value",
+                new[] { "System.Int32" },
+                0);
+            Assert.That(
+                result.Output.skipped.Select(skipped => skipped.method),
+                Does.Contain(expectedLabel),
+                FormatSkipped(result));
+        }
+
         private static TransformWorkerEntryDto AssertEntry(
             TransformWorkerClientResult result,
             Type fixtureType,
@@ -280,7 +333,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static async Task<TransformWorkerClientResult> RunWorkerOnEditedFixtureAsync(
             string fileName,
-            Func<string, string> edit)
+            Func<string, string> edit,
+            string[] excludedMethodKeys = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string fixturePath = Path.Combine(
@@ -295,14 +349,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string sourcePath = Path.Combine(directory, fileName);
             File.WriteAllText(sourcePath, editedSource);
 
-            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(sourcePath, onDisk);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(sourcePath, onDisk, excludedMethodKeys);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
         }
 
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
             string sourcePath,
-            string snapshotSource)
+            string snapshotSource,
+            string[] excludedMethodKeys = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(projectRoot, "Library", "ScriptAssemblies", TestAssemblyName + ".dll");
@@ -356,6 +411,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 referencePaths = referencePaths.ToArray(),
                 targetTypesAssemblyPath = targetDllPath,
                 assemblySourcePaths = assemblySourcePaths.ToArray(),
+                excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>(),
                 // No sibling is passed, which stands for a scan that compared every sibling and
                 // found none changed.
                 changedSiblingScanComplete = true

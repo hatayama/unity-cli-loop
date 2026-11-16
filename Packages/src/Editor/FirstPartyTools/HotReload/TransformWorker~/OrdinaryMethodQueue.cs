@@ -47,9 +47,11 @@ internal static class OrdinaryMethodQueue
         string[] parameterTypeFullNames = methodSymbol.Parameters
             .Select(CecilTypeNames.ToParameterTypeFullName)
             .ToArray();
+        // Why the row name: the Editor builds excluded keys from the compiled method's name, which
+        // for an explicit implementation can differ from the source spelling (global::).
         string methodKey = WorkerMethodKeys.BuildMethodKey(
             CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-            methodSymbol.Name,
+            ExplicitImplementationMatcher.RowMethodName(compiledType, methodSymbol),
             parameterTypeFullNames,
             methodSymbol.Arity);
         (bool isAddedMethod, bool replacesCompiledMethod) = ClassifyOrdinaryMethodAddedState(
@@ -136,7 +138,7 @@ internal static class OrdinaryMethodQueue
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(typeState.CompiledType, methodSymbol),
                 Reason = skipReason
             });
             if (isAddedMethod)
@@ -281,7 +283,7 @@ internal static class OrdinaryMethodQueue
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(typeState.CompiledType, methodSymbol),
             Reason = bodylessNotCompared
                 ? WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBodylessNotCompared)
                 : WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodInterfaceMember)
