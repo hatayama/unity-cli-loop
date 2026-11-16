@@ -607,6 +607,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             PausePointResponse enable = EnableContinuousInFile(ExplicitFixtureProjectRelativePath, explicitLine);
             Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.EqualTo(explicitLine));
 
             IHotReloadExplicitRunner runner = new HotReloadPausePointExplicitFixture();
             Assert.That(runner.Run(), Is.EqualTo(4212));
