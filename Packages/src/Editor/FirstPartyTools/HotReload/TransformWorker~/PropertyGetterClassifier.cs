@@ -59,7 +59,8 @@ internal static class PropertyGetterClassifier
 
     // What: why a getter of a compiled property cannot be patched, or null when it can.
     // Why each case: an entry for a getter the compiled property lacks (a getter added to a
-    // write-only property) fails the Editor's lookup and turns the whole file into Failed, while
+    // write-only property, or one whose property changed its type or static modifier) fails the
+    // Editor's lookup or patches a method of another signature, while
     // Skipped keeps pointing the reader at 'uloop compile'. An explicit getter on a type a retained
     // artifact serves stays Skipped as its setter does: explicit accessors are patched only on
     // compiled types.
@@ -84,7 +85,7 @@ internal static class PropertyGetterClassifier
             : compiledType.GetMembers(propertySymbol.Name)
                 .OfType<IPropertySymbol>()
                 .FirstOrDefault(candidate => !candidate.IsIndexer);
-        if (compiledProperty == null || compiledProperty.GetMethod != null)
+        if (compiledProperty == null || HasMatchingCompiledGetter(compiledProperty, propertySymbol))
         {
             return null;
         }
@@ -92,6 +93,15 @@ internal static class PropertyGetterClassifier
         return WorkerReason.Of(isExplicit
             ? HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation
             : HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
+    }
+
+    // Why each check: a getter added since the last compile, and a property re-typed or made
+    // (non-)static since then, all lack a compiled get_X with this signature, as for the setter.
+    private static bool HasMatchingCompiledGetter(IPropertySymbol compiledProperty, IPropertySymbol propertySymbol)
+    {
+        return compiledProperty.GetMethod != null
+            && compiledProperty.IsStatic == propertySymbol.IsStatic
+            && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == CecilTypeNames.ToCecilFullName(propertySymbol.Type);
     }
 
     // What: runs a property accessor body through the same transform decision and name/added-call

@@ -2992,6 +2992,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a getter of a property whose type changed since the last compile is Skipped as an
+        /// accessor with no matching compiled accessor and emits no entry, because the compiled
+        /// getter returns the old type.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOfPropertyWhoseTypeChanged_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOfPropertyWhoseTypeChanged.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "public int Widened", "public long Widened"));
+
+            AssertNoEntryNamed(result, "get_Widened");
+            AssertSkippedContains(result, "get_Widened", ExpectedExplicitAccessorSkipReason);
+        }
+
+        /// <summary>
+        /// What: a getter of a property made static since the last compile is Skipped as an accessor
+        /// with no matching compiled accessor and emits no entry, because the compiled getter is an
+        /// instance method.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOfPropertyMadeStatic_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOfPropertyMadeStatic.cs",
+                onDisk => ReplaceUniqueFragment(onDisk, "public int Widened", "public static int Widened"));
+
+            AssertNoEntryNamed(result, "get_Widened");
+            AssertSkippedContains(result, "get_Widened", ExpectedExplicitAccessorSkipReason);
+        }
+
+        /// <summary>
         /// What: an edited setter of a generic type's property is Skipped with the generic reason
         /// and emits no entry.
         /// </summary>
