@@ -327,6 +327,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
         }
 
+        /// <summary>
+        /// What: a lambda that calls a method returning a ref struct, added to the host in the same
+        /// reload, is Patched: an added method is called directly, not through an accessor
+        /// delegate, so the ref struct refusal does not apply. RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingAddedMethodReturningRefStruct_IsPatchedAndReverts()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsRefLikeReturningInternalMethod(), Is.EqualTo(7363));
+
+            HotReloadOrchestratorResult result = await RunWithAddedHostMethodAsync(
+                "        private ReadOnlySpan<int> AddedSpanOf()\n"
+                + "        {\n"
+                + "            return new ReadOnlySpan<int>(_ints);\n"
+                + "        }\n\n",
+                "HotReloadPublicClassInternalExtensions.SpanOf(_ints).Length + 7361",
+                "AddedSpanOf().Length + 7362");
+
+            AssertKind(result, "ClosureCallsRefLikeReturningInternalMethod", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsRefLikeReturningInternalMethod(), Is.EqualTo(7364));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(host.ClosureCallsRefLikeReturningInternalMethod(), Is.EqualTo(7363));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls a [Conditional] method added to the host in the same reload is
+        /// Skipped with the [Conditional] reason, because the added-method call would run the
+        /// method where the compiler omits it, and the call stays omitted.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingAddedConditionalMethod_IsSkippedAndTheCallStaysOmitted()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsConditionalInternalMethod(), Is.EqualTo(0));
+
+            HotReloadOrchestratorResult result = await RunWithAddedHostMethodAsync(
+                "        [Conditional(\"ULOOP_HOT_RELOAD_TEST_UNDEFINED_SYMBOL\")]\n"
+                + "        private void AddedTrace(int add)\n"
+                + "        {\n"
+                + "            throw new InvalidOperationException(\"A [Conditional] call must be omitted.\");\n"
+                + "        }\n\n",
+                "HotReloadPublicClassInternalExtensions.TraceOrdinary(RecordTraceArgument(7331))",
+                "AddedTrace(RecordTraceArgument(7332))");
+
+            AssertSkippedWithReason(
+                result,
+                "ClosureCallsConditionalInternalMethod",
+                "inaccessible [Conditional] method calls are not rewritten");
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsConditionalInternalMethod(), Is.EqualTo(0));
+        }
+
+        // Adds a method to the host before NextReceiver and rewrites one call to use it.
+        private static async Task<HotReloadOrchestratorResult> RunWithAddedHostMethodAsync(
+            string addedSource,
+            string originalCall,
+            string editedCall)
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
+            string onDisk = File.ReadAllText(fixturePath);
+            const string anchor = "        private int NextReceiver()";
+            Assert.That(onDisk.Contains(anchor), "Precondition: the anchor must be in the fixture.");
+            Assert.That(onDisk.Contains(originalCall), "Precondition: the call must be in the fixture.");
+            string edited = onDisk
+                .Replace(anchor, addedSource + anchor)
+                .Replace(originalCall, editedCall);
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource("PublicClassAddedHostMethodE2E.cs", edited);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+        }
+
         // Adds an extension method to the extensions class, rewrites one call to use it, and edits
         // another method of the file so the test can see that the rest of the file applied.
         private static async Task<HotReloadOrchestratorResult> RunWithAddedExtensionAsync(

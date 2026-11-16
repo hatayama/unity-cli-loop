@@ -460,6 +460,12 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        rejectReason = FindDelegateCallRejectReason(methodSymbol);
+        if (rejectReason != null)
+        {
+            return false;
+        }
+
         rejectReason = FindArgumentRejectReason(semanticModel, invocation, invokedMethod, methodSymbol);
         if (rejectReason != null)
         {
@@ -542,11 +548,21 @@ internal static class AccessorAccessRegistrar
         }
 
         // Why refuse: the accessor call is an ordinary delegate call, so it would run the method
-        // and evaluate its arguments where the compiler omits the call.
+        // and evaluate its arguments where the compiler omits the call. Why before the added-method
+        // exemption: the added-method rewrite also runs the call (measured), so an added
+        // [Conditional] method is refused too.
         if (BaseCallRules.IsConditional(methodSymbol))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten);
         }
+
+        return null;
+    }
+
+    // What: refuses a method whose call an accessor delegate cannot carry. Only asked for a
+    // method the compiled assembly holds; a method added in the same reload is called directly.
+    private static WorkerReason FindDelegateCallRejectReason(IMethodSymbol methodSymbol)
+    {
 
         // Why refuse: the accessor is a Func or Action, and a ref struct cannot be a generic
         // type argument, so the shim would not compile. Why parameters too, though no call reaches
