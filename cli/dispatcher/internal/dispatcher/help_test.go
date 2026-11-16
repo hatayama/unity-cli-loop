@@ -197,7 +197,7 @@ func TestRunDispatcherLaunchHelpShowsGlobalOptions(t *testing.T) {
 	for _, expected := range []string{
 		"Usage:",
 		"uloop launch [options] [project-path]",
-		"Compiler errors are ignored by default during Unity startup.",
+		"When Unity offers Safe Mode for compile errors at startup, launch presses Ignore (macOS and Windows).",
 		"--editor-version <version>",
 		"Global options:",
 		"--project-path <path>",

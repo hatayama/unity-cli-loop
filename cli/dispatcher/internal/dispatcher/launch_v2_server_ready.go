@@ -224,7 +224,7 @@ func waitForExistingV2LaunchReadiness(ctx context.Context, projectRoot string, p
 	lookout := v2LaunchDialogLookout(projectRoot, pid, deps)
 	if err := deps.waitForV2ServerReady(ctx, projectRoot, "", lookout, launchV2ServerReadyPoll, launchReadinessTimeout); err != nil {
 		// Why not a restart: launch reaches an open Editor's wait only without --restart.
-		err = asLaunchDialogError(err, projectRoot, false, false)
+		err = asLaunchDialogError(err, projectRoot, false, false, false)
 		spinner.Stop()
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1

@@ -219,7 +219,7 @@ func TestPressWin32ButtonSendsNoClickToARealDialogWithAnEditableTextBox(t *testi
 	inspector := win32DialogInspectorForTest(t, unityProcessWithPID(os.Getpid()), listUnityProcessWindows)
 	inspector.pressWindowButton = pressWin32WindowButton
 
-	result, err := inspector.pressWin32Button(context.Background(), os.Getpid(), "OK")
+	result, err := inspector.pressWin32Button(context.Background(), os.Getpid(), "", "OK")
 
 	want := PressResult{
 		DialogFound: true,

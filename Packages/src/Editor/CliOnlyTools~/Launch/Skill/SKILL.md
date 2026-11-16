@@ -45,6 +45,7 @@ The final JSON payload includes:
 - `PreviousProcessId`: process ID stopped by restart or quit, when available
 - `StopMethod`: how restart or quit stopped that process, omitted when there was none — `Quit` when Unity exited on request, `ForceKill` when it had to be killed
 - `CurrentProcessId`: current Unity process ID, when available
+- `SafeModePromptIgnored`: `true` when launch pressed Ignore on Unity's "Enter Safe Mode?" prompt; omitted otherwise
 - `ProjectRoot`: resolved project root
 - `Message`: readiness summary
 
@@ -66,3 +67,4 @@ running, or still does not respond after retries.
 - `--log-file` only affects new Unity processes; use it with `--restart` to replace an already-running Editor. A start overwrites that file and keeps no previous copy, so read it first after a crash. The step other commands print after an abnormal exit, which names this Editor's log, only looks at the shared log: it does not know this path, and can name an older log of the same project
 - The command waits until Unity finishes startup and the CLI can connect before returning
 - If a modal dialog holds Unity while launch waits (such as a package prompt while a project opens), launch stops after about 5 seconds with `BLOCKED_BY_DIALOG` instead of waiting out its timeout; the Editor keeps running. Read `Details.Dialogs`, answer it as `NextActions` say, then run `uloop launch` again. macOS and Windows only
+- When Unity offers Safe Mode because the project has compile errors, launch presses Ignore on that prompt itself (macOS and Windows), keeps waiting, and returns `SafeModePromptIgnored: true`; if launch still stops with `BLOCKED_BY_DIALOG` or `UNITY_STARTUP_TIMEOUT`, the error's `Details` carries it instead. The compile errors remain: run `uloop compile` to list them. Any other dialog still stops launch as above
