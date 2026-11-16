@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.28.0](https://github.com/hatayama/unity-cli-loop/compare/v3.27.2...v3.28.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to explicit interface method implementations ([#3526](https://github.com/hatayama/unity-cli-loop/issues/3526)) ([c6cb90f](https://github.com/hatayama/unity-cli-loop/commit/c6cb90f09e3950782a52b4ea7e3da69ad8d257b5))
+
 ## [3.27.2](https://github.com/hatayama/unity-cli-loop/compare/v3.27.1...v3.27.2) (2026-11-16)
 
 
