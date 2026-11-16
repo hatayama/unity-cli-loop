@@ -39,7 +39,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RefOutInNotRewritten = "inaccessible method calls with ref/out/in parameters are not rewritten";
         private const string EventPassedByRef = "pass a field-like event by ref/out/in";
         private const string PropertyIncrementNoShape = "inaccessible property increment/decrement has no accessor rewrite shape";
-        private const string ExtensionMethodNotRewritten = "inaccessible extension method calls are not rewritten";
+        private const string ExtensionMethodGroupNoShape =
+            "inaccessible extension method used as a method group (not called) has no accessor rewrite shape.";
+        private const string InternalExtensionClassNotVisible =
+            "accessor signature type is not visible from an external assembly: "
+            + "global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadInternalExtensionCallMath";
+        private const string InternalClassWithPublicExtensionsNotVisible =
+            "accessor signature type is not visible from an external assembly: "
+            + "global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadInternalClassExtensionCallMath";
         private const string PrivateMethodGroupNoShape = "inaccessible method group 'AddSeven' (non-invocation) has no accessor rewrite shape";
         private const string MethodGroupWrapperHint = "wrapping the method group";
         private const string BodyTypeNotVisible = "body uses a type that is not visible from an external assembly";
@@ -550,42 +557,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a lambda that reads a private field and calls an internal extension method in
-        /// reduced form (x.M()) is skipped with the extension-method reason instead of being
-        /// patched into a shim that cannot call the method.
+        /// What: a lambda that reads a private field and calls, in reduced form (x.M()), an
+        /// internal extension method of an internal class is skipped because the accessor cannot
+        /// name the class, instead of being patched into a shim that cannot call the method.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureReadingPrivateFieldAndCallingInternalExtension_IsSkipped()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4101", "4102");
 
-            AssertHasSkip(result, "ClosureReadsPrivateFieldAndCallsInternalExtension(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "ClosureReadsPrivateFieldAndCallsInternalExtension(", InternalExtensionClassNotVisible);
             Assert.That(FindEntry(result, "ClosureReadsPrivateFieldAndCallsInternalExtension"), Is.Null);
         }
 
         /// <summary>
-        /// What: a lambda whose only inaccessible use is an internal extension method called in
-        /// reduced form is skipped with the extension-method reason.
+        /// What: a lambda whose only inaccessible use is an internal extension method of an
+        /// internal class called in reduced form is skipped because the accessor cannot name the
+        /// class.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureCallingOnlyInternalExtension_IsSkipped()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4201", "4202");
 
-            AssertHasSkip(result, "ClosureCallsOnlyInternalExtension(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "ClosureCallsOnlyInternalExtension(", InternalExtensionClassNotVisible);
             Assert.That(FindEntry(result, "ClosureCallsOnlyInternalExtension"), Is.Null);
         }
 
         /// <summary>
-        /// What: an async method that calls an internal extension method in reduced form is
-        /// skipped with the extension-method reason.
+        /// What: an async method that calls an internal extension method of an internal class in
+        /// reduced form is skipped because the accessor cannot name the class.
         /// </summary>
         [Test]
         public async Task ExtensionCall_AsyncMethodCallingInternalExtension_IsSkipped()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4301", "4302");
 
-            AssertHasSkip(result, "AsyncCallsInternalExtension(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "AsyncCallsInternalExtension(", InternalExtensionClassNotVisible);
             Assert.That(FindEntry(result, "AsyncCallsInternalExtension"), Is.Null);
         }
 
@@ -615,22 +623,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an internal extension method of a public class in static form
-        /// is skipped with the extension-method reason.
+        /// stays a patch entry, calling the method through an accessor.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureCallingInternalExtensionOfPublicClassInStaticForm_IsSkipped()
+        public async Task ExtensionCall_ClosureCallingInternalExtensionOfPublicClassInStaticForm_IsAnEntry()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4701", "4702");
 
-            AssertHasSkip(
-                result,
-                "ClosureCallsInternalExtensionOfPublicClassInStaticForm(",
-                ExtensionMethodNotRewritten);
+            AssertEntryAndNotSkipped(result, "ClosureCallsInternalExtensionOfPublicClassInStaticForm");
         }
 
         /// <summary>
         /// What: a lambda that converts an internal extension method in reduced form to a delegate
-        /// (a method group, no call) is skipped with the extension-method reason, without the
+        /// (a method group, no call) is skipped with the extension method-group reason, without the
         /// lambda-wrapper hint, because a wrapping call is skipped as well.
         /// </summary>
         [Test]
@@ -638,7 +643,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4901", "4902");
 
-            AssertHasSkip(result, "ClosureHoldsInternalExtensionMethodGroup(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "ClosureHoldsInternalExtensionMethodGroup(", ExtensionMethodGroupNoShape);
             Assert.That(FindSkipReason(result, "ClosureHoldsInternalExtensionMethodGroup("), Does.Not.Contain(MethodGroupWrapperHint));
             Assert.That(FindEntry(result, "ClosureHoldsInternalExtensionMethodGroup"), Is.Null);
         }
@@ -658,8 +663,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls, in reduced form, a public extension method of an internal
-        /// class declared in the edited file is skipped with the extension-method reason. The
-        /// edited and compiled copies of the class both offer the method, so the call binds
+        /// class declared in the edited file is skipped because the accessor cannot name the class.
+        /// The edited and compiled copies of the class both offer the method, so the call binds
         /// ambiguously; it must still be found inaccessible instead of being transplanted, also
         /// while a public class in another file declares an extension of the same name.
         /// </summary>
@@ -668,7 +673,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5101", "5102");
 
-            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", InternalClassWithPublicExtensionsNotVisible);
             Assert.That(FindEntry(result, "ClosureCallsPublicExtensionOfInternalClass"), Is.Null);
         }
 
@@ -687,21 +692,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an async method that calls, in reduced form, a public extension method of an
-        /// internal class declared in the edited file is skipped with the extension-method reason
-        /// and produces no entry.
+        /// internal class declared in the edited file is skipped because the accessor cannot name
+        /// the class, and produces no entry.
         /// </summary>
         [Test]
         public async Task ExtensionCall_AsyncMethodCallingPublicExtensionOfInternalClassInEditedFile_IsSkipped()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5201", "5202");
 
-            AssertHasSkip(result, "AsyncCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "AsyncCallsPublicExtensionOfInternalClass(", InternalClassWithPublicExtensionsNotVisible);
             Assert.That(FindEntry(result, "AsyncCallsPublicExtensionOfInternalClass"), Is.Null);
         }
 
         /// <summary>
         /// What: a lambda that holds, as a method group, a public extension method of an internal
-        /// class declared in the edited file is skipped with the extension-method reason and
+        /// class declared in the edited file is skipped with the extension method-group reason and
         /// produces no entry, although the method group binds ambiguously.
         /// </summary>
         [Test]
@@ -712,28 +717,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(
                 result,
                 "ClosureHoldsPublicExtensionOfInternalClassMethodGroup(",
-                ExtensionMethodNotRewritten);
+                ExtensionMethodGroupNoShape);
             Assert.That(FindEntry(result, "ClosureHoldsPublicExtensionOfInternalClassMethodGroup"), Is.Null);
         }
 
         /// <summary>
         /// What: a lambda that calls an extension method of an internal class in the edited file,
-        /// whose overloads take different parameter types, is skipped with the extension-method
-        /// reason and produces no entry. The ambiguous binding lists every overload of both copies.
+        /// whose overloads take different parameter types, is skipped because the accessor cannot
+        /// name the class, and produces no entry. The ambiguous binding lists every overload of
+        /// both copies.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureCallingOverloadedExtensionOfInternalClassInEditedFile_IsSkipped()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5401", "5402");
 
-            AssertHasSkip(result, "ClosureCallsOverloadedExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "ClosureCallsOverloadedExtensionOfInternalClass(", InternalClassWithPublicExtensionsNotVisible);
             Assert.That(FindEntry(result, "ClosureCallsOverloadedExtensionOfInternalClass"), Is.Null);
         }
 
         /// <summary>
         /// What: a lambda that calls an extension method of an internal class in the edited file,
-        /// where two overloads apply and one is the better match, is skipped with the
-        /// extension-method reason and produces no entry.
+        /// where two overloads apply and one is the better match, is skipped because the accessor
+        /// cannot name the class, and produces no entry.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureCallingBetterOverloadOfExtensionOfInternalClassInEditedFile_IsSkipped()
@@ -743,14 +749,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(
                 result,
                 "ClosureCallsBetterOverloadOfExtensionOfInternalClass(",
-                ExtensionMethodNotRewritten);
+                InternalClassWithPublicExtensionsNotVisible);
             Assert.That(FindEntry(result, "ClosureCallsBetterOverloadOfExtensionOfInternalClass"), Is.Null);
         }
 
         /// <summary>
         /// What: when the same edit makes the internal extension class public and changes a lambda
-        /// that calls it, the call is still skipped with the extension-method reason. The running
-        /// code calls the compiled class, which is still internal.
+        /// that calls it, the call is still skipped because the accessor cannot name the class. The
+        /// running code calls the compiled class, which is still internal.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureCallingExtensionOfClassMadePublicInSameEdit_IsSkipped()
@@ -771,7 +777,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assets/Tests/Editor/HotReload/HotReloadExtensionCallFixtures.cs",
                 snapshotSource: onDisk);
 
-            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "ClosureCallsPublicExtensionOfInternalClass(", InternalClassWithPublicExtensionsNotVisible);
             Assert.That(FindEntry(result, "ClosureCallsPublicExtensionOfInternalClass"), Is.Null);
         }
 
@@ -802,8 +808,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a method added in this reload that calls an internal extension method in reduced
-        /// form is skipped with the extension-method reason instead of being added as a shim
-        /// method that cannot call it.
+        /// form is skipped because the accessor cannot name the internal class, instead of being
+        /// added as a shim method that cannot call it.
         /// </summary>
         [Test]
         public async Task ExtensionCall_AddedMethodCallingInternalExtension_IsSkipped()
@@ -823,7 +829,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Assets/Tests/Editor/HotReload/HotReloadExtensionCallFixtures.cs",
                 snapshotSource: onDisk);
 
-            AssertHasSkip(result, "AddedCallsInternalExtension(", ExtensionMethodNotRewritten);
+            AssertHasSkip(result, "AddedCallsInternalExtension(", InternalExtensionClassNotVisible);
             Assert.That(FindEntry(result, "AddedCallsInternalExtension"), Is.Null);
         }
 

@@ -703,9 +703,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "compound assignment to an event has no accessor rewrite shape.");
             yield return Case(
-                HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten,
+                HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape,
                 NoArgs,
-                "inaccessible extension method calls are not rewritten.");
+                "inaccessible extension method used as a method group (not called) has no accessor rewrite shape.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 NoArgs,

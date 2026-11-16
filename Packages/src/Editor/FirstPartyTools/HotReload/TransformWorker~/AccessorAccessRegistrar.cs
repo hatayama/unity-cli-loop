@@ -203,7 +203,9 @@ internal static class AccessorAccessRegistrar
         if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
             && parentInvocation.Expression == memberAccess)
         {
-            ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+            // Why the bound symbol: a call into a static class seen twice binds to no symbol, and
+            // the method would otherwise be taken for a method group here.
+            ISymbol invocationTarget = AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
                 ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
             if (invocationTarget is IMethodSymbol)
             {
@@ -420,6 +422,14 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        // Why refuse here: the shim rewrite leaves a call on a conditional-access spine as written,
+        // so registering it would transplant a direct call the shim cannot make.
+        if (invocation.Expression is MemberBindingExpressionSyntax)
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalAccessNoShape);
+            return false;
+        }
+
         rejectReason = FindMethodShapeRejectReason(methodSymbol);
         if (rejectReason != null)
         {
@@ -454,7 +464,9 @@ internal static class AccessorAccessRegistrar
             }
         }
 
-        if (invocation.ArgumentList.Arguments.Count != methodSymbol.Parameters.Length)
+        // A reduced extension call passes its receiver as the first parameter, outside the list.
+        int receiverArgumentCount = invokedMethod.MethodKind == MethodKind.ReducedExtension ? 1 : 0;
+        if (invocation.ArgumentList.Arguments.Count + receiverArgumentCount != methodSymbol.Parameters.Length)
         {
             rejectReason =
                 WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
@@ -470,11 +482,6 @@ internal static class AccessorAccessRegistrar
         if (AccessibilityRules.NeedsStructInstanceReceiver(methodSymbol))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
-        }
-
-        if (methodSymbol.IsExtensionMethod)
-        {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
         }
 
         if (methodSymbol.IsGenericMethod)

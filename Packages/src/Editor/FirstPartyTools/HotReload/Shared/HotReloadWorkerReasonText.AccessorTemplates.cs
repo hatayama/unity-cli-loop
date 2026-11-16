@@ -137,8 +137,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape,
                 Plain("compound assignment to an event has no accessor rewrite shape.", 0));
             templates.Add(
-                HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten,
-                Plain("inaccessible extension method calls are not rewritten.", 0));
+                HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape,
+                Plain("inaccessible extension method used as a method group (not called) has no accessor rewrite shape.", 0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 Plain("inaccessible generic method calls are not rewritten.", 0));

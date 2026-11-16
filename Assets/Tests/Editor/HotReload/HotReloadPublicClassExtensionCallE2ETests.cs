@@ -1,0 +1,176 @@
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+using NUnit.Framework;
+
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    /// <summary>
+    /// End-to-end coverage for lambdas and async methods that call an internal extension method of
+    /// a public class: they are patched, return the edited value through the accessor, and
+    /// RevertAll restores the compiled value.
+    /// </summary>
+    public class HotReloadPublicClassExtensionCallE2ETests
+    {
+        private const string FixtureFileName = "HotReloadPublicClassExtensionCallFixtures.cs";
+
+        private HotReloadDomainTestScope _scope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _scope = new HotReloadDomainTestScope();
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _scope.Dispose();
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an internal extension method of a public class is Patched and
+        /// returns the edited value; RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingInternalExtension_IsPatchedAndReverts()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7101", "7102");
+
+            AssertKind(result, "ClosureCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7111));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
+        }
+
+        /// <summary>
+        /// What: an async method that calls an internal extension method of a public class is
+        /// Patched and returns the edited value; RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_AsyncMethodCallingInternalExtension_IsPatchedAndReverts()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7111", "7112");
+
+            AssertKind(result, "AsyncCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7121));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+        }
+
+        /// <summary>
+        /// What: a lambda that chains two internal extension methods of a public class is Patched
+        /// and returns the edited value; RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureChainingInternalExtensions_IsPatchedAndReverts()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureChainsInternalExtensions(), Is.EqualTo(7142));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7131", "7132");
+
+            AssertKind(result, "ClosureChainsInternalExtensions", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureChainsInternalExtensions(), Is.EqualTo(7143));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(host.ClosureChainsInternalExtensions(), Is.EqualTo(7142));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an internal extension method on a call result evaluates the
+        /// receiver once and before the argument, as the compiled call does.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingInternalExtensionOnCallResult_EvaluatesTheReceiverOnceAndFirst()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtensionOnCallResult(), Is.EqualTo(7150));
+            Assert.That(host.Order, Is.EqualTo("ra"));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7141", "7142");
+
+            AssertKind(result, "ClosureCallsInternalExtensionOnCallResult", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsInternalExtensionOnCallResult(), Is.EqualTo(7151));
+            Assert.That(host.Order, Is.EqualTo("rara"));
+            Assert.That(host.ReceiverCalls, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an internal extension method on a struct passed by value
+        /// reads the struct through the accessor and returns the edited value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingInternalExtensionOnStructByValue_IsPatchedAndReturnsTheEditedValue()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtensionOnStructByValue(), Is.EqualTo(7196));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7191", "7192");
+
+            AssertKind(result, "ClosureCallsInternalExtensionOnStructByValue", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsInternalExtensionOnStructByValue(), Is.EqualTo(7197));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an internal extension method on a null receiver passes the
+        /// null through the accessor to the method, as the compiled call does.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingInternalExtensionOnNullReceiver_PassesTheNullToTheMethod()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtensionOnNullReceiver(), Is.EqualTo(8201));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7201", "7202");
+
+            AssertKind(result, "ClosureCallsInternalExtensionOnNullReceiver", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsInternalExtensionOnNullReceiver(), Is.EqualTo(8202));
+        }
+
+        private static async Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(
+            string originalToken,
+            string editedToken)
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(originalToken, editedToken);
+            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the token must be in the fixture.");
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource("PublicClassExtensionE2E.cs", edited);
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+        }
+
+        private static void AssertKind(
+            HotReloadOrchestratorResult result,
+            string methodName,
+            HotReloadMethodOutcomeKind expectedKind)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method.Contains("." + methodName + "("))
+                {
+                    Assert.That(outcome.Kind, Is.EqualTo(expectedKind), outcome.Method + ": " + outcome.Reason);
+                    return;
+                }
+            }
+
+            Assert.Fail("No row for " + methodName + ".");
+        }
+    }
+}

@@ -205,18 +205,24 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        ISymbol symbol = invokedSymbol;
-        if (symbol is not IMethodSymbol methodSymbol
-            || methodSymbol.MethodKind != MethodKind.Ordinary
-            || !AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol)
-            || methodSymbol.IsExtensionMethod)
+        if (invokedSymbol is not IMethodSymbol invokedMethod)
+        {
+            return base.VisitInvocationExpression(node);
+        }
+
+        // Why unreduce: the accessor binds the static extension method, whose first parameter is
+        // the receiver of a reduced call (x.M(a) becomes __M(x, a)).
+        IMethodSymbol methodSymbol = AccessibilityRules.UnreducedMethod(invokedMethod);
+        bool isReducedExtensionCall = invokedMethod.MethodKind == MethodKind.ReducedExtension;
+        if (methodSymbol.MethodKind != MethodKind.Ordinary
+            || !AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
             return base.VisitInvocationExpression(node);
         }
 
         AccessorEntry entry = _accessorPlan.GetOrAddMethod(methodSymbol);
         List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
-        if (!methodSymbol.IsStatic)
+        if (isReducedExtensionCall || !methodSymbol.IsStatic)
         {
             ExpressionSyntax receiver = ExtractReceiver(node.Expression);
             arguments.Add(SyntaxFactory.Argument(VisitReceiver(receiver)));
