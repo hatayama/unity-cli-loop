@@ -3008,6 +3008,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a getter of a property that now returns by reference is Skipped as an accessor with
+        /// no matching compiled accessor and emits no entry, because the compiled getter returns by
+        /// value under the same type name.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterOfPropertyNowReturningByRef_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedSetterCopyAsync(
+                "GetterOfPropertyNowReturningByRef.cs",
+                onDisk => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(onDisk, "public int GetterOnly", "public ref int GetterOnly"),
+                    "return _stored + 4004;",
+                    "return ref _stored;"));
+
+            AssertNoEntryNamed(result, "get_GetterOnly");
+            AssertSkippedContains(result, "get_GetterOnly", ExpectedExplicitAccessorSkipReason);
+        }
+
+        /// <summary>
         /// What: a getter of a property made static since the last compile is Skipped as an accessor
         /// with no matching compiled accessor and emits no entry, because the compiled getter is an
         /// instance method.

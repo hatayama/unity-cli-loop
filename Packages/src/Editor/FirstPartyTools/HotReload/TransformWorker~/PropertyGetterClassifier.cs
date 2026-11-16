@@ -95,12 +95,15 @@ internal static class PropertyGetterClassifier
             : HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor);
     }
 
-    // Why each check: a getter added since the last compile, and a property re-typed or made
-    // (non-)static since then, all lack a compiled get_X with this signature, as for the setter.
+    // Why each check: a getter added since the last compile, and a property re-typed, made
+    // (non-)static, or switched to or from returning by reference since then, all lack a compiled
+    // get_X with this signature, as for the setter. RefKind is compared on its own because the
+    // Cecil type name is the same for int and ref int.
     private static bool HasMatchingCompiledGetter(IPropertySymbol compiledProperty, IPropertySymbol propertySymbol)
     {
         return compiledProperty.GetMethod != null
             && compiledProperty.IsStatic == propertySymbol.IsStatic
+            && compiledProperty.RefKind == propertySymbol.RefKind
             && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == CecilTypeNames.ToCecilFullName(propertySymbol.Type);
     }
 
