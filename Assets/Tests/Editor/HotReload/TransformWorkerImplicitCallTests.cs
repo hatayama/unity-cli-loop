@@ -96,7 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// methods (a public Deconstruct, a List collection initializer, LINQ to objects, awaiting a
         /// Task, foreach over a List) stays a patch entry, as does an await using on a resource that
         /// implements IAsyncDisposable beside an internal pattern DisposeAsync (the compiled call goes
-        /// through the public interface method).
+        /// through the public interface method), and one whose public optional-parameter DisposeAsync
+        /// wins over an internal params overload.
         /// </summary>
         [TestCase("6801", "ClosureDeconstructsThroughPublicMethod")]
         [TestCase("6811", "ClosureFillsPublicList")]
@@ -104,6 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6831", "ClosureAwaitsPublicTask")]
         [TestCase("6841", "ClosureLoopsOverPublicList")]
         [TestCase("9441", "ClosureAwaitUsesInterfaceDisposeAsyncBesideInternalPattern")]
+        [TestCase("9471", "ClosureAwaitUsesOptionalDisposeAsyncOverParamsOverload")]
         public async Task ImplicitCallToPublicMethod_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);

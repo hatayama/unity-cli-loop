@@ -208,7 +208,7 @@ internal static class ImplicitCallTargets
 
     // Why base types, optional parameters, and the order: the compiler finds an inherited pattern
     // method, binds one whose parameters all have defaults or are params, and prefers the overload
-    // that needs the fewest omitted arguments.
+    // that needs the fewest omitted arguments, then one callable without expanding a params array.
     private static IMethodSymbol FindInstanceMethodCallableWithoutArgumentsOrNull(ITypeSymbol type, string name)
     {
         for (ITypeSymbol current = type; current != null; current = current.BaseType)
@@ -218,6 +218,7 @@ internal static class ImplicitCallTargets
                 .Where(candidate => !candidate.IsStatic
                     && candidate.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams))
                 .OrderBy(candidate => candidate.Parameters.Length)
+                .ThenBy(candidate => candidate.Parameters.Any(parameter => parameter.IsParams) ? 1 : 0)
                 .FirstOrDefault();
             if (method != null)
             {
