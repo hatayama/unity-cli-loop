@@ -12,6 +12,7 @@ internal sealed class AddedMemberAccessLookup
     private readonly INamedTypeSymbol _compiledType;
     private readonly AddedPropertyCatalog _addedPropertyCatalog;
     private readonly AddedEventLookup _addedEvents;
+    private readonly bool _answersAddedExtensionsOnly;
 
     public AddedMemberAccessLookup(
         INamedTypeSymbol typeSymbol,
@@ -40,11 +41,35 @@ internal sealed class AddedMemberAccessLookup
         _addedPropertyCatalog = addedPropertyCatalog;
     }
 
+    private AddedMemberAccessLookup(AddedEventLookup addedEvents)
+    {
+        _addedEvents = addedEvents;
+        _answersAddedExtensionsOnly = true;
+    }
+
+    /// <summary>
+    /// A lookup for a property or indexer accessor body that answers only whether an extension
+    /// method is added in this reload; every other question answers false.
+    /// </summary>
+    // Why accessor bodies get the extension answer and nothing else: they reach no added member
+    // directly, so the other answers stay as without a lookup. A receiver call to an added
+    // extension fails at accessor binding in any body, so that refusal must reach them too.
+    internal static AddedMemberAccessLookup ForAccessorBody(AddedEventLookup addedEvents)
+    {
+        if (addedEvents == null)
+        {
+            throw new ArgumentNullException(nameof(addedEvents));
+        }
+
+        return new AddedMemberAccessLookup(addedEvents);
+    }
+
     // Why the compiled match and not the added-method catalog: the catalog fills in declaration
     // order, so a caller declared above its added callee would not find the callee yet.
     public bool IsAddedMethod(IMethodSymbol methodSymbol)
     {
-        if (_compiledType == null
+        if (_answersAddedExtensionsOnly
+            || _compiledType == null
             || methodSymbol == null
             || methodSymbol.MethodKind != MethodKind.Ordinary
             || !SymbolEqualityComparer.Default.Equals(methodSymbol.ContainingType, _typeSymbol))
@@ -82,7 +107,8 @@ internal sealed class AddedMemberAccessLookup
     // method bodies is decided. Another type's may not be yet, so only this type is asked.
     public bool IsAddedProperty(IPropertySymbol propertySymbol)
     {
-        if (propertySymbol == null
+        if (_answersAddedExtensionsOnly
+            || propertySymbol == null
             || !SymbolEqualityComparer.Default.Equals(propertySymbol.ContainingType, _typeSymbol))
         {
             return false;
@@ -95,6 +121,6 @@ internal sealed class AddedMemberAccessLookup
     // compiled declaring type alone, which every type can ask regardless of classification order.
     public bool IsStoreBackedEvent(IEventSymbol eventSymbol)
     {
-        return eventSymbol != null && _addedEvents.IsStoreBacked(eventSymbol);
+        return !_answersAddedExtensionsOnly && eventSymbol != null && _addedEvents.IsStoreBacked(eventSymbol);
     }
 }

@@ -133,7 +133,7 @@ internal static class PropertyGetterClassifier
             accessorBodyNode,
             semanticModel,
             compiledType,
-            addedMemberAccess: null,
+            AddedMemberAccessLookup.ForAccessorBody(addedEvents),
             addedEvents,
             partialTypeParts);
         if (decision.SkipReason != null)

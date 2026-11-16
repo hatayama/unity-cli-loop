@@ -267,6 +267,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
         }
 
+        /// <summary>
+        /// What: a property getter whose lambda calls an extension method added in the same
+        /// reload on a receiver is Skipped with the reason that names the static form, keeps its
+        /// compiled value, and the rest of the file still applies.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterLambdaCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureGetterValue, Is.EqualTo(7310));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                "Func<int> read = () => _value.TriplePlus(7301);",
+                "Func<int> read = () => _value.AddedTriple(7301);");
+
+            AssertSkippedWithReason(result, "get_ClosureGetterValue", AddedExtensionReducedCallReason);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureGetterValue, Is.EqualTo(7310));
+            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
+        /// <summary>
+        /// What: a property setter whose lambda calls an extension method added in the same
+        /// reload on a receiver is Skipped with the reason that names the static form, keeps its
+        /// compiled behavior, and the rest of the file still applies.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterLambdaCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            host.ClosureSetterValue = 3;
+            Assert.That(host.ClosureSetterValue, Is.EqualTo(7320));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionAsync(
+                "Func<int> read = () => value.TriplePlus(7311);",
+                "Func<int> read = () => value.AddedTriple(7311);");
+
+            AssertSkippedWithReason(result, "set_ClosureSetterValue", AddedExtensionReducedCallReason);
+            AssertNoFailedRow(result);
+            host.ClosureSetterValue = 3;
+            Assert.That(host.ClosureSetterValue, Is.EqualTo(7320));
+            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
         // Adds an extension method to the extensions class, rewrites one call to use it, and edits
         // another method of the file so the test can see that the rest of the file applied.
         private static async Task<HotReloadOrchestratorResult> RunWithAddedExtensionAsync(

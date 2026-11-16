@@ -49,6 +49,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return sum;
         }
 
+        internal static int SumValues(params int[] values)
+        {
+            int sum = 0;
+            foreach (int item in values)
+            {
+                sum += item;
+            }
+
+            return sum;
+        }
+
         internal static int GenericEcho<T>(this T value, int add)
         {
             return add;
@@ -71,6 +82,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public class with an internal instance method, reached through a public member of
+    /// <see cref="HotReloadExtensionCallBox"/>.
+    /// </summary>
+    public sealed class HotReloadExtensionCallInner
+    {
+        internal int Plus(int add)
+        {
+            return add + 1;
+        }
+    }
+
+    /// <summary>
+    /// Holds a <see cref="HotReloadExtensionCallInner"/> behind a public property, so a call on
+    /// it can sit further down a conditional-access chain.
+    /// </summary>
+    public sealed class HotReloadExtensionCallBox
+    {
+        public HotReloadExtensionCallInner Inner { get; } = new HotReloadExtensionCallInner();
+    }
+
+    /// <summary>
     /// Compiled host whose lambdas and async methods call internal extension methods of a public
     /// class. Each body's 4-digit token is unique in this file and is the value the tests edit.
     /// </summary>
@@ -86,11 +118,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private string _order = "";
 
+        private string[] _labels = { "abcd" };
+
+        private HotReloadExtensionCallBox _box = new HotReloadExtensionCallBox();
+
+        private int _stored;
+
         private int _receiverCalls;
 
         public string Order => _order;
 
         public int ReceiverCalls => _receiverCalls;
+
+        public int ClosureGetterValue
+        {
+            get
+            {
+                Func<int> read = () => _value.TriplePlus(7301);
+                return read();
+            }
+        }
+
+        public int ClosureSetterValue
+        {
+            get => _stored;
+            set
+            {
+                Func<int> read = () => value.TriplePlus(7311);
+                _stored = read();
+            }
+        }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureCallsInternalExtension()
@@ -138,6 +195,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ClosureCallsInternalExtensionAfterConditionalAccess()
         {
             Func<int> read = () => _label?.Length.TriplePlus(7221) ?? 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsInternalExtensionAfterConditionalCall()
+        {
+            Func<int> read = () => _label?.ToUpperInvariant().NullableLengthPlus(7251) ?? 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsInternalExtensionAfterConditionalElement()
+        {
+            Func<int> read = () => _labels?[0].NullableLengthPlus(7261) ?? 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsInternalMethodAfterConditionalAccess()
+        {
+            Func<int> read = () => _box?.Inner.Plus(7271) ?? 0;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsParamsInternalExtensionWithNoElements()
+        {
+            Func<int> read = () => _value.SumAll() + 7281;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsParamsInternalMethodExpanded()
+        {
+            Func<int> read = () => HotReloadPublicClassInternalExtensions.SumValues(7291);
             return read();
         }
 
