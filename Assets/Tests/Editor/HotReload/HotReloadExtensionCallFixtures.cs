@@ -38,6 +38,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return value.Length * 2 + add;
         }
+
+        // Overloads with different parameter types: the call binds ambiguously against every
+        // overload of both copies, not only against the twin of the overload it picks.
+        public static int Step(this int value, int add)
+        {
+            return value * 3 + add;
+        }
+
+        public static int Step(this int value, string add)
+        {
+            return value + add.Length;
+        }
+
+        // Overloads that both apply to an int argument; the int one is the better match.
+        public static int Pick(this int value, int add)
+        {
+            return value + add;
+        }
+
+        public static int Pick(this int value, long add)
+        {
+            return value + (int)add + 1000;
+        }
     }
 
     /// <summary>
@@ -54,6 +77,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         internal static int InternalTwice(this int value, int add)
         {
             return value * 2 + add;
+        }
+
+        public static int PublicStep(this int value, int add)
+        {
+            return value * 4 + add;
+        }
+
+        public static int PublicStep(this int value, string add)
+        {
+            return value + add.Length;
         }
     }
 
@@ -157,6 +190,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Func<int, int> lengthTimesTwo = _label.LengthTimesTwo;
                 return lengthTimesTwo(5301);
             };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsOverloadedExtensionOfInternalClass()
+        {
+            Func<int> read = () => _value.Step(5401);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsBetterOverloadOfExtensionOfInternalClass()
+        {
+            Func<int> read = () => _value.Pick(5501);
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension()
+        {
+            Func<int> read = () => _value.PublicStep(5601);
             return read();
         }
 

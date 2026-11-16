@@ -703,6 +703,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda that calls an extension method of an internal class in the edited file,
+        /// whose overloads take different parameter types, is skipped with the extension-method
+        /// reason and produces no entry. The ambiguous binding lists every overload of both copies.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingOverloadedExtensionOfInternalClassInEditedFile_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5401", "5402");
+
+            AssertHasSkip(result, "ClosureCallsOverloadedExtensionOfInternalClass(", ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsOverloadedExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method of an internal class in the edited file,
+        /// where two overloads apply and one is the better match, is skipped with the
+        /// extension-method reason and produces no entry.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingBetterOverloadOfExtensionOfInternalClassInEditedFile_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5501", "5502");
+
+            AssertHasSkip(
+                result,
+                "ClosureCallsBetterOverloadOfExtensionOfInternalClass(",
+                ExtensionMethodNotRewritten);
+            Assert.That(FindEntry(result, "ClosureCallsBetterOverloadOfExtensionOfInternalClass"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a lambda that reads a private field and calls an overloaded public extension
+        /// method of a public class in the edited file stays a patch entry, although the call
+        /// binds ambiguously against both copies of the class.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingOverloadedPublicExtensionOfPublicClass_IsAnEntry()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5601", "5602");
+
+            AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsOverloadedPublicExtension");
+        }
+
+        /// <summary>
         /// What: a lambda that reads a private field and calls a public extension method in
         /// reduced form stays a patch entry.
         /// </summary>

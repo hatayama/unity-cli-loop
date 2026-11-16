@@ -38,9 +38,11 @@ internal static class AccessibilityRules
     }
 
     /// <summary>
-    /// What: the symbol a call, method group, or member access binds to. When binding failed only
-    /// because the same method is offered twice, returns the copy declared in the edited sources.
-    /// Otherwise the bound symbol, or null when nothing is bound.
+    /// What: the symbol a call, method group, or member access binds to, or null when nothing is
+    /// bound. When binding failed only because a static class is offered twice (the edited source
+    /// and its compiled copy) and that class is not externally visible, returns one of its methods
+    /// from the edited source. That method shares the containing type of the overload the compiler
+    /// would pick but is not necessarily that overload, so it is only good for deciding refusal.
     /// </summary>
     internal static ISymbol BoundSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
@@ -51,65 +53,64 @@ internal static class AccessibilityRules
         }
 
         // Why: the compiled assembly is referenced beside the edited source of the same file, and
-        // extension lookup gathers methods from both copies of a static class. A public method of
-        // an internal class is imported from metadata and is eligible because the worker binds
-        // with accessibility ignored, so a call to it fails as ambiguous. Treating that as "no
-        // symbol" made every access check pass, and the shim called the method and threw.
-        if (info.CandidateReason != CandidateReason.OverloadResolutionFailure
-            || info.CandidateSymbols.Length < 2)
+        // extension lookup gathers methods from both copies of a static class, every overload of
+        // each. A public method of an internal class is imported from metadata and is eligible
+        // because the worker binds with accessibility ignored, so a call to it fails as ambiguous.
+        // Treating that as "no symbol" made every access check pass, and the shim called the
+        // method and threw.
+        if (info.CandidateReason != CandidateReason.OverloadResolutionFailure)
         {
             return null;
         }
 
-        IMethodSymbol first = info.CandidateSymbols[0] as IMethodSymbol;
-        IMethodSymbol sourceCopy = null;
-        foreach (ISymbol candidate in info.CandidateSymbols)
+        return FindTwinCandidateToRefuseOrNull(semanticModel.Compilation.Assembly, info.CandidateSymbols);
+    }
+
+    // Why the containing type alone decides: only public members are imported from metadata, so
+    // twins are public methods, and an extension class is top-level. A twin call into a public
+    // class is accessible (nothing to refuse); into a class that is not externally visible, every
+    // overload is inaccessible. An internal overload exists once and binds without ambiguity.
+    private static IMethodSymbol FindTwinCandidateToRefuseOrNull(
+        IAssemblySymbol editedAssembly,
+        ImmutableArray<ISymbol> candidates)
+    {
+        string containingType = null;
+        IMethodSymbol editedCopy = null;
+        bool hasCompiledCopy = false;
+        foreach (ISymbol candidate in candidates)
         {
-            if (candidate is not IMethodSymbol method
-                || first == null
-                || !IsSameMethodDeclaration(UnreducedMethod(first), UnreducedMethod(method)))
+            if (candidate is not IMethodSymbol method)
             {
                 return null;
             }
 
-            if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, semanticModel.Compilation.Assembly))
+            INamedTypeSymbol candidateType = UnreducedMethod(method).ContainingType;
+            string candidateTypeName = candidateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (containingType != null && containingType != candidateTypeName)
             {
-                sourceCopy = method;
+                // A real ambiguity across types, which the compiler rejects as well.
+                return null;
+            }
+
+            containingType = candidateTypeName;
+            if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, editedAssembly))
+            {
+                editedCopy = method;
+            }
+            else
+            {
+                hasCompiledCopy = true;
             }
         }
 
-        return sourceCopy;
-    }
-
-    // Whether two method symbols from different assemblies declare the same method: same name,
-    // same containing type, same parameter types and ref kinds, same generic arity.
-    private static bool IsSameMethodDeclaration(IMethodSymbol left, IMethodSymbol right)
-    {
-        if (left.Name != right.Name
-            || left.Arity != right.Arity
-            || left.Parameters.Length != right.Parameters.Length
-            || FullyQualified(left.ContainingType) != FullyQualified(right.ContainingType))
+        if (editedCopy == null
+            || !hasCompiledCopy
+            || IsExternallyVisibleType(UnreducedMethod(editedCopy).ContainingType))
         {
-            return false;
+            return null;
         }
 
-        for (int index = 0; index < left.Parameters.Length; index++)
-        {
-            IParameterSymbol leftParameter = left.Parameters[index];
-            IParameterSymbol rightParameter = right.Parameters[index];
-            if (leftParameter.RefKind != rightParameter.RefKind
-                || FullyQualified(leftParameter.Type) != FullyQualified(rightParameter.Type))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static string FullyQualified(ISymbol symbol)
-    {
-        return symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return editedCopy;
     }
 
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
