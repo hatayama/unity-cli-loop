@@ -348,6 +348,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Resource whose public DisposeAsync with an optional parameter is declared before an internal
+    /// parameterless one; the compiler binds the parameterless overload.
+    /// </summary>
+    public sealed class HotReloadImplicitCompetingDisposeAsyncResource
+    {
+        public ValueTask DisposeAsync(int delay = 0)
+        {
+            return default;
+        }
+
+        internal ValueTask DisposeAsync()
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
     /// Base resource whose pattern DisposeAsync is internal, inherited by the resource below.
     /// </summary>
     public class HotReloadImplicitAsyncResourceBase
@@ -867,6 +884,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 int result = 9451;
                 await using (HotReloadImplicitOptionalParameterResource resource = new HotReloadImplicitOptionalParameterResource())
+                {
+                    result += 1;
+                }
+
+                return result;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesParameterlessDisposeAsyncOverOptionalOverload()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int result = 9461;
+                await using (HotReloadImplicitCompetingDisposeAsyncResource resource = new HotReloadImplicitCompetingDisposeAsyncResource())
                 {
                     result += 1;
                 }

@@ -206,16 +206,19 @@ internal static class ImplicitCallTargets
         return type.AllInterfaces.Any(candidate => candidate.ToDisplayString() == interfaceFullName);
     }
 
-    // Why base types and optional parameters: the compiler finds an inherited pattern method, and
-    // binds one whose parameters all have defaults or are params.
+    // Why base types, optional parameters, and the order: the compiler finds an inherited pattern
+    // method, binds one whose parameters all have defaults or are params, and prefers the overload
+    // that needs the fewest omitted arguments.
     private static IMethodSymbol FindInstanceMethodCallableWithoutArgumentsOrNull(ITypeSymbol type, string name)
     {
         for (ITypeSymbol current = type; current != null; current = current.BaseType)
         {
             IMethodSymbol method = current.GetMembers(name)
                 .OfType<IMethodSymbol>()
-                .FirstOrDefault(candidate => !candidate.IsStatic
-                    && candidate.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams));
+                .Where(candidate => !candidate.IsStatic
+                    && candidate.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams))
+                .OrderBy(candidate => candidate.Parameters.Length)
+                .FirstOrDefault();
             if (method != null)
             {
                 return method;
