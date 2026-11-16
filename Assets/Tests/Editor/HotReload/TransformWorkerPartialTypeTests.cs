@@ -234,8 +234,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an unchanged part sent alone while the list of changed files may be incomplete gets
-        /// no declaration-drift warning, and its method whose parameter type lives in the other part
-        /// is skipped with the reason that the parts were not checked, not as an added method.
+        /// no declaration-drift warning (the part holds a field typed from the other part, too), and its
+        /// method whose parameter type lives in the other part is skipped with the reason that the
+        /// parts were not checked, not as an added method.
         /// </summary>
         [Test]
         public async Task Run_UnchangedPartAloneWithIncompleteScan_SkipsOtherPartTypedMethodAsUncheckedWithoutDrift()

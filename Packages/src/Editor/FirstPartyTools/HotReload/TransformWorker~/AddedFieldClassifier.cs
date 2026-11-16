@@ -31,7 +31,7 @@ internal static class AddedFieldClassifier
                 }
 
                 CompiledFieldMatch fieldMatch = CompiledMemberMatcher.MatchCompiledField(compiledType, fieldSymbol);
-                if (fieldMatch == CompiledFieldMatch.Matched)
+                if (fieldMatch == CompiledFieldMatch.Matched || IsTypeUnboundForUntrustedParts(typeState, fieldMatch, fieldSymbol))
                 {
                     continue;
                 }
@@ -49,6 +49,21 @@ internal static class AddedFieldClassifier
         }
 
         ClassifyAddedEvents(typeState, semanticModel, home, addedFieldCatalog);
+    }
+
+    // Why not added: when another part of the partial type was not bound (it changed, or the scan
+    // that would prove it unchanged did not finish), a field typed from that part does not resolve,
+    // so its type looks changed. Calling it added recorded an added key that the drift check strips
+    // from the current tree only, which reported an outside-body edit for a file that had none.
+    // Bodies that use the field are skipped by the same untrusted-parts reason.
+    private static bool IsTypeUnboundForUntrustedParts(
+        TypeEmitState typeState,
+        CompiledFieldMatch fieldMatch,
+        IFieldSymbol fieldSymbol)
+    {
+        return fieldMatch == CompiledFieldMatch.FieldTypeChanged
+            && UnresolvedSignatureTypes.TryFind(fieldSymbol.Type, out ITypeSymbol _)
+            && typeState.SourceUnit.PartialTypeParts.FindUntrustedOtherPartReasonOrNull(typeState.TypeDeclaration) != null;
     }
 
     /// <summary>
