@@ -1,6 +1,7 @@
 package dispatcher
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -193,5 +194,57 @@ func TestLaunchReadinessKeepsACancellationOverAnOlderPackageRefusal(t *testing.T
 
 	if err == nil || readiness.olderPackageProtocol {
 		t.Fatalf("expected the wait to fail without the field, got err=%v readiness=%+v", err, readiness)
+	}
+}
+
+// fallbackProbeLaunchDeps is a launch whose process scan fails, so launch falls back to the IPC
+// probe, which returns probeErr after calling beforeReturn.
+func fallbackProbeLaunchDeps(probeErr error, beforeReturn func()) launchDeps {
+	deps := defaultLaunchDeps()
+	deps.findRunningUnityProcess = func(context.Context, string) (*unityprocess.UnityProcess, error) {
+		return nil, errors.New("failed to retrieve Unity process list: /bin/ps: operation not permitted")
+	}
+	deps.probeProjectIpcFallback = func(context.Context, string) error {
+		beforeReturn()
+		return probeErr
+	}
+	return deps
+}
+
+func TestLaunchFallbackProbeKeepsACancellationOverAnOlderPackageRefusal(t *testing.T) {
+	// Verifies a launch canceled while the fallback probe read an older-package refusal fails instead of reporting the Editor ready.
+	projectRoot := createLaunchTestProject(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := fallbackProbeLaunchDeps(olderPackageMismatch(), cancel)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runLaunchWithDeps(ctx, launchOptions{projectPath: projectRoot}, projectRoot, &stdout, &stderr, deps)
+
+	if code == 0 || strings.Contains(stdout.String(), "OlderPackageProtocol") {
+		t.Fatalf("expected a canceled launch to fail: code=%d stdout=%s", code, stdout.String())
+	}
+}
+
+func TestLaunchFallbackProbeStillFailsOnARefusalThatIsNotFromAnOlderPackage(t *testing.T) {
+	// Verifies the fallback probe keeps failing on a cli_update_required refusal whose version is equal, newer, missing or zero.
+	current := clicontract.ProtocolVersion()
+	for name, data := range map[string]string{
+		"same protocol":   fmt.Sprintf(`{"type":"cli_update_required","requiredProtocolVersion":%d}`, current),
+		"newer package":   fmt.Sprintf(`{"type":"cli_update_required","requiredProtocolVersion":%d}`, current+1),
+		"missing version": `{"type":"cli_update_required"}`,
+		"zero version":    `{"type":"cli_update_required","requiredProtocolVersion":0}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			projectRoot := createLaunchTestProject(t)
+			deps := fallbackProbeLaunchDeps(protocolMismatchError(data), func() {})
+
+			run := runLaunchForTest(t, launchOptions{projectPath: projectRoot}, deps)
+
+			if run.code == 0 || strings.Contains(run.stdout, "OlderPackageProtocol") {
+				t.Fatalf("expected the fallback to fail: code=%d stdout=%s", run.code, run.stdout)
+			}
+		})
 	}
 }

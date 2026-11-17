@@ -48,7 +48,9 @@ func probeProjectIpcAnswers(ctx context.Context, projectRoot string, deps launch
 	if err == nil {
 		return true, launchReadiness{}
 	}
-	if isNewerDispatcherProtocolMismatch(err) {
+	// Why only while ctx is live: a refusal read after cancellation must not turn a canceled
+	// launch into a success.
+	if ctx.Err() == nil && isNewerDispatcherProtocolMismatch(err) {
 		return true, launchReadiness{olderPackageProtocol: true}
 	}
 	return false, launchReadiness{}
