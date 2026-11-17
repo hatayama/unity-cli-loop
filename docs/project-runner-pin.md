@@ -131,4 +131,6 @@ While the file exists — even if it cannot be read — the periodic self-update
 - Plain `uloop update` removes the hold and updates to the newest release.
 - Reinstalling with `install.sh` / `install.ps1` does not remove the hold.
 - When a held dispatcher is below a project's `minimumDispatcherVersion`, the command fails
-  with a manual-update error naming the hold instead of updating automatically.
+  with a manual-update error naming the hold instead of updating automatically. A Homebrew or
+  winget install, or `ULOOP_DISABLE_SELF_UPDATE`, takes precedence and is the reason that error
+  names instead.

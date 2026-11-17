@@ -149,7 +149,7 @@ CLI は使っているあいだ、1 日に 1 回まで新しいリリースを�
 
 - 特定のバージョンに固定する：`uloop update --to-version <バージョン>` でそのリリースを入れて固定します。`uloop update` を実行すると自動更新に戻ります。
 - 自動更新を止める：環境変数 `ULOOP_DISABLE_SELF_UPDATE=1` を設定します。
-- Homebrew で入れた場合は自動更新しません。`brew upgrade` で更新してください（バージョンを固定するには `brew pin`）。
+- Homebrew で入れた場合は自動更新しません。`brew upgrade uloop` で更新してください（バージョンを固定するには `brew pin uloop`）。
 
 </details>
 
