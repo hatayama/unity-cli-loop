@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -55,48 +54,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
-
-	resolvedOptions, err := resolveUpdateTargetVersionFunc(ctx, update.Options{
-		CurrentVersion: dispatcherVersion,
-		TargetVersion:  options.targetVersion,
-	})
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
-		return true, 1
-	}
-	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolvedOptions.TargetVersion)
-	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
-		return true, 1
-	}
-	if !targetChanged {
-		clicore.WriteLine(stdout, "uloop dispatcher is already up to date ("+targetVersion+").")
-		return true, 0
-	}
-	updateCommand, err := update.CommandForOS(runtime.GOOS, resolvedOptions)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UpdateCommandName})
-		return true, 1
-	}
-
-	clicore.WriteLine(stdout, "Updating global uloop dispatcher...")
-	if err := updateRunCommand(ctx, updateCommand, stdout, stderr); err != nil {
-		clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
-			ErrorCode:   clierrors.ErrorCodeInternalError,
-			Phase:       clierrors.ErrorPhaseExecution,
-			Message:     "Update failed: " + err.Error(),
-			Retryable:   true,
-			SafeToRetry: true,
-			Command:     clicore.UpdateCommandName,
-			NextActions: []string{"Retry `uloop update` after checking network access to GitHub."},
-			Details: map[string]any{
-				"Cause": err.Error(),
-			},
-		})
-		return true, 1
-	}
-	writeManualDispatcherUpdateCompletion(stdout, dispatcherVersion, dispatcherInstalledVersionOrEmpty(ctx))
-	return true, 0
+	return true, runDispatcherUpdateRequest(ctx, options, stdout, stderr)
 }
 
 func updateCommandForOS(goos string) (string, []string, error) {
@@ -181,7 +139,8 @@ func updateExecutionArgs(updateCommand update.Command, installerPath string) []s
 
 func printUpdateHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Usage:")
-	clicore.WriteLine(stdout, "  uloop update [--to-version <version>]")
+	clicore.WriteLine(stdout, "  uloop update                          Update to the newest release and resume automatic updates")
+	clicore.WriteLine(stdout, "  uloop update --to-version <version>   Install that release and hold it; automatic updates pause")
 }
 
 // resolveUpdateExecutablePath returns the on-disk path of this dispatcher binary.

@@ -113,10 +113,11 @@ func periodicDispatcherSelfUpdateAllowed(deps dispatcherRunDeps) bool {
 		return false
 	}
 	executablePath, installDir, err := deps.resolveSelfUpdateLocation()
-	if err != nil {
+	if err != nil || !isRunningFromInstallDir(executablePath, installDir, runtime.GOOS) {
 		return false
 	}
-	return isRunningFromInstallDir(executablePath, installDir, runtime.GOOS)
+	held, _ := readDispatcherVersionHold()
+	return !held
 }
 
 func writeDispatcherSelfUpdateSkippedWarning(stderr io.Writer, err error) {

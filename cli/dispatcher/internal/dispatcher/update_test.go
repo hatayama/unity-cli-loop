@@ -20,6 +20,7 @@ import (
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/dispatcher/dispatchercontract"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -450,6 +451,7 @@ func TestTryHandleUpdateRequestExplainsRateLimit(t *testing.T) {
 
 func TestTryHandleUpdateRequestSkipsInstallerWhenRequestedTargetIsCurrent(t *testing.T) {
 	// Verifies an explicit current --to-version target exits successfully without running the installer.
+	t.Setenv(nativepath.ConfigDirEnvName, t.TempDir())
 	previousRunner := updateRunCommand
 	previousResolver := resolveUpdateTargetVersionFunc
 	previousExecutablePath := resolveUpdateExecutablePathFunc

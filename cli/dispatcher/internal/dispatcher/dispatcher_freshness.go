@@ -35,6 +35,8 @@ type dispatcherFreshnessInputs struct {
 	CurrentVersion     string
 	SelfUpdateDisabled bool
 	ManagedInstall     sharedupdate.ManagedInstall
+	VersionHeld        bool
+	HeldVersion        string
 }
 
 type dispatcherFreshnessPlan struct {
@@ -52,11 +54,14 @@ const (
 // running dispatcher is below the pin's floor. installedVersion is the release the periodic
 // update installed earlier in this process ("" when it installed nothing).
 func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, installedVersion string, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
+	versionHeld, heldVersion := readDispatcherVersionHold()
 	plan := decideDispatcherFreshness(dispatcherFreshnessInputs{
 		MinimumVersion:     pin.MinimumDispatcherVersion,
 		CurrentVersion:     dispatcherVersion,
 		SelfUpdateDisabled: dispatcherSelfUpdateDisabled(),
 		ManagedInstall:     detectManagedDispatcherInstall(),
+		VersionHeld:        versionHeld,
+		HeldVersion:        heldVersion,
 	})
 	// Why not install again: the periodic update already put the newest release in place, and
 	// comparing against the embedded version would download and reinstall that same release.
@@ -97,6 +102,14 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 			MinimumVersion: minimumVersion,
 			Reason:         dispatcherFreshnessReasonSelfUpdateDisabled,
 			NextAction:     "Run `uloop update` and retry the command.",
+		}
+	}
+	if inputs.VersionHeld {
+		return dispatcherFreshnessPlan{
+			Action:         dispatcherFreshnessManualUpdateRequired,
+			MinimumVersion: minimumVersion,
+			Reason:         "This uloop is held at " + inputs.HeldVersion + " by `uloop update --to-version`.",
+			NextAction:     "Run `uloop update` to resume automatic updates, then retry the command.",
 		}
 	}
 	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}

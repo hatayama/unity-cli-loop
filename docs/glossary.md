@@ -93,6 +93,13 @@ requirements: `projectRunnerVersion` (stamped by release-please) and
 `minimumDispatcherVersion` (the manually maintained dispatcher floor). The pin evolves
 additively only — existing fields are never deleted or renamed.
 
+### Version hold
+
+The setting `uloop update --to-version <version>` records in the user's config directory
+(`dispatcher-version-hold.json`) to keep the dispatcher on that release: while it exists,
+the dispatcher's periodic self-update does not run. Plain `uloop update` removes it. It is
+unrelated to the project runner [pin](#pin) — never call it a pin.
+
 ### Protocol version
 
 The integer IPC contract generation declared on both sides: `protocolVersion` in

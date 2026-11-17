@@ -334,3 +334,39 @@ func TestDefaultEnvironmentReadsTheProcessEnvironment(t *testing.T) {
 		t.Fatalf("cacheRoot=%q err=%v", cacheRoot, err)
 	}
 }
+
+func TestConfigRootResolvesPerOperatingSystem(t *testing.T) {
+	// Verifies the config root prefers ULOOP_CONFIG_DIR, then follows each OS convention, and fails on Windows without APPDATA.
+	home := func() (string, error) { return "/home/<USER_NAME>", nil }
+	cases := []struct {
+		name     string
+		goos     string
+		env      map[string]string
+		expected string
+		wantErr  bool
+	}{
+		{name: "explicit wins", goos: "darwin", env: map[string]string{ConfigDirEnvName: " /tmp/uloop-config "}, expected: "/tmp/uloop-config"},
+		{name: "darwin", goos: "darwin", expected: "/home/<USER_NAME>/Library/Application Support/uloop"},
+		{name: "windows", goos: "windows", env: map[string]string{AppDataEnvName: `C:\Users\<USER_NAME>\AppData\Roaming\`}, expected: `C:\Users\<USER_NAME>\AppData\Roaming\uloop`},
+		{name: "windows without APPDATA", goos: "windows", wantErr: true},
+		{name: "linux with XDG", goos: "linux", env: map[string]string{"XDG_CONFIG_HOME": "/config"}, expected: "/config/uloop"},
+		{name: "linux without XDG", goos: "linux", expected: "/home/<USER_NAME>/.config/uloop"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			configRoot, err := ConfigRoot(testCase.goos, Environment{
+				Getenv:      func(name string) string { return testCase.env[name] },
+				UserHomeDir: home,
+			})
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got %s", configRoot)
+				}
+				return
+			}
+			if err != nil || configRoot != testCase.expected {
+				t.Fatalf("config root mismatch: got %q err=%v want %q", configRoot, err, testCase.expected)
+			}
+		})
+	}
+}
