@@ -43,6 +43,11 @@ type dispatcherRunDeps struct {
 	runUpdate        func(context.Context) (bool, error)
 	stdoutIsTerminal func(io.Writer) bool
 	launch           launchDeps
+	// runPeriodicUpdate installs the newest release and returns its version ("" when current).
+	runPeriodicUpdate func(context.Context, io.Writer) (string, error)
+	// resolveSelfUpdateLocation returns the running executable path and the install directory.
+	resolveSelfUpdateLocation func() (string, string, error)
+	acquireUpdateLock         func(string, time.Time) (func(), dispatcherUpdateLockResult)
 }
 
 func defaultDispatcherRunDeps() dispatcherRunDeps {
@@ -53,6 +58,10 @@ func defaultDispatcherRunDeps() dispatcherRunDeps {
 		runUpdate:        runDispatcherUpdateCommand,
 		stdoutIsTerminal: isTerminalWriter,
 		launch:           defaultLaunchDeps(),
+
+		runPeriodicUpdate:         runPeriodicDispatcherUpdate,
+		resolveSelfUpdateLocation: resolveDispatcherSelfUpdateLocation,
+		acquireUpdateLock:         tryAcquireDispatcherUpdateLock,
 	}
 }
 
@@ -69,10 +78,14 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 	if handled, code := tryHandleDispatcherHelpOrVersion(ctx, args, remainingArgs, projectPath, stdout, stderr, deps); handled {
 		return code
 	}
+	installedVersion := ""
+	if !isExcludedFromPeriodicSelfUpdate(remainingArgs) {
+		installedVersion = runPeriodicDispatcherSelfUpdate(ctx, stderr, deps)
+	}
 	if shouldRunInDispatcherProcess(remainingArgs) {
 		return runDispatcherProcessCommandWithDeps(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
 	}
-	return runPinnedDispatcherProjectRunner(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
+	return runPinnedDispatcherProjectRunner(ctx, args, remainingArgs, projectPath, installedVersion, stdout, stderr, deps)
 }
 
 func tryHandleDispatcherHelpOrVersion(
@@ -108,6 +121,7 @@ func runPinnedDispatcherProjectRunner(
 	args []string,
 	remainingArgs []string,
 	projectPath string,
+	installedVersion string,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps dispatcherRunDeps,
@@ -133,7 +147,7 @@ func runPinnedDispatcherProjectRunner(
 		return 1
 	}
 
-	if handled, code := enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, deps); handled {
+	if handled, code := enforceDispatcherFreshnessWithDeps(ctx, pin, installedVersion, stderr, deps); handled {
 		return code
 	}
 

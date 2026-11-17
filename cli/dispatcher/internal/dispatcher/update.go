@@ -137,14 +137,21 @@ func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout 
 	command := exec.CommandContext(ctx, updateCommand.Name, args...)
 	command.Stdout = stdout
 	command.Stderr = stderr
-	env := append(os.Environ(), updateCommand.Env...)
+	command.Env = updateInstallerEnvironment(os.Environ(), updateCommand, manifest)
+	return command.Run()
+}
+
+// updateInstallerEnvironment builds the environment the installer child process runs with.
+func updateInstallerEnvironment(baseEnvironment []string, updateCommand update.Command, manifest string) []string {
+	env := append(append([]string{}, baseEnvironment...), updateCommand.Env...)
 	// Why: installer scripts now fall back to the repository pin when this env
 	// var is absent; self-update MUST keep passing the Sigstore-derived
 	// manifest explicitly so the update installs the requested release tag
 	// rather than the pinned one.
 	env = append(env, updateArchiveManifestEnvName+"="+manifest)
-	command.Env = env
-	return command.Run()
+	// Why: the installer runs `uloop install` and similar commands with the binary it just
+	// placed; those must not start a second self-update from inside this one.
+	return append(env, dispatcherDisableSelfUpdateEnvName+"=1")
 }
 
 func downloadVerifiedUpdateInstaller(ctx context.Context, updateCommand update.Command, tempDir string) (string, error) {

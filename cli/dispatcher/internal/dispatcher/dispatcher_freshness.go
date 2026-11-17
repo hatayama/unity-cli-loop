@@ -3,7 +3,6 @@ package dispatcher
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,14 +11,15 @@ import (
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
-	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
-func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr io.Writer) (bool, int) {
-	return enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, defaultDispatcherRunDeps())
+// enforceDispatcherFreshness enforces the pin's minimumDispatcherVersion floor. The periodic
+// update to the newest release lives in runPeriodicDispatcherSelfUpdate; this path only ever
+// runs the required update.
+func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, installedVersion string, stderr io.Writer) (bool, int) {
+	return enforceDispatcherFreshnessWithDeps(ctx, pin, installedVersion, stderr, defaultDispatcherRunDeps())
 }
 
 type dispatcherFreshnessAction string
@@ -28,15 +28,12 @@ const (
 	dispatcherFreshnessNoop                 dispatcherFreshnessAction = "noop"
 	dispatcherFreshnessManualUpdateRequired dispatcherFreshnessAction = "manual-update-required"
 	dispatcherFreshnessRunRequiredUpdate    dispatcherFreshnessAction = "run-required-update"
-	dispatcherFreshnessRunOptionalUpdate    dispatcherFreshnessAction = "run-optional-update"
 )
 
 type dispatcherFreshnessInputs struct {
 	MinimumVersion     string
 	CurrentVersion     string
 	SelfUpdateDisabled bool
-	HasSiblingRealCLI  bool
-	UpdateDue          bool
 	ManagedInstall     sharedupdate.ManagedInstall
 }
 
@@ -51,28 +48,22 @@ const (
 	dispatcherFreshnessReasonSelfUpdateDisabled = "Automatic update is disabled."
 )
 
-func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
-	minimumVersion := strings.TrimSpace(pin.MinimumDispatcherVersion)
-	selfUpdateDisabled := dispatcherSelfUpdateDisabled()
-	updateRequired := minimumVersion != "" && sharedversion.IsLessThan(dispatcherVersion, minimumVersion)
-	hasSiblingRealCLI := false
-	if minimumVersion != "" && !updateRequired {
-		if _, ok := dispatcherSiblingRealCLIPath(pin); ok {
-			hasSiblingRealCLI = true
-		}
-	}
-	updateDue := false
-	if minimumVersion != "" && !updateRequired && !hasSiblingRealCLI && !selfUpdateDisabled {
-		updateDue = dispatcherSelfUpdateDueWithDeps(deps)
-	}
+// enforceDispatcherFreshnessWithDeps returns handled=true when the command must stop because the
+// running dispatcher is below the pin's floor. installedVersion is the release the periodic
+// update installed earlier in this process ("" when it installed nothing).
+func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, installedVersion string, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
 	plan := decideDispatcherFreshness(dispatcherFreshnessInputs{
-		MinimumVersion:     minimumVersion,
+		MinimumVersion:     pin.MinimumDispatcherVersion,
 		CurrentVersion:     dispatcherVersion,
-		SelfUpdateDisabled: selfUpdateDisabled,
-		HasSiblingRealCLI:  hasSiblingRealCLI,
-		UpdateDue:          updateDue,
+		SelfUpdateDisabled: dispatcherSelfUpdateDisabled(),
 		ManagedInstall:     detectManagedDispatcherInstall(),
 	})
+	// Why not install again: the periodic update already put the newest release in place, and
+	// comparing against the embedded version would download and reinstall that same release.
+	if plan.Action == dispatcherFreshnessRunRequiredUpdate && installedVersion != "" {
+		writeDispatcherSelfUpdateRequiredError(stderr, installedVersion)
+		return true, 1
+	}
 	return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 }
 
@@ -89,11 +80,10 @@ func detectManagedDispatcherInstall() sharedupdate.ManagedInstall {
 
 func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFreshnessPlan {
 	minimumVersion := strings.TrimSpace(inputs.MinimumVersion)
-	if minimumVersion == "" {
-		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop}
+	if minimumVersion == "" || !sharedversion.IsLessThan(inputs.CurrentVersion, minimumVersion) {
+		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop, MinimumVersion: minimumVersion}
 	}
-	updateRequired := sharedversion.IsLessThan(inputs.CurrentVersion, minimumVersion)
-	if updateRequired && inputs.ManagedInstall.IsManaged() {
+	if inputs.ManagedInstall.IsManaged() {
 		return dispatcherFreshnessPlan{
 			Action:         dispatcherFreshnessManualUpdateRequired,
 			MinimumVersion: minimumVersion,
@@ -101,7 +91,7 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 			NextAction:     "Run `" + inputs.ManagedInstall.UpgradeCommand + "` and retry the command.",
 		}
 	}
-	if updateRequired && inputs.SelfUpdateDisabled {
+	if inputs.SelfUpdateDisabled {
 		return dispatcherFreshnessPlan{
 			Action:         dispatcherFreshnessManualUpdateRequired,
 			MinimumVersion: minimumVersion,
@@ -109,13 +99,7 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 			NextAction:     "Run `uloop update` and retry the command.",
 		}
 	}
-	if updateRequired {
-		return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
-	}
-	if inputs.ManagedInstall.IsManaged() || inputs.HasSiblingRealCLI || !inputs.UpdateDue {
-		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop, MinimumVersion: minimumVersion}
-	}
-	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunOptionalUpdate, MinimumVersion: minimumVersion}
+	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
 }
 
 func managedInstallFreshnessReason(managedInstall sharedupdate.ManagedInstall) string {
@@ -129,7 +113,7 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 	case dispatcherFreshnessManualUpdateRequired:
 		writeDispatcherManualUpdateRequiredError(stderr, plan)
 		return true, 1
-	case dispatcherFreshnessRunRequiredUpdate, dispatcherFreshnessRunOptionalUpdate:
+	case dispatcherFreshnessRunRequiredUpdate:
 		return runDispatcherFreshnessUpdate(ctx, plan, stderr, deps)
 	default:
 		clierrors.WriteErrorEnvelope(stderr, clierrors.InternalCLIError(
@@ -141,39 +125,41 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 }
 
 func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
-	updated, err := deps.runUpdate(ctx)
+	release, lockResult := acquireDispatcherUpdateLockInCache(deps)
+	if lockResult == dispatcherUpdateLockHeld {
+		writeDispatcherUpdateInProgressError(stderr, plan)
+		return true, 1
+	}
+	// Why an unavailable lock still updates: a cache that cannot be written must not stop the
+	// required update, which is the only way past the pin's floor.
+	defer release()
+	_, err := deps.runUpdate(ctx)
 	if err == nil {
 		markDispatcherSelfUpdateCheckedWithDeps(deps)
-		if plan.Action == dispatcherFreshnessRunRequiredUpdate {
-			updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
-			writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
-			return true, 1
-		}
-		if !updated {
-			return false, 0
-		}
 		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
-		writeOptionalDispatcherUpdateCompletion(stderr, dispatcherVersion, updatedVersion)
-		return false, 0
+		writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
+		return true, 1
 	}
 
-	if plan.Action == dispatcherFreshnessRunRequiredUpdate {
-		plan.Action = dispatcherFreshnessManualUpdateRequired
-		plan.Reason = "Automatic update failed: " + err.Error()
-		plan.NextAction = "Run `uloop update` and retry the command."
-		return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
-	}
+	plan.Action = dispatcherFreshnessManualUpdateRequired
+	plan.Reason = "Automatic update failed: " + err.Error()
+	plan.NextAction = "Run `uloop update` and retry the command."
+	return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
+}
 
-	// Why: optional update failures should not retry and redraw installer progress on every command.
-	markDispatcherSelfUpdateCheckedWithDeps(deps)
-	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
-	var rateLimit githubapi.RateLimitError
-	if errors.As(err, &rateLimit) {
-		for _, action := range rateLimit.NextActions() {
-			clicore.WriteFormat(stderr, "warning: %s\n", action)
-		}
-	}
-	return false, 0
+func writeDispatcherUpdateInProgressError(stderr io.Writer, plan dispatcherFreshnessPlan) {
+	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeCLIUpdateRequired,
+		Phase:       clierrors.ErrorPhaseExecution,
+		Message:     "Another uloop command is updating the dispatcher. Retry the same command when it finishes.",
+		Retryable:   true,
+		SafeToRetry: true,
+		NextActions: []string{"Retry the same uloop command when the other uloop command finishes."},
+		Details: map[string]any{
+			"CurrentDispatcherVersion": dispatcherVersion,
+			"MinimumDispatcherVersion": plan.MinimumVersion,
+		},
+	})
 }
 
 func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion string) {
@@ -236,19 +222,20 @@ func dispatcherSelfUpdateDueWithDeps(deps dispatcherRunDeps) bool {
 	return deps.now().Sub(state.LastChecked) >= dispatcherSelfUpdateInterval
 }
 
-func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) {
+// markDispatcherSelfUpdateCheckedWithDeps records the check time and reports whether it was written.
+func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) bool {
 	cacheRoot, err := dispatcherCacheRoot(runtime.GOOS)
 	if err != nil {
-		return
+		return false
 	}
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
-		return
+		return false
 	}
 	content, err := json.Marshal(dispatcherUpdateState{LastChecked: deps.now().UTC()})
 	if err != nil {
-		return
+		return false
 	}
-	_ = os.WriteFile(filepath.Join(cacheRoot, dispatcherUpdateStateFileName), content, 0o644)
+	return os.WriteFile(filepath.Join(cacheRoot, dispatcherUpdateStateFileName), content, 0o644) == nil
 }
 
 func runDispatcherUpdateCommand(ctx context.Context) (bool, error) {
