@@ -587,6 +587,7 @@ func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenHomebrewManaged(t *tes
 
 func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T) {
 	// Verifies transient optional update failures are throttled until the next check interval.
+	enableSelfUpdateForTest(t)
 	cacheRoot := t.TempDir()
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 
@@ -635,6 +636,7 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 
 func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing.T) {
 	// Verifies optional dispatcher self-updates tell users which dispatcher version will run next.
+	enableSelfUpdateForTest(t)
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
 	defer restoreDispatcherUpdateHooks()
@@ -678,6 +680,7 @@ func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotCh
 
 func TestEnforceDispatcherFreshnessSkipsInstallerWhenOptionalTargetIsCurrent(t *testing.T) {
 	// Verifies an optional current target skips the installer, records the check, and continues silently.
+	enableSelfUpdateForTest(t)
 	cacheRoot := t.TempDir()
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 	previousRunner := updateRunCommand
@@ -729,6 +732,7 @@ func TestEnforceDispatcherFreshnessSkipsInstallerWhenOptionalTargetIsCurrent(t *
 
 func TestEnforceDispatcherFreshnessRunsInstallerWhenOptionalTargetIsNewer(t *testing.T) {
 	// Verifies an optional newer target still runs the installer and continues successfully.
+	enableSelfUpdateForTest(t)
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	previousRunner := updateRunCommand
 	previousReader := dispatcherReadInstalledVersion
@@ -845,6 +849,7 @@ func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *te
 
 func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing.T) {
 	// Verifies required dispatcher self-updates include the version change before asking for a retry.
+	enableSelfUpdateForTest(t)
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "999.0.0")
 	defer restoreDispatcherUpdateHooks()
@@ -1769,6 +1774,7 @@ func TestDispatcherRealCLIResolutionErrorKeepsGenericGuidance(t *testing.T) {
 
 // Verifies a rate-limited optional self-update adds the token hint after the skip warning.
 func TestEnforceDispatcherFreshnessRateLimitedOptionalUpdateSuggestsToken(t *testing.T) {
+	enableSelfUpdateForTest(t)
 	cacheRoot := t.TempDir()
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
 

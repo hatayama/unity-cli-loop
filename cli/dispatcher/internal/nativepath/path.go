@@ -10,6 +10,7 @@ import (
 const (
 	InstallDirEnvName        = "ULOOP_INSTALL_DIR"
 	CacheDirEnvName          = "ULOOP_CACHE_DIR"
+	ConfigDirEnvName         = "ULOOP_CONFIG_DIR"
 	ProjectRunnerPathEnvName = "ULOOP_PROJECT_RUNNER_PATH"
 	LocalAppDataEnvName      = "LOCALAPPDATA"
 	WindowsProgramsDirName   = "Programs"
