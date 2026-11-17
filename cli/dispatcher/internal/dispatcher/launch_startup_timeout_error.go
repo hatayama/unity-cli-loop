@@ -51,7 +51,9 @@ func waitForLaunchReadinessWithDeps(
 	if err == nil {
 		return readiness, nil
 	}
-	if isNewerDispatcherProtocolMismatch(err) {
+	// Why only while ctx is live: a refusal that arrives after cancellation must not turn a canceled
+	// launch into a success.
+	if ctx.Err() == nil && isNewerDispatcherProtocolMismatch(err) {
 		readiness.olderPackageProtocol = true
 		return readiness, nil
 	}

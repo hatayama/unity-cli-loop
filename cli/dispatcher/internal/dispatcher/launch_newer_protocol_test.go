@@ -181,3 +181,17 @@ func TestLaunchWithoutAProtocolMismatchLeavesTheResponseUnchanged(t *testing.T) 
 		t.Fatalf("expected the plain ready response: code=%d stdout=%s", run.code, run.stdout)
 	}
 }
+
+func TestLaunchReadinessKeepsACancellationOverAnOlderPackageRefusal(t *testing.T) {
+	// Verifies a launch canceled while the readiness wait met an older-package refusal still ends with the cancellation.
+	projectRoot := createLaunchTestProject(t)
+	deps, _ := safeModePromptLaunchDeps(t, nil, olderPackageMismatch())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps)
+
+	if err == nil || readiness.olderPackageProtocol {
+		t.Fatalf("expected the wait to fail without the field, got err=%v readiness=%+v", err, readiness)
+	}
+}
