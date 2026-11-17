@@ -47,7 +47,7 @@ type dispatcherRunDeps struct {
 	runPeriodicUpdate func(context.Context, io.Writer) (string, error)
 	// resolveSelfUpdateLocation returns the running executable path and the install directory.
 	resolveSelfUpdateLocation func() (string, string, error)
-	acquireUpdateLock         func(string, time.Time) (func(), dispatcherUpdateLockResult)
+	acquireUpdateLock         func(string) (func(), dispatcherUpdateLockResult)
 }
 
 func defaultDispatcherRunDeps() dispatcherRunDeps {

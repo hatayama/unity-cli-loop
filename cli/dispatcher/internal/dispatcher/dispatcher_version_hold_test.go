@@ -361,7 +361,7 @@ func TestManualUpdateWaitsForAnotherProcessHoldingTheLock(t *testing.T) {
 	fixture := newVersionHoldUpdateFixture(t)
 	cacheRoot := t.TempDir()
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
-	writeDispatcherTestFile(t, filepath.Join(cacheRoot, dispatcherUpdateLockFileName), "")
+	holdUpdateLockElsewhere(t, cacheRoot)
 
 	code, _, stderr := runUpdateForHoldTest("--to-version", "999.0.0")
 
@@ -376,26 +376,66 @@ func TestManualUpdateWaitsForAnotherProcessHoldingTheLock(t *testing.T) {
 	}
 }
 
-func TestManualUpdateReleasesTheLockAfterInstalling(t *testing.T) {
-	// Verifies `uloop update` holds the update lock while the installer runs and removes it afterwards.
+func TestManualUpdateHoldsTheLockWhileInstallingAndReleasesIt(t *testing.T) {
+	// Verifies `uloop update` holds the update lock while the installer runs and releases it afterwards.
 	fixture := newVersionHoldUpdateFixture(t)
 	cacheRoot := t.TempDir()
 	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
-	lockPath := filepath.Join(cacheRoot, dispatcherUpdateLockFileName)
-	lockedDuringInstall := false
+	var resultDuringInstall dispatcherUpdateLockResult
 	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
 		fixture.installerCalls++
-		_, err := os.Stat(lockPath)
-		lockedDuringInstall = err == nil
+		release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
+		release()
+		resultDuringInstall = result
 		return nil
 	}
 
 	code, _, _ := runUpdateForHoldTest()
 
-	if code != 0 || fixture.installerCalls != 1 || !lockedDuringInstall {
-		t.Fatalf("expected an install under the lock: code=%d installer=%d locked=%t", code, fixture.installerCalls, lockedDuringInstall)
+	if code != 0 || fixture.installerCalls != 1 || resultDuringInstall != dispatcherUpdateLockHeld {
+		t.Fatalf("expected an install under the lock: code=%d installer=%d lock=%s", code, fixture.installerCalls, resultDuringInstall)
 	}
-	if _, err := os.Stat(lockPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected the lock to be released, stat err=%v", err)
+	release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
+	defer release()
+	if result != dispatcherUpdateLockAcquired {
+		t.Fatalf("expected the lock to be released, got %s", result)
+	}
+}
+
+func TestPlainUpdateKeepsTheHoldWhileAnotherProcessUpdates(t *testing.T) {
+	// Verifies plain `uloop update` neither removes the hold nor installs while another process holds the update lock.
+	fixture := newVersionHoldUpdateFixture(t)
+	cacheRoot := t.TempDir()
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	fixture.writeHold(`{"version":"3.1.0"}`)
+	holdUpdateLockElsewhere(t, cacheRoot)
+
+	code, stdout, _ := runUpdateForHoldTest()
+
+	if code != 1 || fixture.installerCalls != 0 || fixture.resolverCalls != 0 {
+		t.Fatalf("expected exit 1 before any update work: code=%d installer=%d resolver=%d", code, fixture.installerCalls, fixture.resolverCalls)
+	}
+	if strings.Contains(stdout, "Automatic updates resumed.") {
+		t.Fatalf("the hold must not be reported as removed: %s", stdout)
+	}
+	assertFileContent(t, fixture.holdPath(), `{"version":"3.1.0"}`)
+}
+
+func TestFailedHoldWriteLeavesNoPartialFiles(t *testing.T) {
+	// Verifies a hold write that cannot replace the hold path leaves no temporary file behind.
+	configRoot := t.TempDir()
+	t.Setenv(nativepath.ConfigDirEnvName, configRoot)
+	writeDispatcherTestFile(t, filepath.Join(configRoot, dispatcherVersionHoldFileName, "occupied"), "")
+
+	if err := writeDispatcherVersionHold("999.0.0"); err == nil {
+		t.Fatal("expected the write to fail when a directory occupies the hold path")
+	}
+
+	entries, err := os.ReadDir(configRoot)
+	if err != nil {
+		t.Fatalf("read config root: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != dispatcherVersionHoldFileName {
+		t.Fatalf("expected only the occupied hold path, got %v", entries)
 	}
 }

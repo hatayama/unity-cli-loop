@@ -109,14 +109,15 @@ func (fixture *periodicUpdateFixture) readLastChecked() time.Time {
 	return state.LastChecked
 }
 
-func (fixture *periodicUpdateFixture) writeLockFile(modifiedAt time.Time) string {
-	fixture.t.Helper()
-	lockPath := filepath.Join(fixture.cacheRoot, dispatcherUpdateLockFileName)
-	writeDispatcherTestFile(fixture.t, lockPath, "")
-	if err := os.Chtimes(lockPath, modifiedAt, modifiedAt); err != nil {
-		fixture.t.Fatalf("set lock time: %v", err)
+// holdUpdateLockElsewhere takes the update lock through a separate open of the lock file, the way
+// another uloop process would, and keeps it until the test ends.
+func holdUpdateLockElsewhere(t *testing.T, cacheRoot string) {
+	t.Helper()
+	release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
+	if result != dispatcherUpdateLockAcquired {
+		t.Fatalf("precondition failed: could not take the update lock: %s", result)
 	}
-	return lockPath
+	t.Cleanup(release)
 }
 
 func (fixture *periodicUpdateFixture) run() (string, string) {
@@ -322,10 +323,10 @@ func TestPeriodicSelfUpdateSkipsBinaryOutsideInstallDir(t *testing.T) {
 }
 
 func TestPeriodicSelfUpdateRespectsTheUpdateLock(t *testing.T) {
-	// Verifies a fresh lock blocks the update, while a 16-minute-old lock is treated as abandoned and removed after the update.
-	t.Run("fresh lock", func(t *testing.T) {
+	// Verifies a lock held through another open blocks the update, while a leftover lock file nobody holds does not.
+	t.Run("held elsewhere", func(t *testing.T) {
 		fixture := newPeriodicUpdateFixture(t)
-		fixture.writeLockFile(fixture.now.Add(-time.Minute))
+		holdUpdateLockElsewhere(t, fixture.cacheRoot)
 
 		fixture.run()
 
@@ -333,19 +334,36 @@ func TestPeriodicSelfUpdateRespectsTheUpdateLock(t *testing.T) {
 			t.Fatalf("a held lock must block the update, got %d", fixture.periodicCalls)
 		}
 	})
-	t.Run("abandoned lock", func(t *testing.T) {
+	t.Run("leftover file", func(t *testing.T) {
 		fixture := newPeriodicUpdateFixture(t)
-		lockPath := fixture.writeLockFile(fixture.now.Add(-16 * time.Minute))
+		writeDispatcherTestFile(t, filepath.Join(fixture.cacheRoot, dispatcherUpdateLockFileName), "")
 
 		fixture.run()
 
 		if fixture.periodicCalls != 1 {
-			t.Fatalf("an abandoned lock must not block the update, got %d", fixture.periodicCalls)
-		}
-		if _, err := os.Stat(lockPath); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected the lock to be released, stat err=%v", err)
+			t.Fatalf("a lock file nobody holds must not block the update, got %d", fixture.periodicCalls)
 		}
 	})
+}
+
+func TestDispatcherUpdateLockCanBeTakenAgainAfterRelease(t *testing.T) {
+	// Verifies a second open is refused while the lock is held and succeeds once it is released.
+	cacheRoot := t.TempDir()
+	release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
+	if result != dispatcherUpdateLockAcquired {
+		t.Fatalf("first acquisition: %s", result)
+	}
+	if _, second := tryAcquireDispatcherUpdateLock(cacheRoot); second != dispatcherUpdateLockHeld {
+		t.Fatalf("second acquisition while held: %s", second)
+	}
+
+	release()
+
+	releaseAgain, third := tryAcquireDispatcherUpdateLock(cacheRoot)
+	defer releaseAgain()
+	if third != dispatcherUpdateLockAcquired {
+		t.Fatalf("acquisition after release: %s", third)
+	}
 }
 
 func TestPeriodicSelfUpdateSkipsSilentlyWhenCacheRootCannotBeCreated(t *testing.T) {
@@ -403,8 +421,8 @@ func TestPeriodicSelfUpdateRecordsTheCheckBeforeLookingUp(t *testing.T) {
 func TestPeriodicSelfUpdateRechecksDueAfterTakingTheLock(t *testing.T) {
 	// Verifies that when another process records a check while this one takes the lock, this process does not look up again.
 	fixture := newPeriodicUpdateFixture(t)
-	fixture.deps.acquireUpdateLock = func(cacheRoot string, now time.Time) (func(), dispatcherUpdateLockResult) {
-		release, result := tryAcquireDispatcherUpdateLock(cacheRoot, now)
+	fixture.deps.acquireUpdateLock = func(cacheRoot string) (func(), dispatcherUpdateLockResult) {
+		release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
 		fixture.writeLastChecked(fixture.now)
 		return release, result
 	}
@@ -621,7 +639,7 @@ func TestRequiredUpdateWaitsForAnotherProcessHoldingTheLock(t *testing.T) {
 	fixture := newPeriodicUpdateFixture(t)
 	writePinnedProjectWithMinimum(t, fixture, "999.0.0")
 	fixture.writeLastChecked(fixture.now)
-	fixture.writeLockFile(fixture.now.Add(-time.Minute))
+	holdUpdateLockElsewhere(t, fixture.cacheRoot)
 	var stderr bytes.Buffer
 
 	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, fixture.deps)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"runtime"
-	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -21,6 +20,13 @@ func runDispatcherUpdateRequest(ctx context.Context, options updateOptions, stdo
 
 func runDispatcherUpdateRequestForOS(ctx context.Context, options updateOptions, goos string, stdout io.Writer, stderr io.Writer) int {
 	holding := options.targetVersion != ""
+	// Why lock first: removing or recording a hold while another process installs would undo
+	// the hold that process's user asked for. The lock is held through the lookup and install.
+	release, acquired := acquireManualDispatcherUpdateLock(stderr)
+	if !acquired {
+		return 1
+	}
+	defer release()
 	// Why before the release lookup: asking to resume automatic updates must work even when
 	// GitHub cannot be reached right now.
 	if !holding && !resumeAutomaticDispatcherUpdates(stdout, stderr) {
@@ -47,24 +53,18 @@ func runDispatcherUpdateRequestForOS(ctx context.Context, options updateOptions,
 		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return 1
 	}
-	release, acquired := acquireManualDispatcherUpdateLock(stderr)
-	if !acquired {
-		return 1
-	}
-	defer release()
 	return installDispatcherUpdate(ctx, updateCommand, targetVersion, holding, stdout, stderr)
 }
 
 // acquireManualDispatcherUpdateLock takes the lock the periodic and required updates use, so
-// `uloop update` never runs its installer alongside theirs. The lock is taken before the hold is
-// recorded, so a refused request leaves no hold behind. An unusable cache does not block a manual
-// update, matching the required update.
+// `uloop update` never runs its installer or changes the hold alongside them. A refused request
+// changes nothing. An unusable cache does not block a manual update, matching the required update.
 func acquireManualDispatcherUpdateLock(stderr io.Writer) (func(), bool) {
 	cacheRoot, err := dispatcherCacheRoot(runtime.GOOS)
 	if err != nil {
 		return releaseNothing, true
 	}
-	release, result := tryAcquireDispatcherUpdateLock(cacheRoot, time.Now())
+	release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
 	if result != dispatcherUpdateLockHeld {
 		return release, true
 	}

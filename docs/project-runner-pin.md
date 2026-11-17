@@ -110,10 +110,13 @@ release on its own, independent of any pin, V2 or V3 project, or working directo
   installer child process always gets `ULOOP_DISABLE_SELF_UPDATE=1`.
 - **Record and lock**: the cache root (`ULOOP_CACHE_DIR`, otherwise the OS cache directory)
   holds `dispatcher-update.json` (the last check, written *before* the lookup; no lookup runs
-  when it cannot be written) and `dispatcher-update.lock` (created exclusively, treated as
-  abandoned after 15 minutes). The required update for `minimumDispatcherVersion` takes the
-  same lock; when another process holds it, the command fails with a retryable
-  `CLI_UPDATE_REQUIRED` instead of starting a second installer. When the periodic update
+  when it cannot be written) and `dispatcher-update.lock`. The lock is an OS file lock on that
+  file (`flock` on macOS / Linux, `LockFileEx` on Windows), so it is released when the holding
+  process exits and never goes stale; the file itself stays in place. The required update for
+  `minimumDispatcherVersion` takes the same lock; when another process holds it, the command
+  fails with a retryable `CLI_UPDATE_REQUIRED` instead of starting a second installer.
+  `uloop update` takes it before touching the hold and exits with a retryable error while
+  another process holds it. When the periodic update
   already installed a release in the same process, the required check asks for a retry
   instead of installing again.
 - **Time limits**: the release lookup is cut off after 10 seconds. The installer has no time
