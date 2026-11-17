@@ -32,7 +32,7 @@ func tryHandleCommandHelp(command string, startPath string, projectPath string, 
 				return true, 0
 			}
 		}
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: command})
+		clierrors.WriteErrorEnvelope(stderr, projectResolutionError(err, command, clierrors.ErrorContext{Command: command}))
 		return true, 1
 	}
 	tool, cache, ok, err := clicore.FindToolForCommand(connection.ProjectRoot, command)

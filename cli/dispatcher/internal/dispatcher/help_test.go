@@ -588,9 +588,10 @@ func TestRunDispatcherRunnerOwnedCommandHelpOutsideProjectGivesProjectGuidance(t
 	}
 }
 
-// Tests that a Unity tool command without an embedded default definition gives
-// the same project-resolution guidance as runner-owned commands when run
-// outside a Unity project, since both depend on resolving a project.
+// Tests that --help for a name that is neither a built-in command nor in the
+// embedded catalog, run outside a Unity project, reports an unknown command
+// that still points to the project: without one only built-in commands are
+// known, and the name may be a mistyped built-in or a tool of the project.
 func TestRunDispatcherUnityToolCommandHelpOutsideProjectGivesProjectGuidance(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var stdout bytes.Buffer
@@ -603,8 +604,8 @@ func TestRunDispatcherUnityToolCommandHelpOutsideProjectGivesProjectGuidance(t *
 	}
 	output := stderr.String()
 	for _, expected := range []string{
-		"PROJECT_NOT_FOUND",
-		"Run the command from inside a Unity project.",
+		"UNKNOWN_COMMAND",
+		"run the command from inside a Unity project.",
 		"when targeting another Unity project.",
 	} {
 		if !strings.Contains(output, expected) {
