@@ -1,6 +1,6 @@
 //go:build windows
 
-package compilecheck
+package filelock
 
 import (
 	"errors"
@@ -12,8 +12,8 @@ import (
 // lockedRangeLength covers one byte: the lock only has to be exclusive, not to guard any content.
 const lockedRangeLength = 1
 
-// tryLockFile takes the exclusive lock without blocking and reports whether another holder has it.
-func tryLockFile(file *os.File) (bool, error) {
+// TryLock takes the exclusive lock without blocking and reports whether another holder has it.
+func TryLock(file *os.File) (bool, error) {
 	err := windows.LockFileEx(
 		windows.Handle(file.Fd()),
 		windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
@@ -28,9 +28,9 @@ func tryLockFile(file *os.File) (bool, error) {
 	return false, err
 }
 
-// unlockFile releases the lock tryLockFile took.
+// Unlock releases the lock TryLock took.
 // Why it is not left to Close: Windows releases a closed handle's locks only eventually, and the
 // next run polling for the lock should not have to wait for that.
-func unlockFile(file *os.File) error {
+func Unlock(file *os.File) error {
 	return windows.UnlockFileEx(windows.Handle(file.Fd()), 0, lockedRangeLength, 0, &windows.Overlapped{})
 }
