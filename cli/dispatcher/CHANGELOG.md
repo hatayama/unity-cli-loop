@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.18.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.18.0...dispatcher-v3.18.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* A mistyped command outside a Unity project is reported as unknown, with the closest command suggested ([#3561](https://github.com/hatayama/unity-cli-loop/issues/3561)) ([5c302a5](https://github.com/hatayama/unity-cli-loop/commit/5c302a56dd8403c7fef98d8552e082ac8b4fea52))
+
 ## [3.18.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.17.0...dispatcher-v3.18.0) (2026-11-17)
 
 
