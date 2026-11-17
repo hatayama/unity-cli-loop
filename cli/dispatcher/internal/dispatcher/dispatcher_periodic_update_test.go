@@ -35,8 +35,10 @@ type periodicUpdateFixture struct {
 	periodicCalls  int
 	requiredCalls  int
 	runnerCalls    int
-	periodicResult string
-	periodicErr    error
+	// requiredMinimums records the floor each required update was asked to meet.
+	requiredMinimums []string
+	periodicResult   string
+	periodicErr      error
 }
 
 func newPeriodicUpdateFixture(t *testing.T) *periodicUpdateFixture {
@@ -63,9 +65,10 @@ func newPeriodicUpdateFixture(t *testing.T) *periodicUpdateFixture {
 		fixture.periodicCalls++
 		return fixture.periodicResult, fixture.periodicErr
 	}
-	deps.runUpdate = func(context.Context) (bool, error) {
+	deps.runRequiredUpdate = func(_ context.Context, minimumVersion string) (string, error) {
 		fixture.requiredCalls++
-		return true, nil
+		fixture.requiredMinimums = append(fixture.requiredMinimums, minimumVersion)
+		return minimumVersion, nil
 	}
 	deps.runRealCLI = func(context.Context, string, []string, io.Writer, io.Writer) int {
 		fixture.runnerCalls++

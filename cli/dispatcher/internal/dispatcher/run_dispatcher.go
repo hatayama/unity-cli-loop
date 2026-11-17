@@ -37,12 +37,13 @@ type dispatcherUpdateState struct {
 }
 
 type dispatcherRunDeps struct {
-	now              func() time.Time
-	runRealCLI       func(context.Context, string, []string, io.Writer, io.Writer) int
-	runV2CLI         func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
-	runUpdate        func(context.Context) (bool, error)
-	stdoutIsTerminal func(io.Writer) bool
-	launch           launchDeps
+	now        func() time.Time
+	runRealCLI func(context.Context, string, []string, io.Writer, io.Writer) int
+	runV2CLI   func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
+	// runRequiredUpdate installs a release meeting the given floor and returns its version ("" when none).
+	runRequiredUpdate func(context.Context, string) (string, error)
+	stdoutIsTerminal  func(io.Writer) bool
+	launch            launchDeps
 	// runPeriodicUpdate installs the newest release and returns its version ("" when current).
 	runPeriodicUpdate func(context.Context, io.Writer) (string, error)
 	// resolveSelfUpdateLocation returns the running executable path and the install directory.
@@ -52,12 +53,12 @@ type dispatcherRunDeps struct {
 
 func defaultDispatcherRunDeps() dispatcherRunDeps {
 	return dispatcherRunDeps{
-		now:              time.Now,
-		runRealCLI:       runRealCLICommand,
-		runV2CLI:         runDispatcherV2CLI,
-		runUpdate:        runDispatcherUpdateCommand,
-		stdoutIsTerminal: isTerminalWriter,
-		launch:           defaultLaunchDeps(),
+		now:               time.Now,
+		runRealCLI:        runRealCLICommand,
+		runV2CLI:          runDispatcherV2CLI,
+		runRequiredUpdate: runRequiredDispatcherUpdate,
+		stdoutIsTerminal:  isTerminalWriter,
+		launch:            defaultLaunchDeps(),
 
 		runPeriodicUpdate:         runPeriodicDispatcherUpdate,
 		resolveSelfUpdateLocation: resolveDispatcherSelfUpdateLocation,

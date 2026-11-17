@@ -470,9 +470,9 @@ func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpda
 		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
 	}
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		t.Fatal("runUpdate must not run for Homebrew-managed required freshness")
-		return false, nil
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		t.Fatal("runRequiredUpdate must not run for Homebrew-managed required freshness")
+		return "", nil
 	}
 
 	var stderr bytes.Buffer
@@ -505,9 +505,9 @@ func TestEnforceDispatcherFreshnessRequiresWingetUpgradeWhenWingetManagedAndUpda
 		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
 	}
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		t.Fatal("runUpdate must not run for winget-managed required freshness")
-		return false, nil
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		t.Fatal("runRequiredUpdate must not run for winget-managed required freshness")
+		return "", nil
 	}
 
 	var stderr bytes.Buffer
@@ -556,30 +556,23 @@ func TestRunDispatcherUpdateCommandRejectsInvalidResolvedTarget(t *testing.T) {
 				return options, nil
 			}
 
-			updated, err := runDispatcherUpdateCommandForOS(context.Background(), "darwin")
+			installed, err := runRequiredDispatcherUpdateForOS(context.Background(), dispatcherVersion, "darwin")
 
 			if err == nil || !strings.Contains(err.Error(), "expected semantic version") {
 				t.Fatalf("expected invalid resolved target error, got: %v", err)
 			}
-			if updated {
+			if installed != "" {
 				t.Fatal("invalid resolved target must not report installer execution")
 			}
 		})
 	}
 }
 
-func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *testing.T) {
-	// Verifies required freshness keeps its retry contract even if the update dependency reports no installation.
-	previousReader := dispatcherReadInstalledVersion
-	defer func() {
-		dispatcherReadInstalledVersion = previousReader
-	}()
-	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
-		return dispatcherVersion, nil
-	}
+func TestRequiredDispatcherFreshnessAsksForManualUpdateWhenNothingWasInstalled(t *testing.T) {
+	// Verifies a required update that installs nothing ends in the manual-update error instead of a retry request that would repeat forever.
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		return false, nil
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		return "", nil
 	}
 
 	var stderr bytes.Buffer
@@ -592,8 +585,13 @@ func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *te
 	if !handled || code != 1 {
 		t.Fatalf("required freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "Retry the same uloop command.") {
-		t.Fatalf("required freshness retry guidance missing: %s", stderr.String())
+	if strings.Contains(stderr.String(), "Retry the same uloop command.") {
+		t.Fatalf("a retry request would repeat forever: %s", stderr.String())
+	}
+	for _, expected := range []string{"The dispatcher could not be updated to 999.0.0 or later (installed: " + dispatcherVersion + ").", "Run `uloop update` and retry the command."} {
+		if !strings.Contains(stderr.String(), expected) {
+			t.Fatalf("missing %q in: %s", expected, stderr.String())
+		}
 	}
 }
 
@@ -719,8 +717,8 @@ func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherR
 	previousReader := dispatcherReadInstalledVersion
 	previousExecutablePath := resolveUpdateExecutablePathFunc
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		return true, nil
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		return updatedVersion, nil
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return updatedVersion, nil

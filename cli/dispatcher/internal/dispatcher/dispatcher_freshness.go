@@ -63,9 +63,10 @@ func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, 
 		VersionHeld:        versionHeld,
 		HeldVersion:        heldVersion,
 	})
-	// Why not install again: the periodic update already put the newest release in place, and
-	// comparing against the embedded version would download and reinstall that same release.
-	if plan.Action == dispatcherFreshnessRunRequiredUpdate && installedVersion != "" {
+	// Why not install again: the periodic update already put a release that meets the floor in
+	// place, and comparing against the embedded version would download and reinstall it. A
+	// periodic install below the floor still runs the required update, which installs the floor.
+	if plan.Action == dispatcherFreshnessRunRequiredUpdate && dispatcherVersionMeetsMinimum(installedVersion, plan.MinimumVersion) {
 		writeDispatcherSelfUpdateRequiredError(stderr, installedVersion)
 		return true, 1
 	}
@@ -146,18 +147,37 @@ func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessP
 	// Why an unavailable lock still updates: a cache that cannot be written must not stop the
 	// required update, which is the only way past the pin's floor.
 	defer release()
-	_, err := deps.runUpdate(ctx)
-	if err == nil {
-		markDispatcherSelfUpdateCheckedWithDeps(deps)
-		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
-		writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
-		return true, 1
+	installedVersion, err := deps.runRequiredUpdate(ctx, plan.MinimumVersion)
+	if err != nil {
+		plan.Action = dispatcherFreshnessManualUpdateRequired
+		plan.Reason = "Automatic update failed: " + err.Error()
+		plan.NextAction = "Run `uloop update` and retry the command."
+		return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 	}
+	// Why not ask for a retry here: the retried command would run this same update again and end
+	// in the same place, so the user would be told to retry forever.
+	if !dispatcherVersionMeetsMinimum(installedVersion, plan.MinimumVersion) {
+		plan.Action = dispatcherFreshnessManualUpdateRequired
+		plan.Reason = "The dispatcher could not be updated to " + plan.MinimumVersion + " or later (installed: " + installedVersionOrRunning(installedVersion) + ")."
+		plan.NextAction = "Run `uloop update` and retry the command."
+		return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
+	}
+	markDispatcherSelfUpdateCheckedWithDeps(deps)
+	writeDispatcherSelfUpdateRequiredError(stderr, installedVersion)
+	return true, 1
+}
 
-	plan.Action = dispatcherFreshnessManualUpdateRequired
-	plan.Reason = "Automatic update failed: " + err.Error()
-	plan.NextAction = "Run `uloop update` and retry the command."
-	return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
+// dispatcherVersionMeetsMinimum reports whether an installed version ("" when nothing was
+// installed) satisfies the pin's floor.
+func dispatcherVersionMeetsMinimum(installedVersion string, minimumVersion string) bool {
+	return installedVersion != "" && !sharedversion.IsLessThan(installedVersion, minimumVersion)
+}
+
+func installedVersionOrRunning(installedVersion string) string {
+	if installedVersion == "" {
+		return dispatcherVersion
+	}
+	return installedVersion
 }
 
 func writeDispatcherUpdateInProgressError(stderr io.Writer, plan dispatcherFreshnessPlan) {
@@ -249,32 +269,4 @@ func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) bool {
 		return false
 	}
 	return os.WriteFile(filepath.Join(cacheRoot, dispatcherUpdateStateFileName), content, 0o644) == nil
-}
-
-func runDispatcherUpdateCommand(ctx context.Context) (bool, error) {
-	return runDispatcherUpdateCommandForOS(ctx, runtime.GOOS)
-}
-
-func runDispatcherUpdateCommandForOS(ctx context.Context, goos string) (bool, error) {
-	resolved, err := resolveUpdateTargetVersionFunc(ctx, sharedupdate.Options{
-		CurrentVersion: dispatcherVersion,
-	})
-	if err != nil {
-		return false, err
-	}
-	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolved.TargetVersion)
-	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
-		return false, err
-	}
-	if !targetChanged {
-		return false, nil
-	}
-	command, err := sharedupdate.CommandForOS(goos, resolved)
-	if err != nil {
-		return false, err
-	}
-	if err := updateRunCommand(ctx, command, io.Discard, io.Discard); err != nil {
-		return false, err
-	}
-	return true, nil
 }

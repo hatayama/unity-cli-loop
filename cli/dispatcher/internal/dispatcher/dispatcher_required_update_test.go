@@ -1,0 +1,111 @@
+package dispatcher
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
+)
+
+// stubRequiredUpdateRelease makes the channel's newest release latestVersion and records the
+// release tag the installer is asked to install.
+func stubRequiredUpdateRelease(t *testing.T, latestVersion string) *[]string {
+	t.Helper()
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousRunner := updateRunCommand
+	t.Cleanup(func() {
+		resolveUpdateTargetVersionFunc = previousResolver
+		updateRunCommand = previousRunner
+	})
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		if options.TargetVersion == "" {
+			options.TargetVersion = latestVersion
+		}
+		return options, nil
+	}
+	installedTags := []string{}
+	updateRunCommand = func(_ context.Context, command update.Command, _ io.Writer, _ io.Writer) error {
+		installedTags = append(installedTags, command.ReleaseTag)
+		return nil
+	}
+	return &installedTags
+}
+
+func TestRequiredUpdateInstallsTheFloorWhenTheNewestReleaseIsOlder(t *testing.T) {
+	// Verifies that when the channel's newest release is below the floor, the floor itself is installed and named in the retry request.
+	installedTags := stubRequiredUpdateRelease(t, "1.0.0")
+	deps := defaultDispatcherRunDeps()
+	deps.runRequiredUpdate = func(ctx context.Context, minimumVersion string) (string, error) {
+		return runRequiredDispatcherUpdateForOS(ctx, minimumVersion, "linux")
+	}
+	var stderr bytes.Buffer
+
+	handled, code := runDispatcherFreshnessUpdate(
+		context.Background(),
+		dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if len(*installedTags) != 1 || !strings.HasSuffix((*installedTags)[0], "999.0.0") {
+		t.Fatalf("expected the floor to be installed, got %v", *installedTags)
+	}
+	if !handled || code != 1 || !strings.Contains(stderr.String(), "Dispatcher updated from "+dispatcherVersion+" to 999.0.0") {
+		t.Fatalf("expected a retry request naming the floor: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+}
+
+func TestRequiredUpdateInstallsTheNewestReleaseWhenItMeetsTheFloor(t *testing.T) {
+	// Verifies that a newest release at or above the floor is the one installed.
+	installedTags := stubRequiredUpdateRelease(t, "1000.0.0")
+
+	installed, err := runRequiredDispatcherUpdateForOS(context.Background(), "999.0.0", "linux")
+
+	if err != nil || installed != "1000.0.0" {
+		t.Fatalf("expected the newest release: installed=%q err=%v", installed, err)
+	}
+	if len(*installedTags) != 1 || !strings.HasSuffix((*installedTags)[0], "1000.0.0") {
+		t.Fatalf("installer tag mismatch: %v", *installedTags)
+	}
+}
+
+func TestRequiredUpdateBelowTheFloorAsksForManualUpdate(t *testing.T) {
+	// Verifies an install that still leaves the dispatcher below the floor ends in the manual-update error, not a retry request.
+	deps := defaultDispatcherRunDeps()
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		return "998.0.0", nil
+	}
+	var stderr bytes.Buffer
+
+	handled, code := runDispatcherFreshnessUpdate(
+		context.Background(),
+		dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if !handled || code != 1 || strings.Contains(stderr.String(), "Retry the same uloop command.") {
+		t.Fatalf("expected a manual-update error without a retry request: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "The dispatcher could not be updated to 999.0.0 or later (installed: 998.0.0).") {
+		t.Fatalf("missing reason: %s", stderr.String())
+	}
+}
+
+func TestRequiredUpdateRunsWhenThePeriodicUpdateStayedBelowTheFloor(t *testing.T) {
+	// Verifies that a periodic install below the floor is followed by one required update that installs the floor.
+	fixture := newPeriodicUpdateFixture(t)
+	writePinnedProjectWithMinimum(t, fixture, "999.0.0")
+	fixture.periodicResult = "998.0.0"
+	var stderr bytes.Buffer
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, fixture.deps)
+
+	if code != 1 || fixture.periodicCalls != 1 || fixture.requiredCalls != 1 || fixture.runnerCalls != 0 {
+		t.Fatalf("expected one periodic and one required update: code=%d periodic=%d required=%d runner=%d", code, fixture.periodicCalls, fixture.requiredCalls, fixture.runnerCalls)
+	}
+	if len(fixture.requiredMinimums) != 1 || fixture.requiredMinimums[0] != "999.0.0" {
+		t.Fatalf("required update floor mismatch: %v", fixture.requiredMinimums)
+	}
+}

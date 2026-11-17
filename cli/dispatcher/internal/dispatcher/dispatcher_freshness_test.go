@@ -62,8 +62,8 @@ func TestRunDispatcherFreshnessUpdateTurnsFailedRequiredUpdateIntoManualUpdate(t
 	// Verifies a failed required update stops the command and tells the user to run `uloop update` with the cause.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		return false, errors.New("network unavailable")
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		return "", errors.New("network unavailable")
 	}
 
 	var stderr bytes.Buffer
@@ -156,9 +156,9 @@ func TestRunDispatcherUpdateCommandForOSReportsFailures(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			stubDispatcherUpdateRun(t, testCase.resolveErr, testCase.runErr)
 
-			updated, err := runDispatcherUpdateCommandForOS(context.Background(), testCase.goos)
+			installed, err := runRequiredDispatcherUpdateForOS(context.Background(), "999.0.0", testCase.goos)
 
-			if updated {
+			if installed != "" {
 				t.Fatal("a failed update must not report an installed update")
 			}
 			if err == nil || !strings.Contains(err.Error(), testCase.wantMessage) {
@@ -189,9 +189,9 @@ func TestRunDispatcherUpdateCommandForOSReportsInstalledUpdate(t *testing.T) {
 	// Verifies a newer resolved target runs the installer and reports that an update was installed.
 	stubDispatcherUpdateRun(t, nil, nil)
 
-	updated, err := runDispatcherUpdateCommandForOS(context.Background(), "linux")
+	installed, err := runRequiredDispatcherUpdateForOS(context.Background(), "999.0.0", "linux")
 
-	if err != nil || !updated {
-		t.Fatalf("expected an installed update, got updated=%t err=%v", updated, err)
+	if err != nil || installed != "999.0.0" {
+		t.Fatalf("expected an installed update, got installed=%q err=%v", installed, err)
 	}
 }
