@@ -89,7 +89,29 @@ func writeDispatcherVersionHold(version string) error {
 	if err := os.MkdirAll(filepath.Dir(holdPath), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(holdPath, content, 0o644)
+	return replaceDispatcherVersionHoldFile(holdPath, content)
+}
+
+// replaceDispatcherVersionHoldFile writes the hold through a temporary file and a rename. A write
+// that fails halfway would otherwise leave a partial file, and any file at the hold path counts
+// as a hold, so a failed request would pause automatic updates.
+func replaceDispatcherVersionHoldFile(holdPath string, content []byte) error {
+	tempFile, err := os.CreateTemp(filepath.Dir(holdPath), dispatcherVersionHoldFileName+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	_, writeErr := tempFile.Write(content)
+	closeErr := tempFile.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	if err := os.Rename(tempPath, holdPath); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	return nil
 }
 
 // restoreDispatcherVersionHold puts back the hold that existed before a failed install, or
@@ -104,7 +126,7 @@ func restoreDispatcherVersionHold(snapshot dispatcherVersionHoldSnapshot) {
 		_ = os.Remove(holdPath)
 		return
 	}
-	_ = os.WriteFile(holdPath, snapshot.content, 0o644)
+	_ = replaceDispatcherVersionHoldFile(holdPath, snapshot.content)
 }
 
 // removeDispatcherVersionHold deletes the hold and reports whether one existed.
