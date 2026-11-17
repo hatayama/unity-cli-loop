@@ -22,6 +22,9 @@ type launchStartupTimeoutError struct {
 type launchReadiness struct {
 	// safeModePromptIgnored is whether launch pressed Ignore on Unity's Safe Mode prompt.
 	safeModePromptIgnored bool
+	// olderPackageProtocol is whether the package refused this dispatcher's newer IPC protocol, so
+	// launch confirmed only that the Editor answers.
+	olderPackageProtocol bool
 }
 
 func (err launchStartupTimeoutError) Error() string {
@@ -46,6 +49,12 @@ func waitForLaunchReadinessWithDeps(
 	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout, answerer.findDialogs)
 	readiness := launchReadiness{safeModePromptIgnored: answerer.ignored}
 	if err == nil {
+		return readiness, nil
+	}
+	// Why only while ctx is live: a refusal that arrives after cancellation must not turn a canceled
+	// launch into a success.
+	if ctx.Err() == nil && isNewerDispatcherProtocolMismatch(err) {
+		readiness.olderPackageProtocol = true
 		return readiness, nil
 	}
 	var blocked clicore.ToolReadinessBlockedByDialogError
