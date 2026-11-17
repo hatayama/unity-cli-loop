@@ -46,6 +46,7 @@ The final JSON payload includes:
 - `StopMethod`: how restart or quit stopped that process, omitted when there was none — `Quit` when Unity exited on request, `ForceKill` when it had to be killed
 - `CurrentProcessId`: current Unity process ID, when available
 - `SafeModePromptIgnored`: `true` when launch pressed Ignore on Unity's "Enter Safe Mode?" prompt; omitted otherwise
+- `OlderPackageProtocol`: `true` when the dispatcher speaks a newer IPC protocol than the project's package, so launch confirmed only that the Editor answers; omitted otherwise
 - `ProjectRoot`: resolved project root
 - `Message`: readiness summary
 

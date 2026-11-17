@@ -179,12 +179,14 @@ func findLaunchRunningProcess(
 	// Sandboxes can block the process scan (e.g. /bin/ps). A responding project IPC
 	// proves Unity is running, so plain launch must not fail on the scan alone.
 	// Restart and quit still fail because they need a process id to kill.
-	if !options.restart && !options.quit && deps.probeProjectIpcFallback(ctx, projectRoot) == nil {
-		if options.logFile != "" {
-			clierrors.WriteClassifiedError(stderr, launchLogFileNeedsProcessScanError(options.logFile, err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
-			return nil, true, 1
+	if !options.restart && !options.quit {
+		if answers, readiness := probeProjectIpcAnswers(ctx, projectRoot, deps); answers {
+			if options.logFile != "" {
+				clierrors.WriteClassifiedError(stderr, launchLogFileNeedsProcessScanError(options.logFile, err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+				return nil, true, 1
+			}
+			return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err, readiness)
 		}
-		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
 	}
 	clierrors.WriteClassifiedError(stderr, launchStopLookupError(err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 	return nil, true, 1

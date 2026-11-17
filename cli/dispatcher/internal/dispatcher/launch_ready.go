@@ -37,9 +37,12 @@ type launchReadyResponse struct {
 	CurrentProcessId  *int   `json:"CurrentProcessId,omitempty"`
 	// SafeModePromptIgnored is left out unless launch pressed Ignore on Unity's Safe Mode prompt, so
 	// a launch that pressed nothing keeps the output it always had.
-	SafeModePromptIgnored bool   `json:"SafeModePromptIgnored,omitempty"`
-	ProjectRoot           string `json:"ProjectRoot"`
-	Message               string `json:"Message"`
+	SafeModePromptIgnored bool `json:"SafeModePromptIgnored,omitempty"`
+	// OlderPackageProtocol is left out unless the package refused this dispatcher's newer IPC
+	// protocol, so launch could confirm only that the Editor answers.
+	OlderPackageProtocol bool   `json:"OlderPackageProtocol,omitempty"`
+	ProjectRoot          string `json:"ProjectRoot"`
+	Message              string `json:"Message"`
 }
 
 func writeLaunchReadinessWait(stdout io.Writer, spinner *ui.TerminalSpinner) {
@@ -51,17 +54,20 @@ func writeLaunchReadinessWait(stdout io.Writer, spinner *ui.TerminalSpinner) {
 
 // writeDetectionFallbackLaunchReadyResponse reports a running Editor that was proven via
 // the project IPC after the process scan failed, so no process id or window focus is available.
-func writeDetectionFallbackLaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string, detectionErr error) int {
+func writeDetectionFallbackLaunchReadyResponse(
+	stdout io.Writer, stderr io.Writer, projectRoot string, detectionErr error, readiness launchReadiness,
+) int {
 	return writeLaunchResponse(stdout, stderr, launchReadyResponse{
-		Success:         true,
-		Ready:           true,
-		ServerReady:     true,
-		ProjectIpcReady: true,
-		AlreadyRunning:  true,
-		ProjectRoot:     projectRoot,
-		Message: fmt.Sprintf(
+		Success:              true,
+		Ready:                true,
+		ServerReady:          true,
+		ProjectIpcReady:      true,
+		AlreadyRunning:       true,
+		OlderPackageProtocol: readiness.olderPackageProtocol,
+		ProjectRoot:          projectRoot,
+		Message: launchReadyMessageAfter(fmt.Sprintf(
 			"Unity is already running and ready. The process scan failed (%v), so the existing window was not focused.",
-			detectionErr),
+			detectionErr), readiness),
 	})
 }
 
@@ -76,19 +82,24 @@ func writeExistingLaunchReadyResponse(
 		AlreadyRunning:        true,
 		CurrentProcessId:      &currentPid,
 		SafeModePromptIgnored: readiness.safeModePromptIgnored,
+		OlderPackageProtocol:  readiness.olderPackageProtocol,
 		ProjectRoot:           projectRoot,
 		Message:               launchReadyMessageAfter(launchAlreadyRunningReadyMessage, readiness),
 	})
 }
 
-// launchReadyMessageAfter adds to message what the wait did on the way that the caller must act on.
-// Why the note: Ignore lets the Editor open with the compile errors still there, and the caller must
-// fix them before the project behaves.
+// launchReadyMessageAfter adds to message what the wait did or saw on the way that the caller must know.
+// Why the Safe Mode note: Ignore lets the Editor open with the compile errors still there, and the
+// caller must fix them before the project behaves. Why the protocol note: launch could confirm only
+// that the Editor answers, not that it finished starting up.
 func launchReadyMessageAfter(message string, readiness launchReadiness) string {
-	if !readiness.safeModePromptIgnored {
-		return message
+	if readiness.safeModePromptIgnored {
+		message += " " + launchSafeModePromptIgnoredNote
 	}
-	return message + " " + launchSafeModePromptIgnoredNote
+	if readiness.olderPackageProtocol {
+		message += " " + launchOlderPackageProtocolNote
+	}
+	return message
 }
 
 func writeExistingV2LaunchReadyResponse(stdout io.Writer, stderr io.Writer, projectRoot string, currentPid int) int {
@@ -124,6 +135,7 @@ func writeLaunchedReadyResponse(
 		StopMethod:            string(previousStop),
 		CurrentProcessId:      &currentPid,
 		SafeModePromptIgnored: readiness.safeModePromptIgnored,
+		OlderPackageProtocol:  readiness.olderPackageProtocol,
 		ProjectRoot:           projectRoot,
 		Message:               launchReadyMessageAfter(launchReadyMessage, readiness),
 	})
