@@ -116,15 +116,17 @@ release on its own, independent of any pin, V2 or V3 project, or working directo
   `minimumDispatcherVersion` takes the same lock; when another process holds it, the command
   fails with a retryable `CLI_UPDATE_REQUIRED` instead of starting a second installer.
   `uloop update` takes it before touching the hold and exits with a retryable error while
-  another process holds it. When the periodic update
-  already installed a release in the same process, the required check asks for a retry
-  instead of installing again.
+  another process holds it. When the periodic update already installed a release that meets
+  the floor in the same process, the required check asks for a retry instead of installing
+  again; a periodic install below the floor is followed by the required update.
 - **Required update**: below the `minimumDispatcherVersion` floor, the dispatcher installs the
   newest release on its channel, or the floor itself when that release is older (a beta floor
   while the newest stable release is older installs the beta, and later automatic updates then
   follow the beta channel). If the dispatcher is still below the floor afterwards, the command
   fails with a manual-update error instead of asking for a retry that would repeat forever.
-- **Time limits**: the release lookup is cut off after 10 seconds. The installer has no time
+- **Time limits**: the periodic update's release lookup is cut off after 10 seconds (the
+  required update keeps its lookup unbounded, as before, because it is the only way past the
+  floor). The installer has no time
   limit, because killing it can leave Windows without `uloop.exe`; a stderr line announces the
   install so a slow download is visible.
 
