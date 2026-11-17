@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -107,5 +108,51 @@ func TestRequiredUpdateRunsWhenThePeriodicUpdateStayedBelowTheFloor(t *testing.T
 	}
 	if len(fixture.requiredMinimums) != 1 || fixture.requiredMinimums[0] != "999.0.0" {
 		t.Fatalf("required update floor mismatch: %v", fixture.requiredMinimums)
+	}
+}
+
+func TestRequiredUpdateInstallsNothingWhenAlreadyCurrent(t *testing.T) {
+	// Verifies the default required update returns no version and runs no installer when the newest release is the running one.
+	installedTags := stubRequiredUpdateRelease(t, dispatcherVersion)
+
+	installed, err := runRequiredDispatcherUpdate(context.Background(), dispatcherVersion)
+
+	if err != nil || installed != "" || len(*installedTags) != 0 {
+		t.Fatalf("expected no install: installed=%q err=%v tags=%v", installed, err, *installedTags)
+	}
+}
+
+func TestRequiredUpdateReportsLookupAndInstallerFailures(t *testing.T) {
+	// Verifies a failed floor lookup, an invalid newest release, and a failed installer each return an error and no installed version.
+	cases := []struct {
+		name          string
+		latestVersion string
+		floorErr      error
+		installerErr  error
+	}{
+		{name: "floor lookup failure", latestVersion: "1.0.0", floorErr: errors.New("floor release not found")},
+		{name: "invalid newest release", latestVersion: "not-a-version"},
+		{name: "installer failure", latestVersion: "1000.0.0", installerErr: errors.New("installer exited 1")},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			stubRequiredUpdateRelease(t, testCase.latestVersion)
+			resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+				if options.TargetVersion == "" {
+					options.TargetVersion = testCase.latestVersion
+					return options, nil
+				}
+				return options, testCase.floorErr
+			}
+			updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+				return testCase.installerErr
+			}
+
+			installed, err := runRequiredDispatcherUpdateForOS(context.Background(), "999.0.0", "linux")
+
+			if err == nil || installed != "" {
+				t.Fatalf("expected an error and no install: installed=%q err=%v", installed, err)
+			}
+		})
 	}
 }

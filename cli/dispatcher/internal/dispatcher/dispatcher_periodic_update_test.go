@@ -700,3 +700,37 @@ func TestPeriodicSelfUpdatePointsAtUloopUpdateOnlyForInstallerFailures(t *testin
 		}
 	})
 }
+
+func TestResolveDispatcherSelfUpdateLocationUsesTheInstallDirOverride(t *testing.T) {
+	// Verifies the self-update location reports the running executable and the ULOOP_INSTALL_DIR override as the install directory.
+	installDir := t.TempDir()
+	t.Setenv(nativepath.InstallDirEnvName, installDir)
+	previous := resolveUpdateExecutablePathFunc
+	t.Cleanup(func() {
+		resolveUpdateExecutablePathFunc = previous
+	})
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return filepath.Join(installDir, "uloop"), nil
+	}
+
+	executablePath, resolvedInstallDir, err := resolveDispatcherSelfUpdateLocation()
+
+	if err != nil || executablePath != filepath.Join(installDir, "uloop") || resolvedInstallDir != installDir {
+		t.Fatalf("location mismatch: executable=%q installDir=%q err=%v", executablePath, resolvedInstallDir, err)
+	}
+}
+
+func TestResolveDispatcherSelfUpdateLocationFailsWithoutAnExecutablePath(t *testing.T) {
+	// Verifies an executable path failure is reported so the periodic update does not run.
+	previous := resolveUpdateExecutablePathFunc
+	t.Cleanup(func() {
+		resolveUpdateExecutablePathFunc = previous
+	})
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "", errors.New("executable path unavailable")
+	}
+
+	if _, _, err := resolveDispatcherSelfUpdateLocation(); err == nil {
+		t.Fatal("expected an error when the executable path cannot be resolved")
+	}
+}
