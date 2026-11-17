@@ -439,3 +439,19 @@ func TestFailedHoldWriteLeavesNoPartialFiles(t *testing.T) {
 		t.Fatalf("expected only the occupied hold path, got %v", entries)
 	}
 }
+
+func TestPeriodicSelfUpdateRechecksTheHoldAfterTakingTheLock(t *testing.T) {
+	// Verifies a hold recorded by another process while this one takes the lock stops the periodic update.
+	fixture := newPeriodicUpdateFixture(t)
+	fixture.deps.acquireUpdateLock = func(cacheRoot string) (func(), dispatcherUpdateLockResult) {
+		release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
+		writeDispatcherTestFile(t, filepath.Join(fixture.configRoot, dispatcherVersionHoldFileName), `{"version":"3.1.0"}`)
+		return release, result
+	}
+
+	fixture.run()
+
+	if fixture.periodicCalls != 0 {
+		t.Fatalf("expected no update after a hold appeared, got %d", fixture.periodicCalls)
+	}
+}

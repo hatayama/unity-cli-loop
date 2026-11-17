@@ -87,8 +87,12 @@ func runPeriodicDispatcherSelfUpdate(ctx context.Context, stderr io.Writer, deps
 		return ""
 	}
 	defer release()
-	// Why check again under the lock: another process may have finished a check while we waited.
+	// Why check again under the lock: another process may have finished a check, or recorded a
+	// version hold with `uloop update --to-version`, between the first checks and the lock.
 	if !dispatcherSelfUpdateDueWithDeps(deps) {
+		return ""
+	}
+	if held, _ := readDispatcherVersionHold(); held {
 		return ""
 	}
 	// Why record before checking: when the record cannot be written, every command would see the
