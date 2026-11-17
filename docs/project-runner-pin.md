@@ -124,6 +124,9 @@ release on its own, independent of any pin, V2 or V3 project, or working directo
   while the newest stable release is older installs the beta, and later automatic updates then
   follow the beta channel). If the dispatcher is still below the floor afterwards, the command
   fails with a manual-update error instead of asking for a retry that would repeat forever.
+  A dispatcher that runs from outside the install directory does not update itself even below
+  the floor: the installer would replace a different copy, so the command asks for a manual
+  update of the running copy instead. When the location cannot be resolved, the update runs.
 - **Time limits**: the periodic update's release lookup is cut off after 10 seconds (the
   required update keeps its lookup unbounded, as before, because it is the only way past the
   floor). The installer has no time

@@ -74,3 +74,12 @@ func enableSelfUpdateForTest(t *testing.T) {
 	t.Helper()
 	t.Setenv(dispatcherDisableSelfUpdateEnvName, "")
 }
+
+// runFromInstallDir makes deps report that the dispatcher runs from its install dir, the only
+// place a required update can replace it.
+func runFromInstallDir(deps dispatcherRunDeps) dispatcherRunDeps {
+	deps.resolveSelfUpdateLocation = func() (string, string, error) {
+		return "/install/uloop", "/install", nil
+	}
+	return deps
+}

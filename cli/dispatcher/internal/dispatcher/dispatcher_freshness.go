@@ -144,6 +144,11 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 }
 
 func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
+	// Why stop before installing: the installer writes into the install directory, so a dispatcher
+	// running from elsewhere would still be below the floor on the retry and install forever.
+	if outsidePlan, outside := requiredUpdateOutsideInstallDirPlan(plan, deps); outside {
+		return executeDispatcherFreshnessPlan(ctx, outsidePlan, stderr, deps)
+	}
 	release, lockResult := acquireDispatcherUpdateLockInCache(deps)
 	if lockResult == dispatcherUpdateLockHeld {
 		writeDispatcherUpdateInProgressError(stderr, plan)
@@ -175,6 +180,24 @@ func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessP
 	markDispatcherSelfUpdateCheckedWithDeps(deps)
 	writeDispatcherSelfUpdateRequiredError(stderr, installedVersion)
 	return true, 1
+}
+
+// requiredUpdateOutsideInstallDirPlan asks for a manual update when the running dispatcher is not
+// the one the installer replaces. When either location cannot be resolved it reports false, so an
+// unknown location never blocks the required update, the only way past the pin's floor.
+func requiredUpdateOutsideInstallDirPlan(plan dispatcherFreshnessPlan, deps dispatcherRunDeps) (dispatcherFreshnessPlan, bool) {
+	executablePath, installDir, err := deps.resolveSelfUpdateLocation()
+	if err != nil || strings.TrimSpace(executablePath) == "" || strings.TrimSpace(installDir) == "" {
+		return plan, false
+	}
+	if isRunningFromInstallDir(executablePath, installDir, runtime.GOOS) {
+		return plan, false
+	}
+	plan.Action = dispatcherFreshnessManualUpdateRequired
+	plan.Reason = "This uloop runs from " + filepath.Dir(executablePath) + ", but `uloop update` installs into " + installDir + "."
+	plan.NextAction = "Update the uloop at " + executablePath + " the way you installed it, or remove it so the one in " +
+		installDir + " is found first, then retry the command."
+	return plan, true
 }
 
 // dispatcherVersionMeetsMinimum reports whether an installed version ("" when nothing was

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,7 +39,7 @@ func stubRequiredUpdateRelease(t *testing.T, latestVersion string) *[]string {
 func TestRequiredUpdateInstallsTheFloorWhenTheNewestReleaseIsOlder(t *testing.T) {
 	// Verifies that when the channel's newest release is below the floor, the floor itself is installed and named in the retry request.
 	installedTags := stubRequiredUpdateRelease(t, "1.0.0")
-	deps := defaultDispatcherRunDeps()
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
 	deps.runRequiredUpdate = func(ctx context.Context, minimumVersion string) (string, error) {
 		return runRequiredDispatcherUpdateForOS(ctx, minimumVersion, "linux")
 	}
@@ -74,7 +75,7 @@ func TestRequiredUpdateInstallsTheNewestReleaseWhenItMeetsTheFloor(t *testing.T)
 
 func TestRequiredUpdateBelowTheFloorAsksForManualUpdate(t *testing.T) {
 	// Verifies an install that still leaves the dispatcher below the floor ends in the manual-update error, not a retry request.
-	deps := defaultDispatcherRunDeps()
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
 	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
 		return "998.0.0", nil
 	}
@@ -154,5 +155,42 @@ func TestRequiredUpdateReportsLookupAndInstallerFailures(t *testing.T) {
 				t.Fatalf("expected an error and no install: installed=%q err=%v", installed, err)
 			}
 		})
+	}
+}
+
+func TestRequiredUpdateAsksForAManualUpdateWhenRunningOutsideTheInstallDir(t *testing.T) {
+	// Verifies a below-floor dispatcher running outside the install dir installs nothing and asks for a manual update instead of a retry that could never succeed.
+	fixture := newPeriodicUpdateFixture(t)
+	writePinnedProjectWithMinimum(t, fixture, "999.0.0")
+	fixture.writeLastChecked(fixture.now)
+	otherDir := t.TempDir()
+	fixture.deps.resolveSelfUpdateLocation = func() (string, string, error) {
+		return filepath.Join(otherDir, "uloop"), fixture.installDir, nil
+	}
+	var stderr bytes.Buffer
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, fixture.deps)
+
+	if code != 1 || fixture.requiredCalls != 0 {
+		t.Fatalf("expected no install: code=%d required=%d", code, fixture.requiredCalls)
+	}
+	if !strings.Contains(stderr.String(), "This uloop runs from") || strings.Contains(stderr.String(), "Retry the same uloop command.") {
+		t.Fatalf("expected the manual-update error without a retry request: %s", stderr.String())
+	}
+}
+
+func TestRequiredUpdateStillRunsWhenTheLocationIsUnknown(t *testing.T) {
+	// Verifies a failure to resolve where the dispatcher runs does not block the required update.
+	fixture := newPeriodicUpdateFixture(t)
+	writePinnedProjectWithMinimum(t, fixture, "999.0.0")
+	fixture.writeLastChecked(fixture.now)
+	fixture.deps.resolveSelfUpdateLocation = func() (string, string, error) {
+		return "", "", errors.New("no executable path")
+	}
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, io.Discard, fixture.deps)
+
+	if code != 1 || fixture.requiredCalls != 1 {
+		t.Fatalf("expected the required update to run: code=%d required=%d", code, fixture.requiredCalls)
 	}
 }

@@ -570,7 +570,7 @@ func TestRunDispatcherUpdateCommandRejectsInvalidResolvedTarget(t *testing.T) {
 
 func TestRequiredDispatcherFreshnessAsksForManualUpdateWhenNothingWasInstalled(t *testing.T) {
 	// Verifies a required update that installs nothing ends in the manual-update error instead of a retry request that would repeat forever.
-	deps := defaultDispatcherRunDeps()
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
 	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
 		return "", nil
 	}
@@ -716,7 +716,7 @@ func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherR
 	t.Helper()
 	previousReader := dispatcherReadInstalledVersion
 	previousExecutablePath := resolveUpdateExecutablePathFunc
-	deps := defaultDispatcherRunDeps()
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
 	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
 		return updatedVersion, nil
 	}

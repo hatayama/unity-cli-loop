@@ -61,7 +61,7 @@ func TestExecuteDispatcherFreshnessPlanRejectsUnknownAction(t *testing.T) {
 func TestRunDispatcherFreshnessUpdateTurnsFailedRequiredUpdateIntoManualUpdate(t *testing.T) {
 	// Verifies a failed required update stops the command and tells the user to run `uloop update` with the cause.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	deps := defaultDispatcherRunDeps()
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
 	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
 		return "", errors.New("network unavailable")
 	}
