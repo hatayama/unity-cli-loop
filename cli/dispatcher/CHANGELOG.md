@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.18.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.17.0...dispatcher-v3.18.0) (2026-11-17)
+
+
+### Features
+
+* The CLI now keeps itself up to date on every command, and can be held at a chosen version ([#3557](https://github.com/hatayama/unity-cli-loop/issues/3557)) ([b2d948d](https://github.com/hatayama/unity-cli-loop/commit/b2d948d29a662cd6cf3fb94df691b3d97bd8d5bc))
+* uloop launch works on projects whose Unity package is older than the CLI's IPC protocol ([#3558](https://github.com/hatayama/unity-cli-loop/issues/3558)) ([41750fd](https://github.com/hatayama/unity-cli-loop/commit/41750fd9ea1ec0a3e51461c66d2e489992c8b3ec))
+
 ## [3.17.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.16.1...dispatcher-v3.17.0) (2026-11-16)
 
 
