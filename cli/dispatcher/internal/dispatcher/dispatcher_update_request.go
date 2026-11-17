@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"runtime"
+	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -46,7 +47,37 @@ func runDispatcherUpdateRequestForOS(ctx context.Context, options updateOptions,
 		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return 1
 	}
+	release, acquired := acquireManualDispatcherUpdateLock(stderr)
+	if !acquired {
+		return 1
+	}
+	defer release()
 	return installDispatcherUpdate(ctx, updateCommand, targetVersion, holding, stdout, stderr)
+}
+
+// acquireManualDispatcherUpdateLock takes the lock the periodic and required updates use, so
+// `uloop update` never runs its installer alongside theirs. The lock is taken before the hold is
+// recorded, so a refused request leaves no hold behind. An unusable cache does not block a manual
+// update, matching the required update.
+func acquireManualDispatcherUpdateLock(stderr io.Writer) (func(), bool) {
+	cacheRoot, err := dispatcherCacheRoot(runtime.GOOS)
+	if err != nil {
+		return releaseNothing, true
+	}
+	release, result := tryAcquireDispatcherUpdateLock(cacheRoot, time.Now())
+	if result != dispatcherUpdateLockHeld {
+		return release, true
+	}
+	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeInternalError,
+		Phase:       clierrors.ErrorPhaseExecution,
+		Message:     "Another uloop command is updating the dispatcher.",
+		Retryable:   true,
+		SafeToRetry: true,
+		Command:     clicore.UpdateCommandName,
+		NextActions: []string{"Retry `uloop update` when it finishes."},
+	})
+	return releaseNothing, false
 }
 
 func finishCurrentDispatcherUpdateRequest(targetVersion string, holding bool, stdout io.Writer, stderr io.Writer) int {

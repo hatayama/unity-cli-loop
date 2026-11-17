@@ -18,7 +18,8 @@ import (
 // stubbing the update would otherwise reach GitHub. Tests that exercise the
 // self-update clear the variable themselves. The config directory points at a
 // throwaway directory so no test can write a version hold into the developer's
-// real configuration.
+// real configuration, and the cache directory likewise so no test takes or leaves
+// the real update lock.
 func TestMain(m *testing.M) {
 	githubapi.DefaultTokenSource = githubapi.StaticTokenSource("")
 	os.Exit(runPackageTests(m))
@@ -35,6 +36,18 @@ func runPackageTests(m *testing.M) int {
 	}()
 	if err := os.Setenv(nativepath.ConfigDirEnvName, configDir); err != nil {
 		fmt.Fprintf(os.Stderr, "set %s: %v\n", nativepath.ConfigDirEnvName, err)
+		return 1
+	}
+	cacheDir, err := os.MkdirTemp("", "uloop-dispatcher-test-cache-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create test cache dir: %v\n", err)
+		return 1
+	}
+	defer func() {
+		_ = os.RemoveAll(cacheDir)
+	}()
+	if err := os.Setenv(nativepath.CacheDirEnvName, cacheDir); err != nil {
+		fmt.Fprintf(os.Stderr, "set %s: %v\n", nativepath.CacheDirEnvName, err)
 		return 1
 	}
 	if err := os.Setenv(dispatcherDisableSelfUpdateEnvName, "1"); err != nil {

@@ -651,3 +651,31 @@ func TestRequiredUpdateStillRunsWithoutAUsableLock(t *testing.T) {
 		t.Fatalf("expected the required update to run: handled=%t code=%d required=%d stderr=%s", handled, code, fixture.requiredCalls, stderr.String())
 	}
 }
+
+func TestPeriodicSelfUpdatePointsAtUloopUpdateOnlyForInstallerFailures(t *testing.T) {
+	// Verifies an installer failure adds the hint to run `uloop update`, while a lookup failure does not.
+	hint := "warning: Run `uloop update` to see the installer output."
+	t.Run("installer failure", func(t *testing.T) {
+		stubPeriodicLookupAndInstaller(t, "999.0.0", func(context.Context, update.Command, io.Writer, io.Writer) error {
+			return errors.New("exit status 1")
+		})
+		fixture := newPeriodicUpdateFixture(t)
+		fixture.deps.runPeriodicUpdate = runPeriodicDispatcherUpdate
+
+		_, stderr := fixture.run()
+
+		if !strings.Contains(stderr, "dispatcher self-update skipped: exit status 1") || !strings.Contains(stderr, hint) {
+			t.Fatalf("expected the skip warning and the hint: %s", stderr)
+		}
+	})
+	t.Run("lookup failure", func(t *testing.T) {
+		fixture := newPeriodicUpdateFixture(t)
+		fixture.periodicErr = errors.New("release lookup failed")
+
+		_, stderr := fixture.run()
+
+		if strings.Contains(stderr, hint) {
+			t.Fatalf("the hint must not follow a lookup failure: %s", stderr)
+		}
+	})
+}

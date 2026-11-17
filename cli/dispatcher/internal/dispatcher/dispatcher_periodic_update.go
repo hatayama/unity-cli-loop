@@ -120,8 +120,27 @@ func periodicDispatcherSelfUpdateAllowed(deps dispatcherRunDeps) bool {
 	return !held
 }
 
+// dispatcherInstallerError marks a failure of the installer run, as opposed to the release lookup.
+type dispatcherInstallerError struct {
+	cause error
+}
+
+func (installerError dispatcherInstallerError) Error() string {
+	return installerError.cause.Error()
+}
+
+func (installerError dispatcherInstallerError) Unwrap() error {
+	return installerError.cause
+}
+
 func writeDispatcherSelfUpdateSkippedWarning(stderr io.Writer, err error) {
 	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
+	// Why point at `uloop update`: the periodic update discards installer output so it does not
+	// draw progress before every command, which leaves only an exit status to read here.
+	var installerError dispatcherInstallerError
+	if errors.As(err, &installerError) {
+		clicore.WriteLine(stderr, "warning: Run `uloop update` to see the installer output.")
+	}
 	var rateLimit githubapi.RateLimitError
 	if errors.As(err, &rateLimit) {
 		for _, action := range rateLimit.NextActions() {
@@ -160,7 +179,7 @@ func runPeriodicDispatcherUpdateForOS(ctx context.Context, stderr io.Writer, goo
 	// leave the user's command silently hanging.
 	clicore.WriteFormat(stderr, "uloop: updating the dispatcher from %s to %s before running this command...\n", currentVersion, targetVersion)
 	if err := updateRunCommand(ctx, command, io.Discard, io.Discard); err != nil {
-		return "", err
+		return "", dispatcherInstallerError{cause: err}
 	}
 	// Why return the target instead of re-reading the binary: a failed re-read would be
 	// indistinguishable from "already current", and the required-update path relies on knowing

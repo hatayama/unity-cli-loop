@@ -355,3 +355,47 @@ func TestRequiredUpdateAsksForManualUpdateWhileAVersionIsHeld(t *testing.T) {
 		}
 	}
 }
+
+func TestManualUpdateWaitsForAnotherProcessHoldingTheLock(t *testing.T) {
+	// Verifies `uloop update --to-version` refuses with a retryable error, records no hold, and runs no installer while another process holds the update lock.
+	fixture := newVersionHoldUpdateFixture(t)
+	cacheRoot := t.TempDir()
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	writeDispatcherTestFile(t, filepath.Join(cacheRoot, dispatcherUpdateLockFileName), "")
+
+	code, _, stderr := runUpdateForHoldTest("--to-version", "999.0.0")
+
+	if code != 1 || fixture.installerCalls != 0 {
+		t.Fatalf("expected exit 1 without installing: code=%d installer=%d", code, fixture.installerCalls)
+	}
+	fixture.assertNoHold()
+	for _, expected := range []string{"Another uloop command is updating the dispatcher.", `"Retryable": true`, "Retry `uloop update` when it finishes."} {
+		if !strings.Contains(stderr, expected) {
+			t.Fatalf("missing %q in: %s", expected, stderr)
+		}
+	}
+}
+
+func TestManualUpdateReleasesTheLockAfterInstalling(t *testing.T) {
+	// Verifies `uloop update` holds the update lock while the installer runs and removes it afterwards.
+	fixture := newVersionHoldUpdateFixture(t)
+	cacheRoot := t.TempDir()
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	lockPath := filepath.Join(cacheRoot, dispatcherUpdateLockFileName)
+	lockedDuringInstall := false
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		fixture.installerCalls++
+		_, err := os.Stat(lockPath)
+		lockedDuringInstall = err == nil
+		return nil
+	}
+
+	code, _, _ := runUpdateForHoldTest()
+
+	if code != 0 || fixture.installerCalls != 1 || !lockedDuringInstall {
+		t.Fatalf("expected an install under the lock: code=%d installer=%d locked=%t", code, fixture.installerCalls, lockedDuringInstall)
+	}
+	if _, err := os.Stat(lockPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected the lock to be released, stat err=%v", err)
+	}
+}
