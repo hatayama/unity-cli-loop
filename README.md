@@ -142,6 +142,17 @@ uloop -v
 
 The install succeeded when the first line shows the CLI version (for example `3.0.1`).
 
+<details>
+<summary>Automatic CLI updates</summary>
+
+While you use it, the CLI checks for a newer release at most once a day and installs it; the new version takes effect from the next command.
+
+- Stay on one version: `uloop update --to-version <version>` installs that release and holds it there. Run `uloop update` to resume automatic updates.
+- Turn automatic updates off: set `ULOOP_DISABLE_SELF_UPDATE=1` in the environment.
+- Homebrew installs never update themselves; use `brew upgrade uloop` (and `brew pin uloop` to hold a version).
+
+</details>
+
 ### Step 2: Install the Unity package
 
 Run this in the root of your Unity project:

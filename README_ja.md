@@ -142,6 +142,17 @@ uloop -v
 
 最初の行に CLI のバージョン（例: `3.0.1`）が表示されれば成功です。
 
+<details>
+<summary>CLI の自動更新</summary>
+
+CLI は使っているあいだ、1 日に 1 回まで新しいリリースを確認し、あれば自動でインストールします。新しいバージョンは次のコマンドから使われます。
+
+- 特定のバージョンに固定する：`uloop update --to-version <バージョン>` でそのリリースを入れて固定します。`uloop update` を実行すると自動更新に戻ります。
+- 自動更新を止める：環境変数 `ULOOP_DISABLE_SELF_UPDATE=1` を設定します。
+- Homebrew で入れた場合は自動更新しません。`brew upgrade uloop` で更新してください（バージョンを固定するには `brew pin uloop`）。
+
+</details>
+
 ### ステップ 2：Unity パッケージをインストールする
 
 Unity プロジェクトのルートで実行します：

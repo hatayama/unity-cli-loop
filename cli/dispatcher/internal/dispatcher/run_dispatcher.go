@@ -37,22 +37,32 @@ type dispatcherUpdateState struct {
 }
 
 type dispatcherRunDeps struct {
-	now              func() time.Time
-	runRealCLI       func(context.Context, string, []string, io.Writer, io.Writer) int
-	runV2CLI         func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
-	runUpdate        func(context.Context) (bool, error)
-	stdoutIsTerminal func(io.Writer) bool
-	launch           launchDeps
+	now        func() time.Time
+	runRealCLI func(context.Context, string, []string, io.Writer, io.Writer) int
+	runV2CLI   func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
+	// runRequiredUpdate installs a release meeting the given floor and returns its version ("" when none).
+	runRequiredUpdate func(context.Context, string) (string, error)
+	stdoutIsTerminal  func(io.Writer) bool
+	launch            launchDeps
+	// runPeriodicUpdate installs the newest release and returns its version ("" when current).
+	runPeriodicUpdate func(context.Context, io.Writer) (string, error)
+	// resolveSelfUpdateLocation returns the running executable path and the install directory.
+	resolveSelfUpdateLocation func() (string, string, error)
+	acquireUpdateLock         func(string) (func(), dispatcherUpdateLockResult)
 }
 
 func defaultDispatcherRunDeps() dispatcherRunDeps {
 	return dispatcherRunDeps{
-		now:              time.Now,
-		runRealCLI:       runRealCLICommand,
-		runV2CLI:         runDispatcherV2CLI,
-		runUpdate:        runDispatcherUpdateCommand,
-		stdoutIsTerminal: isTerminalWriter,
-		launch:           defaultLaunchDeps(),
+		now:               time.Now,
+		runRealCLI:        runRealCLICommand,
+		runV2CLI:          runDispatcherV2CLI,
+		runRequiredUpdate: runRequiredDispatcherUpdate,
+		stdoutIsTerminal:  isTerminalWriter,
+		launch:            defaultLaunchDeps(),
+
+		runPeriodicUpdate:         runPeriodicDispatcherUpdate,
+		resolveSelfUpdateLocation: resolveDispatcherSelfUpdateLocation,
+		acquireUpdateLock:         tryAcquireDispatcherUpdateLock,
 	}
 }
 
@@ -69,10 +79,14 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 	if handled, code := tryHandleDispatcherHelpOrVersion(ctx, args, remainingArgs, projectPath, stdout, stderr, deps); handled {
 		return code
 	}
+	installedVersion := ""
+	if !isExcludedFromPeriodicSelfUpdate(remainingArgs) {
+		installedVersion = runPeriodicDispatcherSelfUpdate(ctx, stderr, deps)
+	}
 	if shouldRunInDispatcherProcess(remainingArgs) {
 		return runDispatcherProcessCommandWithDeps(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
 	}
-	return runPinnedDispatcherProjectRunner(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
+	return runPinnedDispatcherProjectRunner(ctx, args, remainingArgs, projectPath, installedVersion, stdout, stderr, deps)
 }
 
 func tryHandleDispatcherHelpOrVersion(
@@ -108,6 +122,7 @@ func runPinnedDispatcherProjectRunner(
 	args []string,
 	remainingArgs []string,
 	projectPath string,
+	installedVersion string,
 	stdout io.Writer,
 	stderr io.Writer,
 	deps dispatcherRunDeps,
@@ -133,7 +148,7 @@ func runPinnedDispatcherProjectRunner(
 		return 1
 	}
 
-	if handled, code := enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, deps); handled {
+	if handled, code := enforceDispatcherFreshnessWithDeps(ctx, pin, installedVersion, stderr, deps); handled {
 		return code
 	}
 
