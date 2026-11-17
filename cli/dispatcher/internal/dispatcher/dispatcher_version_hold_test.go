@@ -455,3 +455,25 @@ func TestPeriodicSelfUpdateRechecksTheHoldAfterTakingTheLock(t *testing.T) {
 		t.Fatalf("expected no update after a hold appeared, got %d", fixture.periodicCalls)
 	}
 }
+
+func TestRequiredUpdateRechecksTheHoldAfterTakingTheLock(t *testing.T) {
+	// Verifies a hold recorded by another process before the required update takes the lock stops the install and names the hold.
+	fixture := newPeriodicUpdateFixture(t)
+	writePinnedProjectWithMinimum(t, fixture, "999.0.0")
+	fixture.writeLastChecked(fixture.now)
+	fixture.deps.acquireUpdateLock = func(cacheRoot string) (func(), dispatcherUpdateLockResult) {
+		release, result := tryAcquireDispatcherUpdateLock(cacheRoot)
+		writeDispatcherTestFile(t, filepath.Join(fixture.configRoot, dispatcherVersionHoldFileName), `{"version":"3.1.0"}`)
+		return release, result
+	}
+	var stderr bytes.Buffer
+
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, fixture.deps)
+
+	if code != 1 || fixture.requiredCalls != 0 {
+		t.Fatalf("expected no install after a hold appeared: code=%d required=%d", code, fixture.requiredCalls)
+	}
+	if !strings.Contains(stderr.String(), "held at 3.1.0") {
+		t.Fatalf("expected the hold to be named: %s", stderr.String())
+	}
+}

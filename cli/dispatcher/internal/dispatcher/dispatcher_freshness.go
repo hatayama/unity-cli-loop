@@ -106,14 +106,19 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 		}
 	}
 	if inputs.VersionHeld {
-		return dispatcherFreshnessPlan{
-			Action:         dispatcherFreshnessManualUpdateRequired,
-			MinimumVersion: minimumVersion,
-			Reason:         "This uloop is held at " + inputs.HeldVersion + " by `uloop update --to-version`.",
-			NextAction:     "Run `uloop update` to resume automatic updates, then retry the command.",
-		}
+		return versionHeldFreshnessPlan(minimumVersion, inputs.HeldVersion)
 	}
 	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
+}
+
+// versionHeldFreshnessPlan asks for a manual update because a version hold pauses automatic updates.
+func versionHeldFreshnessPlan(minimumVersion string, heldVersion string) dispatcherFreshnessPlan {
+	return dispatcherFreshnessPlan{
+		Action:         dispatcherFreshnessManualUpdateRequired,
+		MinimumVersion: minimumVersion,
+		Reason:         "This uloop is held at " + heldVersion + " by `uloop update --to-version`.",
+		NextAction:     "Run `uloop update` to resume automatic updates, then retry the command.",
+	}
 }
 
 func managedInstallFreshnessReason(managedInstall sharedupdate.ManagedInstall) string {
@@ -147,6 +152,11 @@ func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessP
 	// Why an unavailable lock still updates: a cache that cannot be written must not stop the
 	// required update, which is the only way past the pin's floor.
 	defer release()
+	// Why read the hold again under the lock: `uloop update --to-version` may have recorded one
+	// after the plan was made, and the hold takes precedence over the required update.
+	if held, heldVersion := readDispatcherVersionHold(); held {
+		return executeDispatcherFreshnessPlan(ctx, versionHeldFreshnessPlan(plan.MinimumVersion, heldVersion), stderr, deps)
+	}
 	installedVersion, err := deps.runRequiredUpdate(ctx, plan.MinimumVersion)
 	if err != nil {
 		plan.Action = dispatcherFreshnessManualUpdateRequired
