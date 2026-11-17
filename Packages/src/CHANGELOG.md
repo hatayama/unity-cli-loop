@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.0](https://github.com/hatayama/unity-cli-loop/compare/v3.33.0...v3.34.0) (2026-11-17)
+
+
+### Features
+
+* uloop launch works on projects whose Unity package is older than the CLI's IPC protocol ([#3558](https://github.com/hatayama/unity-cli-loop/issues/3558)) ([41750fd](https://github.com/hatayama/unity-cli-loop/commit/41750fd9ea1ec0a3e51461c66d2e489992c8b3ec))
+
 ## [3.33.0](https://github.com/hatayama/unity-cli-loop/compare/v3.32.0...v3.33.0) (2026-11-16)
 
 
