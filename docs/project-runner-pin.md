@@ -89,3 +89,46 @@ The forced-update instruction (`minimumDispatcherVersion`) travels inside the
 pin, so an old dispatcher that cannot parse a new pin never learns it must
 update. For the same reason the dispatcher must stay lenient when reading pins
 written by older packages.
+
+## Periodic dispatcher self-update
+
+Separately from the `minimumDispatcherVersion` floor, the dispatcher checks for the newest
+release on its own, independent of any pin, V2 or V3 project, or working directory.
+
+- **When**: on every command, at most once per 24 hours. Excluded are `uloop update`,
+  `install`, `uninstall`, `version`, and help and version requests (including a project-scoped
+  `--version` that is forwarded to the runner). `install` and `uninstall` are excluded because
+  installers and the Unity settings window run them, and a second installer must not start
+  from inside the first.
+- **Effect**: a newer release is installed while the command runs, but that command finishes
+  on the old dispatcher; the next command uses the new one.
+- **Where it runs**: only when the running `uloop` sits in the install directory
+  (`ULOOP_INSTALL_DIR`, otherwise the OS default). The installer only replaces that
+  directory, so a dev build or a hand-extracted copy would rewrite the global install every
+  day while staying old.
+- **Never runs**: under Homebrew or winget, or with `ULOOP_DISABLE_SELF_UPDATE=1|true`. The
+  installer child process always gets `ULOOP_DISABLE_SELF_UPDATE=1`.
+- **Record and lock**: the cache root (`ULOOP_CACHE_DIR`, otherwise the OS cache directory)
+  holds `dispatcher-update.json` (the last check, written *before* the lookup; no lookup runs
+  when it cannot be written) and `dispatcher-update.lock` (created exclusively, treated as
+  abandoned after 15 minutes). The required update for `minimumDispatcherVersion` takes the
+  same lock; when another process holds it, the command fails with a retryable
+  `CLI_UPDATE_REQUIRED` instead of starting a second installer. When the periodic update
+  already installed a release in the same process, the required check asks for a retry
+  instead of installing again.
+- **Time limits**: the release lookup is cut off after 10 seconds. The installer has no time
+  limit, because killing it can leave Windows without `uloop.exe`; a stderr line announces the
+  install so a slow download is visible.
+
+### Version hold
+
+`uloop update --to-version <version>` installs that release and records a version hold in
+the per-user config directory (`ULOOP_CONFIG_DIR`, otherwise
+`~/Library/Application Support/uloop` on macOS, `%APPDATA%\uloop` on Windows,
+`$XDG_CONFIG_HOME/uloop` or `~/.config/uloop` elsewhere) as `dispatcher-version-hold.json`.
+While the file exists — even if it cannot be read — the periodic self-update does not run.
+
+- Plain `uloop update` removes the hold and updates to the newest release.
+- Reinstalling with `install.sh` / `install.ps1` does not remove the hold.
+- When a held dispatcher is below a project's `minimumDispatcherVersion`, the command fails
+  with a manual-update error naming the hold instead of updating automatically.

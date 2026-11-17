@@ -75,7 +75,8 @@ the project runner.
 
 The globally installed `uloop` binary. It resolves the target Unity project, ensures the
 pinned project runner release is installed (downloading it when needed), keeps itself
-up to date against the pin's `minimumDispatcherVersion`, and delegates command execution
+up to date with a periodic self-update to the newest release plus the pin's
+`minimumDispatcherVersion` floor, and delegates command execution
 to the project runner. Released via release-please from `cli/dispatcher/`.
 
 ### Project runner
