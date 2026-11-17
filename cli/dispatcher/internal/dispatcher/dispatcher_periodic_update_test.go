@@ -734,3 +734,14 @@ func TestResolveDispatcherSelfUpdateLocationFailsWithoutAnExecutablePath(t *test
 		t.Fatal("expected an error when the executable path cannot be resolved")
 	}
 }
+
+func TestPeriodicUpdateRejectsAnInvalidResolvedRelease(t *testing.T) {
+	// Verifies the periodic update refuses a resolved release that is not a valid version and never runs the installer with it.
+	installedTags := stubRequiredUpdateRelease(t, "not-a-version")
+
+	installed, err := runPeriodicDispatcherUpdateForOS(context.Background(), io.Discard, "linux")
+
+	if err == nil || installed != "" || len(*installedTags) != 0 {
+		t.Fatalf("expected an error and no install: installed=%q err=%v installs=%v", installed, err, *installedTags)
+	}
+}
