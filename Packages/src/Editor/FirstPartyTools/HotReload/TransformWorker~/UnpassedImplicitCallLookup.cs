@@ -502,7 +502,9 @@ internal static class UnpassedImplicitCallLookup
     // assembly through its public surface, as the body that calls the extension does.
     private static bool SatisfiesKindConstraints(ITypeParameterSymbol typeParameter, INamedTypeSymbol receiver)
     {
-        if (typeParameter.HasValueTypeConstraint && !receiver.IsValueType)
+        // Why Nullable<T> fails the struct constraint: C# requires a non-nullable value type there.
+        if (typeParameter.HasValueTypeConstraint
+            && (!receiver.IsValueType || receiver.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T))
         {
             return false;
         }

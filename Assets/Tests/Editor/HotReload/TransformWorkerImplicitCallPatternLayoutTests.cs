@@ -169,23 +169,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a deconstruction whose receiver does not satisfy the new() or unmanaged constraint
-        /// of an internal generic extension Deconstruct is skipped with a reason that names the
-        /// extension the compiled body calls, not the constrained one.
+        /// What: a deconstruction whose receiver does not satisfy the new(), unmanaged, or struct
+        /// constraint of an internal generic extension Deconstruct is skipped with a reason that
+        /// names the extension the compiled body calls, not the constrained one.
         /// </summary>
-        [TestCase("7625", "ClosureDeconstructsBesideANewConstrainedExtension")]
-        [TestCase("7635", "ClosureDeconstructsBesideAnUnmanagedConstrainedExtension")]
+        [TestCase("7625", "ClosureDeconstructsBesideANewConstrainedExtension", "HotReloadUnpassedConstraintTargetExtensions", "HotReloadUnpassedNewConstrainedExtensions")]
+        [TestCase("7635", "ClosureDeconstructsBesideAnUnmanagedConstrainedExtension", "HotReloadUnpassedConstraintTargetExtensions", "HotReloadUnpassedNewConstrainedExtensions")]
+        [TestCase("7675", "ClosureDeconstructsANullableStructBesideAStructConstrainedExtension", "HotReloadUnpassedNullableEightOutExtensions", "HotReloadUnpassedStructOnlyEightOutExtensions")]
         public async Task DeconstructionBesideAnUnsatisfiedConstraint_NamesTheCalledExtension(
             string token,
-            string methodName)
+            string methodName,
+            string calledType,
+            string constrainedType)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
 
             TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
             Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
             string reason = HotReloadWorkerReasonText.Render(skipped.reason);
-            Assert.That(reason, Does.Contain("HotReloadUnpassedConstraintTargetExtensions"));
-            Assert.That(reason, Does.Not.Contain("HotReloadUnpassedNewConstrainedExtensions"));
+            Assert.That(reason, Does.Contain(calledType));
+            Assert.That(reason, Does.Not.Contain(constrainedType));
             Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
         }
 

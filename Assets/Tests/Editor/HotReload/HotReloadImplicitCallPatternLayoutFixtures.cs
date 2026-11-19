@@ -653,5 +653,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.CompletedTask;
             return new HotReloadUnpassedInternalIntIndexer()[0] + 7665;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsANullableStructBesideAStructConstrainedExtension()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadUnpassedQuint? value = new HotReloadUnpassedQuint();
+                (int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8) = value;
+                return p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + 7675;
+            };
+            return read();
+        }
     }
 }

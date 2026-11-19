@@ -294,6 +294,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal eight-out Deconstruct constrained to struct, declared before the one a nullable
+    /// struct receiver actually calls; Nullable&lt;T&gt; does not satisfy the struct constraint.
+    /// </summary>
+    public static class HotReloadUnpassedStructOnlyEightOutExtensions
+    {
+        internal static void Deconstruct<T>(
+            this T value,
+            out int p1,
+            out int p2,
+            out int p3,
+            out int p4,
+            out int p5,
+            out int p6,
+            out int p7,
+            out int p8)
+            where T : struct
+        {
+            p1 = value.GetHashCode() == 0 ? 0 : 1;
+            p2 = 2;
+            p3 = 3;
+            p4 = 4;
+            p5 = 5;
+            p6 = 6;
+            p7 = 7;
+            p8 = 8;
+        }
+    }
+
+    /// <summary>
+    /// The eight-out Deconstruct a nullable struct receiver actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedNullableEightOutExtensions
+    {
+        internal static void Deconstruct(
+            this HotReloadUnpassedQuint? value,
+            out int p1,
+            out int p2,
+            out int p3,
+            out int p4,
+            out int p5,
+            out int p6,
+            out int p7,
+            out int p8)
+        {
+            p1 = value.HasValue ? 1 : 0;
+            p2 = 2;
+            p3 = 3;
+            p4 = 4;
+            p5 = 5;
+            p6 = 6;
+            p7 = 7;
+            p8 = 8;
+        }
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>
