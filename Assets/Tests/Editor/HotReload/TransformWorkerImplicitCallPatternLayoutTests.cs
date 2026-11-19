@@ -221,10 +221,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a lambda or async body whose handler is declared in the passed file, with its
         /// InterpolatedStringHandler attribute declared internally in a file the run does not pass,
-        /// is skipped with the implicit-call reason naming the internal AppendFormatted.
+        /// is skipped with the implicit-call reason naming the internal AppendFormatted, also when
+        /// the handler call is an operand of an addition and its hole is a captured local.
         /// </summary>
         [TestCase("7765", "ClosureBuildsPassedFileHandlerWithInternalAppendFormatted")]
         [TestCase("7775", "AsyncBuildsPassedFileHandlerWithInternalAppendFormatted")]
+        [TestCase("7785", "ClosureAddsToPassedFileHandlerCallOfCapturedLocal")]
+        [TestCase("7795", "AsyncAddsToPassedFileHandlerCallOfLocal")]
         public async Task HandlerWithAttributeFromUnpassedFile_IsSkippedWithTheImplicitCallReason(
             string token,
             string methodName)

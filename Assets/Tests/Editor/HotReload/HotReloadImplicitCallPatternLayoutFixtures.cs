@@ -766,6 +766,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadPassedFileHandlerSinks.Measure($"ab{7775}");
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureAddsToPassedFileHandlerCallOfCapturedLocal()
+        {
+            int value = 2;
+            Func<int> read = () => HotReloadPassedFileHandlerSinks.Measure($"ab{value}") + 7785;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAddsToPassedFileHandlerCallOfLocal()
+        {
+            int value = 2;
+            await Task.CompletedTask;
+            return HotReloadPassedFileHandlerSinks.Measure($"ab{value}") + 7795;
+        }
+
     }
 
     /// <summary>
