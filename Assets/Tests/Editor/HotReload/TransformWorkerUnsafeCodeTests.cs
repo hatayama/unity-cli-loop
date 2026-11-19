@@ -132,6 +132,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertRefusedAsync("sizeof(UnsafeFixtureStruct) + 1950", "sizeof(UnsafeFixtureStruct) + 1951", "UnsafeFixtureSizeOfStructHost.Read(");
         }
 
+        /// <summary>What: an unsafe block with no pointer use inside is Skipped.</summary>
+        [Test]
+        public async Task Run_UnsafeBlockWithoutPointers_IsSkipped()
+        {
+            await AssertRefusedAsync("counter = 2350", "counter = 2351", "UnsafeFixtureBlockWithoutPointerHost.Read(");
+        }
+
+        /// <summary>What: an unsafe local function with no pointer use inside is Skipped.</summary>
+        [Test]
+        public async Task Run_UnsafeLocalFunctionWithoutPointers_IsSkipped()
+        {
+            await AssertRefusedAsync("return 2400;", "return 2401;", "UnsafeFixtureLocalFunctionWithoutPointerHost.Read(");
+        }
+
+        /// <summary>What: a body that holds a pointer only in a var local, with no pointer syntax and no pointer-parameter call, is Skipped.</summary>
+        [Test]
+        public async Task Run_PointerTypedLocalOnly_IsSkipped()
+        {
+            await AssertRefusedAsync("p == null ? 2450", "p == null ? 2460", "UnsafeFixtureImplicitPointerOnlyHost.Read(");
+        }
+
         /// <summary>What: a call that omits an optional pointer argument, leaving no pointer expression in the body, is Skipped.</summary>
         [Test]
         public async Task Run_CallOmittingOptionalPointerArgument_IsSkipped()

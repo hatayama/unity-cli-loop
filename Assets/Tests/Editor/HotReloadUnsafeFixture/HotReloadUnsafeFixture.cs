@@ -276,6 +276,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
         }
     }
 
+    public class UnsafeFixtureBlockWithoutPointerHost
+    {
+        public int Read()
+        {
+            int counter = 2350;
+            unsafe
+            {
+                counter++;
+            }
+
+            return counter;
+        }
+    }
+
+    public class UnsafeFixtureLocalFunctionWithoutPointerHost
+    {
+        public int Read()
+        {
+            unsafe int Local()
+            {
+                return 2400;
+            }
+
+            return Local();
+        }
+    }
+
+    public class UnsafeFixtureImplicitPointerOnlyHost
+    {
+        public unsafe int Read()
+        {
+            // Why var: the shape under test handles a pointer with no pointer syntax and no call
+            // that takes a pointer parameter.
+            var p = UnsafeFixturePointerSource.Get();
+            return p == null ? 2450 : 2451;
+        }
+    }
+
     public static class UnsafeFixtureOptionalPointerApi
     {
         public static unsafe int Count(int* values = null)

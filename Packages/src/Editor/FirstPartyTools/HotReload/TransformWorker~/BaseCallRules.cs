@@ -285,9 +285,9 @@ internal static class BaseCallRules
     // Why these shapes are refused: the stand-in copies the target's parameters without default
     // values or params, and a generic, ref-returning or pointer signature has no stand-in the
     // shim can declare and the Editor can match back.
-    // Why the pointer checks stay although the unsafe-code skip runs first: they are the stand-in's
-    // own precondition on the target signature, not a copy of the body check; an omitted optional
-    // pointer argument leaves no pointer-typed expression in the body for that check to see.
+    // Why the pointer checks stay although the unsafe-code skip runs first: the stand-in declares
+    // the target's signature in a shim compiled without unsafe code, so it checks that signature
+    // itself instead of relying on the member-level check running first.
     private static bool HasUnsupportedArgumentShape(InvocationExpressionSyntax invocation, IMethodSymbol target)
     {
         if (target.IsGenericMethod || target.ReturnsByRef || target.ReturnsByRefReadonly || UnsafeContextRules.IsPointerLike(target.ReturnType))
