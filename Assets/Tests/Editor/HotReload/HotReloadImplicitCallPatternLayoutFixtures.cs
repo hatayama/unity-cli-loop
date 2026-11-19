@@ -577,5 +577,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             return read();
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesInternalDisposeAsyncBesideAPublicExtension()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                await using (new HotReloadUnpassedResourceInternalDisposeAsync())
+                {
+                }
+
+                return 7595;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitUsesInternalDisposeAsyncBesideAPublicExtension()
+        {
+            await using (new HotReloadUnpassedResourceInternalDisposeAsync())
+            {
+            }
+
+            return 7605;
+        }
     }
 }

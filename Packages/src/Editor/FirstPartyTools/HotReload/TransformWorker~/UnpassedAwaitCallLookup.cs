@@ -79,7 +79,11 @@ internal static class UnpassedAwaitCallLookup
             return Array.Empty<(ITypeSymbol, string)>();
         }
 
-        if (speculative.GetSymbolInfo(awaitExpression.Expression).Symbol is not IMethodSymbol call)
+        // Why an extension counts as no method: await using and await foreach call only an instance
+        // DisposeAsync or MoveNextAsync, so an extension the speculative call binds to instead
+        // stands in for an instance method the worker cannot see.
+        if (speculative.GetSymbolInfo(awaitExpression.Expression).Symbol is not IMethodSymbol call
+            || call.MethodKind == MethodKind.ReducedExtension)
         {
             return isRequired ? new[] { (receiver, methodName) } : Array.Empty<(ITypeSymbol, string)>();
         }

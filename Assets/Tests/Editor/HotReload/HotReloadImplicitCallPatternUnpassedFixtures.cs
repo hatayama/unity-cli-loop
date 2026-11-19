@@ -143,6 +143,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Resource whose pattern DisposeAsync is an internal instance method; a public extension
+    /// DisposeAsync of the same name exists but await using never calls an extension.
+    /// </summary>
+    public sealed class HotReloadUnpassedResourceInternalDisposeAsync
+    {
+        internal HotReloadPatternPublicAwaitable DisposeAsync()
+        {
+            return new HotReloadPatternPublicAwaitable(true);
+        }
+    }
+
+    /// <summary>
+    /// Public extension DisposeAsync that a speculative call binds to when the instance method is
+    /// out of reach.
+    /// </summary>
+    public static class HotReloadUnpassedPublicDisposeAsyncExtensions
+    {
+        public static System.Threading.Tasks.ValueTask DisposeAsync(this HotReloadUnpassedResourceInternalDisposeAsync resource)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>
