@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.5](https://github.com/hatayama/unity-cli-loop/compare/v3.34.4...v3.34.5) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose interpolated string handler calls an internal member when the project declares the handler attribute in a file the reload was not given ([#3575](https://github.com/hatayama/unity-cli-loop/issues/3575)) ([b751192](https://github.com/hatayama/unity-cli-loop/commit/b751192fb20a7432c1c446eb914183ae1a66ef35))
+
 ## [3.34.4](https://github.com/hatayama/unity-cli-loop/compare/v3.34.3...v3.34.4) (2026-11-19)
 
 
