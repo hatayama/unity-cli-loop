@@ -542,8 +542,11 @@ internal static class UnpassedImplicitCallLookup
             return false;
         }
 
+        // Why a type-parameter receiver passes new() by its own constraint: it has no constructors
+        // to inspect, and the compiler accepts it when it is itself constrained to new().
         return !typeParameter.HasConstructorConstraint
             || receiver.IsValueType
+            || receiver is ITypeParameterSymbol { HasConstructorConstraint: true }
             || (receiver is INamedTypeSymbol { IsAbstract: false } named && named.InstanceConstructors.Any(constructor =>
                 constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public));
     }

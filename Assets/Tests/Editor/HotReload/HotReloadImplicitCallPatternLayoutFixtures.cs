@@ -720,5 +720,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             (int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8, int p9, int p10) = new string[1];
             return p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + 7735;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsATypeParameterWithNew()
+        {
+            Func<int> read = () =>
+            {
+                int Sum<T>()
+                    where T : new()
+                {
+                    (int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8, int p9, int p10, int p11) = new T();
+                    return p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11;
+                }
+
+                return Sum<object>() + 7745;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncDeconstructsATypeParameterWithNew()
+        {
+            await Task.CompletedTask;
+            int Sum<T>()
+                where T : new()
+            {
+                (int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8, int p9, int p10, int p11) = new T();
+                return p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11;
+            }
+
+            return Sum<object>() + 7755;
+        }
     }
 }
