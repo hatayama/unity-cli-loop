@@ -690,5 +690,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             return read();
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsBesideAnOverloadWithARequiredArgument()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedRequiredArgumentDerived();
+                return first + second + 7715;
+            };
+            return read();
+        }
     }
 }

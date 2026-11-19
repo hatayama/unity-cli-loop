@@ -389,6 +389,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Base whose internal two-out Deconstruct a two-part deconstruction of the derived type calls.
+    /// </summary>
+    public class HotReloadUnpassedRequiredArgumentBase
+    {
+        internal void Deconstruct(out int first, out int second)
+        {
+            first = 1;
+            second = 2;
+        }
+    }
+
+    /// <summary>
+    /// Derived type with an internal Deconstruct that has two out parameters after a required one,
+    /// which a two-part deconstruction cannot call.
+    /// </summary>
+    public sealed class HotReloadUnpassedRequiredArgumentDerived : HotReloadUnpassedRequiredArgumentBase
+    {
+        internal void Deconstruct(int required, out int first, out int second)
+        {
+            first = required;
+            second = required;
+        }
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>

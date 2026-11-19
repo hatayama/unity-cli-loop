@@ -287,8 +287,9 @@ internal sealed class UnpassedInternalMemberUse
     }
 
     /// <summary>
-    /// What: whether the member is a method with the expected number of out parameters, or no count
-    /// is expected. A deconstruction calls the Deconstruct with one out parameter per part.
+    /// What: whether the member is a method whose parameters are exactly the expected number of out
+    /// parameters, or no count is expected. A deconstruction calls the Deconstruct with one out
+    /// parameter per part and nothing else.
     /// </summary>
     internal static bool HasOutParameterCount(ISymbol member, int? outParameterCount)
     {
@@ -297,8 +298,16 @@ internal sealed class UnpassedInternalMemberUse
             return true;
         }
 
-        return member is IMethodSymbol method
-            && method.Parameters.Count(parameter => parameter.RefKind == RefKind.Out) == outParameterCount.Value;
+        if (member is not IMethodSymbol method)
+        {
+            return false;
+        }
+
+        // Why every part must be out: a Deconstruct with any other parameter is not one a
+        // deconstruction can call. An extension's receiver is not a part.
+        IEnumerable<IParameterSymbol> parts = method.IsExtensionMethod ? method.Parameters.Skip(1) : method.Parameters;
+        return parts.Count() == outParameterCount.Value
+            && parts.All(parameter => parameter.RefKind == RefKind.Out);
     }
 
     // Why names and not symbols: the target assembly comes from a separate compilation that

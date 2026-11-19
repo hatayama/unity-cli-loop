@@ -172,6 +172,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a two-part deconstruction of a derived type whose own internal Deconstruct takes a
+        /// required argument before two out parameters is skipped with a reason that names the base
+        /// type's two-out Deconstruct, the method the compiled body calls.
+        /// </summary>
+        [TestCase("7715", "ClosureDeconstructsBesideAnOverloadWithARequiredArgument")]
+        public async Task DeconstructionBesideAnOverloadWithARequiredArgument_NamesTheBaseDeconstruct(
+            string token,
+            string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(reason, Does.Contain("'HotReloadUnpassedRequiredArgumentBase'"));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
         /// What: a deconstruction whose receiver does not satisfy the new(), unmanaged, or struct
         /// constraint of an internal generic extension Deconstruct is skipped with a reason that
         /// names the extension the compiled body calls, not the constrained one.
