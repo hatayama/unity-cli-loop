@@ -100,7 +100,7 @@ internal static class AccessorAccessRegistrar
         out WorkerReason rejectReason)
     {
         rejectReason = null;
-        ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol ctorSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, node);
         if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
         {
             rejectReason =
@@ -118,7 +118,7 @@ internal static class AccessorAccessRegistrar
     {
         rejectReason = null;
         // Initializer assignments are always writes (including ImplicitElementAccess indexers).
-        ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol initializerSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
             ? AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(initializerProperty))
             : initializerSymbol != null
@@ -145,7 +145,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, elementAccess);
         if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
         {
             if (AssignmentTargetRules.IsDeconstructedThroughSetter(indexer, elementAccess))
@@ -311,7 +311,7 @@ internal static class AccessorAccessRegistrar
         out WorkerReason rejectReason)
     {
         rejectReason = null;
-        ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol leftSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         if (leftSymbol is IFieldSymbol fieldSymbol)
         {
             if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))

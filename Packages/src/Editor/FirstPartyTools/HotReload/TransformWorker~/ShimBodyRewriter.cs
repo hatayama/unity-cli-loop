@@ -174,7 +174,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol invokedSymbol = AccessibilityRules.BoundSymbolOrNull(_semanticModel, node);
         if (BaseCallShimRewrite.IsBaseCall(node))
         {
             // Why here: a base call has no receiver the later rewrites could qualify, and C# cannot
