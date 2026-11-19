@@ -863,6 +863,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesOpenStartWithInternalLength()
+        {
+            Func<int> read = () => new HotReloadPatternRangeInternalLength()[..2] + 7741;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesOpenStartWithInternalLength()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternRangeInternalLength()[..2] + 7751;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesOpenEndWithInternalLength()
+        {
+            Func<int> read = () => new HotReloadPatternRangeInternalLength()[1..] + 7761;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesAndSlicesPublicMembers()
         {
             Func<int> read = () =>

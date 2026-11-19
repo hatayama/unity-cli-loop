@@ -330,9 +330,9 @@ internal static class ImplicitCallTargets
         }
     }
 
-    // Why a range of two int endpoints reads nothing: the compiler lowers `x[a..b]` to
-    // `x.Slice(a, b - a)` when neither endpoint counts from the end, while `^n`, an open end, and
-    // an Index or Range value all need Length to find their offsets.
+    // Why a range of int endpoints reads nothing: the compiler lowers `x[a..b]` to
+    // `x.Slice(a, b - a)` and `x[..b]` to `x.Slice(0, b)` when no endpoint counts from the end,
+    // while `^n`, an open end, and an Index or Range value all need Length to find their offsets.
     private static bool ReadsLength(SemanticModel semanticModel, BracketedArgumentListSyntax arguments)
     {
         ExpressionSyntax argument = arguments.Arguments.Count == 1 ? arguments.Arguments[0].Expression : null;
@@ -341,14 +341,13 @@ internal static class ImplicitCallTargets
             argument = parenthesized.Expression;
         }
 
-        if (argument is not RangeExpressionSyntax range
-            || range.LeftOperand == null
-            || range.RightOperand == null)
+        if (argument is not RangeExpressionSyntax range || range.RightOperand == null)
         {
             return true;
         }
 
-        return !IsInt(semanticModel, range.LeftOperand) || !IsInt(semanticModel, range.RightOperand);
+        return (range.LeftOperand != null && !IsInt(semanticModel, range.LeftOperand))
+            || !IsInt(semanticModel, range.RightOperand);
     }
 
     private static bool IsInt(SemanticModel semanticModel, ExpressionSyntax operand)

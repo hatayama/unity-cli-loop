@@ -58,6 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7681", "AsyncIndexesFromEndWithInternalGetter", "this[]", IndexOrRangeConstruct)]
         [TestCase("7621", "ClosureIndexesConditionallyFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7631", "AsyncIndexesConditionallyFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
+        [TestCase("7761", "ClosureSlicesOpenEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7301", "ClosureAwaitUsesDisposeAsyncWithInternalGetAwaiter", "GetAwaiter", AwaitUsingConstruct)]
         [TestCase("7311", "AsyncAwaitUsesDisposeAsyncWithInternalGetAwaiter", "GetAwaiter", AwaitUsingConstruct)]
         [TestCase("7321", "ClosureAwaitUsesDisposeAsyncWithInternalIsCompleted", "IsCompleted", AwaitUsingConstruct)]
@@ -131,11 +132,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a range whose endpoints both count from the start never reads Length, so an
-        /// internal Length alone does not refuse the lambda or async body.
+        /// What: a range whose given endpoints all count from the start and whose end is given
+        /// (`1..2`, `..2`) never reads Length, so an internal Length alone does not refuse the
+        /// lambda or async body.
         /// </summary>
         [TestCase("7721", "ClosureSlicesFromStartWithInternalLength")]
         [TestCase("7731", "AsyncSlicesFromStartWithInternalLength")]
+        [TestCase("7741", "ClosureSlicesOpenStartWithInternalLength")]
+        [TestCase("7751", "AsyncSlicesOpenStartWithInternalLength")]
         public async Task RangeFromStartWithInternalLength_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
