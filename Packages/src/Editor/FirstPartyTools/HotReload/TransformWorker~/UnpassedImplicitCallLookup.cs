@@ -501,6 +501,15 @@ internal static class UnpassedImplicitCallLookup
         {
             case INamedTypeSymbol named:
                 return acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition));
+            // Why the element is compared as the receiver: `this T[]` takes an array of the same
+            // rank whose element its element type accepts.
+            case IArrayTypeSymbol arrayThisType:
+                return receiver is IArrayTypeSymbol arrayReceiver
+                    && arrayReceiver.Rank == arrayThisType.Rank
+                    && AcceptsReceiver(
+                        arrayThisType.ElementType,
+                        arrayReceiver.ElementType,
+                        AcceptedThisTypeNames(arrayReceiver.ElementType));
             case ITypeParameterSymbol typeParameter:
                 return SatisfiesKindConstraints(typeParameter, receiver)
                     && typeParameter.ConstraintTypes.All(constraint => constraint is INamedTypeSymbol namedConstraint
