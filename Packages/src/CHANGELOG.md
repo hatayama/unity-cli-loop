@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.1](https://github.com/hatayama/unity-cli-loop/compare/v3.34.0...v3.34.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose interpolated string handler, index or range, or await using and await foreach awaiter calls an internal member instead of failing at run time ([#3565](https://github.com/hatayama/unity-cli-loop/issues/3565)) ([43043e5](https://github.com/hatayama/unity-cli-loop/commit/43043e5389fe5a50258551f45d5166da806adde6))
+
 ## [3.34.0](https://github.com/hatayama/unity-cli-loop/compare/v3.33.0...v3.34.0) (2026-11-17)
 
 
