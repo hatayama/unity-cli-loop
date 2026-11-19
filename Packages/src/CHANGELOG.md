@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.3](https://github.com/hatayama/unity-cli-loop/compare/v3.34.2...v3.34.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body that reaches an internal member of an unpassed file through an interpolated string handler, index or range, await using or await foreach awaiter, or generic extension method ([#3566](https://github.com/hatayama/unity-cli-loop/issues/3566)) ([4d3fd0b](https://github.com/hatayama/unity-cli-loop/commit/4d3fd0b966d483504f51ecae11ba8893041d21dd))
+
 ## [3.34.2](https://github.com/hatayama/unity-cli-loop/compare/v3.34.1...v3.34.2) (2026-11-19)
 
 
