@@ -238,7 +238,7 @@ internal static class ImplicitCallTargets
     // initializer, or any other converted expression; null for an ordinary string or addition.
     // Why the creation must belong to this very node: the compiler attaches the conversion of
     // `$"a" + $"b"` to the addition, and each string inside it would otherwise report it again.
-    private static IInterpolatedStringHandlerCreationOperation FindHandlerCreationOrNull(
+    internal static IInterpolatedStringHandlerCreationOperation FindHandlerCreationOrNull(
         SemanticModel semanticModel,
         ExpressionSyntax expression)
     {
@@ -279,7 +279,7 @@ internal static class ImplicitCallTargets
 
     // Why only the content's own parts: a formatted value may hold another interpolated string,
     // whose handler calls belong to that string's node.
-    private static IEnumerable<IInterpolatedStringAppendOperation> AppendOperations(IOperation content)
+    internal static IEnumerable<IInterpolatedStringAppendOperation> AppendOperations(IOperation content)
     {
         switch (content)
         {
@@ -337,7 +337,7 @@ internal static class ImplicitCallTargets
     // Why a range of int endpoints reads nothing: the compiler lowers `x[a..b]` to
     // `x.Slice(a, b - a)` and `x[..b]` to `x.Slice(0, b)` when no endpoint counts from the end,
     // while `^n`, an open end, and an Index or Range value all need Length to find their offsets.
-    private static bool ReadsLength(SemanticModel semanticModel, BracketedArgumentListSyntax arguments)
+    internal static bool ReadsLength(SemanticModel semanticModel, BracketedArgumentListSyntax arguments)
     {
         ExpressionSyntax argument = arguments.Arguments.Count == 1 ? arguments.Arguments[0].Expression : null;
         while (argument is ParenthesizedExpressionSyntax parenthesized)
@@ -435,7 +435,7 @@ internal static class ImplicitCallTargets
 
     // A property accessor is named by its property and a constructor by the creation, which is
     // what the source would show.
-    private static string DisplayName(IMethodSymbol method)
+    internal static string DisplayName(IMethodSymbol method)
     {
         if (method.MethodKind == MethodKind.Constructor)
         {

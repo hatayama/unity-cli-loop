@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -114,6 +115,7 @@ internal sealed class UnpassedInternalMemberUse
         ISymbol member = FindInternalMemberOfUnpassedTypeOrNull(
             start,
             name.Identifier.ValueText,
+            outParameterCount: null,
             semanticModel,
             targetAssembly);
         if (member == null)
@@ -161,7 +163,7 @@ internal sealed class UnpassedInternalMemberUse
         bool mayRunOutsideThePatchedMethod = runPlace != UseRunPlace.PatchedMethod;
         return new UnpassedInternalMemberUse(
             method.ContainingType,
-            method.AssociatedSymbol?.Name ?? method.Name,
+            ImplicitCallTargets.DisplayName(method),
             ChooseForm(runPlace, isSimpleNameLookup: false),
             isOfAPatchableKind: true,
             canBePatchedInPlace: !mayRunOutsideThePatchedMethod,
@@ -246,6 +248,7 @@ internal sealed class UnpassedInternalMemberUse
     internal static ISymbol FindInternalMemberOfUnpassedTypeOrNull(
         INamedTypeSymbol start,
         string memberName,
+        int? outParameterCount,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
@@ -272,7 +275,8 @@ internal sealed class UnpassedInternalMemberUse
             // too, and protected or protected internal members already bind in the worker.
             foreach (ISymbol member in type.GetMembers(memberName))
             {
-                if (member.DeclaredAccessibility == Accessibility.Internal)
+                if (member.DeclaredAccessibility == Accessibility.Internal
+                    && HasOutParameterCount(member, outParameterCount))
                 {
                     return member;
                 }
@@ -280,6 +284,30 @@ internal sealed class UnpassedInternalMemberUse
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// What: whether the member is a method whose parameters are exactly the expected number of out
+    /// parameters, or no count is expected. A deconstruction calls the Deconstruct with one out
+    /// parameter per part and nothing else.
+    /// </summary>
+    internal static bool HasOutParameterCount(ISymbol member, int? outParameterCount)
+    {
+        if (outParameterCount == null)
+        {
+            return true;
+        }
+
+        if (member is not IMethodSymbol method)
+        {
+            return false;
+        }
+
+        // Why every part must be out: a Deconstruct with any other parameter is not one a
+        // deconstruction can call. An extension's receiver is not a part.
+        IEnumerable<IParameterSymbol> parts = method.IsExtensionMethod ? method.Parameters.Skip(1) : method.Parameters;
+        return parts.Count() == outParameterCount.Value
+            && parts.All(parameter => parameter.RefKind == RefKind.Out);
     }
 
     // Why names and not symbols: the target assembly comes from a separate compilation that

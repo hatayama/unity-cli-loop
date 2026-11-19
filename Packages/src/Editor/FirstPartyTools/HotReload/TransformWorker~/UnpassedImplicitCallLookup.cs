@@ -8,12 +8,13 @@ using Microsoft.CodeAnalysis.Operations;
 
 /// <summary>
 /// What: finds the internal method of a compiled type of the target assembly that the compiler
-/// calls for an await, foreach, deconstruction, positional pattern, collection initializer, query,
-/// ref struct using, or await using, when the worker's binding found no method for it. The worker
+/// calls for an await, foreach, await foreach, deconstruction, positional pattern, collection
+/// initializer, query, interpolated string handler, implicit Index or Range support, ref struct
+/// using, or await using, when the worker's binding found no method for it. The worker
 /// reads a referenced assembly through its public surface only, so such a method looks missing to
 /// it while the shim compile binds it, and a closure or state machine calling it fails at run time.
 /// The method is looked up by the name the construct fixes, on the receiver type or as an extension
-/// method whose first parameter accepts the receiver, so a construct nothing can bind keeps failing.
+/// method whose this parameter accepts the receiver, so a construct nothing can bind keeps failing.
 /// </summary>
 internal static class UnpassedImplicitCallLookup
 {
@@ -41,9 +42,15 @@ internal static class UnpassedImplicitCallLookup
         SyntaxNode reported = bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
         foreach (SyntaxNode construct in reported.AncestorsAndSelf())
         {
-            foreach ((ITypeSymbol receiver, string methodName) in EnumerateMissingCalls(semanticModel, construct))
+            foreach ((ITypeSymbol receiver, string methodName, int? outParameterCount)
+                in EnumerateMissingCalls(semanticModel, construct))
             {
-                IMethodSymbol method = FindInternalMethodOrNull(receiver, methodName, semanticModel, targetAssembly);
+                IMethodSymbol method = FindInternalMethodOrNull(
+                    receiver,
+                    methodName,
+                    outParameterCount,
+                    semanticModel,
+                    targetAssembly);
                 if (method != null)
                 {
                     return UnpassedInternalMemberUse.ForImplicitCall(
@@ -65,14 +72,17 @@ internal static class UnpassedImplicitCallLookup
         return null;
     }
 
-    private static IEnumerable<(ITypeSymbol Receiver, string MethodName)> EnumerateMissingCalls(
+    // Why an expected out-parameter count: a deconstruction or positional pattern calls the
+    // Deconstruct with one out parameter per part, and another internal Deconstruct of the same
+    // name is not the method the compiled body calls. Every other call leaves it unset.
+    private static IEnumerable<(ITypeSymbol Receiver, string MethodName, int? OutParameterCount)> EnumerateMissingCalls(
         SemanticModel semanticModel,
         SyntaxNode construct)
     {
         switch (construct)
         {
             case AwaitExpressionSyntax awaitExpression:
-                return MissingAwaitCalls(semanticModel, awaitExpression);
+                return AnyArity(UnpassedAwaitCallLookup.MissingAwaitCalls(semanticModel, awaitExpression));
             case CommonForEachStatementSyntax forEach:
                 return MissingForEachCalls(semanticModel, forEach);
             case AssignmentExpressionSyntax assignment
@@ -82,52 +92,154 @@ internal static class UnpassedImplicitCallLookup
                 return MissingPositionalPatternCalls(semanticModel, pattern);
             case InitializerExpressionSyntax initializer
                 when initializer.IsKind(SyntaxKind.CollectionInitializerExpression):
-                return MissingCollectionInitializerCalls(semanticModel, initializer);
+                return AnyArity(MissingCollectionInitializerCalls(semanticModel, initializer));
             case QueryExpressionSyntax query:
-                return MissingQueryCalls(semanticModel, query);
+                return AnyArity(UnpassedQueryCallLookup.MissingCalls(semanticModel, query));
             case UsingStatementSyntax usingStatement:
-                return MissingDisposeCalls(
+                return AnyArity(MissingDisposeCalls(
+                    semanticModel,
+                    usingStatement.SpanStart,
                     TypeOf(semanticModel, (SyntaxNode)usingStatement.Declaration?.Type ?? usingStatement.Expression),
-                    usingStatement.AwaitKeyword != default);
+                    usingStatement.AwaitKeyword != default));
             case LocalDeclarationStatementSyntax localDeclaration when localDeclaration.UsingKeyword != default:
-                return MissingDisposeCalls(
+                return AnyArity(MissingDisposeCalls(
+                    semanticModel,
+                    localDeclaration.SpanStart,
                     TypeOf(semanticModel, localDeclaration.Declaration.Type),
-                    localDeclaration.AwaitKeyword != default);
+                    localDeclaration.AwaitKeyword != default));
+            default:
+                return AnyArity(MissingExpressionPatternCalls(semanticModel, construct));
+        }
+    }
+
+    private static IEnumerable<(ITypeSymbol, string, int?)> AnyArity(IEnumerable<(ITypeSymbol, string)> calls)
+    {
+        return calls.Select(call => (call.Item1, call.Item2, (int?)null));
+    }
+
+    // The expressions whose pattern members the compiler calls: an interpolated string, or an
+    // addition of interpolated strings, converted to a handler (the creation of an explicit
+    // conversion belongs to the cast), and an element access, plain or after `?.`, that goes
+    // through the implicit Index or Range support.
+    private static IEnumerable<(ITypeSymbol Receiver, string MethodName)> MissingExpressionPatternCalls(
+        SemanticModel semanticModel,
+        SyntaxNode construct)
+    {
+        switch (construct)
+        {
+            case InterpolatedStringExpressionSyntax interpolatedString:
+                return MissingHandlerCalls(semanticModel, interpolatedString);
+            case BinaryExpressionSyntax addition when addition.IsKind(SyntaxKind.AddExpression):
+                return MissingHandlerCalls(semanticModel, addition);
+            case CastExpressionSyntax cast:
+                return MissingHandlerCalls(semanticModel, cast);
+            case ElementAccessExpressionSyntax elementAccess:
+                return MissingIndexOrRangeCalls(
+                    semanticModel,
+                    elementAccess,
+                    elementAccess.Expression,
+                    elementAccess.ArgumentList);
+            case ElementBindingExpressionSyntax elementBinding:
+                return MissingIndexOrRangeCalls(
+                    semanticModel,
+                    elementBinding,
+                    elementBinding.Ancestors().OfType<ConditionalAccessExpressionSyntax>().FirstOrDefault()?.Expression,
+                    elementBinding.ArgumentList);
             default:
                 return Array.Empty<(ITypeSymbol, string)>();
         }
     }
 
-    private static IEnumerable<(ITypeSymbol, string)> MissingAwaitCalls(
+    // Why the parts' syntax names the method: a part whose append call bound to nothing has no
+    // method left, and a literal part calls AppendLiteral while an interpolation calls
+    // AppendFormatted.
+    private static IEnumerable<(ITypeSymbol, string)> MissingHandlerCalls(
         SemanticModel semanticModel,
-        AwaitExpressionSyntax awaitExpression)
+        ExpressionSyntax converted)
     {
-        AwaitExpressionInfo info = semanticModel.GetAwaitExpressionInfo(awaitExpression);
-        if (info.GetAwaiterMethod == null)
+        IInterpolatedStringHandlerCreationOperation creation =
+            ImplicitCallTargets.FindHandlerCreationOrNull(semanticModel, converted);
+        if (creation == null)
         {
-            return Single(TypeOf(semanticModel, awaitExpression.Expression), "GetAwaiter");
+            return Array.Empty<(ITypeSymbol, string)>();
         }
 
         List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
-        ITypeSymbol awaiter = info.GetAwaiterMethod.ReturnType;
-        if (info.IsCompletedProperty == null)
+        if (creation.HandlerCreation is not IObjectCreationOperation)
         {
-            missing.Add((awaiter, "IsCompleted"));
+            missing.Add((creation.Type, WellKnownMemberNames.InstanceConstructorName));
         }
 
-        if (info.GetResultMethod == null)
+        foreach (IInterpolatedStringAppendOperation append in ImplicitCallTargets.AppendOperations(creation.Content))
         {
-            missing.Add((awaiter, "GetResult"));
+            if (append.AppendCall is not IInvocationOperation)
+            {
+                missing.Add((creation.Type, append.Syntax is InterpolationSyntax ? "AppendFormatted" : "AppendLiteral"));
+            }
         }
 
         return missing;
     }
 
-    private static IEnumerable<(ITypeSymbol, string)> MissingDeconstructCalls(
+    // Why every member of the support pattern the access calls: an access the worker could not
+    // bind does not say which of Length, Count, the int indexer or Slice it missed, and the first
+    // internal one found is a member the compiled access calls. Length and Count are left out for
+    // a range the compiler lowers without reading them.
+    private static IEnumerable<(ITypeSymbol, string)> MissingIndexOrRangeCalls(
+        SemanticModel semanticModel,
+        ExpressionSyntax access,
+        ExpressionSyntax receiverExpression,
+        BracketedArgumentListSyntax arguments)
+    {
+        if (semanticModel.GetSymbolInfo(access).Symbol != null)
+        {
+            return Array.Empty<(ITypeSymbol, string)>();
+        }
+
+        // Why Nullable<T> is unwrapped: after `?.` on a nullable struct the access runs on the
+        // underlying value, whose members are the ones the compiler calls.
+        ITypeSymbol receiver = TypeOf(semanticModel, receiverExpression);
+        if (receiver is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+        {
+            receiver = nullable.TypeArguments[0];
+        }
+
+        // Why only the indexer otherwise: the implicit Index and Range support applies to a single
+        // Index or Range argument, and any other access that bound to nothing calls an indexer of
+        // its own shape, which may be the internal member.
+        string argumentType = arguments.Arguments.Count == 1
+            ? TypeOf(semanticModel, arguments.Arguments[0].Expression)?.ToDisplayString()
+            : null;
+        bool isRange = argumentType == "System.Range";
+        bool isIndex = argumentType == "System.Index";
+        if (!isRange && !isIndex)
+        {
+            return new[] { (receiver, WellKnownMemberNames.Indexer) };
+        }
+
+        List<(ITypeSymbol, string)> candidates = new List<(ITypeSymbol, string)>();
+        if (ImplicitCallTargets.ReadsLength(semanticModel, arguments))
+        {
+            candidates.Add((receiver, "Length"));
+            candidates.Add((receiver, "Count"));
+        }
+
+        if (isRange)
+        {
+            candidates.Add((receiver, "Slice"));
+        }
+
+        // Why the indexer for a range too: a type with its own Range indexer is indexed through it
+        // directly, without the implicit support.
+        candidates.Add((receiver, WellKnownMemberNames.Indexer));
+        return candidates;
+    }
+
+    private static IEnumerable<(ITypeSymbol, string, int?)> MissingDeconstructCalls(
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment)
     {
-        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
+        List<(ITypeSymbol, string, int?)> missing = new List<(ITypeSymbol, string, int?)>();
         AddMissingDeconstructCalls(
             assignment.Left,
             TypeOf(semanticModel, assignment.Right),
@@ -143,16 +255,16 @@ internal static class UnpassedImplicitCallLookup
         SyntaxNode left,
         ITypeSymbol value,
         DeconstructionInfo info,
-        List<(ITypeSymbol, string)> missing)
+        List<(ITypeSymbol, string, int?)> missing)
     {
         IReadOnlyList<ITypeSymbol> parts = PartTypesOrNull(value, info);
+        IReadOnlyList<SyntaxNode> targets = DeconstructionTargetsOrNull(left);
         if (parts == null)
         {
-            missing.Add((value, "Deconstruct"));
+            missing.Add((value, "Deconstruct", targets?.Count));
             return;
         }
 
-        IReadOnlyList<SyntaxNode> targets = DeconstructionTargetsOrNull(left);
         if (targets == null || targets.Count != parts.Count)
         {
             return;
@@ -204,39 +316,58 @@ internal static class UnpassedImplicitCallLookup
         }
     }
 
-    private static IEnumerable<(ITypeSymbol, string)> MissingForEachCalls(
+    private static IEnumerable<(ITypeSymbol, string, int?)> MissingForEachCalls(
         SemanticModel semanticModel,
         CommonForEachStatementSyntax forEach)
     {
         ForEachStatementInfo info = semanticModel.GetForEachStatementInfo(forEach);
-        if (info.GetEnumeratorMethod == null)
+        bool isAwaitForEach = forEach.AwaitKeyword != default;
+        if (!isAwaitForEach && info.GetEnumeratorMethod == null)
         {
-            string name = forEach.AwaitKeyword != default ? "GetAsyncEnumerator" : "GetEnumerator";
-            return Single(TypeOf(semanticModel, forEach.Expression), name);
+            return AnyArity(Single(TypeOf(semanticModel, forEach.Expression), "GetEnumerator"));
+        }
+
+        // Why an await foreach is traced even when its enumerator bound: the worker's binding keeps
+        // GetAsyncEnumerator, MoveNextAsync and DisposeAsync when only the awaiter of a result they
+        // return is missing, so the bound methods do not show which call failed.
+        List<(ITypeSymbol, string, int?)> missing = new List<(ITypeSymbol, string, int?)>();
+        if (isAwaitForEach)
+        {
+            missing.AddRange(AnyArity(UnpassedAwaitCallLookup.MissingAwaitForEachCalls(
+                semanticModel,
+                forEach.SpanStart,
+                TypeOf(semanticModel, forEach.Expression))));
         }
 
         if (forEach is ForEachVariableStatementSyntax forEachVariable
+            && info.ElementType != null
             && semanticModel.GetDeconstructionInfo(forEachVariable).Method == null)
         {
-            return Single(info.ElementType, "Deconstruct");
+            missing.Add((
+                info.ElementType,
+                "Deconstruct",
+                DeconstructionTargetsOrNull(forEachVariable.Variable)?.Count));
         }
 
-        return Array.Empty<(ITypeSymbol, string)>();
+        return missing;
     }
 
     // Why the input type from the context: a pattern that binds to no Deconstruct has no reliable
     // operation, while the matched expression and an explicit type still have their types.
-    private static IEnumerable<(ITypeSymbol, string)> MissingPositionalPatternCalls(
+    private static IEnumerable<(ITypeSymbol, string, int?)> MissingPositionalPatternCalls(
         SemanticModel semanticModel,
         RecursivePatternSyntax pattern)
     {
         if ((semanticModel.GetOperation(pattern) as IRecursivePatternOperation)?.DeconstructSymbol != null)
         {
-            return Array.Empty<(ITypeSymbol, string)>();
+            return Array.Empty<(ITypeSymbol, string, int?)>();
         }
 
         SyntaxNode typed = pattern.Type ?? FindMatchedExpressionOrNull(pattern);
-        return Single(TypeOf(semanticModel, typed), "Deconstruct");
+        return new[]
+        {
+            (TypeOf(semanticModel, typed), "Deconstruct", (int?)pattern.PositionalPatternClause.Subpatterns.Count),
+        };
     }
 
     private static SyntaxNode FindMatchedExpressionOrNull(RecursivePatternSyntax pattern)
@@ -269,114 +400,11 @@ internal static class UnpassedImplicitCallLookup
         return Array.Empty<(ITypeSymbol, string)>();
     }
 
-    // Why the receiver is carried: each clause calls its query method on what the previous call
-    // returned. After a clause that binds to nothing, the last type known stands in, which is right
-    // for a query whose methods all return the same sequence type.
-    private static IEnumerable<(ITypeSymbol, string)> MissingQueryCalls(
+    private static IEnumerable<(ITypeSymbol, string)> MissingDisposeCalls(
         SemanticModel semanticModel,
-        QueryExpressionSyntax query)
-    {
-        ITypeSymbol receiver = TypeOf(semanticModel, query.FromClause.Expression);
-        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
-        if (query.FromClause.Type != null)
-        {
-            receiver = CallOrRecordMissing(
-                semanticModel.GetQueryClauseInfo(query.FromClause).CastInfo.Symbol,
-                receiver,
-                "Cast",
-                missing);
-        }
-
-        foreach (QueryClauseSyntax clause in query.Body.Clauses)
-        {
-            receiver = AddMissingClauseCalls(semanticModel, clause, receiver, missing);
-        }
-
-        CallOrRecordMissing(
-            semanticModel.GetSymbolInfo(query.Body.SelectOrGroup).Symbol,
-            receiver,
-            query.Body.SelectOrGroup is GroupClauseSyntax ? "GroupBy" : "Select",
-            missing);
-        return missing;
-    }
-
-    // The type the query goes on with: the bound method's return type, or the receiver unchanged
-    // after recording the method as missing.
-    private static ITypeSymbol CallOrRecordMissing(
-        ISymbol bound,
-        ITypeSymbol receiver,
-        string methodName,
-        List<(ITypeSymbol, string)> missing)
-    {
-        if (bound is IMethodSymbol method)
-        {
-            return method.ReturnType;
-        }
-
-        missing.Add((receiver, methodName));
-        return receiver;
-    }
-
-    private static ITypeSymbol AddMissingClauseCalls(
-        SemanticModel semanticModel,
-        QueryClauseSyntax clause,
-        ITypeSymbol receiver,
-        List<(ITypeSymbol, string)> missing)
-    {
-        if (clause is OrderByClauseSyntax orderBy)
-        {
-            return AddMissingOrderingCalls(semanticModel, orderBy, receiver, missing);
-        }
-
-        QueryClauseInfo info = semanticModel.GetQueryClauseInfo(clause);
-        if (clause is JoinClauseSyntax join && join.Type != null && info.CastInfo.Symbol == null)
-        {
-            missing.Add((TypeOf(semanticModel, join.InExpression), "Cast"));
-        }
-
-        if (clause is FromClauseSyntax from && from.Type != null && info.CastInfo.Symbol == null)
-        {
-            missing.Add((TypeOf(semanticModel, from.Expression), "Cast"));
-        }
-
-        return CallOrRecordMissing(info.OperationInfo.Symbol, receiver, OperationName(clause), missing);
-    }
-
-    private static ITypeSymbol AddMissingOrderingCalls(
-        SemanticModel semanticModel,
-        OrderByClauseSyntax orderBy,
-        ITypeSymbol receiver,
-        List<(ITypeSymbol, string)> missing)
-    {
-        for (int index = 0; index < orderBy.Orderings.Count; index++)
-        {
-            OrderingSyntax ordering = orderBy.Orderings[index];
-            bool descending = ordering.AscendingOrDescendingKeyword.IsKind(SyntaxKind.DescendingKeyword);
-            string name = index == 0
-                ? (descending ? "OrderByDescending" : "OrderBy")
-                : (descending ? "ThenByDescending" : "ThenBy");
-            receiver = CallOrRecordMissing(semanticModel.GetSymbolInfo(ordering).Symbol, receiver, name, missing);
-        }
-
-        return receiver;
-    }
-
-    private static string OperationName(QueryClauseSyntax clause)
-    {
-        switch (clause)
-        {
-            case WhereClauseSyntax:
-                return "Where";
-            case FromClauseSyntax:
-                return "SelectMany";
-            case JoinClauseSyntax join:
-                return join.Into != null ? "GroupJoin" : "Join";
-            default:
-                return "Select";
-        }
-    }
-
-    private static IEnumerable<(ITypeSymbol, string)> MissingDisposeCalls(ITypeSymbol resourceType, bool isAwaitUsing)
+        int position,
+        ITypeSymbol resourceType,
+        bool isAwaitUsing)
     {
         if (resourceType == null)
         {
@@ -387,7 +415,7 @@ internal static class UnpassedImplicitCallLookup
         {
             return Implements(resourceType, "System.IAsyncDisposable")
                 ? Array.Empty<(ITypeSymbol, string)>()
-                : Single(resourceType, "DisposeAsync");
+                : UnpassedAwaitCallLookup.MissingAwaitUsingCalls(semanticModel, position, resourceType);
         }
 
         return resourceType.IsRefLikeType && !Implements(resourceType, "System.IDisposable")
@@ -398,17 +426,26 @@ internal static class UnpassedImplicitCallLookup
     private static IMethodSymbol FindInternalMethodOrNull(
         ITypeSymbol receiver,
         string methodName,
+        int? outParameterCount,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
-        if (receiver is not INamedTypeSymbol namedReceiver)
+        if (receiver == null)
         {
             return null;
+        }
+
+        // Why an array goes straight to the extensions: it declares no members of its own, but a
+        // `this T` extension can still take it.
+        if (receiver is not INamedTypeSymbol namedReceiver)
+        {
+            return FindInternalExtensionOrNull(receiver, methodName, outParameterCount, targetAssembly);
         }
 
         ISymbol member = UnpassedInternalMemberUse.FindInternalMemberOfUnpassedTypeOrNull(
             namedReceiver,
             methodName,
+            outParameterCount,
             semanticModel,
             targetAssembly);
         if (member is IMethodSymbol instanceMethod)
@@ -422,14 +459,15 @@ internal static class UnpassedImplicitCallLookup
             return property.GetMethod;
         }
 
-        return FindInternalExtensionOrNull(namedReceiver, methodName, targetAssembly);
+        return FindInternalExtensionOrNull(namedReceiver, methodName, outParameterCount, targetAssembly);
     }
 
     // Why names and not symbols: the target assembly comes from a separate compilation, so its
     // types are other symbols than the receiver the body binds to.
     private static IMethodSymbol FindInternalExtensionOrNull(
-        INamedTypeSymbol receiver,
+        ITypeSymbol receiver,
         string methodName,
+        int? outParameterCount,
         IAssemblySymbol targetAssembly)
     {
         HashSet<string> acceptedThisTypes = AcceptedThisTypeNames(receiver);
@@ -443,8 +481,8 @@ internal static class UnpassedImplicitCallLookup
             foreach (IMethodSymbol method in type.GetMembers(methodName).OfType<IMethodSymbol>())
             {
                 if (method.IsExtensionMethod
-                    && method.Parameters[0].Type is INamedTypeSymbol thisType
-                    && acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(thisType.OriginalDefinition))
+                    && UnpassedInternalMemberUse.HasOutParameterCount(method, outParameterCount)
+                    && AcceptsReceiver(method.Parameters[0].Type, receiver, acceptedThisTypes)
                     && AccessibilityRules.IsInaccessibleFromExternalAssembly(method))
                 {
                     return method;
@@ -455,11 +493,69 @@ internal static class UnpassedImplicitCallLookup
         return null;
     }
 
+    // Why a type parameter is compared by its constraints: `this T` accepts every receiver its
+    // constraints allow, and an unconstrained one accepts any receiver.
+    private static bool AcceptsReceiver(ITypeSymbol thisType, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)
+    {
+        switch (thisType)
+        {
+            case INamedTypeSymbol named:
+                return acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition));
+            // Why the element is compared as the receiver: `this T[]` takes an array of the same
+            // rank whose element its element type accepts.
+            case IArrayTypeSymbol arrayThisType:
+                return receiver is IArrayTypeSymbol arrayReceiver
+                    && arrayReceiver.Rank == arrayThisType.Rank
+                    && AcceptsReceiver(
+                        arrayThisType.ElementType,
+                        arrayReceiver.ElementType,
+                        AcceptedThisTypeNames(arrayReceiver.ElementType));
+            case ITypeParameterSymbol typeParameter:
+                return SatisfiesKindConstraints(typeParameter, receiver)
+                    && typeParameter.ConstraintTypes.All(constraint => constraint is INamedTypeSymbol namedConstraint
+                        && acceptedThisTypes.Contains(
+                            ConstDriftCollector.ToReflectionMetadataName(namedConstraint.OriginalDefinition)));
+            default:
+                return false;
+        }
+    }
+
+    // The constraints on what kind of type the receiver is: class, struct, unmanaged, and new().
+    // Why only a public parameterless constructor counts for new(): the worker sees the receiver's
+    // assembly through its public surface, as the body that calls the extension does.
+    private static bool SatisfiesKindConstraints(ITypeParameterSymbol typeParameter, ITypeSymbol receiver)
+    {
+        // Why Nullable<T> fails the struct constraint: C# requires a non-nullable value type there.
+        if (typeParameter.HasValueTypeConstraint
+            && (!receiver.IsValueType || receiver.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T))
+        {
+            return false;
+        }
+
+        if (typeParameter.HasReferenceTypeConstraint && !receiver.IsReferenceType)
+        {
+            return false;
+        }
+
+        if (typeParameter.HasUnmanagedTypeConstraint && !receiver.IsUnmanagedType)
+        {
+            return false;
+        }
+
+        // Why a type-parameter receiver passes new() by its own constraint: it has no constructors
+        // to inspect, and the compiler accepts it when it is itself constrained to new().
+        return !typeParameter.HasConstructorConstraint
+            || receiver.IsValueType
+            || receiver is ITypeParameterSymbol { HasConstructorConstraint: true }
+            || (receiver is INamedTypeSymbol { IsAbstract: false } named && named.InstanceConstructors.Any(constructor =>
+                constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public));
+    }
+
     // The receiver, its base types and its interfaces, any of which an extension's 'this' may name.
-    private static HashSet<string> AcceptedThisTypeNames(INamedTypeSymbol receiver)
+    private static HashSet<string> AcceptedThisTypeNames(ITypeSymbol receiver)
     {
         HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
-        for (INamedTypeSymbol type = receiver; type != null; type = type.BaseType)
+        for (INamedTypeSymbol type = receiver as INamedTypeSymbol ?? receiver.BaseType; type != null; type = type.BaseType)
         {
             names.Add(ConstDriftCollector.ToReflectionMetadataName(type.OriginalDefinition));
         }
