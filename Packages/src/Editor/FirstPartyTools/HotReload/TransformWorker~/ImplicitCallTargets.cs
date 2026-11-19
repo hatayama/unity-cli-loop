@@ -435,7 +435,7 @@ internal static class ImplicitCallTargets
 
     // A property accessor is named by its property and a constructor by the creation, which is
     // what the source would show.
-    private static string DisplayName(IMethodSymbol method)
+    internal static string DisplayName(IMethodSymbol method)
     {
         if (method.MethodKind == MethodKind.Constructor)
         {

@@ -163,24 +163,12 @@ internal sealed class UnpassedInternalMemberUse
         bool mayRunOutsideThePatchedMethod = runPlace != UseRunPlace.PatchedMethod;
         return new UnpassedInternalMemberUse(
             method.ContainingType,
-            ImplicitCallDisplayName(method),
+            ImplicitCallTargets.DisplayName(method),
             ChooseForm(runPlace, isSimpleNameLookup: false),
             isOfAPatchableKind: true,
             canBePatchedInPlace: !mayRunOutsideThePatchedMethod,
             mayRunOutsideThePatchedMethod,
             isSimpleNameLookup: false);
-    }
-
-    // A property accessor is named by its property and a constructor by the creation, which is
-    // what the source would show.
-    private static string ImplicitCallDisplayName(IMethodSymbol method)
-    {
-        if (method.MethodKind == MethodKind.Constructor)
-        {
-            return "new " + method.ContainingType.Name + "(...)";
-        }
-
-        return method.AssociatedSymbol?.Name ?? method.Name;
     }
 
     // Why this order: in a state machine or a delegating shim, neither moving the use nor
