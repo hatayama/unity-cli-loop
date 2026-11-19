@@ -87,6 +87,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Async sequence with public pattern members whose elements deconstruct only through the
+    /// internal generic extension Deconstruct above. Yields one pair.
+    /// </summary>
+    public sealed class HotReloadUnpassedPairSequence
+    {
+        public Enumerator GetAsyncEnumerator()
+        {
+            return new Enumerator();
+        }
+
+        /// <summary>
+        /// Yields one pair.
+        /// </summary>
+        public sealed class Enumerator
+        {
+            private int _moves;
+
+            public HotReloadUnpassedGenericPair Current { get; } = new HotReloadUnpassedGenericPair();
+
+            public HotReloadPatternPublicAwaitable MoveNextAsync()
+            {
+                _moves++;
+                return new HotReloadPatternPublicAwaitable(_moves <= 1);
+            }
+
+            public HotReloadPatternPublicAwaitable DisposeAsync()
+            {
+                return new HotReloadPatternPublicAwaitable(true);
+            }
+        }
+    }
+
+    /// <summary>
     /// Enumerator returned by the generic extension GetEnumerator; yields 1 to Count.
     /// </summary>
     public sealed class HotReloadUnpassedGenericEnumerator

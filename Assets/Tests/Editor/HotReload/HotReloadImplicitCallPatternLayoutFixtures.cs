@@ -469,5 +469,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.CompletedTask;
             return new HotReloadPatternRangeInternalLength()[..2] + 7991;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitForEachDeconstructsThroughConstrainedGenericExtension()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int sum = 7781;
+                await foreach ((int first, int second) in new HotReloadUnpassedPairSequence())
+                {
+                    sum += first + second;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitForEachDeconstructsThroughConstrainedGenericExtension()
+        {
+            int sum = 7791;
+            await foreach ((int first, int second) in new HotReloadUnpassedPairSequence())
+            {
+                sum += first + second;
+            }
+
+            return sum;
+        }
     }
 }

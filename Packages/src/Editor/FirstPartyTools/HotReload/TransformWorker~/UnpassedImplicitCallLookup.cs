@@ -290,30 +290,33 @@ internal static class UnpassedImplicitCallLookup
         SemanticModel semanticModel,
         CommonForEachStatementSyntax forEach)
     {
-        // Why an await foreach is traced even when its enumerator bound: the worker's binding keeps
-        // GetAsyncEnumerator, MoveNextAsync and DisposeAsync when only the awaiter of a result they
-        // return is missing, so the bound methods do not show which call failed.
-        if (forEach.AwaitKeyword != default)
-        {
-            return UnpassedAwaitCallLookup.MissingAwaitForEachCalls(
-                semanticModel,
-                forEach.SpanStart,
-                TypeOf(semanticModel, forEach.Expression));
-        }
-
         ForEachStatementInfo info = semanticModel.GetForEachStatementInfo(forEach);
-        if (info.GetEnumeratorMethod == null)
+        bool isAwaitForEach = forEach.AwaitKeyword != default;
+        if (!isAwaitForEach && info.GetEnumeratorMethod == null)
         {
             return Single(TypeOf(semanticModel, forEach.Expression), "GetEnumerator");
         }
 
-        if (forEach is ForEachVariableStatementSyntax forEachVariable
-            && semanticModel.GetDeconstructionInfo(forEachVariable).Method == null)
+        // Why an await foreach is traced even when its enumerator bound: the worker's binding keeps
+        // GetAsyncEnumerator, MoveNextAsync and DisposeAsync when only the awaiter of a result they
+        // return is missing, so the bound methods do not show which call failed.
+        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
+        if (isAwaitForEach)
         {
-            return Single(info.ElementType, "Deconstruct");
+            missing.AddRange(UnpassedAwaitCallLookup.MissingAwaitForEachCalls(
+                semanticModel,
+                forEach.SpanStart,
+                TypeOf(semanticModel, forEach.Expression)));
         }
 
-        return Array.Empty<(ITypeSymbol, string)>();
+        if (forEach is ForEachVariableStatementSyntax forEachVariable
+            && info.ElementType != null
+            && semanticModel.GetDeconstructionInfo(forEachVariable).Method == null)
+        {
+            missing.Add((info.ElementType, "Deconstruct"));
+        }
+
+        return missing;
     }
 
     // Why the input type from the context: a pattern that binds to no Deconstruct has no reliable
