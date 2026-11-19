@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.2](https://github.com/hatayama/unity-cli-loop/compare/v3.34.1...v3.34.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips an edited member that needs unsafe code instead of failing the whole file ([#3564](https://github.com/hatayama/unity-cli-loop/issues/3564)) ([04508b9](https://github.com/hatayama/unity-cli-loop/commit/04508b96a2c0bc4ae6e0980f8ecd6d73d7f395fb))
+
 ## [3.34.1](https://github.com/hatayama/unity-cli-loop/compare/v3.34.0...v3.34.1) (2026-11-19)
 
 
