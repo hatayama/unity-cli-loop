@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.4](https://github.com/hatayama/unity-cli-loop/compare/v3.34.3...v3.34.4) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload no longer reports Patched for a lambda or async body that passes a Span or Memory to an internal member and then fails at run time ([#3568](https://github.com/hatayama/unity-cli-loop/issues/3568)) ([051bb5c](https://github.com/hatayama/unity-cli-loop/commit/051bb5c2d6d45e7b565406cb6ab9a2e1eafa3f5a))
+
 ## [3.34.3](https://github.com/hatayama/unity-cli-loop/compare/v3.34.2...v3.34.3) (2026-11-19)
 
 
