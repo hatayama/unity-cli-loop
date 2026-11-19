@@ -265,6 +265,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Writable through the implicit Index support with a public Length and an internal
+    /// ref-returning indexer, which a write goes through instead of a setter.
+    /// </summary>
+    public sealed class HotReloadPatternIndexInternalRefIndexer
+    {
+        private readonly int[] _values = { 1, 2, 3 };
+
+        public int Length => _values.Length;
+
+        internal ref int this[int index] => ref _values[index];
+    }
+
+    /// <summary>
     /// Indexable and sliceable through the implicit Index and Range support with public members.
     /// </summary>
     public sealed class HotReloadPatternPublicIndexable
@@ -931,6 +944,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await Task.CompletedTask;
             HotReloadPatternIndexInternalGetter values = new HotReloadPatternIndexInternalGetter();
             (values[^1]) = 7821;
+            return values.Length;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureAssignsParenthesizedFromEndWithInternalRefIndexer()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadPatternIndexInternalRefIndexer values = new HotReloadPatternIndexInternalRefIndexer();
+                (values[^1]) = 7831;
+                return values.Length;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAssignsParenthesizedFromEndWithInternalRefIndexer()
+        {
+            await Task.CompletedTask;
+            HotReloadPatternIndexInternalRefIndexer values = new HotReloadPatternIndexInternalRefIndexer();
+            (values[^1]) = 7841;
             return values.Length;
         }
 

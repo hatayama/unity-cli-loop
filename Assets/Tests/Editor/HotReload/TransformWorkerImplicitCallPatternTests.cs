@@ -119,12 +119,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a lambda or async body that writes `x[^1]` through an internal indexer setter is
-        /// skipped and produces no entry. The indexer check refuses it before the implicit-call
-        /// check, so the reason is the indexer one.
+        /// What: a lambda or async body that writes `x[^1]` through an internal indexer setter, or
+        /// through an internal ref-returning indexer's getter, is skipped and produces no entry. The
+        /// indexer check refuses it before the implicit-call check, so the reason is the indexer one.
         /// </summary>
         [TestCase("7691", "ClosureAssignsFromEndWithInternalSetter")]
         [TestCase("7701", "AsyncAssignsFromEndWithInternalSetter")]
+        [TestCase("7831", "ClosureAssignsParenthesizedFromEndWithInternalRefIndexer")]
+        [TestCase("7841", "AsyncAssignsParenthesizedFromEndWithInternalRefIndexer")]
         public async Task IndexFromEndThroughInternalSetter_IsSkipped(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);

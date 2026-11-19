@@ -321,9 +321,11 @@ internal static class ImplicitCallTargets
         }
 
         AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(elementAccess);
+        // Why the accessor a write calls: a ref-returning indexer has no setter, and a write goes
+        // through the reference its getter returns.
         if (assignment != null)
         {
-            yield return (property.SetMethod, IndexOrRangeConstruct);
+            yield return (AssignmentTargetRules.AccessorCalledByWrite(property), IndexOrRangeConstruct);
         }
 
         if (assignment == null || !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
