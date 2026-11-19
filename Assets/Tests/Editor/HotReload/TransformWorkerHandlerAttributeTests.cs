@@ -28,10 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a lambda or async body whose handler has an internal AppendFormatted is skipped with
         /// the implicit-call reason naming AppendFormatted, although the attribute's file is not
-        /// passed, and produces no entry.
+        /// passed, and produces no entry. This holds also when the handler call is an operand of an
+        /// addition and its hole is a captured local, the shape first reported.
         /// </summary>
         [TestCase("1105", "ClosureBuildsHandler")]
         [TestCase("1115", "AsyncBuildsHandler")]
+        [TestCase("1125", "ClosureAddsToHandlerCallOfCapturedLocal")]
+        [TestCase("1135", "AsyncAddsToHandlerCallOfLocal")]
         public async Task HandlerWithInternalAttributeInUnpassedFile_IsSkippedWithTheImplicitCallReason(
             string token,
             string methodName)

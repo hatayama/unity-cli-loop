@@ -59,5 +59,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadHandlerAttribute
             await Task.CompletedTask;
             return HandlerAttributeFixtureSinks.Measure($"ab{1115}");
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureAddsToHandlerCallOfCapturedLocal()
+        {
+            int value = 2;
+            Func<int> read = () => HandlerAttributeFixtureSinks.Measure($"ab{value}") + 1125;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAddsToHandlerCallOfLocal()
+        {
+            int value = 2;
+            await Task.CompletedTask;
+            return HandlerAttributeFixtureSinks.Measure($"ab{value}") + 1135;
+        }
     }
 }
