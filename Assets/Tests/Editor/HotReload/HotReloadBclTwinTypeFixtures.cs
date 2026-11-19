@@ -415,5 +415,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Func<int> read = () => new HotReloadBclTwinIndexed { [new ArraySegment<int>(_ints)] = 6341 }.Stored;
             return read();
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncCallsInternalMethodWithMemory()
+        {
+            await Task.Yield();
+            return HotReloadBclTwinTargets.MemoryLength(new Memory<int>(_ints)) + 6351;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncCallsInternalMethodWithArraySegment()
+        {
+            await Task.Yield();
+            return HotReloadBclTwinTargets.SegmentLength(new ArraySegment<int>(_ints)) + 6361;
+        }
     }
 }

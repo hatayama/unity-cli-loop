@@ -83,6 +83,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.ClosureCallsInternalMethodWithMemory(), Is.EqualTo(6103));
         }
 
+        /// <summary>
+        /// What: an edited async method that passes a Memory to an internal method is Patched and
+        /// returns the edited value through the accessor.
+        /// </summary>
+        [Test]
+        public async Task Run_AsyncPassingMemoryToInternalMethod_IsPatchedAndReturnsTheEditedValue()
+        {
+            HotReloadBclTwinHost host = new HotReloadBclTwinHost();
+            Assert.That(await host.AsyncCallsInternalMethodWithMemory(), Is.EqualTo(6353));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("6351");
+
+            AssertKind(result, "AsyncCallsInternalMethodWithMemory", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(await host.AsyncCallsInternalMethodWithMemory(), Is.EqualTo(6354));
+        }
+
         private static int Call(HotReloadBclTwinHost host, string methodName)
         {
             switch (methodName)

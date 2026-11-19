@@ -89,6 +89,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an async body that passes a Memory to an internal method becomes an entry whose shim
+        /// calls the method through its accessor, as the same call with an ArraySegment does.
+        /// </summary>
+        [Test]
+        public async Task AsyncCallingInternalMethodWithMemory_CallsTheAccessorAsItsOracleDoes()
+        {
+            TransformWorkerClientResult oracle = await RunEditedFixtureAsync("6361");
+            AssertEntry(oracle, "AsyncCallsInternalMethodWithArraySegment");
+            Assert.That(
+                oracle.Output.shimSource,
+                Does.Match(@"__M_SegmentLength\w*\(new ArraySegment<int>\(__F__ints\(__uloopInstance\)\)\) \+ 6362"));
+
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("6351");
+            AssertEntry(result, "AsyncCallsInternalMethodWithMemory");
+            Assert.That(
+                result.Output.shimSource,
+                Does.Match(@"__M_MemoryLength\w*\(new Memory<int>\(__F__ints\(__uloopInstance\)\)\) \+ 6352"));
+        }
+
+        /// <summary>
         /// What: shapes that need no accessor for the twin type (plain body, public target, string,
         /// index from end, private Memory field and property) stay entries.
         /// </summary>
