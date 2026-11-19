@@ -39,10 +39,8 @@ internal static class WorkerHandlerAttributeBindingTree
     {
         targetAssemblyWithAllMembers = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference);
 
-        // Why a bound attribute leaves the compilation as it is: a passed file or a reference
-        // already declares it, and a second declaration would make the name ambiguous.
         if (targetAssemblyWithAllMembers == null
-            || compilation.GetTypeByMetadataName(AttributeMetadataName) != null
+            || HasAccessibleDeclaration(compilation)
             || targetAssemblyWithAllMembers.GetTypeByMetadataName(AttributeMetadataName) == null)
         {
             return compilation;
@@ -55,5 +53,21 @@ internal static class WorkerHandlerAttributeBindingTree
         // models bind with, and the one resolved above belongs to the compilation without the tree.
         targetAssemblyWithAllMembers = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(withAttribute, targetTypesReference);
         return withAttribute;
+    }
+
+    // Why an accessible declaration and not any: GetTypeByMetadataName also returns an internal
+    // copy of another assembly, which the compiler cannot bind the attribute to. A passed file or
+    // a public declaration in a reference already binds, and a second one would make it ambiguous.
+    private static bool HasAccessibleDeclaration(CSharpCompilation compilation)
+    {
+        foreach (INamedTypeSymbol declared in compilation.GetTypesByMetadataName(AttributeMetadataName))
+        {
+            if (compilation.IsSymbolAccessibleWithin(declared, compilation.Assembly))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
