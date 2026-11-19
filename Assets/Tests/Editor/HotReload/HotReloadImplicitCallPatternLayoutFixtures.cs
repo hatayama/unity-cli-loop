@@ -601,5 +601,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return 7605;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsBesideANewConstrainedExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second, int third, int fourth, int fifth, int sixth) =
+                    new HotReloadUnpassedNoDefaultConstructor(1);
+                return first + second + third + fourth + fifth + sixth + 7625;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsBesideAnUnmanagedConstrainedExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second, int third, int fourth, int fifth, int sixth, int seventh) =
+                    new HotReloadUnpassedManagedStruct();
+                return first + second + third + fourth + fifth + sixth + seventh + 7635;
+            };
+            return read();
+        }
     }
 }

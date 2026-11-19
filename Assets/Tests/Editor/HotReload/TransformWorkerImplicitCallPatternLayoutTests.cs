@@ -164,6 +164,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
         }
 
+        /// <summary>
+        /// What: a deconstruction whose receiver does not satisfy the new() or unmanaged constraint
+        /// of an internal generic extension Deconstruct is skipped with a reason that names the
+        /// extension the compiled body calls, not the constrained one.
+        /// </summary>
+        [TestCase("7625", "ClosureDeconstructsBesideANewConstrainedExtension")]
+        [TestCase("7635", "ClosureDeconstructsBesideAnUnmanagedConstrainedExtension")]
+        public async Task DeconstructionBesideAnUnsatisfiedConstraint_NamesTheCalledExtension(
+            string token,
+            string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(reason, Does.Contain("HotReloadUnpassedConstraintTargetExtensions"));
+            Assert.That(reason, Does.Not.Contain("HotReloadUnpassedNewConstrainedExtensions"));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
         {
             string fixturePath = Path.GetFullPath(

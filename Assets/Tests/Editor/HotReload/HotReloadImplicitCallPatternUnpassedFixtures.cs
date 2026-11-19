@@ -167,6 +167,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal six-out Deconstruct with a new() constraint, declared before the one the two
+    /// classes without a public parameterless constructor actually call.
+    /// </summary>
+    public static class HotReloadUnpassedNewConstrainedExtensions
+    {
+        internal static void Deconstruct<T>(
+            this T value,
+            out int first,
+            out int second,
+            out int third,
+            out int fourth,
+            out int fifth,
+            out int sixth)
+            where T : new()
+        {
+            first = value == null ? 0 : 1;
+            second = 2;
+            third = 3;
+            fourth = 4;
+            fifth = 5;
+            sixth = 6;
+        }
+
+        internal static void Deconstruct<T>(
+            this T value,
+            out int first,
+            out int second,
+            out int third,
+            out int fourth,
+            out int fifth,
+            out int sixth,
+            out int seventh)
+            where T : unmanaged
+        {
+            first = value.GetHashCode() == 0 ? 0 : 1;
+            second = 2;
+            third = 3;
+            fourth = 4;
+            fifth = 5;
+            sixth = 6;
+            seventh = 7;
+        }
+    }
+
+    /// <summary>
+    /// The six-out and seven-out Deconstruct methods the receivers below actually call.
+    /// </summary>
+    public static class HotReloadUnpassedConstraintTargetExtensions
+    {
+        internal static void Deconstruct(
+            this HotReloadUnpassedNoDefaultConstructor value,
+            out int first,
+            out int second,
+            out int third,
+            out int fourth,
+            out int fifth,
+            out int sixth)
+        {
+            first = value.Seed;
+            second = 2;
+            third = 3;
+            fourth = 4;
+            fifth = 5;
+            sixth = 6;
+        }
+
+        internal static void Deconstruct(
+            this HotReloadUnpassedManagedStruct value,
+            out int first,
+            out int second,
+            out int third,
+            out int fourth,
+            out int fifth,
+            out int sixth,
+            out int seventh)
+        {
+            first = value.Label == null ? 0 : 1;
+            second = 2;
+            third = 3;
+            fourth = 4;
+            fifth = 5;
+            sixth = 6;
+            seventh = 7;
+        }
+    }
+
+    /// <summary>
+    /// Class without a public parameterless constructor, so it does not satisfy new().
+    /// </summary>
+    public sealed class HotReloadUnpassedNoDefaultConstructor
+    {
+        public HotReloadUnpassedNoDefaultConstructor(int seed)
+        {
+            Seed = seed;
+        }
+
+        public int Seed { get; }
+    }
+
+    /// <summary>
+    /// Struct with a reference field, so it does not satisfy unmanaged.
+    /// </summary>
+    public struct HotReloadUnpassedManagedStruct
+    {
+        public string Label;
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>

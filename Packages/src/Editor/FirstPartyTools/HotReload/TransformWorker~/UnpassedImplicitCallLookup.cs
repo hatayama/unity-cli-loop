@@ -488,14 +488,39 @@ internal static class UnpassedImplicitCallLookup
             case INamedTypeSymbol named:
                 return acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition));
             case ITypeParameterSymbol typeParameter:
-                return (!typeParameter.HasValueTypeConstraint || receiver.IsValueType)
-                    && (!typeParameter.HasReferenceTypeConstraint || receiver.IsReferenceType)
+                return SatisfiesKindConstraints(typeParameter, receiver)
                     && typeParameter.ConstraintTypes.All(constraint => constraint is INamedTypeSymbol namedConstraint
                         && acceptedThisTypes.Contains(
                             ConstDriftCollector.ToReflectionMetadataName(namedConstraint.OriginalDefinition)));
             default:
                 return false;
         }
+    }
+
+    // The constraints on what kind of type the receiver is: class, struct, unmanaged, and new().
+    // Why only a public parameterless constructor counts for new(): the worker sees the receiver's
+    // assembly through its public surface, as the body that calls the extension does.
+    private static bool SatisfiesKindConstraints(ITypeParameterSymbol typeParameter, INamedTypeSymbol receiver)
+    {
+        if (typeParameter.HasValueTypeConstraint && !receiver.IsValueType)
+        {
+            return false;
+        }
+
+        if (typeParameter.HasReferenceTypeConstraint && !receiver.IsReferenceType)
+        {
+            return false;
+        }
+
+        if (typeParameter.HasUnmanagedTypeConstraint && !receiver.IsUnmanagedType)
+        {
+            return false;
+        }
+
+        return !typeParameter.HasConstructorConstraint
+            || receiver.IsValueType
+            || (!receiver.IsAbstract && receiver.InstanceConstructors.Any(constructor =>
+                constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public));
     }
 
     // The receiver, its base types and its interfaces, any of which an extension's 'this' may name.
