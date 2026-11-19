@@ -210,7 +210,13 @@ internal static class UnpassedImplicitCallLookup
             return Array.Empty<(ITypeSymbol, string)>();
         }
 
+        // Why Nullable<T> is unwrapped: after `?.` on a nullable struct the access runs on the
+        // underlying value, whose members are the ones the compiler calls.
         ITypeSymbol receiver = TypeOf(semanticModel, receiverExpression);
+        if (receiver is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+        {
+            receiver = nullable.TypeArguments[0];
+        }
         List<(ITypeSymbol, string)> candidates = new List<(ITypeSymbol, string)>();
         if (ImplicitCallTargets.ReadsLength(semanticModel, arguments))
         {

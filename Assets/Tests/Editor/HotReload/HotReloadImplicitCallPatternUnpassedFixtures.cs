@@ -76,6 +76,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Struct indexable through the implicit Index and Range support with an internal Length, used
+    /// through a nullable receiver in an unpassed file.
+    /// </summary>
+    public struct HotReloadUnpassedStructInternalLength
+    {
+        internal int Length => 3;
+
+        public int this[int index] => 100 + index;
+
+        public int Slice(int start, int length)
+        {
+            return start * 10 + length;
+        }
+    }
+
+    /// <summary>
+    /// Internal extension methods whose this parameter is a type parameter with a class or a struct
+    /// constraint; four and five out parameters keep them apart from the other Deconstruct fixtures.
+    /// </summary>
+    public static class HotReloadUnpassedKindConstrainedExtensions
+    {
+        internal static void Deconstruct<T>(
+            this T value,
+            out int first,
+            out int second,
+            out int third,
+            out int fourth)
+            where T : class
+        {
+            first = value == null ? 0 : 1;
+            second = 2;
+            third = 3;
+            fourth = 4;
+        }
+
+        internal static void Deconstruct<T>(
+            this T value,
+            out int first,
+            out int second,
+            out int third,
+            out int fourth,
+            out int fifth)
+            where T : struct
+        {
+            first = value.GetHashCode() == 0 ? 0 : 1;
+            second = 2;
+            third = 3;
+            fourth = 4;
+            fifth = 5;
+        }
+    }
+
+    /// <summary>
+    /// Class deconstructed into four parts through the class-constrained generic extension.
+    /// </summary>
+    public sealed class HotReloadUnpassedQuad
+    {
+    }
+
+    /// <summary>
+    /// Struct deconstructed into five parts through the struct-constrained generic extension.
+    /// </summary>
+    public struct HotReloadUnpassedQuint
+    {
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>

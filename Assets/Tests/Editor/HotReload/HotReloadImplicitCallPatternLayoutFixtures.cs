@@ -539,5 +539,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Func<int> read = () => new HotReloadUnpassedArityPair() is (5, 6) ? 7545 : 0;
             return read();
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesNullableStructFromEndWithInternalLength()
+        {
+            HotReloadUnpassedStructInternalLength? values = new HotReloadUnpassedStructInternalLength();
+            Func<int> read = () => (values?[^1] ?? 0) + 7555;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesNullableStructWithInternalLength()
+        {
+            await Task.CompletedTask;
+            HotReloadUnpassedStructInternalLength? values = new HotReloadUnpassedStructInternalLength();
+            return (values?[1..^1] ?? 0) + 7565;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsThroughClassConstrainedExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second, int third, int fourth) = new HotReloadUnpassedQuad();
+                return first + second + third + fourth + 7575;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsThroughStructConstrainedExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second, int third, int fourth, int fifth) = new HotReloadUnpassedQuint();
+                return first + second + third + fourth + fifth + 7585;
+            };
+            return read();
+        }
     }
 }

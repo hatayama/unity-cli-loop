@@ -31,6 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("7501", "ClosureBuildsHandlerWithInternalCtor", "new HotReloadPatternHandlerInternalCtor(...)")]
         [TestCase("7505", "ClosureCastsToHandlerWithInternalAppendFormatted", "AppendFormatted")]
+        [TestCase("7555", "ClosureIndexesNullableStructFromEndWithInternalLength", "Length")]
+        [TestCase("7575", "ClosureDeconstructsThroughClassConstrainedExtension", "Deconstruct")]
+        [TestCase("7585", "ClosureDeconstructsThroughStructConstrainedExtension", "Deconstruct")]
         [TestCase("7581", "ClosureBuildsHandlerFromInterpolatedAddition", "AppendFormatted")]
         [TestCase("7881", "ClosureIndexesConditionallyFromEndWithInternalLength", "Length")]
         [TestCase("7521", "ClosureBuildsHandlerWithInternalAppendLiteral", "AppendLiteral")]
@@ -77,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("7511", "AsyncBuildsHandlerWithInternalCtor", "new HotReloadPatternHandlerInternalCtor(...)")]
         [TestCase("7515", "AsyncCastsToHandlerWithInternalAppendFormatted", "AppendFormatted")]
+        [TestCase("7565", "AsyncSlicesNullableStructWithInternalLength", "Length")]
         [TestCase("7591", "AsyncBuildsHandlerFromInterpolatedAddition", "AppendFormatted")]
         [TestCase("7891", "AsyncIndexesConditionallyFromEndWithInternalLength", "Length")]
         [TestCase("7531", "AsyncBuildsHandlerWithInternalAppendLiteral", "AppendLiteral")]
