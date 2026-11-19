@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerBclTwinTypeBindingTests
     {
         private const string FixtureFileName = "HotReloadBclTwinTypeFixtures.cs";
-        private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
+        private const string LocalFixtureFileName = "HotReloadBclTwinLocalFixtures.cs";
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
@@ -66,6 +66,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertSkippedWith(oracle, oracleMethodName, expectedCode);
 
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+            AssertSkippedWith(result, methodName, expectedCode);
+        }
+
+        /// <summary>
+        /// What: a lambda that reads no private member and builds a BCL twin type from a captured
+        /// local is skipped with its oracle's reason when the twin type reaches a non-public
+        /// constructor, indexer, or initializer indexer, or a non-public method the compiler calls
+        /// for a construct (collection initializer, deconstruction, positional pattern, foreach,
+        /// await, query).
+        /// </summary>
+        [TestCase("6641", "ClosureCreatesBoxFromLocalMemory", "6651", "ClosureCreatesBoxFromLocalArraySegment", nameof(HotReloadWorkerReasonCode.AccessorConstructorCallNoShape))]
+        [TestCase("6661", "ClosureReadsPrivateIndexerWithLocalMemory", "6671", "ClosureReadsPrivateIndexerWithLocalArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
+        [TestCase("6681", "ClosureWritesPrivateIndexerWithLocalMemory", "6691", "ClosureWritesPrivateIndexerWithLocalArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
+        [TestCase("6701", "ClosureCompoundWritesPrivateIndexerWithLocalMemory", "6711", "ClosureCompoundWritesPrivateIndexerWithLocalArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
+        [TestCase("6721", "ClosureIncrementsPrivateIndexerWithLocalMemory", "6731", "ClosureIncrementsPrivateIndexerWithLocalArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
+        [TestCase("6741", "ClosureInitializesInternalIndexerWithLocalMemory", "6751", "ClosureInitializesInternalIndexerWithLocalArraySegment", nameof(HotReloadWorkerReasonCode.AccessorInitializerAssignmentNoShape))]
+        [TestCase("6501", "ClosureFillsBagWithMemory", "6511", "ClosureFillsBagWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape))]
+        [TestCase("6521", "ClosureDeconstructsMemory", "6531", "ClosureDeconstructsArraySegment", nameof(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape))]
+        [TestCase("6541", "ClosureMatchesMemoryPositionally", "6551", "ClosureMatchesArraySegmentPositionally", nameof(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape))]
+        [TestCase("6561", "ClosureEnumeratesMemory", "6571", "ClosureEnumeratesPlainValue", nameof(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape))]
+        [TestCase("6581", "ClosureAwaitsMemory", "6591", "ClosureAwaitsArraySegment", nameof(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape))]
+        [TestCase("6601", "ClosureQueriesMemory", "6611", "ClosureQueriesArraySegment", nameof(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape))]
+        public async Task TwinTypedShapeFromCapturedLocal_IsSkippedWithTheOracleReason(
+            string token,
+            string methodName,
+            string oracleToken,
+            string oracleMethodName,
+            string expectedCodeName)
+        {
+            // Why a name: the reason code enum is internal, and a public test method cannot take it.
+            HotReloadWorkerReasonCode expectedCode =
+                (HotReloadWorkerReasonCode)Enum.Parse(typeof(HotReloadWorkerReasonCode), expectedCodeName);
+
+            TransformWorkerClientResult oracle = await RunEditedFileAsync(LocalFixtureFileName, oracleToken);
+            AssertSkippedWith(oracle, oracleMethodName, expectedCode);
+
+            TransformWorkerClientResult result = await RunEditedFileAsync(LocalFixtureFileName, token);
             AssertSkippedWith(result, methodName, expectedCode);
         }
 
@@ -142,10 +179,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Contain("whose source this reload was not given"));
         }
 
-        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
+        private static Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
+        {
+            return RunEditedFileAsync(FixtureFileName, token);
+        }
+
+        private static async Task<TransformWorkerClientResult> RunEditedFileAsync(string fileName, string token)
         {
             string fixturePath = Path.GetFullPath(
-                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName));
             string onDisk = File.ReadAllText(fixturePath);
             string editedToken = token.Substring(0, 3) + "2";
             string edited = onDisk.Replace(token, editedToken, StringComparison.Ordinal);
@@ -153,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource("BclTwinType" + token + ".cs", edited);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildInputForSource(
                 editedPath,
-                FixtureProjectRelativePath,
+                "Assets/Tests/Editor/HotReload/" + fileName,
                 snapshotSource: onDisk);
             TransformWorkerClientResult result =
                 await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
