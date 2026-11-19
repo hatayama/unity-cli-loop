@@ -115,11 +115,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a range whose endpoints both count from the start never reads Length, so an
-        /// internal Length alone does not refuse the lambda or async body.
+        /// What: a range whose given endpoints all count from the start and whose end is given
+        /// (`1..2`, `..2`) never reads Length, so an internal Length alone does not refuse the
+        /// lambda or async body.
         /// </summary>
         [TestCase("7961", "ClosureSlicesFromStartWithInternalLength")]
         [TestCase("7971", "AsyncSlicesFromStartWithInternalLength")]
+        [TestCase("7981", "ClosureSlicesOpenStartWithInternalLength")]
+        [TestCase("7991", "AsyncSlicesOpenStartWithInternalLength")]
         public async Task RangeFromStartWithUnpassedInternalLength_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
