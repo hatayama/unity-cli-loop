@@ -104,8 +104,9 @@ internal static class UnpassedImplicitCallLookup
     }
 
     // The expressions whose pattern members the compiler calls: an interpolated string, or an
-    // addition of interpolated strings, converted to a handler, and an element access, plain or
-    // after `?.`, that goes through the implicit Index or Range support.
+    // addition of interpolated strings, converted to a handler (the creation of an explicit
+    // conversion belongs to the cast), and an element access, plain or after `?.`, that goes
+    // through the implicit Index or Range support.
     private static IEnumerable<(ITypeSymbol Receiver, string MethodName)> MissingExpressionPatternCalls(
         SemanticModel semanticModel,
         SyntaxNode construct)
@@ -116,6 +117,8 @@ internal static class UnpassedImplicitCallLookup
                 return MissingHandlerCalls(semanticModel, interpolatedString);
             case BinaryExpressionSyntax addition when addition.IsKind(SyntaxKind.AddExpression):
                 return MissingHandlerCalls(semanticModel, addition);
+            case CastExpressionSyntax cast:
+                return MissingHandlerCalls(semanticModel, cast);
             case ElementAccessExpressionSyntax elementAccess:
                 return MissingIndexOrRangeCalls(
                     semanticModel,

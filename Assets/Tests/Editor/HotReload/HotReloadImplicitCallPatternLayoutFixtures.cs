@@ -497,5 +497,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return sum;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCastsToHandlerWithInternalAppendFormatted()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureFormatted(
+                (HotReloadPatternHandlerInternalAppendFormatted)$"ab{7505}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncCastsToHandlerWithInternalAppendFormatted()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureFormatted(
+                (HotReloadPatternHandlerInternalAppendFormatted)$"ab{7515}");
+        }
     }
 }
