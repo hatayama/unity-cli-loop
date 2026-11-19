@@ -80,7 +80,25 @@ internal static class UnsafeContextRules
                 return !semanticModel.GetConstantValue(node).HasValue;
         }
 
+        if (CallsPointerLikeParameter(node, semanticModel))
+        {
+            return true;
+        }
+
         return node is ExpressionSyntax expression && HasPointerLikeType(expression, semanticModel);
+    }
+
+    // Why the callee's parameters: an omitted optional pointer argument leaves no expression in the
+    // body, yet the call still needs an unsafe context (CS0214 at the call site).
+    private static bool CallsPointerLikeParameter(SyntaxNode node, SemanticModel semanticModel)
+    {
+        if (!(node is InvocationExpressionSyntax) && !(node is BaseObjectCreationExpressionSyntax))
+        {
+            return false;
+        }
+
+        return semanticModel.GetSymbolInfo(node).Symbol is IMethodSymbol method
+            && method.Parameters.Any(parameter => IsPointerLike(parameter.Type));
     }
 
     // Why exempt: a pointer type that only names a type, as a typeof operand or a generic type

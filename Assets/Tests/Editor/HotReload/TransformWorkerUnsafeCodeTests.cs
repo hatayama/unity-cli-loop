@@ -132,6 +132,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertRefusedAsync("sizeof(UnsafeFixtureStruct) + 1950", "sizeof(UnsafeFixtureStruct) + 1951", "UnsafeFixtureSizeOfStructHost.Read(");
         }
 
+        /// <summary>What: a call that omits an optional pointer argument, leaving no pointer expression in the body, is Skipped.</summary>
+        [Test]
+        public async Task Run_CallOmittingOptionalPointerArgument_IsSkipped()
+        {
+            await AssertRefusedAsync("Count() + 2300", "Count() + 2301", "UnsafeFixtureOptionalPointerCallHost.Read(");
+        }
+
         /// <summary>What: an added method with pointer code is Skipped and the safe method is an entry.</summary>
         [Test]
         public async Task Run_AddedMethodWithPointers_IsSkipped()

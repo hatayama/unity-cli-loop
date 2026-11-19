@@ -276,6 +276,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
         }
     }
 
+    public static class UnsafeFixtureOptionalPointerApi
+    {
+        public static unsafe int Count(int* values = null)
+        {
+            return values == null ? 0 : *values;
+        }
+    }
+
+    public class UnsafeFixtureOptionalPointerCallHost
+    {
+        public unsafe int Read()
+        {
+            return UnsafeFixtureOptionalPointerApi.Count() + 2300;
+        }
+    }
+
     public class UnsafeFixturePointerTypeArgumentHost
     {
         public int Read()
