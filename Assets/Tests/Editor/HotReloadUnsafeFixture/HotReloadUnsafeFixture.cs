@@ -330,6 +330,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
         }
     }
 
+    public class UnsafeFixtureOptionalPointerBag : System.Collections.IEnumerable
+    {
+        public int Total;
+
+        public unsafe void Add(int value, int* extra = null)
+        {
+            Total += value;
+        }
+
+        public System.Collections.IEnumerator GetEnumerator()
+        {
+            return null;
+        }
+    }
+
+    public class UnsafeFixtureCollectionInitializerHost
+    {
+        public unsafe int Read()
+        {
+            UnsafeFixtureOptionalPointerBag bag = new UnsafeFixtureOptionalPointerBag { 2500 };
+            return bag.Total;
+        }
+    }
+
     public class UnsafeFixturePointerTypeArgumentHost
     {
         public int Read()

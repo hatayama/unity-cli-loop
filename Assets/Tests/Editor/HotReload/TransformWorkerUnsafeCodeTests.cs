@@ -160,6 +160,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertRefusedAsync("Count() + 2300", "Count() + 2301", "UnsafeFixtureOptionalPointerCallHost.Read(");
         }
 
+        /// <summary>What: a collection initializer whose implicit Add takes an omitted optional pointer argument is Skipped.</summary>
+        [Test]
+        public async Task Run_CollectionInitializerAddWithPointerParameter_IsSkipped()
+        {
+            await AssertRefusedAsync("{ 2500 }", "{ 2501 }", "UnsafeFixtureCollectionInitializerHost.Read(");
+        }
+
         /// <summary>What: an added method with pointer code is Skipped and the safe method is an entry.</summary>
         [Test]
         public async Task Run_AddedMethodWithPointers_IsSkipped()

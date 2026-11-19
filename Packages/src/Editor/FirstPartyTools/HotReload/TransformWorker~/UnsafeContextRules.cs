@@ -89,15 +89,21 @@ internal static class UnsafeContextRules
     }
 
     // Why the callee's parameters: an omitted optional pointer argument leaves no expression in the
-    // body, yet the call still needs an unsafe context (CS0214 at the call site).
+    // body, yet the call still needs an unsafe context (CS0214 at the call site). A collection
+    // initializer element calls Add implicitly, with no invocation node of its own.
     private static bool CallsPointerLikeParameter(SyntaxNode node, SemanticModel semanticModel)
     {
-        if (!(node is InvocationExpressionSyntax) && !(node is BaseObjectCreationExpressionSyntax))
+        ISymbol callee = null;
+        if (node is InvocationExpressionSyntax || node is BaseObjectCreationExpressionSyntax)
         {
-            return false;
+            callee = semanticModel.GetSymbolInfo(node).Symbol;
+        }
+        else if (node is ExpressionSyntax element && node.Parent.IsKind(SyntaxKind.CollectionInitializerExpression))
+        {
+            callee = semanticModel.GetCollectionInitializerSymbolInfo(element).Symbol;
         }
 
-        return semanticModel.GetSymbolInfo(node).Symbol is IMethodSymbol method
+        return callee is IMethodSymbol method
             && method.Parameters.Any(parameter => IsPointerLike(parameter.Type));
     }
 
