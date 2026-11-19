@@ -110,7 +110,7 @@ internal static class InaccessibleAccessScanner
         if (assignment.Parent is InitializerExpressionSyntax)
         {
             // Initializer assignments are always writes (including ImplicitElementAccess indexers).
-            ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+            ISymbol initializerSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
             if (initializerSymbol is IPropertySymbol initializerProperty)
             {
                 return AccessibilityRules.IsInaccessibleAccessor(
@@ -120,7 +120,7 @@ internal static class InaccessibleAccessScanner
             return IsInaccessibleNonConstSymbol(initializerSymbol);
         }
 
-        ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol leftSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         if (leftSymbol is IPropertySymbol propertySymbol)
         {
             bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
@@ -163,7 +163,7 @@ internal static class InaccessibleAccessScanner
 
     internal static bool IsInaccessibleObjectCreation(SemanticModel semanticModel, SyntaxNode node)
     {
-        ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol ctorSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, node);
         return ctorSymbol != null
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol);
     }
@@ -199,7 +199,7 @@ internal static class InaccessibleAccessScanner
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, elementAccess);
         if (symbol is IPropertySymbol indexer)
         {
             return AccessibilityRules.IsInaccessibleAccessor(AccessorCalledOutsideAssignment(indexer, elementAccess));

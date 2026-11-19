@@ -43,12 +43,32 @@ internal static class ImplicitCallTargets
     /// What: the refusal for the first inaccessible method the compiler calls for this node, or
     /// null when the node makes no such call.
     /// </summary>
+    /// <remarks>
+    /// Why the enforcing binding when a target is missing: an operand whose type a referenced DLL
+    /// also declares internally (Harmony's copies of Memory and Span) gets an error type under the
+    /// accessibility-ignoring binding, so the compiler's call is not found there; see
+    /// AccessibilityRules.BoundSymbolOrNull. A missing target is also normal (foreach over an array,
+    /// a tuple deconstruction), so the enforcing pass only adds a second look.
+    /// </remarks>
     internal static WorkerReason FindInaccessibleCallReasonOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
+        WorkerReason reason = FindReasonOrNull(semanticModel, node, out bool metMissingTarget);
+        if (reason != null || !metMissingTarget)
+        {
+            return reason;
+        }
+
+        return FindReasonOrNull(AccessibilityRules.EnforcingModel(semanticModel), node, out _);
+    }
+
+    private static WorkerReason FindReasonOrNull(SemanticModel semanticModel, SyntaxNode node, out bool metMissingTarget)
+    {
+        metMissingTarget = false;
         foreach ((IMethodSymbol method, string construct) in EnumerateTargets(semanticModel, node))
         {
             if (method == null)
             {
+                metMissingTarget = true;
                 continue;
             }
 

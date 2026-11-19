@@ -100,7 +100,7 @@ internal static class AccessorAccessRegistrar
         out WorkerReason rejectReason)
     {
         rejectReason = null;
-        ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol ctorSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, node);
         if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
         {
             rejectReason =
@@ -118,7 +118,7 @@ internal static class AccessorAccessRegistrar
     {
         rejectReason = null;
         // Initializer assignments are always writes (including ImplicitElementAccess indexers).
-        ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol initializerSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
             ? AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(initializerProperty))
             : initializerSymbol != null
@@ -145,7 +145,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, elementAccess);
         if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
         {
             if (AssignmentTargetRules.IsDeconstructedThroughSetter(indexer, elementAccess))
@@ -311,7 +311,7 @@ internal static class AccessorAccessRegistrar
         out WorkerReason rejectReason)
     {
         rejectReason = null;
-        ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol leftSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         if (leftSymbol is IFieldSymbol fieldSymbol)
         {
             if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
@@ -512,9 +512,13 @@ internal static class AccessorAccessRegistrar
 
     // Why the bound form and not the count: one element passed to a params parameter matches the
     // parameter count, yet the accessor delegate takes the array, so the element must be refused.
+    // Why the enforcing binding when the first finds no call: the accessor target of a call left
+    // unbound by an internal BCL copy came from that binding, so only it shows how the arguments map.
     private static bool HasExpandedParamsArgument(SemanticModel semanticModel, InvocationExpressionSyntax invocation)
     {
-        if (semanticModel.GetOperation(invocation) is not IInvocationOperation operation)
+        IInvocationOperation operation = semanticModel.GetOperation(invocation) as IInvocationOperation
+            ?? AccessibilityRules.EnforcingModel(semanticModel).GetOperation(invocation) as IInvocationOperation;
+        if (operation == null)
         {
             return false;
         }
@@ -565,9 +569,8 @@ internal static class AccessorAccessRegistrar
     {
 
         // Why refuse: the accessor is a Func or Action, and a ref struct cannot be a generic
-        // type argument, so the shim would not compile. Why parameters too, though no call reaches
-        // them today: a call with a ref struct argument does not bind in the worker yet, and once
-        // it does, the same delegate would not compile.
+        // type argument, so the shim would not compile. Parameters count too: a call that passes a
+        // Span or ReadOnlySpan binds, and its delegate would not compile either.
         if (HasRefLikeSignature(methodSymbol))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape);

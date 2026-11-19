@@ -38,13 +38,24 @@ internal static class AccessibilityRules
     }
 
     /// <summary>
-    /// What: the symbol a call, method group, or member access binds to, or null when nothing is
-    /// bound. When binding failed because a static class is offered twice (the edited source and
-    /// its compiled copy) and such a compiled class is not externally visible, returns one of its
-    /// methods from that compiled class, the one the running code would call. That method shares the
-    /// containing type of the overload the compiler would pick but is not necessarily that overload,
-    /// so it is only good for deciding refusal.
+    /// What: the symbol a call, method group, member access, object creation, element access, or
+    /// assignment target binds to, or null when nothing is bound. When binding failed because a
+    /// static class is offered twice (the edited source and its compiled copy) and such a compiled
+    /// class is not externally visible, returns one of its methods from that compiled class, the one
+    /// the running code would call. That method shares the containing type of the overload the
+    /// compiler would pick but is not necessarily that overload, so it is only good for deciding
+    /// refusal. Otherwise, when the node is still unbound, returns what binding with accessibility
+    /// enforced gives.
     /// </summary>
+    /// <remarks>
+    /// Why the accessibility-enforcing binding is asked last: the worker binds with accessibility
+    /// ignored so that private and internal members resolve, which the enforcing binding cannot do.
+    /// But ignoring accessibility also exposes internal types of referenced assemblies, and a DLL
+    /// that carries an internal copy of a BCL type (Harmony carries ReadOnlySpan, Span, Memory and
+    /// more) makes that type name ambiguous in a body. An argument of that type then has an error
+    /// type, the call binds to nothing, and every accessor check passes it by. The enforcing binding
+    /// does not see the internal copy, so it resolves the name to the BCL type and binds the call.
+    /// </remarks>
     internal static ISymbol BoundSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
         SymbolInfo info = semanticModel.GetSymbolInfo(node);
@@ -59,12 +70,27 @@ internal static class AccessibilityRules
         // because the worker binds with accessibility ignored, so a call to it fails as ambiguous.
         // Treating that as "no symbol" made every access check pass, and the shim called the
         // method and threw.
-        if (info.CandidateReason != CandidateReason.OverloadResolutionFailure)
+        if (info.CandidateReason == CandidateReason.OverloadResolutionFailure)
         {
-            return null;
+            IMethodSymbol twin = FindTwinCandidateToRefuseOrNull(
+                semanticModel.Compilation.Assembly,
+                info.CandidateSymbols);
+            if (twin != null)
+            {
+                return twin;
+            }
         }
 
-        return FindTwinCandidateToRefuseOrNull(semanticModel.Compilation.Assembly, info.CandidateSymbols);
+        return EnforcingModel(semanticModel).GetSymbolInfo(node).Symbol;
+    }
+
+    /// <summary>
+    /// What: the semantic model of the same tree that binds with accessibility enforced. Asked only
+    /// for a node the accessibility-ignoring binding left unbound; see BoundSymbolOrNull for why.
+    /// </summary>
+    internal static SemanticModel EnforcingModel(SemanticModel semanticModel)
+    {
+        return semanticModel.Compilation.GetSemanticModel(semanticModel.SyntaxTree, ignoreAccessibility: false);
     }
 
     // Why per containing type: the candidates are the whole method group, so they include every
