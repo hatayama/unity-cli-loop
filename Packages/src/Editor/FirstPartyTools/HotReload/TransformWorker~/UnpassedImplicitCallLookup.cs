@@ -196,20 +196,6 @@ internal static class UnpassedImplicitCallLookup
             return Array.Empty<(ITypeSymbol, string)>();
         }
 
-        bool isRange = false;
-        bool isIndex = false;
-        foreach (ArgumentSyntax argument in arguments.Arguments)
-        {
-            string argumentType = TypeOf(semanticModel, argument.Expression)?.ToDisplayString();
-            isRange |= argumentType == "System.Range";
-            isIndex |= argumentType == "System.Index";
-        }
-
-        if (!isRange && !isIndex)
-        {
-            return Array.Empty<(ITypeSymbol, string)>();
-        }
-
         // Why Nullable<T> is unwrapped: after `?.` on a nullable struct the access runs on the
         // underlying value, whose members are the ones the compiler calls.
         ITypeSymbol receiver = TypeOf(semanticModel, receiverExpression);
@@ -217,6 +203,20 @@ internal static class UnpassedImplicitCallLookup
         {
             receiver = nullable.TypeArguments[0];
         }
+
+        // Why only the indexer otherwise: the implicit Index and Range support applies to a single
+        // Index or Range argument, and any other access that bound to nothing calls an indexer of
+        // its own shape, which may be the internal member.
+        string argumentType = arguments.Arguments.Count == 1
+            ? TypeOf(semanticModel, arguments.Arguments[0].Expression)?.ToDisplayString()
+            : null;
+        bool isRange = argumentType == "System.Range";
+        bool isIndex = argumentType == "System.Index";
+        if (!isRange && !isIndex)
+        {
+            return new[] { (receiver, WellKnownMemberNames.Indexer) };
+        }
+
         List<(ITypeSymbol, string)> candidates = new List<(ITypeSymbol, string)>();
         if (ImplicitCallTargets.ReadsLength(semanticModel, arguments))
         {

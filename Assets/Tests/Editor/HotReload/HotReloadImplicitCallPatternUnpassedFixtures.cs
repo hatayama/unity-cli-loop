@@ -275,6 +275,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Indexable with two arguments, an int and an Index, through an internal indexer, beside an
+    /// internal Length that the access never reads.
+    /// </summary>
+    public sealed class HotReloadUnpassedTwoArgumentIndexer
+    {
+        internal int Length => 3;
+
+        internal int this[int row, System.Index column] => row * 10 + column.Value;
+    }
+
+    /// <summary>
+    /// Indexable with one int argument through an internal indexer only, in an unpassed file.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalIntIndexer
+    {
+        internal int this[int index] => 100 + index;
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>

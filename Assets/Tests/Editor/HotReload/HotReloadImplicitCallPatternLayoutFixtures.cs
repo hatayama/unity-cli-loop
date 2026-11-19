@@ -625,5 +625,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             return read();
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesTwoArgumentsWithInternalIndexer()
+        {
+            Func<int> read = () => new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7615;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesTwoArgumentsWithInternalIndexer()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7645;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesWithInternalIntIndexer()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalIntIndexer()[0] + 7655;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesWithInternalIntIndexer()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedInternalIntIndexer()[0] + 7665;
+        }
     }
 }
