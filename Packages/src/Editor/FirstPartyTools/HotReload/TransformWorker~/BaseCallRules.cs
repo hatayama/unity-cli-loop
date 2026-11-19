@@ -285,16 +285,19 @@ internal static class BaseCallRules
     // Why these shapes are refused: the stand-in copies the target's parameters without default
     // values or params, and a generic, ref-returning or pointer signature has no stand-in the
     // shim can declare and the Editor can match back.
+    // Why the pointer checks stay although the unsafe-code skip runs first: the stand-in declares
+    // the target's signature in a shim compiled without unsafe code, so it checks that signature
+    // itself instead of relying on the member-level check running first.
     private static bool HasUnsupportedArgumentShape(InvocationExpressionSyntax invocation, IMethodSymbol target)
     {
-        if (target.IsGenericMethod || target.ReturnsByRef || target.ReturnsByRefReadonly || IsPointerLike(target.ReturnType))
+        if (target.IsGenericMethod || target.ReturnsByRef || target.ReturnsByRefReadonly || UnsafeContextRules.IsPointerLike(target.ReturnType))
         {
             return true;
         }
 
         foreach (IParameterSymbol parameter in target.Parameters)
         {
-            if (parameter.IsParams || !IsSupportedRefKind(parameter.RefKind) || IsPointerLike(parameter.Type))
+            if (parameter.IsParams || !IsSupportedRefKind(parameter.RefKind) || UnsafeContextRules.IsPointerLike(parameter.Type))
             {
                 return true;
             }
@@ -315,18 +318,6 @@ internal static class BaseCallRules
         return refKind == RefKind.None || refKind == RefKind.Ref || refKind == RefKind.Out || refKind == RefKind.In;
     }
 
-    // Why look through arrays: an int*[] parameter is as unsafe as int*, and the stand-in would
-    // declare it in a shim compiled without unsafe code.
-    private static bool IsPointerLike(ITypeSymbol type)
-    {
-        ITypeSymbol elementType = type;
-        while (elementType is IArrayTypeSymbol arrayType)
-        {
-            elementType = arrayType.ElementType;
-        }
-
-        return elementType.TypeKind == TypeKind.Pointer || elementType.TypeKind == TypeKind.FunctionPointer;
-    }
 
     private static bool TargetIsCompiled(INamedTypeSymbol typeSymbol, INamedTypeSymbol compiledType, IMethodSymbol target)
     {

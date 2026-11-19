@@ -302,6 +302,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Generic methods and methods inside generic types cannot be safely patched with Harmony. "
                 + "Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUnsafeCode,
+                NoArgs,
+                "Methods and accessors that need an unsafe context (pointers, function pointers, fixed "
+                + "statements, or unsafe blocks) are skipped; the patch is compiled without unsafe code. "
+                + "Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 NoArgs,
                 "Explicit interface implementations the compiled assembly does not hold yet, and accessors "

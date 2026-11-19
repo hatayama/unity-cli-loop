@@ -457,6 +457,7 @@ source on disk. When a run skips a method it had patched before, `Warnings` name
 | Method or getter on a `partial` type whose body uses an `internal` member of a type in another assembly (through `InternalsVisibleTo`) | Reported as a name no source file of the `partial` type declares; hot reload does not patch this use from a `partial` type yet. Run `uloop compile` |
 | Method on a struct (value type) | Value-type patching is out of scope |
 | Generic method, or method on a generic type | Harmony cannot safely patch open generics |
+| Method or accessor that needs an unsafe context: a pointer or function pointer in its signature or body, a `fixed` statement, `sizeof` of a type that is not built in, or an `unsafe` block or local function | Patches are compiled without unsafe code; the rest of the file still applies. Run `uloop compile` for this member |
 | Explicit interface method or property accessor the compiled assembly does not hold yet, or an accessor of an explicit interface indexer | Only the bodies of explicit interface methods and property getters and setters the compiled type already implements are patched. Run `uloop compile` |
 | No body (`abstract` / `extern`) | Nothing to transplant |
 | Body uses `base.` for something other than a direct call to a base method (a base property, indexer, event, or method group) | C# cannot express that outside the type; run `uloop compile` |
