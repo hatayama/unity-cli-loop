@@ -315,7 +315,7 @@ internal static class InaccessibleAccessScanner
         SemanticModel semanticModel,
         ExpressionSyntax operand)
     {
-        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, operand);
+        ISymbol symbol = semanticModel.GetSymbolInfo(operand).Symbol;
         if (symbol is IPropertySymbol propertySymbol)
         {
             return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod)
