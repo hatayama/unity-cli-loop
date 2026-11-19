@@ -123,6 +123,10 @@ internal static class WorkerGroupPipeline
             syntaxTrees: WorkerGlobalUsingBindingTree.Append(bindingTrees, globalUsingTree),
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        compilation = WorkerHandlerAttributeBindingTree.AddWhenOnlyTheTargetDeclaresIt(
+            compilation,
+            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference),
+            parseOptions);
         Dictionary<SyntaxTree, string> projectRelativePathsByBindingTree = new Dictionary<SyntaxTree, string>();
         foreach (WorkerSourceUnit transformUnit in transformUnits)
         {

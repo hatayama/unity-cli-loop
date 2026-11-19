@@ -218,6 +218,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
         }
 
+        /// <summary>
+        /// What: a lambda or async body whose handler is declared in the passed file, with its
+        /// InterpolatedStringHandler attribute declared internally in a file the run does not pass,
+        /// is skipped with the implicit-call reason naming the internal AppendFormatted.
+        /// </summary>
+        [TestCase("7765", "ClosureBuildsPassedFileHandlerWithInternalAppendFormatted")]
+        [TestCase("7775", "AsyncBuildsPassedFileHandlerWithInternalAppendFormatted")]
+        public async Task HandlerWithAttributeFromUnpassedFile_IsSkippedWithTheImplicitCallReason(
+            string token,
+            string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(CollectCodes(skipped.reason), Has.Member(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape));
+            Assert.That(HotReloadWorkerReasonText.Render(skipped.reason), Does.Contain("AppendFormatted"));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
         {
             string fixturePath = Path.GetFullPath(
