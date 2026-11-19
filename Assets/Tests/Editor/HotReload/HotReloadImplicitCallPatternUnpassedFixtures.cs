@@ -38,6 +38,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal three-out Deconstruct for the arity pair, declared before the two-out one so a
+    /// lookup that ignores the out-parameter count finds it first.
+    /// </summary>
+    public static class HotReloadUnpassedArityThreeOutExtensions
+    {
+        internal static void Deconstruct(
+            this HotReloadUnpassedArityPair pair,
+            out int first,
+            out int second,
+            out int third)
+        {
+            first = pair.First;
+            second = pair.First + 1;
+            third = pair.First + 2;
+        }
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct for the arity pair, the one a two-part deconstruction calls.
+    /// </summary>
+    public static class HotReloadUnpassedArityTwoOutExtensions
+    {
+        internal static void Deconstruct(this HotReloadUnpassedArityPair pair, out int first, out int second)
+        {
+            first = pair.First;
+            second = pair.First + 1;
+        }
+    }
+
+    /// <summary>
+    /// Pair with internal two-out and three-out extension Deconstruct methods in an unpassed file.
+    /// </summary>
+    public sealed class HotReloadUnpassedArityPair
+    {
+        public int First = 5;
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>

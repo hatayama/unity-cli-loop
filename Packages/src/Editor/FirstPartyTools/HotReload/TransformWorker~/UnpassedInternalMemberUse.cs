@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -114,6 +115,7 @@ internal sealed class UnpassedInternalMemberUse
         ISymbol member = FindInternalMemberOfUnpassedTypeOrNull(
             start,
             name.Identifier.ValueText,
+            outParameterCount: null,
             semanticModel,
             targetAssembly);
         if (member == null)
@@ -258,6 +260,7 @@ internal sealed class UnpassedInternalMemberUse
     internal static ISymbol FindInternalMemberOfUnpassedTypeOrNull(
         INamedTypeSymbol start,
         string memberName,
+        int? outParameterCount,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
@@ -284,7 +287,8 @@ internal sealed class UnpassedInternalMemberUse
             // too, and protected or protected internal members already bind in the worker.
             foreach (ISymbol member in type.GetMembers(memberName))
             {
-                if (member.DeclaredAccessibility == Accessibility.Internal)
+                if (member.DeclaredAccessibility == Accessibility.Internal
+                    && HasOutParameterCount(member, outParameterCount))
                 {
                     return member;
                 }
@@ -292,6 +296,21 @@ internal sealed class UnpassedInternalMemberUse
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// What: whether the member is a method with the expected number of out parameters, or no count
+    /// is expected. A deconstruction calls the Deconstruct with one out parameter per part.
+    /// </summary>
+    internal static bool HasOutParameterCount(ISymbol member, int? outParameterCount)
+    {
+        if (outParameterCount == null)
+        {
+            return true;
+        }
+
+        return member is IMethodSymbol method
+            && method.Parameters.Count(parameter => parameter.RefKind == RefKind.Out) == outParameterCount.Value;
     }
 
     // Why names and not symbols: the target assembly comes from a separate compilation that

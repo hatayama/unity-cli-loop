@@ -513,5 +513,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadPatternHandlerSinks.MeasureFormatted(
                 (HotReloadPatternHandlerInternalAppendFormatted)$"ab{7515}");
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsBesideAThreeOutOverload()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedArityPair();
+                return first + second + 7525;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncDeconstructsBesideAThreeOutOverload()
+        {
+            await Task.CompletedTask;
+            (int first, int second) = new HotReloadUnpassedArityPair();
+            return first + second + 7535;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureMatchesPositionalPatternBesideAThreeOutOverload()
+        {
+            Func<int> read = () => new HotReloadUnpassedArityPair() is (5, 6) ? 7545 : 0;
+            return read();
+        }
     }
 }

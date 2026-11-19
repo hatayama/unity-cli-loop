@@ -135,6 +135,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
         }
 
+        /// <summary>
+        /// What: a two-part deconstruction or positional pattern whose receiver has internal
+        /// extension Deconstruct methods with two and with three out parameters is skipped with a
+        /// reason that names the two-out one, the method the compiled body calls.
+        /// </summary>
+        [TestCase("7525", "ClosureDeconstructsBesideAThreeOutOverload")]
+        [TestCase("7535", "AsyncDeconstructsBesideAThreeOutOverload")]
+        [TestCase("7545", "ClosureMatchesPositionalPatternBesideAThreeOutOverload")]
+        public async Task DeconstructionBesideAThreeOutOverload_NamesTheTwoOutDeconstruct(
+            string token,
+            string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(reason, Does.Contain("HotReloadUnpassedArityTwoOutExtensions"));
+            Assert.That(reason, Does.Not.Contain("HotReloadUnpassedArityThreeOutExtensions"));
+            Assert.That(reason, Does.Not.Contain("HotReloadUnpassedUnconstrainedExtensions"));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
         {
             string fixturePath = Path.GetFullPath(

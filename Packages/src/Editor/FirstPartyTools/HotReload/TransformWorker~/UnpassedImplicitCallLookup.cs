@@ -42,9 +42,15 @@ internal static class UnpassedImplicitCallLookup
         SyntaxNode reported = bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
         foreach (SyntaxNode construct in reported.AncestorsAndSelf())
         {
-            foreach ((ITypeSymbol receiver, string methodName) in EnumerateMissingCalls(semanticModel, construct))
+            foreach ((ITypeSymbol receiver, string methodName, int? outParameterCount)
+                in EnumerateMissingCalls(semanticModel, construct))
             {
-                IMethodSymbol method = FindInternalMethodOrNull(receiver, methodName, semanticModel, targetAssembly);
+                IMethodSymbol method = FindInternalMethodOrNull(
+                    receiver,
+                    methodName,
+                    outParameterCount,
+                    semanticModel,
+                    targetAssembly);
                 if (method != null)
                 {
                     return UnpassedInternalMemberUse.ForImplicitCall(
@@ -66,14 +72,17 @@ internal static class UnpassedImplicitCallLookup
         return null;
     }
 
-    private static IEnumerable<(ITypeSymbol Receiver, string MethodName)> EnumerateMissingCalls(
+    // Why an expected out-parameter count: a deconstruction or positional pattern calls the
+    // Deconstruct with one out parameter per part, and another internal Deconstruct of the same
+    // name is not the method the compiled body calls. Every other call leaves it unset.
+    private static IEnumerable<(ITypeSymbol Receiver, string MethodName, int? OutParameterCount)> EnumerateMissingCalls(
         SemanticModel semanticModel,
         SyntaxNode construct)
     {
         switch (construct)
         {
             case AwaitExpressionSyntax awaitExpression:
-                return UnpassedAwaitCallLookup.MissingAwaitCalls(semanticModel, awaitExpression);
+                return AnyArity(UnpassedAwaitCallLookup.MissingAwaitCalls(semanticModel, awaitExpression));
             case CommonForEachStatementSyntax forEach:
                 return MissingForEachCalls(semanticModel, forEach);
             case AssignmentExpressionSyntax assignment
@@ -83,24 +92,29 @@ internal static class UnpassedImplicitCallLookup
                 return MissingPositionalPatternCalls(semanticModel, pattern);
             case InitializerExpressionSyntax initializer
                 when initializer.IsKind(SyntaxKind.CollectionInitializerExpression):
-                return MissingCollectionInitializerCalls(semanticModel, initializer);
+                return AnyArity(MissingCollectionInitializerCalls(semanticModel, initializer));
             case QueryExpressionSyntax query:
-                return UnpassedQueryCallLookup.MissingCalls(semanticModel, query);
+                return AnyArity(UnpassedQueryCallLookup.MissingCalls(semanticModel, query));
             case UsingStatementSyntax usingStatement:
-                return MissingDisposeCalls(
+                return AnyArity(MissingDisposeCalls(
                     semanticModel,
                     usingStatement.SpanStart,
                     TypeOf(semanticModel, (SyntaxNode)usingStatement.Declaration?.Type ?? usingStatement.Expression),
-                    usingStatement.AwaitKeyword != default);
+                    usingStatement.AwaitKeyword != default));
             case LocalDeclarationStatementSyntax localDeclaration when localDeclaration.UsingKeyword != default:
-                return MissingDisposeCalls(
+                return AnyArity(MissingDisposeCalls(
                     semanticModel,
                     localDeclaration.SpanStart,
                     TypeOf(semanticModel, localDeclaration.Declaration.Type),
-                    localDeclaration.AwaitKeyword != default);
+                    localDeclaration.AwaitKeyword != default));
             default:
-                return MissingExpressionPatternCalls(semanticModel, construct);
+                return AnyArity(MissingExpressionPatternCalls(semanticModel, construct));
         }
+    }
+
+    private static IEnumerable<(ITypeSymbol, string, int?)> AnyArity(IEnumerable<(ITypeSymbol, string)> calls)
+    {
+        return calls.Select(call => (call.Item1, call.Item2, (int?)null));
     }
 
     // The expressions whose pattern members the compiler calls: an interpolated string, or an
@@ -208,11 +222,11 @@ internal static class UnpassedImplicitCallLookup
         return candidates;
     }
 
-    private static IEnumerable<(ITypeSymbol, string)> MissingDeconstructCalls(
+    private static IEnumerable<(ITypeSymbol, string, int?)> MissingDeconstructCalls(
         SemanticModel semanticModel,
         AssignmentExpressionSyntax assignment)
     {
-        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
+        List<(ITypeSymbol, string, int?)> missing = new List<(ITypeSymbol, string, int?)>();
         AddMissingDeconstructCalls(
             assignment.Left,
             TypeOf(semanticModel, assignment.Right),
@@ -228,16 +242,16 @@ internal static class UnpassedImplicitCallLookup
         SyntaxNode left,
         ITypeSymbol value,
         DeconstructionInfo info,
-        List<(ITypeSymbol, string)> missing)
+        List<(ITypeSymbol, string, int?)> missing)
     {
         IReadOnlyList<ITypeSymbol> parts = PartTypesOrNull(value, info);
+        IReadOnlyList<SyntaxNode> targets = DeconstructionTargetsOrNull(left);
         if (parts == null)
         {
-            missing.Add((value, "Deconstruct"));
+            missing.Add((value, "Deconstruct", targets?.Count));
             return;
         }
 
-        IReadOnlyList<SyntaxNode> targets = DeconstructionTargetsOrNull(left);
         if (targets == null || targets.Count != parts.Count)
         {
             return;
@@ -289,7 +303,7 @@ internal static class UnpassedImplicitCallLookup
         }
     }
 
-    private static IEnumerable<(ITypeSymbol, string)> MissingForEachCalls(
+    private static IEnumerable<(ITypeSymbol, string, int?)> MissingForEachCalls(
         SemanticModel semanticModel,
         CommonForEachStatementSyntax forEach)
     {
@@ -297,26 +311,29 @@ internal static class UnpassedImplicitCallLookup
         bool isAwaitForEach = forEach.AwaitKeyword != default;
         if (!isAwaitForEach && info.GetEnumeratorMethod == null)
         {
-            return Single(TypeOf(semanticModel, forEach.Expression), "GetEnumerator");
+            return AnyArity(Single(TypeOf(semanticModel, forEach.Expression), "GetEnumerator"));
         }
 
         // Why an await foreach is traced even when its enumerator bound: the worker's binding keeps
         // GetAsyncEnumerator, MoveNextAsync and DisposeAsync when only the awaiter of a result they
         // return is missing, so the bound methods do not show which call failed.
-        List<(ITypeSymbol, string)> missing = new List<(ITypeSymbol, string)>();
+        List<(ITypeSymbol, string, int?)> missing = new List<(ITypeSymbol, string, int?)>();
         if (isAwaitForEach)
         {
-            missing.AddRange(UnpassedAwaitCallLookup.MissingAwaitForEachCalls(
+            missing.AddRange(AnyArity(UnpassedAwaitCallLookup.MissingAwaitForEachCalls(
                 semanticModel,
                 forEach.SpanStart,
-                TypeOf(semanticModel, forEach.Expression)));
+                TypeOf(semanticModel, forEach.Expression))));
         }
 
         if (forEach is ForEachVariableStatementSyntax forEachVariable
             && info.ElementType != null
             && semanticModel.GetDeconstructionInfo(forEachVariable).Method == null)
         {
-            missing.Add((info.ElementType, "Deconstruct"));
+            missing.Add((
+                info.ElementType,
+                "Deconstruct",
+                DeconstructionTargetsOrNull(forEachVariable.Variable)?.Count));
         }
 
         return missing;
@@ -324,17 +341,20 @@ internal static class UnpassedImplicitCallLookup
 
     // Why the input type from the context: a pattern that binds to no Deconstruct has no reliable
     // operation, while the matched expression and an explicit type still have their types.
-    private static IEnumerable<(ITypeSymbol, string)> MissingPositionalPatternCalls(
+    private static IEnumerable<(ITypeSymbol, string, int?)> MissingPositionalPatternCalls(
         SemanticModel semanticModel,
         RecursivePatternSyntax pattern)
     {
         if ((semanticModel.GetOperation(pattern) as IRecursivePatternOperation)?.DeconstructSymbol != null)
         {
-            return Array.Empty<(ITypeSymbol, string)>();
+            return Array.Empty<(ITypeSymbol, string, int?)>();
         }
 
         SyntaxNode typed = pattern.Type ?? FindMatchedExpressionOrNull(pattern);
-        return Single(TypeOf(semanticModel, typed), "Deconstruct");
+        return new[]
+        {
+            (TypeOf(semanticModel, typed), "Deconstruct", (int?)pattern.PositionalPatternClause.Subpatterns.Count),
+        };
     }
 
     private static SyntaxNode FindMatchedExpressionOrNull(RecursivePatternSyntax pattern)
@@ -393,6 +413,7 @@ internal static class UnpassedImplicitCallLookup
     private static IMethodSymbol FindInternalMethodOrNull(
         ITypeSymbol receiver,
         string methodName,
+        int? outParameterCount,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
@@ -404,6 +425,7 @@ internal static class UnpassedImplicitCallLookup
         ISymbol member = UnpassedInternalMemberUse.FindInternalMemberOfUnpassedTypeOrNull(
             namedReceiver,
             methodName,
+            outParameterCount,
             semanticModel,
             targetAssembly);
         if (member is IMethodSymbol instanceMethod)
@@ -417,7 +439,7 @@ internal static class UnpassedImplicitCallLookup
             return property.GetMethod;
         }
 
-        return FindInternalExtensionOrNull(namedReceiver, methodName, targetAssembly);
+        return FindInternalExtensionOrNull(namedReceiver, methodName, outParameterCount, targetAssembly);
     }
 
     // Why names and not symbols: the target assembly comes from a separate compilation, so its
@@ -425,6 +447,7 @@ internal static class UnpassedImplicitCallLookup
     private static IMethodSymbol FindInternalExtensionOrNull(
         INamedTypeSymbol receiver,
         string methodName,
+        int? outParameterCount,
         IAssemblySymbol targetAssembly)
     {
         HashSet<string> acceptedThisTypes = AcceptedThisTypeNames(receiver);
@@ -438,6 +461,7 @@ internal static class UnpassedImplicitCallLookup
             foreach (IMethodSymbol method in type.GetMembers(methodName).OfType<IMethodSymbol>())
             {
                 if (method.IsExtensionMethod
+                    && UnpassedInternalMemberUse.HasOutParameterCount(method, outParameterCount)
                     && AcceptsReceiver(method.Parameters[0].Type, receiver, acceptedThisTypes)
                     && AccessibilityRules.IsInaccessibleFromExternalAssembly(method))
                 {
