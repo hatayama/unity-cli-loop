@@ -177,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertAcceptedAsync("(a * b) + 2150", "(a * b) + 2151", "UnsafeFixtureBitwiseHost");
         }
 
-        /// <summary>What: pointer types used only as typeof operands are not refused; both methods are entries.</summary>
+        /// <summary>What: pointer and function pointer types used only as typeof operands are not refused; both methods are entries.</summary>
         [Test]
         public async Task Run_PointerTypeInTypeOf_IsAnEntry()
         {

@@ -84,11 +84,14 @@ internal static class UnsafeContextRules
     }
 
     // Why exempt: a pointer type that only names a type, as a typeof operand or a generic type
-    // argument (typeof(int*), List<int*[]>), compiles without an unsafe context.
+    // argument (typeof(int*), typeof(delegate*<int*, void>), List<int*[]>), compiles without an
+    // unsafe context. The climb passes through function pointer parameters, which are not types.
     private static bool IsTypeOfOperandOrTypeArgument(TypeSyntax type)
     {
         SyntaxNode current = type;
-        while (current.Parent is TypeSyntax)
+        while (current.Parent is TypeSyntax
+            || current.Parent is FunctionPointerParameterSyntax
+            || current.Parent is FunctionPointerParameterListSyntax)
         {
             current = current.Parent;
         }

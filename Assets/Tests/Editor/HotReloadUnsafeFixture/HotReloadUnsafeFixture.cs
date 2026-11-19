@@ -272,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
     {
         public string Read()
         {
-            return typeof(int*).Name + typeof(int*[]).Name + typeof(delegate*<int, void>).Name + 2200;
+            return typeof(int*).Name + typeof(int*[]).Name + typeof(delegate*<int, void>).Name + typeof(delegate*<int*, void>).Name + 2200;
         }
     }
 
