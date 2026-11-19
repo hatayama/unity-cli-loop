@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a body that passes a BCL twin type to a non-public member whose shape has no accessor
-        /// (ref struct parameter, constructor, indexer, initializer indexer) is skipped with the reason
+        /// (ref struct parameter, constructor, indexer, initializer indexer, expanded params) is skipped with the reason
         /// its oracle shape gets, and produces no entry.
         /// </summary>
         [TestCase("6011", "ClosureCallsInternalMethodWithSpan", "6091", "ClosureCallsInternalMethodWithUserRefStruct", nameof(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape))]
@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6271", "ClosureWritesPrivateIndexerWithMemory", "6281", "ClosureWritesPrivateIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
         [TestCase("6291", "ClosureCompoundWritesPrivateIndexerWithMemory", "6301", "ClosureCompoundWritesPrivateIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
         [TestCase("6311", "ClosureIncrementsPrivateIndexerWithMemory", "6321", "ClosureIncrementsPrivateIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
+        [TestCase("6371", "ClosureCallsInternalParamsMethodWithOneMemory", "6381", "ClosureCallsInternalParamsMethodWithOneArraySegment", nameof(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten))]
         [TestCase("6331", "ClosureInitializesInternalIndexerWithMemory", "6341", "ClosureInitializesInternalIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorInitializerAssignmentNoShape))]
         public async Task TwinTypedShapeWithoutAccessor_IsSkippedWithTheOracleReason(
             string token,

@@ -55,6 +55,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return segment.Count;
         }
 
+        internal static int ParamsMemoryLength(params Memory<int>[] memories)
+        {
+            return memories.Length;
+        }
+
+        internal static int ParamsSegmentLength(params ArraySegment<int>[] segments)
+        {
+            return segments.Length;
+        }
+
         internal static int StringLength(string value)
         {
             return value.Length;
@@ -428,6 +438,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             await Task.Yield();
             return HotReloadBclTwinTargets.SegmentLength(new ArraySegment<int>(_ints)) + 6361;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsInternalParamsMethodWithOneMemory()
+        {
+            Func<int> read = () => HotReloadBclTwinTargets.ParamsMemoryLength(new Memory<int>(_ints)) + 6371;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsInternalParamsMethodWithOneArraySegment()
+        {
+            Func<int> read = () => HotReloadBclTwinTargets.ParamsSegmentLength(new ArraySegment<int>(_ints)) + 6381;
+            return read();
         }
     }
 }

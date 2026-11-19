@@ -81,9 +81,16 @@ internal static class AccessibilityRules
             }
         }
 
-        SemanticModel enforcingModel =
-            semanticModel.Compilation.GetSemanticModel(semanticModel.SyntaxTree, ignoreAccessibility: false);
-        return enforcingModel.GetSymbolInfo(node).Symbol;
+        return EnforcingModel(semanticModel).GetSymbolInfo(node).Symbol;
+    }
+
+    /// <summary>
+    /// What: the semantic model of the same tree that binds with accessibility enforced. Asked only
+    /// for a node the accessibility-ignoring binding left unbound; see BoundSymbolOrNull for why.
+    /// </summary>
+    internal static SemanticModel EnforcingModel(SemanticModel semanticModel)
+    {
+        return semanticModel.Compilation.GetSemanticModel(semanticModel.SyntaxTree, ignoreAccessibility: false);
     }
 
     // Why per containing type: the candidates are the whole method group, so they include every
