@@ -430,9 +430,16 @@ internal static class UnpassedImplicitCallLookup
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
-        if (receiver is not INamedTypeSymbol namedReceiver)
+        if (receiver == null)
         {
             return null;
+        }
+
+        // Why an array goes straight to the extensions: it declares no members of its own, but a
+        // `this T` extension can still take it.
+        if (receiver is not INamedTypeSymbol namedReceiver)
+        {
+            return FindInternalExtensionOrNull(receiver, methodName, outParameterCount, targetAssembly);
         }
 
         ISymbol member = UnpassedInternalMemberUse.FindInternalMemberOfUnpassedTypeOrNull(
@@ -458,7 +465,7 @@ internal static class UnpassedImplicitCallLookup
     // Why names and not symbols: the target assembly comes from a separate compilation, so its
     // types are other symbols than the receiver the body binds to.
     private static IMethodSymbol FindInternalExtensionOrNull(
-        INamedTypeSymbol receiver,
+        ITypeSymbol receiver,
         string methodName,
         int? outParameterCount,
         IAssemblySymbol targetAssembly)
@@ -488,7 +495,7 @@ internal static class UnpassedImplicitCallLookup
 
     // Why a type parameter is compared by its constraints: `this T` accepts every receiver its
     // constraints allow, and an unconstrained one accepts any receiver.
-    private static bool AcceptsReceiver(ITypeSymbol thisType, INamedTypeSymbol receiver, HashSet<string> acceptedThisTypes)
+    private static bool AcceptsReceiver(ITypeSymbol thisType, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)
     {
         switch (thisType)
         {
@@ -507,7 +514,7 @@ internal static class UnpassedImplicitCallLookup
     // The constraints on what kind of type the receiver is: class, struct, unmanaged, and new().
     // Why only a public parameterless constructor counts for new(): the worker sees the receiver's
     // assembly through its public surface, as the body that calls the extension does.
-    private static bool SatisfiesKindConstraints(ITypeParameterSymbol typeParameter, INamedTypeSymbol receiver)
+    private static bool SatisfiesKindConstraints(ITypeParameterSymbol typeParameter, ITypeSymbol receiver)
     {
         // Why Nullable<T> fails the struct constraint: C# requires a non-nullable value type there.
         if (typeParameter.HasValueTypeConstraint
@@ -528,15 +535,15 @@ internal static class UnpassedImplicitCallLookup
 
         return !typeParameter.HasConstructorConstraint
             || receiver.IsValueType
-            || (!receiver.IsAbstract && receiver.InstanceConstructors.Any(constructor =>
+            || (receiver is INamedTypeSymbol { IsAbstract: false } named && named.InstanceConstructors.Any(constructor =>
                 constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public));
     }
 
     // The receiver, its base types and its interfaces, any of which an extension's 'this' may name.
-    private static HashSet<string> AcceptedThisTypeNames(INamedTypeSymbol receiver)
+    private static HashSet<string> AcceptedThisTypeNames(ITypeSymbol receiver)
     {
         HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
-        for (INamedTypeSymbol type = receiver; type != null; type = type.BaseType)
+        for (INamedTypeSymbol type = receiver as INamedTypeSymbol ?? receiver.BaseType; type != null; type = type.BaseType)
         {
             names.Add(ConstDriftCollector.ToReflectionMetadataName(type.OriginalDefinition));
         }

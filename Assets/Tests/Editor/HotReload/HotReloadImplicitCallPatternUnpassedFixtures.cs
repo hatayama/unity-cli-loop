@@ -359,6 +359,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal nine-out Deconstruct over any reference type, which an array receiver binds to.
+    /// </summary>
+    public static class HotReloadUnpassedArrayReceiverExtensions
+    {
+        internal static void Deconstruct<T>(
+            this T value,
+            out int p1,
+            out int p2,
+            out int p3,
+            out int p4,
+            out int p5,
+            out int p6,
+            out int p7,
+            out int p8,
+            out int p9)
+            where T : class
+        {
+            p1 = value == null ? 0 : 1;
+            p2 = 2;
+            p3 = 3;
+            p4 = 4;
+            p5 = 5;
+            p6 = 6;
+            p7 = 7;
+            p8 = 8;
+            p9 = 9;
+        }
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>

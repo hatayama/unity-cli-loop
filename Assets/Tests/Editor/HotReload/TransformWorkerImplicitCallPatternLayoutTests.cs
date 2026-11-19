@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7505", "ClosureCastsToHandlerWithInternalAppendFormatted", "AppendFormatted")]
         [TestCase("7555", "ClosureIndexesNullableStructFromEndWithInternalLength", "Length")]
         [TestCase("7685", "ClosureSlicesThroughInternalRangeIndexer", "this[]")]
+        [TestCase("7705", "ClosureDeconstructsAnArrayThroughGenericExtension", "Deconstruct")]
         [TestCase("7575", "ClosureDeconstructsThroughClassConstrainedExtension", "Deconstruct")]
         [TestCase("7585", "ClosureDeconstructsThroughStructConstrainedExtension", "Deconstruct")]
         [TestCase("7595", "ClosureAwaitUsesInternalDisposeAsyncBesideAPublicExtension", "DisposeAsync")]
