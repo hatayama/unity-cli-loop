@@ -136,6 +136,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a simple assignment to `x[^1]` through parentheses calls only the public setter, so
+        /// an internal indexer getter does not refuse the lambda or async body.
+        /// </summary>
+        [TestCase("7811", "ClosureAssignsParenthesizedFromEndWithInternalGetter")]
+        [TestCase("7821", "AsyncAssignsParenthesizedFromEndWithInternalGetter")]
+        public async Task ParenthesizedIndexAssignmentWithInternalGetter_StaysAnEntry(string token, string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            Assert.That(FindSkipped(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
+        }
+
+        /// <summary>
         /// What: a range whose given endpoints all count from the start and whose end is given
         /// (`1..2`, `..2`) never reads Length, so an internal Length alone does not refuse the
         /// lambda or async body.

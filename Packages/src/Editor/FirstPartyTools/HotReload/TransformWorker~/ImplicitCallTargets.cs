@@ -320,14 +320,13 @@ internal static class ImplicitCallTargets
             yield break;
         }
 
-        bool isAssignmentTarget = elementAccess.Parent is AssignmentExpressionSyntax assignment
-            && assignment.Left == elementAccess;
-        if (isAssignmentTarget)
+        AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(elementAccess);
+        if (assignment != null)
         {
             yield return (property.SetMethod, IndexOrRangeConstruct);
         }
 
-        if (!isAssignmentTarget || !elementAccess.Parent.IsKind(SyntaxKind.SimpleAssignmentExpression))
+        if (assignment == null || !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
         {
             yield return (property.GetMethod, IndexOrRangeConstruct);
         }

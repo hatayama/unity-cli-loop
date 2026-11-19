@@ -914,6 +914,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureAssignsParenthesizedFromEndWithInternalGetter()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadPatternIndexInternalGetter values = new HotReloadPatternIndexInternalGetter();
+                (values[^1]) = 7811;
+                return values.Length;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAssignsParenthesizedFromEndWithInternalGetter()
+        {
+            await Task.CompletedTask;
+            HotReloadPatternIndexInternalGetter values = new HotReloadPatternIndexInternalGetter();
+            (values[^1]) = 7821;
+            return values.Length;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesAndSlicesPublicMembers()
         {
             Func<int> read = () =>
