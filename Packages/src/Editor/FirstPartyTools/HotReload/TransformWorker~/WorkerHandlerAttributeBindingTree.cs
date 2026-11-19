@@ -28,13 +28,17 @@ internal static class WorkerHandlerAttributeBindingTree
 
     /// <summary>
     /// What: the compilation with the attribute declared when the target assembly declares it but
-    /// the compilation cannot bind it; otherwise the compilation unchanged.
+    /// the compilation cannot bind it; otherwise the compilation unchanged. Also gives the target
+    /// assembly with every member visible, resolved from the returned compilation.
     /// </summary>
     internal static CSharpCompilation AddWhenOnlyTheTargetDeclaresIt(
         CSharpCompilation compilation,
-        IAssemblySymbol targetAssemblyWithAllMembers,
-        CSharpParseOptions parseOptions)
+        MetadataReference targetTypesReference,
+        CSharpParseOptions parseOptions,
+        out IAssemblySymbol targetAssemblyWithAllMembers)
     {
+        targetAssemblyWithAllMembers = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference);
+
         // Why a bound attribute leaves the compilation as it is: a passed file or a reference
         // already declares it, and a second declaration would make the name ambiguous.
         if (targetAssemblyWithAllMembers == null
@@ -45,6 +49,11 @@ internal static class WorkerHandlerAttributeBindingTree
         }
 
         SyntaxTree tree = CSharpSyntaxTree.ParseText(Declaration, parseOptions, TreePath, Encoding.UTF8);
-        return compilation.AddSyntaxTrees(tree);
+        CSharpCompilation withAttribute = compilation.AddSyntaxTrees(tree);
+
+        // Why resolved again: the caller's type home must come from the compilation its semantic
+        // models bind with, and the one resolved above belongs to the compilation without the tree.
+        targetAssemblyWithAllMembers = WorkerCompiledAssemblySymbols.ResolveWithAllMembers(withAttribute, targetTypesReference);
+        return withAttribute;
     }
 }

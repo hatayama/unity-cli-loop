@@ -125,8 +125,9 @@ internal static class WorkerGroupPipeline
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         compilation = WorkerHandlerAttributeBindingTree.AddWhenOnlyTheTargetDeclaresIt(
             compilation,
-            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference),
-            parseOptions);
+            targetTypesReference,
+            parseOptions,
+            out IAssemblySymbol targetAssemblyWithAllMembers);
         Dictionary<SyntaxTree, string> projectRelativePathsByBindingTree = new Dictionary<SyntaxTree, string>();
         foreach (WorkerSourceUnit transformUnit in transformUnits)
         {
@@ -140,9 +141,7 @@ internal static class WorkerGroupPipeline
             unit.PartialTypeParts = partialTypeParts;
         }
 
-        WorkerTypeHome home = new WorkerTypeHome(
-            input.TargetAssemblyName,
-            WorkerCompiledAssemblySymbols.ResolveWithAllMembers(compilation, targetTypesReference));
+        WorkerTypeHome home = new WorkerTypeHome(input.TargetAssemblyName, targetAssemblyWithAllMembers);
         timings.Lap("create_compilation");
         List<string> siblingConstDriftWarnings = SiblingConstDriftCollector.CollectConstDriftWarnings(
             input.ChangedSiblingSourcePaths,

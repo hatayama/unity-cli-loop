@@ -234,7 +234,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
             Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
             Assert.That(CollectCodes(skipped.reason), Has.Member(HotReloadWorkerReasonCode.AccessorImplicitCallNoShape));
-            Assert.That(HotReloadWorkerReasonText.Render(skipped.reason), Does.Contain("AppendFormatted"));
+            Assert.That(
+                HotReloadWorkerReasonText.Render(skipped.reason),
+                Does.Contain(
+                    "inaccessible method 'AppendFormatted' that the compiler calls for an interpolated string handler"
+                    + " has no accessor rewrite shape."));
             Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
         }
 
