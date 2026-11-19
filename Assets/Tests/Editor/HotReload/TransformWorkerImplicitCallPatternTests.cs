@@ -59,6 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7621", "ClosureIndexesConditionallyFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7631", "AsyncIndexesConditionallyFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7761", "ClosureSlicesOpenEndWithInternalLength", "Length", IndexOrRangeConstruct)]
+        [TestCase("7771", "ClosureSlicesFromEndToStartWithInternalLength", "Length", IndexOrRangeConstruct)]
+        [TestCase("7781", "AsyncSlicesFromEndToStartWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7301", "ClosureAwaitUsesDisposeAsyncWithInternalGetAwaiter", "GetAwaiter", AwaitUsingConstruct)]
         [TestCase("7311", "AsyncAwaitUsesDisposeAsyncWithInternalGetAwaiter", "GetAwaiter", AwaitUsingConstruct)]
         [TestCase("7321", "ClosureAwaitUsesDisposeAsyncWithInternalIsCompleted", "IsCompleted", AwaitUsingConstruct)]
