@@ -218,6 +218,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Sliceable through the implicit Range support with a public Length and an internal Slice.
+    /// </summary>
+    public sealed class HotReloadPatternRangeInternalSlice
+    {
+        public int Length => 3;
+
+        internal int Slice(int start, int length)
+        {
+            return start * 10 + length;
+        }
+    }
+
+    /// <summary>
+    /// Indexable through the implicit Index support with a public Length and an indexer whose
+    /// getter is internal.
+    /// </summary>
+    public sealed class HotReloadPatternIndexInternalGetter
+    {
+        private readonly int[] _values = { 1, 2, 3 };
+
+        public int Length => _values.Length;
+
+        public int this[int index]
+        {
+            internal get => _values[index];
+            set => _values[index] = value;
+        }
+    }
+
+    /// <summary>
+    /// Writable through the implicit Index support with a public Length and an indexer whose
+    /// setter is internal.
+    /// </summary>
+    public sealed class HotReloadPatternIndexInternalSetter
+    {
+        private readonly int[] _values = { 1, 2, 3 };
+
+        public int Length => _values.Length;
+
+        public int this[int index]
+        {
+            get => _values[index];
+            internal set => _values[index] = value;
+        }
+    }
+
+    /// <summary>
     /// Indexable and sliceable through the implicit Index and Range support with public members.
     /// </summary>
     public sealed class HotReloadPatternPublicIndexable
@@ -710,6 +757,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPatternWritableIndexInternalLength values = new HotReloadPatternWritableIndexInternalLength();
             values[^1] = 7271;
             return values[2];
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsHandlerFromInterpolatedAddition()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureFormatted($"ab" + $"{7601}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsHandlerFromInterpolatedAddition()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureFormatted($"ab" + $"{7611}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesConditionallyFromEndWithInternalLength()
+        {
+            HotReloadPatternIndexInternalLength values = new HotReloadPatternIndexInternalLength();
+            Func<int> read = () => (values?[^1] ?? 0) + 7621;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesConditionallyFromEndWithInternalLength()
+        {
+            await Task.CompletedTask;
+            HotReloadPatternIndexInternalLength values = new HotReloadPatternIndexInternalLength();
+            return (values?[^1] ?? 0) + 7631;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesConditionallyFromEndWithPublicMembers()
+        {
+            HotReloadPatternPublicIndexable values = new HotReloadPatternPublicIndexable();
+            Func<int> read = () => (values?[^1] ?? 0) + 7641;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesRangeWithInternalSlice()
+        {
+            Func<int> read = () => new HotReloadPatternRangeInternalSlice()[1..^1] + 7651;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesRangeWithInternalSlice()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternRangeInternalSlice()[1..^1] + 7661;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesFromEndWithInternalGetter()
+        {
+            Func<int> read = () => new HotReloadPatternIndexInternalGetter()[^1] + 7671;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesFromEndWithInternalGetter()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternIndexInternalGetter()[^1] + 7681;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureAssignsFromEndWithInternalSetter()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadPatternIndexInternalSetter values = new HotReloadPatternIndexInternalSetter();
+                values[^1] = 7691;
+                return values[2];
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAssignsFromEndWithInternalSetter()
+        {
+            await Task.CompletedTask;
+            HotReloadPatternIndexInternalSetter values = new HotReloadPatternIndexInternalSetter();
+            values[^1] = 7701;
+            return values[2];
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesFromStartWithInternalLength()
+        {
+            // Why this stays patchable: a range whose endpoints both count from the start is lowered
+            // to Slice(start, end - start) without reading Length.
+            Func<int> read = () => new HotReloadPatternRangeInternalLength()[1..2] + 7721;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesFromStartWithInternalLength()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternRangeInternalLength()[1..2] + 7731;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

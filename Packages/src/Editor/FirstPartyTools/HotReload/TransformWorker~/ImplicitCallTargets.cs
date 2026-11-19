@@ -110,8 +110,9 @@ internal static class ImplicitCallTargets
         }
     }
 
-    // The expressions whose pattern members the compiler calls: an interpolated string converted
-    // to a handler, and an element access that goes through the implicit Index or Range support.
+    // The expressions whose pattern members the compiler calls: an interpolated string, or an
+    // addition of interpolated strings, converted to a handler, and an element access, plain or
+    // after `?.`, that goes through the implicit Index or Range support.
     private static IEnumerable<(IMethodSymbol Method, string Construct)> ExpressionPatternTargets(
         SemanticModel semanticModel,
         SyntaxNode node)
@@ -120,10 +121,12 @@ internal static class ImplicitCallTargets
         {
             case InterpolatedStringExpressionSyntax interpolatedString:
                 return HandlerTargets(FindHandlerCreationOrNull(semanticModel, interpolatedString));
+            case BinaryExpressionSyntax addition when addition.IsKind(SyntaxKind.AddExpression):
+                return HandlerTargets(FindHandlerCreationOrNull(semanticModel, addition));
             case ElementAccessExpressionSyntax elementAccess:
-                return IndexOrRangeTargets(
-                    semanticModel.GetOperation(elementAccess) as IImplicitIndexerReferenceOperation,
-                    elementAccess);
+                return IndexOrRangeTargets(semanticModel, elementAccess, elementAccess.ArgumentList);
+            case ElementBindingExpressionSyntax elementBinding:
+                return IndexOrRangeTargets(semanticModel, elementBinding, elementBinding.ArgumentList);
             default:
                 return Array.Empty<(IMethodSymbol, string)>();
         }
@@ -228,26 +231,28 @@ internal static class ImplicitCallTargets
         }
     }
 
-    // The handler conversion the string goes through, whether it is an argument, a local's
-    // initializer, or any other converted expression; null for an ordinary string.
+    // The handler conversion the expression goes through, whether it is an argument, a local's
+    // initializer, or any other converted expression; null for an ordinary string or addition.
+    // Why the creation must belong to this very node: the compiler attaches the conversion of
+    // `$"a" + $"b"` to the addition, and each string inside it would otherwise report it again.
     private static IInterpolatedStringHandlerCreationOperation FindHandlerCreationOrNull(
         SemanticModel semanticModel,
-        InterpolatedStringExpressionSyntax interpolatedString)
+        ExpressionSyntax expression)
     {
-        IOperation operation = semanticModel.GetOperation(interpolatedString);
+        IOperation operation = semanticModel.GetOperation(expression);
         if (operation == null)
         {
             return null;
         }
 
-        while (operation.Parent != null && operation.Parent.Syntax == interpolatedString)
+        while (operation.Parent != null && operation.Parent.Syntax == expression)
         {
             operation = operation.Parent;
         }
 
         return operation.DescendantsAndSelf()
             .OfType<IInterpolatedStringHandlerCreationOperation>()
-            .FirstOrDefault(creation => creation.Syntax == interpolatedString);
+            .FirstOrDefault(creation => creation.Syntax == expression);
     }
 
     private static IEnumerable<(IMethodSymbol, string)> HandlerTargets(
@@ -287,15 +292,20 @@ internal static class ImplicitCallTargets
     // `x[^1]` and `x[a..b]` on a type without an Index or Range indexer: the compiler reads
     // Length or Count, then calls the int indexer or Slice.
     private static IEnumerable<(IMethodSymbol, string)> IndexOrRangeTargets(
-        IImplicitIndexerReferenceOperation indexer,
-        ElementAccessExpressionSyntax elementAccess)
+        SemanticModel semanticModel,
+        ExpressionSyntax elementAccess,
+        BracketedArgumentListSyntax arguments)
     {
-        if (indexer == null)
+        if (semanticModel.GetOperation(elementAccess) is not IImplicitIndexerReferenceOperation indexer)
         {
             yield break;
         }
 
-        yield return ((indexer.LengthSymbol as IPropertySymbol)?.GetMethod, IndexOrRangeConstruct);
+        if (ReadsLength(semanticModel, arguments))
+        {
+            yield return ((indexer.LengthSymbol as IPropertySymbol)?.GetMethod, IndexOrRangeConstruct);
+        }
+
         if (indexer.IndexerSymbol is IMethodSymbol slice)
         {
             yield return (slice, IndexOrRangeConstruct);
@@ -318,6 +328,32 @@ internal static class ImplicitCallTargets
         {
             yield return (property.GetMethod, IndexOrRangeConstruct);
         }
+    }
+
+    // Why a range of two int endpoints reads nothing: the compiler lowers `x[a..b]` to
+    // `x.Slice(a, b - a)` when neither endpoint counts from the end, while `^n`, an open end, and
+    // an Index or Range value all need Length to find their offsets.
+    private static bool ReadsLength(SemanticModel semanticModel, BracketedArgumentListSyntax arguments)
+    {
+        ExpressionSyntax argument = arguments.Arguments.Count == 1 ? arguments.Arguments[0].Expression : null;
+        while (argument is ParenthesizedExpressionSyntax parenthesized)
+        {
+            argument = parenthesized.Expression;
+        }
+
+        if (argument is not RangeExpressionSyntax range
+            || range.LeftOperand == null
+            || range.RightOperand == null)
+        {
+            return true;
+        }
+
+        return !IsInt(semanticModel, range.LeftOperand) || !IsInt(semanticModel, range.RightOperand);
+    }
+
+    private static bool IsInt(SemanticModel semanticModel, ExpressionSyntax operand)
+    {
+        return semanticModel.GetTypeInfo(operand).Type?.SpecialType == SpecialType.System_Int32;
     }
 
     private static IEnumerable<(IMethodSymbol, string)> QueryClauseTargets(QueryClauseInfo info)

@@ -104,6 +104,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(await host.ClosureAwaitForEachesMoveNextWithInternalGetResult(), Is.EqualTo(7444));
         }
 
+        /// <summary>
+        /// What: a lambda slicing a range that counts from the start of a type with an internal
+        /// Length is Patched and runs the edited body, because that range never reads Length.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureSlicingFromStartWithInternalLength_IsPatchedAndRunsTheEditedBody()
+        {
+            HotReloadImplicitCallPatternHost host = new HotReloadImplicitCallPatternHost();
+            Assert.That(host.ClosureSlicesFromStartWithInternalLength(), Is.EqualTo(7732));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7721", "7722");
+
+            AssertKind(result, "ClosureSlicesFromStartWithInternalLength", HotReloadMethodOutcomeKind.Patched);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureSlicesFromStartWithInternalLength(), Is.EqualTo(7733));
+        }
+
         private static async Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(
             string originalToken,
             string editedToken)

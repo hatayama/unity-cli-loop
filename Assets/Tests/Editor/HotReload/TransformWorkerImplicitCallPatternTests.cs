@@ -42,6 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7171", "AsyncBuildsRefHandlerWithInternalAppendFormatted", "AppendFormatted", HandlerConstruct)]
         [TestCase("7181", "ClosureConvertsToHandlerLocalWithInternalAppendFormatted", "AppendFormatted", HandlerConstruct)]
         [TestCase("7191", "AsyncConvertsToHandlerLocalWithInternalAppendFormatted", "AppendFormatted", HandlerConstruct)]
+        [TestCase("7601", "ClosureBuildsHandlerFromInterpolatedAddition", "AppendFormatted", HandlerConstruct)]
+        [TestCase("7611", "AsyncBuildsHandlerFromInterpolatedAddition", "AppendFormatted", HandlerConstruct)]
         [TestCase("7201", "ClosureIndexesFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7211", "AsyncIndexesFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7221", "ClosureIndexesFromEndWithInternalCount", "Count", IndexOrRangeConstruct)]
@@ -50,6 +52,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7251", "AsyncSlicesRangeWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7261", "ClosureAssignsFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7271", "AsyncAssignsFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
+        [TestCase("7651", "ClosureSlicesRangeWithInternalSlice", "Slice", IndexOrRangeConstruct)]
+        [TestCase("7661", "AsyncSlicesRangeWithInternalSlice", "Slice", IndexOrRangeConstruct)]
+        [TestCase("7671", "ClosureIndexesFromEndWithInternalGetter", "this[]", IndexOrRangeConstruct)]
+        [TestCase("7681", "AsyncIndexesFromEndWithInternalGetter", "this[]", IndexOrRangeConstruct)]
+        [TestCase("7621", "ClosureIndexesConditionallyFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
+        [TestCase("7631", "AsyncIndexesConditionallyFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7301", "ClosureAwaitUsesDisposeAsyncWithInternalGetAwaiter", "GetAwaiter", AwaitUsingConstruct)]
         [TestCase("7311", "AsyncAwaitUsesDisposeAsyncWithInternalGetAwaiter", "GetAwaiter", AwaitUsingConstruct)]
         [TestCase("7321", "ClosureAwaitUsesDisposeAsyncWithInternalIsCompleted", "IsCompleted", AwaitUsingConstruct)]
@@ -94,9 +102,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("7196", "ClosureBuildsPublicHandler")]
         [TestCase("7281", "ClosureIndexesAndSlicesPublicMembers")]
+        [TestCase("7641", "ClosureIndexesConditionallyFromEndWithPublicMembers")]
         [TestCase("7381", "ClosureAwaitUsesPublicDisposeAsync")]
         [TestCase("7481", "ClosureAwaitForEachesPublicSequence")]
         public async Task PatternCallToPublicMembers_StaysAnEntry(string token, string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            Assert.That(FindSkipped(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
+        }
+
+        /// <summary>
+        /// What: a lambda or async body that writes `x[^1]` through an internal indexer setter is
+        /// skipped and produces no entry. The indexer check refuses it before the implicit-call
+        /// check, so the reason is the indexer one.
+        /// </summary>
+        [TestCase("7691", "ClosureAssignsFromEndWithInternalSetter")]
+        [TestCase("7701", "AsyncAssignsFromEndWithInternalSetter")]
+        public async Task IndexFromEndThroughInternalSetter_IsSkipped(string token, string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(CollectCodes(skipped.reason), Does.Contain(HotReloadWorkerReasonCode.AccessorIndexerNoShape));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
+        /// What: a range whose endpoints both count from the start never reads Length, so an
+        /// internal Length alone does not refuse the lambda or async body.
+        /// </summary>
+        [TestCase("7721", "ClosureSlicesFromStartWithInternalLength")]
+        [TestCase("7731", "AsyncSlicesFromStartWithInternalLength")]
+        public async Task RangeFromStartWithInternalLength_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
 
