@@ -409,5 +409,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             (int first, int second, int third) = new HotReloadUnpassedGenericTriple();
             return first + second + third + 7951;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsHandlerFromInterpolatedAddition()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureFormatted($"ab" + $"{7581}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsHandlerFromInterpolatedAddition()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureFormatted($"ab" + $"{7591}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesConditionallyFromEndWithInternalLength()
+        {
+            HotReloadPatternIndexInternalLength values = new HotReloadPatternIndexInternalLength();
+            Func<int> read = () => (values?[^1] ?? 0) + 7881;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesConditionallyFromEndWithInternalLength()
+        {
+            await Task.CompletedTask;
+            HotReloadPatternIndexInternalLength values = new HotReloadPatternIndexInternalLength();
+            return (values?[^1] ?? 0) + 7891;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesFromStartWithInternalLength()
+        {
+            // Why this stays patchable: a range whose endpoints both count from the start is lowered
+            // to Slice(start, end - start) without reading Length.
+            Func<int> read = () => new HotReloadPatternRangeInternalLength()[1..2] + 7961;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesFromStartWithInternalLength()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternRangeInternalLength()[1..2] + 7971;
+        }
     }
 }

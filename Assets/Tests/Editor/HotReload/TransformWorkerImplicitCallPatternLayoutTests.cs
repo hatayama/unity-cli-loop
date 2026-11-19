@@ -30,6 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// names the member, and produces no entry.
         /// </summary>
         [TestCase("7501", "ClosureBuildsHandlerWithInternalCtor", "new HotReloadPatternHandlerInternalCtor(...)")]
+        [TestCase("7581", "ClosureBuildsHandlerFromInterpolatedAddition", "AppendFormatted")]
+        [TestCase("7881", "ClosureIndexesConditionallyFromEndWithInternalLength", "Length")]
         [TestCase("7521", "ClosureBuildsHandlerWithInternalAppendLiteral", "AppendLiteral")]
         [TestCase("7541", "ClosureBuildsHandlerWithInternalAppendFormatted", "AppendFormatted")]
         [TestCase("7561", "ClosureBuildsRefHandlerWithInternalAppendFormatted", "AppendFormatted")]
@@ -72,6 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// that names the member, and produces no entry.
         /// </summary>
         [TestCase("7511", "AsyncBuildsHandlerWithInternalCtor", "new HotReloadPatternHandlerInternalCtor(...)")]
+        [TestCase("7591", "AsyncBuildsHandlerFromInterpolatedAddition", "AppendFormatted")]
+        [TestCase("7891", "AsyncIndexesConditionallyFromEndWithInternalLength", "Length")]
         [TestCase("7531", "AsyncBuildsHandlerWithInternalAppendLiteral", "AppendLiteral")]
         [TestCase("7551", "AsyncBuildsHandlerWithInternalAppendFormatted", "AppendFormatted")]
         [TestCase("7571", "AsyncBuildsRefHandlerWithInternalAppendFormatted", "AppendFormatted")]
@@ -108,6 +112,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(reason, Does.EndWith("Run 'uloop compile'."));
             Assert.That(reason, Does.Not.Contain(InsideClosureAdvice));
             Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
+        /// What: a range whose endpoints both count from the start never reads Length, so an
+        /// internal Length alone does not refuse the lambda or async body.
+        /// </summary>
+        [TestCase("7961", "ClosureSlicesFromStartWithInternalLength")]
+        [TestCase("7971", "AsyncSlicesFromStartWithInternalLength")]
+        public async Task RangeFromStartWithUnpassedInternalLength_StaysAnEntry(string token, string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            Assert.That(FindSkipped(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)

@@ -103,8 +103,9 @@ internal static class UnpassedImplicitCallLookup
         }
     }
 
-    // The expressions whose pattern members the compiler calls: an interpolated string converted
-    // to a handler, and an element access that goes through the implicit Index or Range support.
+    // The expressions whose pattern members the compiler calls: an interpolated string, or an
+    // addition of interpolated strings, converted to a handler, and an element access, plain or
+    // after `?.`, that goes through the implicit Index or Range support.
     private static IEnumerable<(ITypeSymbol Receiver, string MethodName)> MissingExpressionPatternCalls(
         SemanticModel semanticModel,
         SyntaxNode construct)
@@ -113,8 +114,20 @@ internal static class UnpassedImplicitCallLookup
         {
             case InterpolatedStringExpressionSyntax interpolatedString:
                 return MissingHandlerCalls(semanticModel, interpolatedString);
+            case BinaryExpressionSyntax addition when addition.IsKind(SyntaxKind.AddExpression):
+                return MissingHandlerCalls(semanticModel, addition);
             case ElementAccessExpressionSyntax elementAccess:
-                return MissingIndexOrRangeCalls(semanticModel, elementAccess);
+                return MissingIndexOrRangeCalls(
+                    semanticModel,
+                    elementAccess,
+                    elementAccess.Expression,
+                    elementAccess.ArgumentList);
+            case ElementBindingExpressionSyntax elementBinding:
+                return MissingIndexOrRangeCalls(
+                    semanticModel,
+                    elementBinding,
+                    elementBinding.Ancestors().OfType<ConditionalAccessExpressionSyntax>().FirstOrDefault()?.Expression,
+                    elementBinding.ArgumentList);
             default:
                 return Array.Empty<(ITypeSymbol, string)>();
         }
@@ -125,10 +138,10 @@ internal static class UnpassedImplicitCallLookup
     // AppendFormatted.
     private static IEnumerable<(ITypeSymbol, string)> MissingHandlerCalls(
         SemanticModel semanticModel,
-        InterpolatedStringExpressionSyntax interpolatedString)
+        ExpressionSyntax converted)
     {
         IInterpolatedStringHandlerCreationOperation creation =
-            ImplicitCallTargets.FindHandlerCreationOrNull(semanticModel, interpolatedString);
+            ImplicitCallTargets.FindHandlerCreationOrNull(semanticModel, converted);
         if (creation == null)
         {
             return Array.Empty<(ITypeSymbol, string)>();
@@ -151,21 +164,24 @@ internal static class UnpassedImplicitCallLookup
         return missing;
     }
 
-    // Why every member of the support pattern: an access the worker could not bind does not say
-    // which of Length, Count, the int indexer or Slice it missed, and the first internal one found
-    // is a member the compiled access calls.
+    // Why every member of the support pattern the access calls: an access the worker could not
+    // bind does not say which of Length, Count, the int indexer or Slice it missed, and the first
+    // internal one found is a member the compiled access calls. Length and Count are left out for
+    // a range the compiler lowers without reading them.
     private static IEnumerable<(ITypeSymbol, string)> MissingIndexOrRangeCalls(
         SemanticModel semanticModel,
-        ElementAccessExpressionSyntax elementAccess)
+        ExpressionSyntax access,
+        ExpressionSyntax receiverExpression,
+        BracketedArgumentListSyntax arguments)
     {
-        if (semanticModel.GetSymbolInfo(elementAccess).Symbol != null)
+        if (semanticModel.GetSymbolInfo(access).Symbol != null)
         {
             return Array.Empty<(ITypeSymbol, string)>();
         }
 
         bool isRange = false;
         bool isIndex = false;
-        foreach (ArgumentSyntax argument in elementAccess.ArgumentList.Arguments)
+        foreach (ArgumentSyntax argument in arguments.Arguments)
         {
             string argumentType = TypeOf(semanticModel, argument.Expression)?.ToDisplayString();
             isRange |= argumentType == "System.Range";
@@ -177,13 +193,16 @@ internal static class UnpassedImplicitCallLookup
             return Array.Empty<(ITypeSymbol, string)>();
         }
 
-        ITypeSymbol receiver = TypeOf(semanticModel, elementAccess.Expression);
-        return new[]
+        ITypeSymbol receiver = TypeOf(semanticModel, receiverExpression);
+        List<(ITypeSymbol, string)> candidates = new List<(ITypeSymbol, string)>();
+        if (ImplicitCallTargets.ReadsLength(semanticModel, arguments))
         {
-            (receiver, "Length"),
-            (receiver, "Count"),
-            (receiver, isRange ? "Slice" : WellKnownMemberNames.Indexer),
-        };
+            candidates.Add((receiver, "Length"));
+            candidates.Add((receiver, "Count"));
+        }
+
+        candidates.Add((receiver, isRange ? "Slice" : WellKnownMemberNames.Indexer));
+        return candidates;
     }
 
     private static IEnumerable<(ITypeSymbol, string)> MissingDeconstructCalls(
