@@ -238,7 +238,7 @@ internal static class ImplicitCallTargets
     // initializer, or any other converted expression; null for an ordinary string or addition.
     // Why the creation must belong to this very node: the compiler attaches the conversion of
     // `$"a" + $"b"` to the addition, and each string inside it would otherwise report it again.
-    private static IInterpolatedStringHandlerCreationOperation FindHandlerCreationOrNull(
+    internal static IInterpolatedStringHandlerCreationOperation FindHandlerCreationOrNull(
         SemanticModel semanticModel,
         ExpressionSyntax expression)
     {
@@ -279,7 +279,7 @@ internal static class ImplicitCallTargets
 
     // Why only the content's own parts: a formatted value may hold another interpolated string,
     // whose handler calls belong to that string's node.
-    private static IEnumerable<IInterpolatedStringAppendOperation> AppendOperations(IOperation content)
+    internal static IEnumerable<IInterpolatedStringAppendOperation> AppendOperations(IOperation content)
     {
         switch (content)
         {

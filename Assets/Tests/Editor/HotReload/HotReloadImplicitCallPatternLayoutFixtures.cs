@@ -1,0 +1,413 @@
+using System;
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    /// <summary>
+    /// Compiled host whose lambdas and async methods reach an internal member of a type in a file
+    /// the run does not pass, only through an interpolated string handler, the implicit Index or
+    /// Range support, the awaiter of await using and await foreach, or an extension method whose
+    /// this parameter is a type parameter. Each body holds a 4-digit token unique in this file,
+    /// which the tests edit. Every awaiter completes synchronously, so no continuation is queued.
+    /// </summary>
+    public sealed class HotReloadImplicitCallPatternLayoutHost
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsHandlerWithInternalCtor()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureCtor($"ab{7501}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsHandlerWithInternalCtor()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureCtor($"ab{7511}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsHandlerWithInternalAppendLiteral()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureLiteral($"ab{7521}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsHandlerWithInternalAppendLiteral()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureLiteral($"ab{7531}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsHandlerWithInternalAppendFormatted()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureFormatted($"ab{7541}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsHandlerWithInternalAppendFormatted()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureFormatted($"ab{7551}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsRefHandlerWithInternalAppendFormatted()
+        {
+            Func<int> read = () => HotReloadPatternHandlerSinks.MeasureRefFormatted($"ab{7561}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsRefHandlerWithInternalAppendFormatted()
+        {
+            await Task.CompletedTask;
+            return HotReloadPatternHandlerSinks.MeasureRefFormatted($"ab{7571}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesFromEndWithInternalLength()
+        {
+            Func<int> read = () => new HotReloadPatternIndexInternalLength()[^1] + 7601;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesFromEndWithInternalLength()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternIndexInternalLength()[^1] + 7611;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesFromEndWithInternalCount()
+        {
+            Func<int> read = () => new HotReloadPatternIndexInternalCount()[^1] + 7621;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesFromEndWithInternalCount()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternIndexInternalCount()[^1] + 7631;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureIndexesFromEndWithInternalIndexer()
+        {
+            Func<int> read = () => new HotReloadUnpassedIndexInternalIndexer()[^1] + 7641;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncIndexesFromEndWithInternalIndexer()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedIndexInternalIndexer()[^1] + 7651;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesRangeWithInternalSlice()
+        {
+            Func<int> read = () => new HotReloadUnpassedRangeInternalSlice()[1..2] + 7661;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesRangeWithInternalSlice()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedRangeInternalSlice()[1..2] + 7671;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesRangeWithInternalLength()
+        {
+            Func<int> read = () => new HotReloadPatternRangeInternalLength()[1..^1] + 7681;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesRangeWithInternalLength()
+        {
+            await Task.CompletedTask;
+            return new HotReloadPatternRangeInternalLength()[1..^1] + 7691;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesDisposeAsyncWithInternalGetAwaiter()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                await using (new HotReloadPatternResourceInternalGetAwaiter())
+                {
+                }
+
+                return 7701;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitUsesDisposeAsyncWithInternalGetAwaiter()
+        {
+            await using (new HotReloadPatternResourceInternalGetAwaiter())
+            {
+            }
+
+            return 7711;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesDisposeAsyncWithInternalIsCompleted()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                await using (new HotReloadPatternResourceInternalIsCompleted())
+                {
+                }
+
+                return 7721;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitUsesDisposeAsyncWithInternalIsCompleted()
+        {
+            await using (new HotReloadPatternResourceInternalIsCompleted())
+            {
+            }
+
+            return 7731;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsesDisposeAsyncWithInternalGetResult()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                await using (new HotReloadPatternResourceInternalGetResult())
+                {
+                }
+
+                return 7741;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitUsesDisposeAsyncWithInternalGetResult()
+        {
+            await using (new HotReloadPatternResourceInternalGetResult())
+            {
+            }
+
+            return 7751;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitUsingDeclarationWithInternalGetAwaiter()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                await using HotReloadPatternResourceInternalGetAwaiter resource =
+                    new HotReloadPatternResourceInternalGetAwaiter();
+                return 7761;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitUsingDeclarationWithInternalGetAwaiter()
+        {
+            await using HotReloadPatternResourceInternalGetAwaiter resource =
+                new HotReloadPatternResourceInternalGetAwaiter();
+            return 7771;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitForEachesMoveNextWithInternalGetAwaiter()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int sum = 7801;
+                await foreach (int value in new HotReloadPatternSequenceInternalGetAwaiter())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitForEachesMoveNextWithInternalGetAwaiter()
+        {
+            int sum = 7811;
+            await foreach (int value in new HotReloadPatternSequenceInternalGetAwaiter())
+            {
+                sum += value;
+            }
+
+            return sum;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitForEachesMoveNextWithInternalIsCompleted()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int sum = 7821;
+                await foreach (int value in new HotReloadPatternSequenceInternalIsCompleted())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitForEachesMoveNextWithInternalIsCompleted()
+        {
+            int sum = 7831;
+            await foreach (int value in new HotReloadPatternSequenceInternalIsCompleted())
+            {
+                sum += value;
+            }
+
+            return sum;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitForEachesMoveNextWithInternalGetResult()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int sum = 7841;
+                await foreach (int value in new HotReloadPatternSequenceInternalGetResult())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitForEachesMoveNextWithInternalGetResult()
+        {
+            int sum = 7851;
+            await foreach (int value in new HotReloadPatternSequenceInternalGetResult())
+            {
+                sum += value;
+            }
+
+            return sum;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public Task<int> ClosureAwaitForEachesEnumeratorDisposeWithInternalGetAwaiter()
+        {
+            Func<Task<int>> read = async () =>
+            {
+                int sum = 7861;
+                await foreach (int value in new HotReloadPatternSequenceDisposeInternalGetAwaiter())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAwaitForEachesEnumeratorDisposeWithInternalGetAwaiter()
+        {
+            int sum = 7871;
+            await foreach (int value in new HotReloadPatternSequenceDisposeInternalGetAwaiter())
+            {
+                sum += value;
+            }
+
+            return sum;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsThroughConstrainedGenericExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedGenericPair();
+                return first + second + 7901;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncDeconstructsThroughConstrainedGenericExtension()
+        {
+            await Task.CompletedTask;
+            (int first, int second) = new HotReloadUnpassedGenericPair();
+            return first + second + 7911;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureLoopsThroughConstrainedGenericExtension()
+        {
+            Func<int> read = () =>
+            {
+                int sum = 7921;
+                foreach (int value in new HotReloadUnpassedGenericRange())
+                {
+                    sum += value;
+                }
+
+                return sum;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncLoopsThroughConstrainedGenericExtension()
+        {
+            await Task.CompletedTask;
+            int sum = 7931;
+            foreach (int value in new HotReloadUnpassedGenericRange())
+            {
+                sum += value;
+            }
+
+            return sum;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsThroughUnconstrainedGenericExtension()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second, int third) = new HotReloadUnpassedGenericTriple();
+                return first + second + third + 7941;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncDeconstructsThroughUnconstrainedGenericExtension()
+        {
+            await Task.CompletedTask;
+            (int first, int second, int third) = new HotReloadUnpassedGenericTriple();
+            return first + second + third + 7951;
+        }
+    }
+}
