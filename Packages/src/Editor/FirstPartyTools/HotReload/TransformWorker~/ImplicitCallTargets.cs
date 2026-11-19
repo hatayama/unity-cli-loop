@@ -19,7 +19,8 @@ using Microsoft.CodeAnalysis.Text;
 
 /// <summary>
 /// What: methods the compiler calls for a syntax node with no invocation of them in the source
-/// (await, foreach, deconstruction, collection initializer, query expression, ref struct using).
+/// (await, foreach, await foreach, deconstruction, collection initializer, query expression,
+/// interpolated string handler, implicit Index or Range support, ref struct using, await using).
 /// A closure or state machine emitted into the shim assembly makes those calls too, so an
 /// inaccessible one fails at run time exactly like a written call. None has an accessor rewrite,
 /// so such a body is refused.
@@ -34,6 +35,9 @@ internal static class ImplicitCallTargets
     private const string UsingConstruct = "using";
     private const string AwaitUsingConstruct = "await using";
     private const string PositionalPatternConstruct = "a positional pattern";
+    private const string InterpolatedStringHandlerConstruct = "an interpolated string handler";
+    private const string IndexOrRangeConstruct = "an index or range";
+    private const string AwaitForEachConstruct = "await foreach";
 
     /// <summary>
     /// What: the refusal for the first inaccessible method the compiler calls for this node, or
@@ -68,7 +72,7 @@ internal static class ImplicitCallTargets
         switch (node)
         {
             case AwaitExpressionSyntax awaitExpression:
-                return AwaitTargets(semanticModel.GetAwaitExpressionInfo(awaitExpression));
+                return AwaitTargets(semanticModel.GetAwaitExpressionInfo(awaitExpression), AwaitConstruct);
             case CommonForEachStatementSyntax forEach:
                 return ForEachTargets(semanticModel, forEach);
             case AssignmentExpressionSyntax assignment when IsDeconstruction(assignment):
@@ -89,6 +93,7 @@ internal static class ImplicitCallTargets
             case UsingStatementSyntax usingStatement:
                 return UsingTargets(
                     semanticModel,
+                    usingStatement,
                     usingStatement.Declaration?.Type,
                     usingStatement.Expression,
                     usingStatement.AwaitKeyword != default);
@@ -96,19 +101,65 @@ internal static class ImplicitCallTargets
                 when localDeclaration.UsingKeyword != default:
                 return UsingTargets(
                     semanticModel,
+                    localDeclaration,
                     localDeclaration.Declaration.Type,
                     null,
                     localDeclaration.AwaitKeyword != default);
+            default:
+                return ExpressionPatternTargets(semanticModel, node);
+        }
+    }
+
+    // The expressions whose pattern members the compiler calls: an interpolated string converted
+    // to a handler, and an element access that goes through the implicit Index or Range support.
+    private static IEnumerable<(IMethodSymbol Method, string Construct)> ExpressionPatternTargets(
+        SemanticModel semanticModel,
+        SyntaxNode node)
+    {
+        switch (node)
+        {
+            case InterpolatedStringExpressionSyntax interpolatedString:
+                return HandlerTargets(FindHandlerCreationOrNull(semanticModel, interpolatedString));
+            case ElementAccessExpressionSyntax elementAccess:
+                return IndexOrRangeTargets(
+                    semanticModel.GetOperation(elementAccess) as IImplicitIndexerReferenceOperation,
+                    elementAccess);
             default:
                 return Array.Empty<(IMethodSymbol, string)>();
         }
     }
 
-    private static IEnumerable<(IMethodSymbol, string)> AwaitTargets(AwaitExpressionInfo info)
+    private static IEnumerable<(IMethodSymbol, string)> AwaitTargets(AwaitExpressionInfo info, string construct)
     {
-        yield return (info.GetAwaiterMethod, AwaitConstruct);
-        yield return (info.IsCompletedProperty?.GetMethod, AwaitConstruct);
-        yield return (info.GetResultMethod, AwaitConstruct);
+        yield return (info.GetAwaiterMethod, construct);
+        yield return (info.IsCompletedProperty?.GetMethod, construct);
+        yield return (info.GetResultMethod, construct);
+    }
+
+    // Why a speculative await: the compiler awaits the value DisposeAsync or MoveNextAsync returns
+    // with no await in the source, and no semantic API reports that awaiter. Binding
+    // `await default(R)` at the statement applies the compiler's own awaiter rules, extension
+    // GetAwaiter included.
+    private static IEnumerable<(IMethodSymbol, string)> AwaiterTargetsOf(
+        SemanticModel semanticModel,
+        int position,
+        ITypeSymbol awaited,
+        string construct)
+    {
+        if (awaited == null || awaited.SpecialType == SpecialType.System_Void)
+        {
+            return Array.Empty<(IMethodSymbol, string)>();
+        }
+
+        StatementSyntax statement = SyntaxFactory.ParseStatement(
+            "await default(" + awaited.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ");");
+        if (statement is not ExpressionStatementSyntax { Expression: AwaitExpressionSyntax awaitExpression }
+            || !semanticModel.TryGetSpeculativeSemanticModel(position, statement, out SemanticModel speculative))
+        {
+            return Array.Empty<(IMethodSymbol, string)>();
+        }
+
+        return AwaitTargets(speculative.GetAwaitExpressionInfo(awaitExpression), construct);
     }
 
     private static IEnumerable<(IMethodSymbol, string)> ForEachTargets(
@@ -120,6 +171,21 @@ internal static class ImplicitCallTargets
         yield return (info.MoveNextMethod, ForEachConstruct);
         yield return (info.CurrentProperty?.GetMethod, ForEachConstruct);
         yield return (info.DisposeMethod, ForEachConstruct);
+        if (info.IsAsynchronous)
+        {
+            foreach ((IMethodSymbol, string) target in AwaiterTargetsOf(
+                         semanticModel, forEach.SpanStart, info.MoveNextMethod?.ReturnType, AwaitForEachConstruct))
+            {
+                yield return target;
+            }
+
+            foreach ((IMethodSymbol, string) target in AwaiterTargetsOf(
+                         semanticModel, forEach.SpanStart, info.DisposeMethod?.ReturnType, AwaitForEachConstruct))
+            {
+                yield return target;
+            }
+        }
+
         if (forEach is ForEachVariableStatementSyntax forEachVariable)
         {
             foreach ((IMethodSymbol, string) target in DeconstructionTargets(
@@ -162,6 +228,98 @@ internal static class ImplicitCallTargets
         }
     }
 
+    // The handler conversion the string goes through, whether it is an argument, a local's
+    // initializer, or any other converted expression; null for an ordinary string.
+    private static IInterpolatedStringHandlerCreationOperation FindHandlerCreationOrNull(
+        SemanticModel semanticModel,
+        InterpolatedStringExpressionSyntax interpolatedString)
+    {
+        IOperation operation = semanticModel.GetOperation(interpolatedString);
+        if (operation == null)
+        {
+            return null;
+        }
+
+        while (operation.Parent != null && operation.Parent.Syntax == interpolatedString)
+        {
+            operation = operation.Parent;
+        }
+
+        return operation.DescendantsAndSelf()
+            .OfType<IInterpolatedStringHandlerCreationOperation>()
+            .FirstOrDefault(creation => creation.Syntax == interpolatedString);
+    }
+
+    private static IEnumerable<(IMethodSymbol, string)> HandlerTargets(
+        IInterpolatedStringHandlerCreationOperation creation)
+    {
+        if (creation == null)
+        {
+            yield break;
+        }
+
+        yield return (
+            (creation.HandlerCreation as IObjectCreationOperation)?.Constructor,
+            InterpolatedStringHandlerConstruct);
+        foreach (IInterpolatedStringAppendOperation append in AppendOperations(creation.Content))
+        {
+            yield return (
+                (append.AppendCall as IInvocationOperation)?.TargetMethod,
+                InterpolatedStringHandlerConstruct);
+        }
+    }
+
+    // Why only the content's own parts: a formatted value may hold another interpolated string,
+    // whose handler calls belong to that string's node.
+    private static IEnumerable<IInterpolatedStringAppendOperation> AppendOperations(IOperation content)
+    {
+        switch (content)
+        {
+            case IInterpolatedStringOperation interpolated:
+                return interpolated.Parts.OfType<IInterpolatedStringAppendOperation>();
+            case IInterpolatedStringAdditionOperation addition:
+                return AppendOperations(addition.Left).Concat(AppendOperations(addition.Right));
+            default:
+                return Array.Empty<IInterpolatedStringAppendOperation>();
+        }
+    }
+
+    // `x[^1]` and `x[a..b]` on a type without an Index or Range indexer: the compiler reads
+    // Length or Count, then calls the int indexer or Slice.
+    private static IEnumerable<(IMethodSymbol, string)> IndexOrRangeTargets(
+        IImplicitIndexerReferenceOperation indexer,
+        ElementAccessExpressionSyntax elementAccess)
+    {
+        if (indexer == null)
+        {
+            yield break;
+        }
+
+        yield return ((indexer.LengthSymbol as IPropertySymbol)?.GetMethod, IndexOrRangeConstruct);
+        if (indexer.IndexerSymbol is IMethodSymbol slice)
+        {
+            yield return (slice, IndexOrRangeConstruct);
+            yield break;
+        }
+
+        if (indexer.IndexerSymbol is not IPropertySymbol property)
+        {
+            yield break;
+        }
+
+        bool isAssignmentTarget = elementAccess.Parent is AssignmentExpressionSyntax assignment
+            && assignment.Left == elementAccess;
+        if (isAssignmentTarget)
+        {
+            yield return (property.SetMethod, IndexOrRangeConstruct);
+        }
+
+        if (!isAssignmentTarget || !elementAccess.Parent.IsKind(SyntaxKind.SimpleAssignmentExpression))
+        {
+            yield return (property.GetMethod, IndexOrRangeConstruct);
+        }
+    }
+
     private static IEnumerable<(IMethodSymbol, string)> QueryClauseTargets(QueryClauseInfo info)
     {
         yield return (info.CastInfo.Symbol as IMethodSymbol, QueryConstruct);
@@ -172,10 +330,12 @@ internal static class ImplicitCallTargets
     // calls IDisposable.Dispose or IAsyncDisposable.DisposeAsync through the interface, which is
     // public, whenever the resource implements it, even when a pattern method also exists. A ref
     // struct without IDisposable may offer a pattern Dispose, and an await using on any type without
-    // IAsyncDisposable a pattern DisposeAsync. No semantic API reports which method was bound, so
-    // the call is bound speculatively, which applies the compiler's own overload rules.
+    // IAsyncDisposable a pattern DisposeAsync, whose result the compiler then awaits. No semantic API
+    // reports which method was bound, so the call is bound speculatively, which applies the
+    // compiler's own overload rules.
     private static IEnumerable<(IMethodSymbol, string)> UsingTargets(
         SemanticModel semanticModel,
+        SyntaxNode statement,
         TypeSyntax declaredType,
         ExpressionSyntax resource,
         bool isAwaitUsing)
@@ -189,9 +349,14 @@ internal static class ImplicitCallTargets
 
         if (isAwaitUsing)
         {
-            return Implements(resourceType, "System.IAsyncDisposable")
-                ? Array.Empty<(IMethodSymbol, string)>()
-                : Single(BindPatternMethodOrNull(semanticModel, typedNode.SpanStart, resourceType, "DisposeAsync"), AwaitUsingConstruct);
+            if (Implements(resourceType, "System.IAsyncDisposable"))
+            {
+                return Array.Empty<(IMethodSymbol, string)>();
+            }
+
+            IMethodSymbol disposeAsync = BindPatternMethodOrNull(semanticModel, typedNode.SpanStart, resourceType, "DisposeAsync");
+            return Single(disposeAsync, AwaitUsingConstruct)
+                .Concat(AwaiterTargetsOf(semanticModel, statement.SpanStart, disposeAsync?.ReturnType, AwaitUsingConstruct));
         }
 
         if (!resourceType.IsRefLikeType || Implements(resourceType, "System.IDisposable"))
@@ -229,9 +394,15 @@ internal static class ImplicitCallTargets
         return new[] { (symbol as IMethodSymbol, construct) };
     }
 
-    // A property accessor is named by its property, which is what the source shows.
+    // A property accessor is named by its property and a constructor by the creation, which is
+    // what the source would show.
     private static string DisplayName(IMethodSymbol method)
     {
+        if (method.MethodKind == MethodKind.Constructor)
+        {
+            return "new " + method.ContainingType.Name + "(...)";
+        }
+
         return method.AssociatedSymbol is IPropertySymbol property ? property.Name : method.Name;
     }
 }
