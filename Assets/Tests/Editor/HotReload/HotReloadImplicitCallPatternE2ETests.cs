@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadImplicitCallPatternE2ETests
     {
         private const string FixtureFileName = "HotReloadImplicitCallPatternFixtures.cs";
+        private const string LayoutFixtureFileName = "HotReloadImplicitCallPatternLayoutFixtures.cs";
 
         private HotReloadDomainTestScope _scope;
 
@@ -138,12 +139,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.ClosureSlicesOpenStartWithInternalLength(), Is.EqualTo(7744));
         }
 
+        /// <summary>
+        /// What: a lambda whose handler, declared in the only file passed to the reload, has an
+        /// internal AppendFormatted and takes its InterpolatedStringHandler attribute from an
+        /// internal declaration in another file is Skipped, no row fails, and the method keeps
+        /// returning the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureBuildingHandlerWhoseAttributeIsInAnotherFile_IsSkippedAndKeepsTheCompiledBody()
+        {
+            HotReloadImplicitCallPatternLayoutHost host = new HotReloadImplicitCallPatternLayoutHost();
+            Assert.That(host.ClosureBuildsPassedFileHandlerWithInternalAppendFormatted(), Is.EqualTo(7770));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("7765", "7766", LayoutFixtureFileName);
+
+            AssertKind(result, "ClosureBuildsPassedFileHandlerWithInternalAppendFormatted", HotReloadMethodOutcomeKind.Skipped);
+            AssertNoFailedRow(result);
+            Assert.That(host.ClosureBuildsPassedFileHandlerWithInternalAppendFormatted(), Is.EqualTo(7770));
+        }
+
         private static async Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(
             string originalToken,
-            string editedToken)
+            string editedToken,
+            string fixtureFileName = FixtureFileName)
         {
             string fixturePath = Path.GetFullPath(
-                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fixtureFileName));
             string onDisk = File.ReadAllText(fixturePath);
             string edited = onDisk.Replace(originalToken, editedToken);
             Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the token must be in the fixture.");

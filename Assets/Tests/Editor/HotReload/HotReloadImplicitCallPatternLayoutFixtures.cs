@@ -751,5 +751,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return Sum<object>() + 7755;
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureBuildsPassedFileHandlerWithInternalAppendFormatted()
+        {
+            Func<int> read = () => HotReloadPassedFileHandlerSinks.Measure($"ab{7765}");
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncBuildsPassedFileHandlerWithInternalAppendFormatted()
+        {
+            await Task.CompletedTask;
+            return HotReloadPassedFileHandlerSinks.Measure($"ab{7775}");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureAddsToPassedFileHandlerCallOfCapturedLocal()
+        {
+            int value = 2;
+            Func<int> read = () => HotReloadPassedFileHandlerSinks.Measure($"ab{value}") + 7785;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncAddsToPassedFileHandlerCallOfLocal()
+        {
+            int value = 2;
+            await Task.CompletedTask;
+            return HotReloadPassedFileHandlerSinks.Measure($"ab{value}") + 7795;
+        }
+
+    }
+
+    /// <summary>
+    /// Handler declared in the file the run passes, whose only AppendFormatted is internal. Its
+    /// InterpolatedStringHandler attribute is the internal declaration in a file the run does not
+    /// pass, as in a project whose base class library lacks that attribute.
+    /// </summary>
+    [InterpolatedStringHandler]
+    public struct HotReloadPassedFileHandlerInternalAppendFormatted
+    {
+        public int Total;
+
+        public HotReloadPassedFileHandlerInternalAppendFormatted(int literalLength, int formattedCount)
+        {
+            Total = literalLength + formattedCount;
+        }
+
+        public void AppendLiteral(string value)
+        {
+            Total += value.Length;
+        }
+
+        internal void AppendFormatted(int value)
+        {
+            Total += value;
+        }
+    }
+
+    /// <summary>
+    /// Takes the passed-file handler, so an interpolated string argument is built through it.
+    /// </summary>
+    public static class HotReloadPassedFileHandlerSinks
+    {
+        public static int Measure(HotReloadPassedFileHandlerInternalAppendFormatted handler)
+        {
+            return handler.Total;
+        }
     }
 }

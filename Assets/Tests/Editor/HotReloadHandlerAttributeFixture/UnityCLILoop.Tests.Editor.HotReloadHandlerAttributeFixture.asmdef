@@ -1,0 +1,16 @@
+{
+    "name": "UnityCLILoop.Tests.Editor.HotReloadHandlerAttributeFixture",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadHandlerAttributeFixture",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
