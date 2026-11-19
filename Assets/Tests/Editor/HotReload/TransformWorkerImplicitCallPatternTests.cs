@@ -44,6 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7191", "AsyncConvertsToHandlerLocalWithInternalAppendFormatted", "AppendFormatted", HandlerConstruct)]
         [TestCase("7601", "ClosureBuildsHandlerFromInterpolatedAddition", "AppendFormatted", HandlerConstruct)]
         [TestCase("7611", "AsyncBuildsHandlerFromInterpolatedAddition", "AppendFormatted", HandlerConstruct)]
+        [TestCase("7791", "ClosureCastsToHandlerWithInternalAppendFormatted", "AppendFormatted", HandlerConstruct)]
+        [TestCase("7801", "AsyncCastsToHandlerWithInternalAppendFormatted", "AppendFormatted", HandlerConstruct)]
         [TestCase("7201", "ClosureIndexesFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7211", "AsyncIndexesFromEndWithInternalLength", "Length", IndexOrRangeConstruct)]
         [TestCase("7221", "ClosureIndexesFromEndWithInternalCount", "Count", IndexOrRangeConstruct)]
