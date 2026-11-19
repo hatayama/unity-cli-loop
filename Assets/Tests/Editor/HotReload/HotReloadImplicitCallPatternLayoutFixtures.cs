@@ -665,5 +665,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             return read();
         }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureSlicesThroughInternalRangeIndexer()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexer()[1..2] + 7685;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> AsyncSlicesThroughInternalRangeIndexer()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedInternalRangeIndexer()[1..2] + 7695;
+        }
     }
 }

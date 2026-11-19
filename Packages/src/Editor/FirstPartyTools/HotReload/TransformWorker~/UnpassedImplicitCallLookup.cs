@@ -224,7 +224,14 @@ internal static class UnpassedImplicitCallLookup
             candidates.Add((receiver, "Count"));
         }
 
-        candidates.Add((receiver, isRange ? "Slice" : WellKnownMemberNames.Indexer));
+        if (isRange)
+        {
+            candidates.Add((receiver, "Slice"));
+        }
+
+        // Why the indexer for a range too: a type with its own Range indexer is indexed through it
+        // directly, without the implicit support.
+        candidates.Add((receiver, WellKnownMemberNames.Indexer));
         return candidates;
     }
 

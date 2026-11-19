@@ -350,6 +350,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Sliceable only through an internal Range indexer, with no Length or Slice, so a range
+    /// access binds to that indexer directly.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalRangeIndexer
+    {
+        internal int this[System.Range range] => range.Start.Value;
+    }
+
+    /// <summary>
     /// Indexable through the implicit Index support with an internal int indexer, in an unpassed
     /// file.
     /// </summary>
