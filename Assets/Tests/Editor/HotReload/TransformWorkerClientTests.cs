@@ -4325,7 +4325,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return BuildInputForSource(ResolveE2EFixturePath(), ResolveE2EFixtureProjectRelativePath());
         }
 
-        // Shared with worker tests in other classes that run one edited source against this assembly.
+        // Shared with worker tests in other classes that run one edited source against this assembly,
+        // or against another test assembly named by targetAssemblyName (for example one that allows
+        // unsafe code, which this assembly does not).
         internal static TransformWorkerInputDto BuildInputForSource(
             string sourcePath,
             string projectRelativePath,
@@ -4334,20 +4336,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] changedSiblingSourcePaths = null,
             string secondSourcePath = null,
             string secondProjectRelativePath = null,
-            string operation = null)
+            string operation = null,
+            string targetAssemblyName = TestAssemblyName)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
                 projectRoot,
                 "Library",
                 "ScriptAssemblies",
-                TestAssemblyName + ".dll");
+                targetAssemblyName + ".dll");
             Assert.That(File.Exists(targetDllPath), Is.True, "Test assembly dll missing: " + targetDllPath);
 
             UnityEditor.Compilation.Assembly compilationAssembly = null;
             foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
             {
-                if (assembly.name == TestAssemblyName)
+                if (assembly.name == targetAssemblyName)
                 {
                     compilationAssembly = assembly;
                     break;

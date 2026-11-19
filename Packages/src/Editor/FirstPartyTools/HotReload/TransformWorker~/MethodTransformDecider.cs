@@ -36,6 +36,8 @@ internal static class MethodTransformDecider
             typeSymbol,
             methodDeclaration,
             methodSymbol,
+            bodyNode,
+            semanticModel,
             partialTypeParts);
         if (hardSkip != null)
         {
@@ -235,6 +237,8 @@ internal static class MethodTransformDecider
         INamedTypeSymbol typeSymbol,
         MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
         PartialTypeParts partialTypeParts)
     {
         // Why only an untrusted part skips: the loader put every trusted part into the binding,
@@ -254,6 +258,13 @@ internal static class MethodTransformDecider
         if (typeSymbol.IsGenericType || methodSymbol.IsGenericMethod || hasTypeParameters)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType);
+        }
+
+        // Why only with a body: a bodyless member keeps its own no-body reason, and patches are
+        // compiled without unsafe code, so a body that needs it would fail the whole file's compile.
+        if (bodyNode != null && UnsafeContextRules.NeedsUnsafeContext(methodSymbol, bodyNode, semanticModel))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUnsafeCode);
         }
 
         return null;

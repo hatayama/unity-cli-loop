@@ -135,6 +135,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Generic methods and methods inside generic types cannot be safely patched with Harmony.",
                     0).EndingWith(CompileCallToAction));
             templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformUnsafeCode,
+                Plain(
+                    "Methods and accessors that need an unsafe context (pointers, function pointers, fixed "
+                    + "statements, or unsafe blocks) are skipped; the patch is compiled without unsafe code.",
+                    0).EndingWith(CompileCallToAction));
+            templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 Plain(
                     "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
