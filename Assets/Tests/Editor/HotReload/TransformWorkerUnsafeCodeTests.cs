@@ -177,6 +177,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertAcceptedAsync("(a * b) + 2150", "(a * b) + 2151", "UnsafeFixtureBitwiseHost");
         }
 
+        /// <summary>What: pointer types used only as typeof operands are not refused; both methods are entries.</summary>
+        [Test]
+        public async Task Run_PointerTypeInTypeOf_IsAnEntry()
+        {
+            await AssertAcceptedAsync(".Name + 2200", ".Name + 2201", "UnsafeFixtureTypeOfPointerHost");
+        }
+
+        /// <summary>What: a pointer type used only as a generic type argument is not refused; both methods are entries.</summary>
+        [Test]
+        public async Task Run_PointerTypeAsTypeArgument_IsAnEntry()
+        {
+            await AssertAcceptedAsync("values.Count + 2250", "values.Count + 2251", "UnsafeFixturePointerTypeArgumentHost");
+        }
+
         private static async Task AssertRefusedAsync(string anchor, string replacement, string methodFragment)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(anchor, replacement);

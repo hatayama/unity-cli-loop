@@ -57,6 +57,11 @@ internal static class UnsafeContextRules
     // are safe; only the address-of and indirection node kinds need an unsafe context.
     private static bool NodeNeedsUnsafeContext(SyntaxNode node, SemanticModel semanticModel)
     {
+        if (node is TypeSyntax type && IsTypeOfOperandOrTypeArgument(type))
+        {
+            return false;
+        }
+
         switch (node.Kind())
         {
             case SyntaxKind.UnsafeStatement:
@@ -76,6 +81,19 @@ internal static class UnsafeContextRules
         }
 
         return node is ExpressionSyntax expression && HasPointerLikeType(expression, semanticModel);
+    }
+
+    // Why exempt: a pointer type that only names a type, as a typeof operand or a generic type
+    // argument (typeof(int*), List<int*[]>), compiles without an unsafe context.
+    private static bool IsTypeOfOperandOrTypeArgument(TypeSyntax type)
+    {
+        SyntaxNode current = type;
+        while (current.Parent is TypeSyntax)
+        {
+            current = current.Parent;
+        }
+
+        return current.Parent is TypeArgumentListSyntax || current.Parent is TypeOfExpressionSyntax;
     }
 
     // Why the semantic test on top of the syntax kinds: a body can handle a pointer with no pointer

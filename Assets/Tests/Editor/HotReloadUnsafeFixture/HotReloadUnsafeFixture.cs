@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
 {
@@ -264,6 +265,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
             int a = 6;
             int b = 3;
             return (a & b) + (a * b) + 2150;
+        }
+    }
+
+    public class UnsafeFixtureTypeOfPointerHost
+    {
+        public string Read()
+        {
+            return typeof(int*).Name + typeof(int*[]).Name + typeof(delegate*<int, void>).Name + 2200;
+        }
+    }
+
+    public class UnsafeFixturePointerTypeArgumentHost
+    {
+        public int Read()
+        {
+            List<int*[]> values = new List<int*[]>();
+            return values.Count + 2250;
         }
     }
 }
