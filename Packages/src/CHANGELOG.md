@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.8](https://github.com/hatayama/unity-cli-loop/compare/v3.34.7...v3.34.8) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload keeps property pattern member names as written and skips a body whose pattern names a private member or an added field instead of failing the whole file ([#3584](https://github.com/hatayama/unity-cli-loop/issues/3584)) ([6388af9](https://github.com/hatayama/unity-cli-loop/commit/6388af914629d7685be5cdca4aa4d02d8caf7ba6))
+
 ## [3.34.7](https://github.com/hatayama/unity-cli-loop/compare/v3.34.6...v3.34.7) (2026-11-20)
 
 
