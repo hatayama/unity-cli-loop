@@ -84,6 +84,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// <summary>
     /// Public class with internal constructors taking a BCL twin type or its oracle type.
     /// </summary>
+    /// <summary>
+    /// Public class whose public overload takes any value while a private overload takes Memory. Code
+    /// outside the class can call only the public one; a shim compiled against a copy with every
+    /// member public would pick the private one.
+    /// </summary>
+    public static class HotReloadBclTwinOverloads
+    {
+        public static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(Memory<int> memory)
+        {
+            return memory.Length;
+        }
+    }
+
+    /// <summary>
+    /// Public class with a public constructor taking any value and a private one taking Memory, for
+    /// the same reason as HotReloadBclTwinOverloads.
+    /// </summary>
+    public sealed class HotReloadBclTwinOverloadedBox
+    {
+        public HotReloadBclTwinOverloadedBox(object value)
+        {
+            Value = 1;
+        }
+
+        private HotReloadBclTwinOverloadedBox(Memory<int> memory)
+        {
+            Value = memory.Length;
+        }
+
+        public int Value { get; }
+    }
+
+    /// <summary>
+    /// Value type with an instance method taking Memory, held by an added field whose store returns a
+    /// copy, so a call on the field would lose its write.
+    /// </summary>
+    public struct HotReloadBclTwinCounter
+    {
+        public int Total;
+
+        public void Add(Memory<int> values)
+        {
+            Total += values.Length;
+        }
+    }
+
     public sealed class HotReloadBclTwinBox
     {
         public int Length;

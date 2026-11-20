@@ -43,6 +43,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedFieldFromInternalMemoryCall =
             " private int _addedFromInternal = HotReloadBclTwinTargets.MemoryLength(new Memory<int>(new int[3]));";
 
+        // Why public overloads beside private ones: code outside their class binds the public one,
+        // while a shim compiled against a copy with every member public would bind the private one.
+        private const string AddedFieldFromOverloadedCall =
+            " private int _addedPicked = HotReloadBclTwinOverloads.Pick(new Memory<int>(new int[3]));";
+
+        private const string AddedFieldFromOverloadedConstructor =
+            " private HotReloadBclTwinOverloadedBox _addedBox = new HotReloadBclTwinOverloadedBox(new Memory<int>(new int[3]));";
+
+        private const string AddedValueTypeField = " private HotReloadBclTwinCounter _addedCounter;";
+
         private HotReloadDomainTestScope _scope;
 
         [OneTimeSetUp]
@@ -94,7 +104,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a body whose twin-typed use of an added member the shim cannot run is skipped with
         /// the reason its ArraySegment form gets and keeps the compiled value without failing the
         /// file: an added method converted to a delegate, a call to an added method this reload
-        /// skipped, and a read of an added field whose initializer calls an internal method.
+        /// skipped, a read of an added field whose initializer calls an internal method or a call or
+        /// constructor with a private overload beside a public one, and an instance method call on
+        /// an added value-type field.
         /// </summary>
         [TestCase(
             "Func<Memory<int>, int> length = AddedMemoryLength; return length(new Memory<int>(_ints)) + 6902;",
@@ -108,6 +120,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "return _addedFromInternal + 6902;",
             AddedFieldFromInternalMemoryCall,
             "has an initializer that is not a literal")]
+        [TestCase(
+            "return _addedPicked + 6902;",
+            AddedFieldFromOverloadedCall,
+            "has an initializer that is not a literal")]
+        [TestCase(
+            "return _addedBox.Value + 6902;",
+            AddedFieldFromOverloadedConstructor,
+            "has an initializer that is not a literal")]
+        [TestCase(
+            "_addedCounter.Add(new Memory<int>(_ints)); return _addedCounter.Total + 6902;",
+            AddedValueTypeField,
+            "instance method calls on that field")]
         public async Task Run_TwinTypedUseOfAddedMemberTheShimCannotRun_IsSkippedAndKeepsTheCompiledValue(
             string statements,
             string addedMembers,

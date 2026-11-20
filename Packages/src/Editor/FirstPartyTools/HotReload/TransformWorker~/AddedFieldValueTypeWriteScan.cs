@@ -51,7 +51,10 @@ internal static class AddedFieldValueTypeWriteScan
                 continue;
             }
 
-            ISymbol invoked = semanticModel.GetSymbolInfo(invocation).Symbol;
+            // Why resolved: a call passing a BCL type a referenced assembly also declares internally
+            // (Memory<int>) binds to nothing with accessibility ignored, and the call would lose its
+            // write to the copy the store returns.
+            ISymbol invoked = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation);
             if (invoked is IMethodSymbol methodSymbol
                 && !methodSymbol.IsStatic
                 && ReachesValueTypeAddedFieldRoot(semanticModel, memberAccess.Expression, addedFieldCatalog))
