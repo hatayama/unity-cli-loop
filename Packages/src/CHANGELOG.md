@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.10](https://github.com/hatayama/unity-cli-loop/compare/v3.34.9...v3.34.10) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload no longer reports drift or removed members when an edit only respells an explicit interface specifier ([#3590](https://github.com/hatayama/unity-cli-loop/issues/3590)) ([afad650](https://github.com/hatayama/unity-cli-loop/commit/afad650a572019ef541b18dcc27743ebbb5ed520))
+
 ## [3.34.9](https://github.com/hatayama/unity-cli-loop/compare/v3.34.8...v3.34.9) (2026-11-20)
 
 
