@@ -28,9 +28,21 @@ internal static class RetainedNonPublicMemberUseGuard
         // Why nameof arguments are not skipped, unlike InaccessibleAccessScanner: that scanner asks
         // whether the emitted code needs an accessor, while this asks whether the name binds, and a
         // reload that binds the artifact cannot find the member inside nameof either.
+        SemanticModel enforcingModel = null;
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
-            ISymbol nonPublicMember = FindNonPublicMemberUse(semanticModel.GetSymbolInfo(node).Symbol, node);
+            ISymbol symbol = semanticModel.GetSymbolInfo(node).Symbol;
+            // Why bind an unbound expression again with accessibility enforced: a call passing a
+            // BCL type a referenced assembly also declares internally (Memory<int>) binds to
+            // nothing with accessibility ignored, and its non-public target would go unnoticed.
+            // One enforcing model serves the whole body so the body is bound for it once.
+            if (symbol == null && node is ExpressionSyntax)
+            {
+                enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
+                symbol = enforcingModel.GetSymbolInfo(node).Symbol;
+            }
+
+            ISymbol nonPublicMember = FindNonPublicMemberUse(symbol, node);
             if (nonPublicMember != null
                 && IsMemberOfAnotherRetainedType(nonPublicMember, hostType, semanticModel, sourceUnit))
             {

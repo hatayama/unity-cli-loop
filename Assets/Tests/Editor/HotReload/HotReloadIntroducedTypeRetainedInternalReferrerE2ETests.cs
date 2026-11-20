@@ -76,6 +76,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        }\n"
             + "\n";
 
+        // The same call with a Memory argument. Why Memory: a referenced assembly carries an internal
+        // copy of it, so with accessibility ignored the call binds to no symbol.
+        private static readonly string AddedMethodCallingTheSecretWithMemory =
+            "        public int AddedUsesSecret()\n"
+            + "        {\n"
+            + "            return new RetainedHelper().SecretLength(new System.Memory<int>(new int[2]));\n"
+            + "        }\n"
+            + "\n";
+
         // Added methods of a compiled type that each call one accessor of a retained type's
         // properties, where every property keeps one accessor non-public.
         private static readonly string AddedMethodsCallingAccessors =
@@ -421,18 +430,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// internal method of a retained introduced type: it is skipped when the type is introduced
         /// in the same reload, when a later reload edits a body of the type, and when a reload
         /// leaves the type's file out and binds the artifact, so no unrelated reload drops a method
-        /// an earlier one applied.
+        /// an earlier one applied. The call is made with no argument and with a Memory argument.
         /// </summary>
-        [Test]
-        public async Task Run_AddedMethodCallingInternalMemberOfRetainedType_IsSkippedOnEveryReload()
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task Run_AddedMethodCallingInternalMemberOfRetainedType_IsSkippedOnEveryReload(bool passesMemory)
         {
             const string callerExpression = "new RetainedHelper().Read()";
+            string addedMethod = passesMemory ? AddedMethodCallingTheSecretWithMemory : AddedMethodCallingTheSecret;
             await RunInIntroducedTypeDomainAsync(async _ =>
             {
                 HotReloadOrchestratorResult introducing = await RunAsync(
                     "SecretFirst",
                     callerExpression,
-                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(1)), AddedMethodCallingTheSecret));
+                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(1)), addedMethod));
                 AssertIntroduced(introducing, "RetainedHelper");
                 AssertOutcome(introducing, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
                 AssertReasonContains(introducing, "AddedUsesSecret", UnboundBodyReason);
@@ -440,7 +451,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadOrchestratorResult edited = await RunAsync(
                     "SecretSecond",
                     callerExpression,
-                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(2)), AddedMethodCallingTheSecret));
+                    WithHostAdditions(Owner(OwnerPath, RetainedHelper(2)), addedMethod));
                 AssertOutcome(edited, HotReloadMethodOutcomeKind.Patched, Namespace + ".RetainedHelper.Read");
                 AssertOutcome(edited, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
                 AssertReasonContains(edited, "AddedUsesSecret", "a non-public member of a type hot reload introduced");
@@ -449,7 +460,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadOrchestratorResult hostOnly = await RunAsync(
                     "SecretThird",
                     callerExpression,
-                    WithHostAdditions(new Dictionary<string, string>(), AddedMethodCallingTheSecret));
+                    WithHostAdditions(new Dictionary<string, string>(), addedMethod));
                 AssertOutcome(hostOnly, HotReloadMethodOutcomeKind.Skipped, "AddedUsesSecret");
                 AssertReasonContains(hostOnly, "AddedUsesSecret", UnboundBodyReason);
             });
@@ -634,6 +645,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return "internal sealed class RetainedHelper\n"
                 + "    {\n"
                 + "        internal int Secret() { return 5; }\n"
+                + "\n"
+                + "        internal int SecretLength(System.Memory<int> memory) { return memory.Length; }\n"
                 + "\n"
                 + "        " + NoInlining + "public int Read() { return " + value.ToString() + "; }\n"
                 + "    }";
