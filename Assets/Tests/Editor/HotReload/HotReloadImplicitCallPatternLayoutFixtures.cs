@@ -660,6 +660,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAnArrayOfADerivedType()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedProducedDerived[1];
+                return first + second + 7835;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByANamedTuple()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedByNamedTuple();
+                return first + second + 7845;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesTwoArgumentsWithInternalIndexer()
         {
             Func<int> read = () => new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7615;

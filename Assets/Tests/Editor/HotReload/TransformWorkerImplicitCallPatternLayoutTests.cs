@@ -239,12 +239,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a deconstruction whose receiver satisfies an internal generic extension's constraint
-        /// only through the constraint's own type parameter, or only through variance, is skipped
-        /// with a reason that names that extension rather than patched into a body that throws.
+        /// without having exactly the constraint among its own types (through the constraint's own
+        /// type parameter, through variance, through array covariance, or with other tuple element
+        /// names) is skipped with a reason that names that extension rather than patched into a body
+        /// that throws.
         /// </summary>
         [TestCase("7815", "ClosureDeconstructsASelfReferencingReceiver", "HotReloadUnpassedSelfReferencingExtensions")]
         [TestCase("7825", "ClosureDeconstructsAProducerOfADerivedType", "HotReloadUnpassedVariantProducerExtensions")]
-        public async Task DeconstructionThroughAnOpenOrVariantConstraint_NamesTheCalledExtension(
+        [TestCase("7835", "ClosureDeconstructsAnArrayOfADerivedType", "HotReloadUnpassedCovariantArrayExtensions")]
+        [TestCase("7845", "ClosureDeconstructsAReceiverMarkedByANamedTuple", "HotReloadUnpassedNamedTupleMarkExtensions")]
+        public async Task DeconstructionWhoseReceiverSatisfiesTheConstraintOtherwise_NamesTheCalledExtension(
             string token,
             string methodName,
             string calledType)

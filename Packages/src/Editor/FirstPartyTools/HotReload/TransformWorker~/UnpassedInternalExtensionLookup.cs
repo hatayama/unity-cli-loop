@@ -70,12 +70,14 @@ internal static class UnpassedInternalExtensionLookup
     }
 
     // Whether the receiver satisfies one type constraint of a 'this T' parameter.
-    // Why the constructed type only when it is closed and invariant: then the compiler needs the
-    // receiver to have exactly that type among its own, base and interface types, so 'IMarker<A>'
-    // rejects a receiver marked by 'IMarker<B>'. A constraint that names a type parameter
-    // ('IEquatable<T>') is constructed from the receiver, and a variant one ('IProducer<Base>',
-    // 'IComparable<T>') is met by other type arguments, so both keep the match by the generic
-    // definition, which never rejects a receiver the compiler accepts.
+    // Why the constructed type only for a named receiver and a closed, invariant constraint: then
+    // the compiler needs the receiver to have exactly that type among its own, base and interface
+    // types, so 'IMarker<A>' rejects a receiver marked by 'IMarker<B>'. Every other case keeps the
+    // match by the generic definition, which never rejects a receiver the compiler accepts:
+    // - a constraint that names a type parameter ('IEquatable<T>') is constructed from the receiver;
+    // - a variant one ('IProducer<Base>', 'IComparable<T>') is met by other type arguments;
+    // - an array converts to 'IList<Base>' of a base element type (array covariance), which is
+    //   among none of its interfaces, and a type parameter meets a constraint through its own.
     private static bool AcceptsConstraint(ITypeSymbol constraint, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)
     {
         if (constraint is not INamedTypeSymbol namedConstraint
@@ -84,7 +86,9 @@ internal static class UnpassedInternalExtensionLookup
             return false;
         }
 
-        string constraintKey = HasVariantTypeParameter(namedConstraint) ? null : IdentityKeyOrNull(namedConstraint);
+        string constraintKey = receiver is INamedTypeSymbol && !HasVariantTypeParameter(namedConstraint)
+            ? IdentityKeyOrNull(namedConstraint)
+            : null;
         return constraintKey == null || ReceiverAndSupertypes(receiver).Any(type => IdentityKeyOrNull(type) == constraintKey);
     }
 
@@ -101,24 +105,23 @@ internal static class UnpassedInternalExtensionLookup
         return false;
     }
 
-    // What: a name of the type that the two compilations agree on and that ignores what identity
-    // conversions ignore (tuple element names, dynamic for object); null when the type holds a type
+    // What: a name of the type that the two compilations agree on; null when the type holds a type
     // parameter or a shape the name does not cover, which leaves the definition match in place.
+    // Why metadata names and not the display: a tuple's element names are not part of its type, so
+    // '(int First, int Second)' and '(int Left, int Right)' must get one name. Why no case for
+    // dynamic: C# allows it neither in a constraint nor in a base or interface type.
     private static string IdentityKeyOrNull(ITypeSymbol type)
     {
         switch (type)
         {
-            case IDynamicTypeSymbol _:
-                return "System.Object";
             case IArrayTypeSymbol array:
                 string elementKey = IdentityKeyOrNull(array.ElementType);
                 return elementKey == null ? null : elementKey + "[" + array.Rank + "]";
             case INamedTypeSymbol named:
-                INamedTypeSymbol underlying = named.TupleUnderlyingType ?? named;
-                List<string> argumentKeys = AllTypeArguments(underlying).Select(IdentityKeyOrNull).ToList();
+                List<string> argumentKeys = AllTypeArguments(named).Select(IdentityKeyOrNull).ToList();
                 return argumentKeys.Contains(null)
                     ? null
-                    : ConstDriftCollector.ToReflectionMetadataName(underlying.OriginalDefinition)
+                    : ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition)
                         + "<" + string.Join(",", argumentKeys) + ">";
             default:
                 return null;

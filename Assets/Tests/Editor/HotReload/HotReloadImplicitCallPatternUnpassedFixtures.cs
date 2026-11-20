@@ -559,6 +559,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of a tuple whose element names differ
+    /// from the ones the receiver below writes, which an identity conversion ignores.
+    /// </summary>
+    public static class HotReloadUnpassedNamedTupleMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<(int First, int Second)>
+        {
+            first = value == null ? 0 : 9;
+            second = 10;
+        }
+    }
+
+    /// <summary>
+    /// Receiver marked by a tuple with other element names than the constraint above.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedByNamedTuple : IHotReloadUnpassedMarker<(int Left, int Right)>
+    {
+    }
+
+    /// <summary>
     /// Invariant interface a type implements with itself as the type argument. Unlike
     /// IComparable&lt;T&gt;, it has no variant type parameter, so only the type parameter in the
     /// constraint below keeps that constraint from a comparison of the constructed type.
@@ -620,6 +641,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             first = value == null ? 0 : 6;
             second = 7;
+        }
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to an invariant list of the base type, which an
+    /// array of the derived type satisfies through array covariance only.
+    /// </summary>
+    public static class HotReloadUnpassedCovariantArrayExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : System.Collections.Generic.IList<HotReloadUnpassedProducedBase>
+        {
+            first = value.Count;
+            second = 8;
         }
     }
 
