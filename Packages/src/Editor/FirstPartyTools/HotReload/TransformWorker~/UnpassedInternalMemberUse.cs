@@ -162,31 +162,34 @@ internal sealed class UnpassedInternalMemberUse
         MethodTransformDecision decision,
         SemanticModel semanticModel)
     {
-        return ForCall(method, construct, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+        return ForCall(method, construct, isSimpleNameLookup: false, bodyNode, methodDeclarationOrNull, decision, semanticModel);
     }
 
     /// <summary>
     /// The use of <paramref name="accessor"/>, an internal accessor of a public or protected
     /// property or indexer of a compiled type of the target assembly, by <paramref name="access"/>,
-    /// which reads or writes that member with its receiver.
+    /// which reads or writes that member with its receiver or, when
+    /// <paramref name="isSimpleNameLookup"/>, by its bare name.
     /// </summary>
     internal static UnpassedInternalMemberUse ForAccessorCall(
         IMethodSymbol accessor,
         SyntaxNode access,
+        bool isSimpleNameLookup,
         SyntaxNode bodyNode,
         MethodDeclarationSyntax methodDeclarationOrNull,
         MethodTransformDecision decision,
         SemanticModel semanticModel)
     {
-        return ForCall(accessor, access, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+        return ForCall(accessor, access, isSimpleNameLookup, bodyNode, methodDeclarationOrNull, decision, semanticModel);
     }
 
-    // Why one shape for both: a call the compiler generates and an accessor call each have a
-    // receiver and run where the node that makes them runs, so only the name the reason prints
-    // depends on the method, and an accessor names itself when it alone is internal.
+    // Why one shape for both: a call the compiler generates and an accessor call each run where the
+    // node that makes them runs, so only the name the reason prints and whether the call is named by
+    // a bare name depend on the call, and an accessor names itself when it alone is internal.
     private static UnpassedInternalMemberUse ForCall(
         IMethodSymbol method,
         SyntaxNode caller,
+        bool isSimpleNameLookup,
         SyntaxNode bodyNode,
         MethodDeclarationSyntax methodDeclarationOrNull,
         MethodTransformDecision decision,
@@ -199,11 +202,11 @@ internal sealed class UnpassedInternalMemberUse
             method.ContainingType,
             UnpassedInternalAccessorLookup.DescribeInternalAccessorOrNull(method)
                 ?? "'" + ImplicitCallTargets.DisplayName(method) + "'",
-            ChooseForm(runPlace, isSimpleNameLookup: false),
+            ChooseForm(runPlace, isSimpleNameLookup),
             isOfAPatchableKind: true,
-            canBePatchedInPlace: !mayRunOutsideThePatchedMethod,
+            canBePatchedInPlace: !isSimpleNameLookup && !mayRunOutsideThePatchedMethod,
             mayRunOutsideThePatchedMethod,
-            isSimpleNameLookup: false);
+            isSimpleNameLookup);
     }
 
     // Why this order: in a state machine or a delegating shim, neither moving the use nor

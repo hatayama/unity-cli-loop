@@ -53,26 +53,70 @@ internal static class UnpassedInternalAccessorLookup
             return null;
         }
 
-        ExpressionSyntax access = FindReportedAccessOrNull(error, bodyNode);
-        if (access == null || BoundPropertyOrNull(semanticModel, access) is not IPropertySymbol bound)
+        ExpressionSyntax reported = FindReportedAccessOrNull(error, bodyNode, out bool isBareName);
+        if (reported == null)
+        {
+            return null;
+        }
+
+        foreach (ExpressionSyntax access in CandidateAccesses(reported))
+        {
+            IMethodSymbol accessor = FindInternalAccessorOfAccessOrNull(access, semanticModel, targetAssembly);
+            if (accessor != null)
+            {
+                return UnpassedInternalMemberUse.ForAccessorCall(
+                    accessor,
+                    access,
+                    isBareName,
+                    bodyNode,
+                    methodDeclarationOrNull,
+                    decision,
+                    semanticModel);
+            }
+        }
+
+        return null;
+    }
+
+    private static IMethodSymbol FindInternalAccessorOfAccessOrNull(
+        ExpressionSyntax access,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        if (BoundPropertyOrNull(semanticModel, access) is not IPropertySymbol bound)
         {
             return null;
         }
 
         IPropertySymbol compiled = FindCompiledPropertyOrNull(bound, semanticModel, targetAssembly);
-        IMethodSymbol accessor = compiled == null ? null : FindInternalAccessorCalledOrNull(compiled, access);
-        if (accessor == null)
+        return compiled == null ? null : FindInternalAccessorCalledOrNull(compiled, access);
+    }
+
+    // Why the whole chain of an extended property pattern: the compiler reports '{ A.B: 1 }' on all
+    // of 'A.B', whichever of A and B lacks its getter, and the pattern reads each of them.
+    private static IEnumerable<ExpressionSyntax> CandidateAccesses(ExpressionSyntax reported)
+    {
+        yield return reported;
+        if (!IsHeadOfAnExtendedPropertyPattern(reported))
         {
-            return null;
+            yield break;
         }
 
-        return UnpassedInternalMemberUse.ForAccessorCall(
-            accessor,
-            access,
-            bodyNode,
-            methodDeclarationOrNull,
-            decision,
-            semanticModel);
+        for (ExpressionSyntax part = reported; part is MemberAccessExpressionSyntax access; part = access.Expression)
+        {
+            yield return access.Expression;
+        }
+    }
+
+    private static bool IsHeadOfAnExtendedPropertyPattern(ExpressionSyntax expression)
+    {
+        SyntaxNode current = expression;
+        while (current.Parent is MemberAccessExpressionSyntax access && access.Expression == current)
+        {
+            current = access;
+        }
+
+        return current.Parent is ExpressionColonSyntax;
     }
 
     // The members whose getter a construct calls without naming it: an awaiter's IsCompleted, and
@@ -154,11 +198,13 @@ internal static class UnpassedInternalAccessorLookup
     }
 
     // The read or write the error is reported on: a member access with its receiver ('value.Name',
-    // 'Type.Name'), an element access ('value[i]'), either form after '?.', or a member named in an
-    // object initializer. Why not a bare name: the shim qualifies a name the worker binds, and this
-    // lookup leaves such a use on today's path rather than guess its receiver.
-    private static ExpressionSyntax FindReportedAccessOrNull(Diagnostic error, SyntaxNode bodyNode)
+    // 'Type.Name'), an element access ('value[i]'), either form after '?.', an index initializer
+    // ('[i] = v'), a member named in an object or with initializer or in a property pattern, or a
+    // bare name, which <paramref name="isBareName"/> reports: the shim qualifies only a name the
+    // worker binds as written, so a bare name stays out of reach even in the method's own statements.
+    private static ExpressionSyntax FindReportedAccessOrNull(Diagnostic error, SyntaxNode bodyNode, out bool isBareName)
     {
+        isBareName = false;
         Location location = error.Location;
         if (!location.IsInSource
             || location.SourceTree != bodyNode.SyntaxTree
@@ -167,14 +213,7 @@ internal static class UnpassedInternalAccessorLookup
             return null;
         }
 
-        SyntaxNode reported = bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
-        if (reported is SimpleNameSyntax name
-            && (reported.Parent is MemberAccessExpressionSyntax { Name: var accessName } && accessName == name
-                || reported.Parent is MemberBindingExpressionSyntax))
-        {
-            reported = reported.Parent;
-        }
-
+        SyntaxNode reported = AccessNamedBy(bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true));
         switch (reported)
         {
             case MemberAccessExpressionSyntax memberAccess:
@@ -185,19 +224,56 @@ internal static class UnpassedInternalAccessorLookup
                 return memberBinding;
             case ElementBindingExpressionSyntax elementBinding:
                 return elementBinding;
-            case IdentifierNameSyntax initializedMember when IsObjectInitializerMember(initializedMember):
-                return initializedMember;
+            case ImplicitElementAccessSyntax indexInitializer:
+                return indexInitializer;
+            case IdentifierNameSyntax identifier:
+                isBareName = !IsNamedWithoutAReceiverByItsConstruct(identifier);
+                return identifier;
             default:
                 return null;
         }
     }
 
-    private static bool IsObjectInitializerMember(IdentifierNameSyntax name)
+    // Why these unwrap: a property pattern member is reported on its 'Name:', an index initializer on
+    // its '[i]', and a member access or a member binding on its name, each inside the access it names.
+    private static SyntaxNode AccessNamedBy(SyntaxNode reported)
     {
-        return name.Parent is AssignmentExpressionSyntax assignment
+        if (reported is NameColonSyntax nameColon)
+        {
+            return nameColon.Name;
+        }
+
+        if (reported is BracketedArgumentListSyntax { Parent: ImplicitElementAccessSyntax indexInitializer })
+        {
+            return indexInitializer;
+        }
+
+        bool isNameOfAnAccess = reported is SimpleNameSyntax name
+            && (reported.Parent is MemberAccessExpressionSyntax { Name: var accessName } && accessName == name
+                || reported.Parent is MemberBindingExpressionSyntax);
+        return isNameOfAnAccess ? reported.Parent : reported;
+    }
+
+    // A member an object or with initializer sets, or a property pattern reads, is looked up on the
+    // value being created or matched, not by a bare name in scope.
+    private static bool IsNamedWithoutAReceiverByItsConstruct(IdentifierNameSyntax name)
+    {
+        if (name.Parent is AssignmentExpressionSyntax assignment
             && assignment.Left == name
-            && assignment.Parent is InitializerExpressionSyntax initializer
-            && initializer.IsKind(SyntaxKind.ObjectInitializerExpression);
+            && assignment.Parent is InitializerExpressionSyntax initializer)
+        {
+            return initializer.IsKind(SyntaxKind.ObjectInitializerExpression)
+                || initializer.IsKind(SyntaxKind.WithInitializerExpression);
+        }
+
+        if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(name))
+        {
+            return true;
+        }
+
+        // Why the head of an extended property pattern: in '{ A.B: 1 }' the pattern reads A on the
+        // matched value, the same as '{ A: { B: 1 } }' does.
+        return IsHeadOfAnExtendedPropertyPattern(name);
     }
 
     // Why a single candidate counts: a member access the binder rejects for its missing accessor
@@ -254,11 +330,17 @@ internal static class UnpassedInternalAccessorLookup
         return writes && IsInternalAccessorOfAVisibleMember(store) ? store : null;
     }
 
-    // A simple assignment, an initializer and a deconstruction only store; a compound assignment,
-    // an increment and a decrement read and store; every other use reads.
+    // A simple assignment, an initializer and a deconstruction only store; a nested initializer
+    // ('P = { ... }') only reads, filling what P returns; a compound assignment, an increment and a
+    // decrement read and store; every other use, a property pattern included, reads.
     private static (bool Reads, bool Writes) AccessorsCalledBy(ExpressionSyntax access)
     {
         AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(access);
+        if (assignment != null && AssignmentTargetRules.IsNestedInitializer(assignment))
+        {
+            return (true, false);
+        }
+
         if (assignment != null)
         {
             return (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression), true);
