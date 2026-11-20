@@ -504,6 +504,351 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Generic marker interface whose type argument alone tells two constrained extensions apart.
+    /// </summary>
+    public interface IHotReloadUnpassedMarker<T>
+    {
+    }
+
+    /// <summary>
+    /// First type argument of the marker interface.
+    /// </summary>
+    public sealed class HotReloadUnpassedFirstMark
+    {
+    }
+
+    /// <summary>
+    /// Second type argument of the marker interface.
+    /// </summary>
+    public sealed class HotReloadUnpassedSecondMark
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of the first type argument, declared
+    /// before the one a receiver marked by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedFirstMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<HotReloadUnpassedFirstMark>
+        {
+            first = value == null ? 0 : 1;
+            second = 2;
+        }
+    }
+
+    /// <summary>
+    /// The two-out Deconstruct a receiver marked by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedSecondMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<HotReloadUnpassedSecondMark>
+        {
+            first = value == null ? 0 : 3;
+            second = 4;
+        }
+    }
+
+    /// <summary>
+    /// Receiver marked by the second type argument only.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedBySecond : IHotReloadUnpassedMarker<HotReloadUnpassedSecondMark>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of a tuple whose element names differ
+    /// from the ones the receiver below writes, which an identity conversion ignores.
+    /// </summary>
+    public static class HotReloadUnpassedNamedTupleMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<(int First, int Second)>
+        {
+            first = value == null ? 0 : 9;
+            second = 10;
+        }
+    }
+
+    /// <summary>
+    /// Receiver marked by a tuple with other element names than the constraint above.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedByNamedTuple : IHotReloadUnpassedMarker<(int Left, int Right)>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of object, which a receiver typed as
+    /// the marker of dynamic meets through an identity conversion.
+    /// </summary>
+    public static class HotReloadUnpassedObjectMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<object>
+        {
+            first = value == null ? 0 : 11;
+            second = 12;
+        }
+    }
+
+    /// <summary>
+    /// Marked by object; the host holds it as the marker of dynamic.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedByObject : IHotReloadUnpassedMarker<object>
+    {
+    }
+
+    /// <summary>
+    /// Generic tag interface for the non-generic extensions below, whose 'this' parameter types
+    /// differ only in the type argument.
+    /// </summary>
+    public interface IHotReloadUnpassedTag<T>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct on the tag of the first type argument, declared before the one a
+    /// receiver tagged by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedFirstTagExtensions
+    {
+        internal static void Deconstruct(this IHotReloadUnpassedTag<HotReloadUnpassedFirstMark> value, out int first, out int second)
+        {
+            first = value == null ? 0 : 13;
+            second = 14;
+        }
+    }
+
+    /// <summary>
+    /// The two-out Deconstruct a receiver tagged by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedSecondTagExtensions
+    {
+        internal static void Deconstruct(this IHotReloadUnpassedTag<HotReloadUnpassedSecondMark> value, out int first, out int second)
+        {
+            first = value == null ? 0 : 15;
+            second = 16;
+        }
+    }
+
+    /// <summary>
+    /// Receiver tagged by the second type argument only.
+    /// </summary>
+    public sealed class HotReloadUnpassedTaggedBySecond : IHotReloadUnpassedTag<HotReloadUnpassedSecondMark>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of Memory&lt;int&gt;, a type a
+    /// referenced assembly also declares internally, so a lenient binding of the name is ambiguous.
+    /// </summary>
+    public static class HotReloadUnpassedMemoryMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<System.Memory<int>>
+        {
+            first = value == null ? 0 : 17;
+            second = 18;
+        }
+    }
+
+    /// <summary>
+    /// Receiver marked by Memory&lt;int&gt;.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedByMemory : IHotReloadUnpassedMarker<System.Memory<int>>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct on the tag of Memory&lt;int&gt;, as a non-generic 'this' type.
+    /// </summary>
+    public static class HotReloadUnpassedMemoryTagExtensions
+    {
+        internal static void Deconstruct(this IHotReloadUnpassedTag<System.Memory<int>> value, out int first, out int second)
+        {
+            first = value == null ? 0 : 19;
+            second = 20;
+        }
+    }
+
+    /// <summary>
+    /// Receiver tagged by Memory&lt;int&gt;.
+    /// </summary>
+    public sealed class HotReloadUnpassedTaggedByMemory : IHotReloadUnpassedTag<System.Memory<int>>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of an array of the first type argument,
+    /// declared before the one for an array of the second.
+    /// </summary>
+    public static class HotReloadUnpassedFirstArrayMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<HotReloadUnpassedFirstMark[]>
+        {
+            first = value == null ? 0 : 21;
+            second = 22;
+        }
+    }
+
+    /// <summary>
+    /// The two-out Deconstruct a receiver marked by an array of the second type argument calls.
+    /// </summary>
+    public static class HotReloadUnpassedSecondArrayMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<HotReloadUnpassedSecondMark[]>
+        {
+            first = value == null ? 0 : 23;
+            second = 24;
+        }
+    }
+
+    /// <summary>
+    /// Receiver marked by an array of the second type argument.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedBySecondArray : IHotReloadUnpassedMarker<HotReloadUnpassedSecondMark[]>
+    {
+    }
+
+    /// <summary>
+    /// Generic outer type whose nested interface differs between constructions only in the outer
+    /// type argument.
+    /// </summary>
+    public sealed class HotReloadUnpassedOuter<T>
+    {
+        /// <summary>
+        /// Nested interface of the generic outer type.
+        /// </summary>
+        public interface IInner
+        {
+        }
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the inner interface of the outer type of the first
+    /// type argument, declared before the one for the second.
+    /// </summary>
+    public static class HotReloadUnpassedFirstInnerExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : HotReloadUnpassedOuter<HotReloadUnpassedFirstMark>.IInner
+        {
+            first = value == null ? 0 : 25;
+            second = 26;
+        }
+    }
+
+    /// <summary>
+    /// The two-out Deconstruct a receiver of the inner interface of the second outer type calls.
+    /// </summary>
+    public static class HotReloadUnpassedSecondInnerExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : HotReloadUnpassedOuter<HotReloadUnpassedSecondMark>.IInner
+        {
+            first = value == null ? 0 : 27;
+            second = 28;
+        }
+    }
+
+    /// <summary>
+    /// Receiver of the inner interface of the outer type of the second type argument.
+    /// </summary>
+    public sealed class HotReloadUnpassedInnerOfSecond : HotReloadUnpassedOuter<HotReloadUnpassedSecondMark>.IInner
+    {
+    }
+
+    /// <summary>
+    /// Invariant interface a type implements with itself as the type argument. Unlike
+    /// IComparable&lt;T&gt;, it has no variant type parameter, so only the type parameter in the
+    /// constraint below keeps that constraint from a comparison of the constructed type.
+    /// </summary>
+    public interface IHotReloadUnpassedSelfReferencing<T>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct whose constraint names its own type parameter, so the
+    /// constructed constraint never equals an interface the receiver implements.
+    /// </summary>
+    public static class HotReloadUnpassedSelfReferencingExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedSelfReferencing<T>
+        {
+            first = value == null ? 0 : 5;
+            second = 6;
+        }
+    }
+
+    /// <summary>
+    /// Receiver referencing itself, deconstructed through the self-referencing constraint.
+    /// </summary>
+    public sealed class HotReloadUnpassedSelfReferencing : IHotReloadUnpassedSelfReferencing<HotReloadUnpassedSelfReferencing>
+    {
+    }
+
+    /// <summary>
+    /// Covariant producer interface, so a producer of a derived type is a producer of its base.
+    /// </summary>
+    public interface IHotReloadUnpassedProducer<out T>
+    {
+    }
+
+    /// <summary>
+    /// Base of the produced types.
+    /// </summary>
+    public class HotReloadUnpassedProducedBase
+    {
+    }
+
+    /// <summary>
+    /// Derived produced type.
+    /// </summary>
+    public sealed class HotReloadUnpassedProducedDerived : HotReloadUnpassedProducedBase
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to a producer of the base type, which a producer of
+    /// the derived type satisfies through variance only.
+    /// </summary>
+    public static class HotReloadUnpassedVariantProducerExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedProducer<HotReloadUnpassedProducedBase>
+        {
+            first = value == null ? 0 : 6;
+            second = 7;
+        }
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to an invariant list of the base type, which an
+    /// array of the derived type satisfies through array covariance only.
+    /// </summary>
+    public static class HotReloadUnpassedCovariantArrayExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : System.Collections.Generic.IList<HotReloadUnpassedProducedBase>
+        {
+            first = value.Count;
+            second = 8;
+        }
+    }
+
+    /// <summary>
+    /// Producer of the derived type, deconstructed through the variant constraint.
+    /// </summary>
+    public sealed class HotReloadUnpassedDerivedProducer : IHotReloadUnpassedProducer<HotReloadUnpassedProducedDerived>
+    {
+    }
+
+    /// <summary>
     /// Pair deconstructed through a constrained generic extension Deconstruct in an unpassed file.
     /// </summary>
     public class HotReloadUnpassedGenericPair

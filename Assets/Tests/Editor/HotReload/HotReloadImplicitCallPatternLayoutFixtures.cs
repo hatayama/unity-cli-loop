@@ -627,6 +627,152 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByTheSecondTypeArgument()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedBySecond();
+                return first + second + 7805;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsASelfReferencingReceiver()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedSelfReferencing();
+                return first + second + 7815;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAProducerOfADerivedType()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedDerivedProducer();
+                return first + second + 7825;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAnArrayOfADerivedType()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedProducedDerived[1];
+                return first + second + 7835;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByANamedTuple()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedByNamedTuple();
+                return first + second + 7845;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverTypedAsAMarkerOfDynamic()
+        {
+            IHotReloadUnpassedMarker<dynamic> marked = new HotReloadUnpassedMarkedByObject();
+            Func<int> read = () =>
+            {
+                (int first, int second) = marked;
+                return first + second + 7855;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverTaggedByTheSecondTypeArgument()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedTaggedBySecond();
+                return first + second + 7865;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByMemory()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedByMemory();
+                return first + second + 7875;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsALocalTypedAsAMarkerOfMemory()
+        {
+            IHotReloadUnpassedMarker<Memory<int>> marked = new HotReloadUnpassedMarkedByMemory();
+            Func<int> read = () =>
+            {
+                (int first, int second) = marked;
+                return first + second + 7885;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverTaggedByMemory()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedTaggedByMemory();
+                return first + second + 7895;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsALocalTypedAsATagOfMemory()
+        {
+            IHotReloadUnpassedTag<Memory<int>> tagged = new HotReloadUnpassedTaggedByMemory();
+            Func<int> read = () =>
+            {
+                (int first, int second) = tagged;
+                return first + second + 7905;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByAnArrayOfTheSecond()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedBySecondArray();
+                return first + second + 7915;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverOfTheInnerOfTheSecond()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedInnerOfSecond();
+                return first + second + 7925;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesTwoArgumentsWithInternalIndexer()
         {
             Func<int> read = () => new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7615;

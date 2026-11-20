@@ -219,6 +219,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a deconstruction of a receiver marked by the second of two type arguments is skipped
+        /// with a reason that names the extension for that marker, not the one declared before it for
+        /// the first, though both share one generic definition: as the constraint of a 'this T'
+        /// parameter, as the type of a non-generic 'this' parameter, as the element of an array type
+        /// argument, and as the type argument of the outer type of a nested interface.
+        /// </summary>
+        [TestCase("7805", "ClosureDeconstructsAReceiverMarkedByTheSecondTypeArgument", "HotReloadUnpassedSecondMarkExtensions", "HotReloadUnpassedFirstMarkExtensions")]
+        [TestCase("7865", "ClosureDeconstructsAReceiverTaggedByTheSecondTypeArgument", "HotReloadUnpassedSecondTagExtensions", "HotReloadUnpassedFirstTagExtensions")]
+        [TestCase("7915", "ClosureDeconstructsAReceiverMarkedByAnArrayOfTheSecond", "HotReloadUnpassedSecondArrayMarkExtensions", "HotReloadUnpassedFirstArrayMarkExtensions")]
+        [TestCase("7925", "ClosureDeconstructsAReceiverOfTheInnerOfTheSecond", "HotReloadUnpassedSecondInnerExtensions", "HotReloadUnpassedFirstInnerExtensions")]
+        public async Task DeconstructionBesideAnExtensionForAnotherTypeArgument_NamesTheCalledExtension(
+            string token,
+            string methodName,
+            string calledType,
+            string otherType)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(reason, Does.Contain(calledType));
+            Assert.That(reason, Does.Not.Contain(otherType));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
+        /// What: a deconstruction whose receiver satisfies an internal generic extension's constraint
+        /// without having exactly the constraint among its own types (through the constraint's own
+        /// type parameter, through variance, through array covariance, with other tuple element names,
+        /// or typed with dynamic where the constraint says object), or whose type argument is a type a
+        /// referenced assembly also declares internally (Memory&lt;int&gt;), is skipped with a reason
+        /// that names that extension rather than patched into a body that throws.
+        /// </summary>
+        [TestCase("7815", "ClosureDeconstructsASelfReferencingReceiver", "HotReloadUnpassedSelfReferencingExtensions")]
+        [TestCase("7825", "ClosureDeconstructsAProducerOfADerivedType", "HotReloadUnpassedVariantProducerExtensions")]
+        [TestCase("7835", "ClosureDeconstructsAnArrayOfADerivedType", "HotReloadUnpassedCovariantArrayExtensions")]
+        [TestCase("7845", "ClosureDeconstructsAReceiverMarkedByANamedTuple", "HotReloadUnpassedNamedTupleMarkExtensions")]
+        [TestCase("7855", "ClosureDeconstructsAReceiverTypedAsAMarkerOfDynamic", "HotReloadUnpassedObjectMarkExtensions")]
+        [TestCase("7875", "ClosureDeconstructsAReceiverMarkedByMemory", "HotReloadUnpassedMemoryMarkExtensions")]
+        [TestCase("7885", "ClosureDeconstructsALocalTypedAsAMarkerOfMemory", "HotReloadUnpassedMemoryMarkExtensions")]
+        [TestCase("7895", "ClosureDeconstructsAReceiverTaggedByMemory", "HotReloadUnpassedMemoryTagExtensions")]
+        [TestCase("7905", "ClosureDeconstructsALocalTypedAsATagOfMemory", "HotReloadUnpassedMemoryTagExtensions")]
+        public async Task DeconstructionWhoseReceiverSatisfiesTheConstraintOtherwise_NamesTheCalledExtension(
+            string token,
+            string methodName,
+            string calledType)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(HotReloadWorkerReasonText.Render(skipped.reason), Does.Contain(calledType));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
         /// What: a lambda or async body whose handler is declared in the passed file, with its
         /// InterpolatedStringHandler attribute declared internally in a file the run does not pass,
         /// is skipped with the implicit-call reason naming the internal AppendFormatted, also when
