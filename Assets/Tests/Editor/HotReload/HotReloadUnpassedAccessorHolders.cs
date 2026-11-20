@@ -204,4 +204,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             set { }
         }
     }
+
+    /// <summary>
+    /// A type whose only indexer takes a string and has an internal getter, next to a public
+    /// Length, so an Index argument has no indexer to go through and is a genuine error.
+    /// </summary>
+    public sealed class HotReloadUnpassedStringIndexerInternalGetterHolder
+    {
+        public int Length => 3;
+
+        public int this[string key]
+        {
+            internal get => key.Length;
+            set { }
+        }
+    }
 }

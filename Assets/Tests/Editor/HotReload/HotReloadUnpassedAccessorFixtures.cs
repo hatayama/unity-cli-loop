@@ -295,6 +295,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return read();
         }
 
+        public int StringIndexerReadInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedStringIndexerInternalGetterHolder()["7621"];
+            return read();
+        }
+
         public int GetOnlyWriteInLambda()
         {
             Func<int> read = () =>

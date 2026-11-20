@@ -120,11 +120,11 @@ internal static class UnpassedInternalAccessorLookup
     }
 
     /// <summary>
-    /// Whether the construct is an element access with a single System.Index or System.Range
-    /// argument, the only access for which the compiler calls Length, Count or the int indexer
-    /// instead of an indexer the argument names.
+    /// "System.Index" or "System.Range" when the construct is an element access with a single
+    /// argument of that type, the only access for which the compiler calls Length, Count or an
+    /// indexer it does not name; otherwise null.
     /// </summary>
-    internal static bool IsIndexOrRangeAccess(SemanticModel semanticModel, SyntaxNode construct)
+    internal static string IndexOrRangeArgumentTypeOrNull(SemanticModel semanticModel, SyntaxNode construct)
     {
         BracketedArgumentListSyntax arguments = construct switch
         {
@@ -134,11 +134,35 @@ internal static class UnpassedInternalAccessorLookup
         };
         if (arguments == null || arguments.Arguments.Count != 1)
         {
-            return false;
+            return null;
         }
 
         string argumentType = semanticModel.GetTypeInfo(arguments.Arguments[0].Expression).Type?.ToDisplayString();
-        return argumentType == "System.Index" || argumentType == "System.Range";
+        return argumentType == IndexTypeName || argumentType == RangeTypeName ? argumentType : null;
+    }
+
+    private const string IndexTypeName = "System.Index";
+    private const string RangeTypeName = "System.Range";
+
+    // Why these indexers only: an Index argument is read through 'this[int]' with Length or Count,
+    // or through 'this[Index]'; a Range argument only through 'this[Range]', since a range slices
+    // with Slice instead. Any other indexer is not what the access calls, so an error against it
+    // stays a genuine error.
+    private static bool IsIndexerTheAccessCalls(IPropertySymbol property, string indexOrRangeArgumentType)
+    {
+        if (!property.IsIndexer)
+        {
+            return true;
+        }
+
+        if (indexOrRangeArgumentType == null || property.Parameters.Length != 1)
+        {
+            return false;
+        }
+
+        ITypeSymbol parameterType = property.Parameters[0].Type;
+        return parameterType.SpecialType == SpecialType.System_Int32 && indexOrRangeArgumentType == IndexTypeName
+            || parameterType.ToDisplayString() == indexOrRangeArgumentType;
     }
 
     // The members whose getter a construct calls without naming it: an awaiter's IsCompleted, and
@@ -154,19 +178,19 @@ internal static class UnpassedInternalAccessorLookup
     /// <summary>
     /// The internal getter of a public or protected property or indexer named
     /// <paramref name="memberName"/> of <paramref name="start"/> or a base type, as the target
-    /// assembly declares it, or null, also for a name the compiler never reads implicitly, and for the
-    /// indexer unless <paramref name="isIndexOrRangeAccess"/>. An await reads an awaiter's
-    /// IsCompleted through it, and an Index or Range access Length, Count or the indexer.
+    /// assembly declares it, or null, also for a name the compiler never reads implicitly, and for an
+    /// indexer that an access with an argument of <paramref name="indexOrRangeArgumentTypeOrNull"/>
+    /// does not call. An await reads an awaiter's IsCompleted through it, and an Index or Range
+    /// access Length, Count or the indexer.
     /// </summary>
     internal static IMethodSymbol FindInternalGetterOrNull(
         INamedTypeSymbol start,
         string memberName,
-        bool isIndexOrRangeAccess,
+        string indexOrRangeArgumentTypeOrNull,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
-        if (!ImplicitlyReadPropertyNames.Contains(memberName)
-            || memberName == WellKnownMemberNames.Indexer && !isIndexOrRangeAccess)
+        if (!ImplicitlyReadPropertyNames.Contains(memberName))
         {
             return null;
         }
@@ -175,7 +199,8 @@ internal static class UnpassedInternalAccessorLookup
         {
             foreach (IPropertySymbol property in type.GetMembers(memberName).OfType<IPropertySymbol>())
             {
-                if (IsInternalAccessorOfAVisibleMember(property.GetMethod))
+                if (IsIndexerTheAccessCalls(property, indexOrRangeArgumentTypeOrNull)
+                    && IsInternalAccessorOfAVisibleMember(property.GetMethod))
                 {
                     return property.GetMethod;
                 }
