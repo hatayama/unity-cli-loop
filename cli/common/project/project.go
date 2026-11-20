@@ -23,6 +23,10 @@ const (
 	windowsPipePrefix = `\\.\pipe\uloop`
 )
 
+// DefaultProjectSearchDepth is the child-directory search depth every command uses when
+// --project-path is omitted, so all commands resolve the same project from a repository root.
+const DefaultProjectSearchDepth = 3
+
 var excludedProjectSearchDirs = map[string]bool{
 	".git":         true,
 	"Build":        true,
@@ -78,29 +82,6 @@ func CreateEndpoint(canonicalProjectRoot string) unityipc.Endpoint {
 	}
 }
 
-func FindProjectRoot(startPath string) (string, error) {
-	currentPath, err := filepath.Abs(startPath)
-	if err != nil {
-		return "", err
-	}
-
-	for {
-		if IsUnityProject(currentPath) {
-			return currentPath, nil
-		}
-
-		if exists(filepath.Join(currentPath, ".git")) {
-			return "", clierrors.ProjectNotFoundError{}
-		}
-
-		parentPath := filepath.Dir(currentPath)
-		if parentPath == currentPath {
-			return "", clierrors.ProjectNotFoundError{}
-		}
-		currentPath = parentPath
-	}
-}
-
 func FindUnityProjectRoot(startPath string) (string, error) {
 	currentPath, err := filepath.Abs(startPath)
 	if err != nil {
@@ -132,9 +113,10 @@ func FindUnityProjectRootWithin(startPath string, maxDepth int) (string, error) 
 }
 
 // FindUnityProjectRootPreferringParents resolves the enclosing Unity project first and only
-// falls back to a child-directory search when no ancestor is one. Commands that edit an
-// existing project (package, skills) must not let a nested Unity-shaped folder (for example a
-// CI fixture) shadow the project the user is standing in.
+// falls back to a child-directory search when no ancestor is one. The enclosing project wins so a
+// nested Unity-shaped folder (for example a CI fixture) cannot shadow the project the user is
+// standing in; the child fallback lets a repository root that keeps the project in a
+// subdirectory resolve without --project-path.
 func FindUnityProjectRootPreferringParents(startPath string, maxDepth int) (string, error) {
 	currentPath, err := filepath.Abs(startPath)
 	if err != nil {
@@ -211,7 +193,7 @@ func IsUnityProject(projectPath string) bool {
 
 func resolveProjectRoot(startPath string, explicitProjectPath string) (string, error) {
 	if explicitProjectPath == "" {
-		return FindProjectRoot(startPath)
+		return FindUnityProjectRootPreferringParents(startPath, DefaultProjectSearchDepth)
 	}
 
 	return ResolveExplicitProjectRoot(explicitProjectPath)

@@ -156,6 +156,9 @@ https://github.com/user-attachments/assets/118c8b4a-8254-4798-a63c-f6a213fc1031
 > [!NOTE]
 > **V2 からアップグレードする場合**: V2 API で作ったカスタムツールがあるプロジェクトでは、V3 パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity 起動時の Safe Mode の問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity Loop Harness > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルの V3 移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
 
+> [!NOTE]
+> **macOS の許可の確認**: Unity が応答しないとき、`uloop status` は Unity のウィンドウを見て、Unity を止めているダイアログを探します。`uloop get-dialogs` / `uloop press-dialog-button` は、そのダイアログを読んでボタンを押します。初回は、uloop を実行するアプリ（ターミナルや LLM ツール）に System Events の制御とアクセシビリティを許可するか、macOS が確認します。「システム設定 > プライバシーとセキュリティ」の「オートメーション」と「アクセシビリティ」で両方を許可してください。許可しなくても uloop は動きますが、ダイアログの報告と押下はできず、確認に答えるまで `uloop status` が 5 秒ほど長くかかることがあります。
+
 ## ターミナルから入れる場合
 
 ### ステップ 1：CLI をインストールする
@@ -187,6 +190,17 @@ uloop -v
 ```
 
 最初の行に CLI のバージョン（例: `3.0.1`）が表示されれば成功です。
+
+<details>
+<summary>CLI の自動更新</summary>
+
+CLI は使っているあいだ、1 日に 1 回まで新しいリリースを確認し、あれば自動でインストールします。新しいバージョンは次のコマンドから使われます。
+
+- 特定のバージョンに固定する：`uloop update --to-version <バージョン>` でそのリリースを入れて固定します。`uloop update` を実行すると自動更新に戻ります。
+- 自動更新を止める：環境変数 `ULOOP_DISABLE_SELF_UPDATE=1` を設定します。
+- Homebrew で入れた場合は自動更新しません。`brew upgrade uloop` で更新してください（バージョンを固定するには `brew pin uloop`）。
+
+</details>
 
 ### ステップ 2：Unity パッケージをインストールする
 
@@ -246,7 +260,7 @@ Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity Loop Harness（v3.23.1 までは Unity CLI Loop と表示）をインストールします。
+2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity Loop Harness（v3.34.6 までは Unity CLI Loop と表示）をインストールします。
 
 </details>
 

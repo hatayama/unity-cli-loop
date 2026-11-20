@@ -18,8 +18,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 internal static class UnsupportedMemberSkipCollector
 {
-    // What: reports each property/indexer accessor that has an explicit body as Skipped.
-    // Auto-properties ({ get; set; }) have no body and are not listed.
+    // What: reports each property/indexer accessor that has an explicit body and that hot reload
+    // does not patch as Skipped. Auto-properties ({ get; set; }) have no body and are not listed;
+    // getters and the setters PropertySetterClassifier hands to the setter emitter are left out.
     // When a verified snapshot declares an equivalent property/indexer, skip rows are omitted
     // (unchanged accessors must not appear as Skipped noise). A property is also compared one
     // accessor at a time, so a set or init body equal to the snapshot's is omitted even when
@@ -35,7 +36,9 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
         Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
         AddedMethodCatalog addedMethodCatalog,
-        AddedPropertyCatalog addedPropertyCatalog)
+        AddedPropertyCatalog addedPropertyCatalog,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
         int firstAppendedIndex = skipped.Count;
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
@@ -70,35 +73,23 @@ internal static class UnsupportedMemberSkipCollector
                     snapshotPropertyMap,
                     addedMethodCatalog,
                     snapshotProperty,
-                    plainProperty);
+                    plainProperty,
+                    compiledType,
+                    servedByRetainedArtifact);
                 continue;
             }
 
             if (member is IndexerDeclarationSyntax indexerDeclaration)
             {
-                string indexerKey = WorkerSyntaxIndex.BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration);
-                if (snapshotIndexerMap != null
-                    && plainCurrentIndexerMap != null
-                    && snapshotIndexerMap.TryGetValue(
-                        indexerKey,
-                        out IndexerDeclarationSyntax snapshotIndexer)
-                    && plainCurrentIndexerMap.TryGetValue(
-                        indexerKey,
-                        out IndexerDeclarationSyntax plainIndexer)
-                    && SyntaxFactory.AreEquivalent(snapshotIndexer, plainIndexer, topLevel: false))
-                {
-                    continue;
-                }
-
-                AppendExplicitAccessorSkipsForProperty(
+                AppendIndexerAccessorSkips(
                     indexerDeclaration,
                     semanticModel.GetDeclaredSymbol(indexerDeclaration),
                     skipped,
                     typeMetadataNameFromSyntax,
-                    snapshotPropertyMap,
-                    addedMethodCatalog,
-                    snapshotProperty: null,
-                    plainCurrentProperty: null);
+                    snapshotIndexerMap,
+                    plainCurrentIndexerMap,
+                    compiledType,
+                    servedByRetainedArtifact);
             }
         }
 
@@ -116,35 +107,42 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
         AddedMethodCatalog addedMethodCatalog,
         PropertyDeclarationSyntax snapshotProperty,
-        PropertyDeclarationSyntax plainCurrentProperty)
+        PropertyDeclarationSyntax plainCurrentProperty,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
         if (propertySymbol == null)
         {
             return;
         }
 
-        // Indexers: keep reporting every explicit-body accessor (including expression-bodied).
-        if (propertyDeclaration is IndexerDeclarationSyntax indexerDeclaration)
-        {
-            AppendIndexerExplicitAccessorSkips(indexerDeclaration, propertySymbol, skipped);
-            return;
-        }
-
-        // Properties: getters are patched elsewhere; only setter/init with bodies are Skipped here.
+        // Properties: getters and patchable setters are reported by the emitters; only init and
+        // setters without a matching compiled setter are Skipped here.
         if (propertyDeclaration.AccessorList == null)
         {
             return;
         }
 
         bool emittedSkip = AppendChangedSetOrInitAccessorSkips(
-            propertyDeclaration.AccessorList,
+            propertyDeclaration,
             propertySymbol,
             skipped,
             snapshotProperty,
-            plainCurrentProperty);
+            plainCurrentProperty,
+            compiledType,
+            servedByRetainedArtifact);
 
         PropertyDeclarationSyntax namedProperty = propertyDeclaration as PropertyDeclarationSyntax;
-        if (!emittedSkip
+        // Why also for an emitter-reported setter: a property the snapshot does not declare has to be
+        // marked as added to the current tree whichever path reports its setter, or the drift check
+        // reads the whole property as an edit outside method bodies.
+        bool setterReportedByEmitter = namedProperty != null
+            && PropertySetterClassifier.IsPatchableCompiledSetter(
+                namedProperty,
+                propertySymbol,
+                compiledType,
+                servedByRetainedArtifact);
+        if ((!emittedSkip && !setterReportedByEmitter)
             || namedProperty == null
             || snapshotPropertyMap == null
             || addedMethodCatalog == null)
@@ -159,19 +157,33 @@ internal static class UnsupportedMemberSkipCollector
         }
     }
 
-    // Reports each set or init accessor that has a body and differs from the snapshot, and returns
-    // whether it reported any.
+    // Reports each set or init accessor that has a body, differs from the snapshot, and is not
+    // reported by the setter emitter, and returns whether it reported any.
     private static bool AppendChangedSetOrInitAccessorSkips(
-        AccessorListSyntax accessorList,
+        BasePropertyDeclarationSyntax propertyDeclaration,
         IPropertySymbol propertySymbol,
         List<WorkerSkipped> skipped,
         PropertyDeclarationSyntax snapshotProperty,
-        PropertyDeclarationSyntax plainCurrentProperty)
+        PropertyDeclarationSyntax plainCurrentProperty,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
         bool emittedSkip = false;
-        foreach (AccessorDeclarationSyntax accessor in accessorList.Accessors)
+        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
         {
             if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
+            {
+                continue;
+            }
+
+            // The setter emitter reports this accessor (entry, unchanged row, or its own skip).
+            if ((accessor.IsKind(SyntaxKind.SetAccessorDeclaration) || accessor.IsKind(SyntaxKind.InitAccessorDeclaration))
+                && propertyDeclaration is PropertyDeclarationSyntax namedProperty
+                && PropertySetterClassifier.IsPatchableCompiledSetter(
+                    namedProperty,
+                    propertySymbol,
+                    compiledType,
+                    servedByRetainedArtifact))
             {
                 continue;
             }
@@ -242,38 +254,43 @@ internal static class UnsupportedMemberSkipCollector
         return null;
     }
 
-    internal static void AppendIndexerExplicitAccessorSkips(
+    // What: a Skipped row for each bodied indexer accessor that changed since the verified snapshot
+    // and that the indexer emitter does not report itself (no matching compiled accessor, an init
+    // accessor, or a type a retained artifact serves).
+    private static void AppendIndexerAccessorSkips(
         IndexerDeclarationSyntax indexerDeclaration,
-        IPropertySymbol propertySymbol,
-        List<WorkerSkipped> skipped)
+        IPropertySymbol indexerSymbol,
+        List<WorkerSkipped> skipped,
+        string typeMetadataNameFromSyntax,
+        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
+        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
+        INamedTypeSymbol compiledType,
+        bool servedByRetainedArtifact)
     {
-        if (indexerDeclaration.ExpressionBody != null)
-        {
-            if (propertySymbol.GetMethod != null)
-            {
-                skipped.Add(new WorkerSkipped
-                {
-                    Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
-                    Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
-                });
-            }
-
-            return;
-        }
-
-        if (indexerDeclaration.AccessorList == null)
+        if (indexerSymbol == null)
         {
             return;
         }
 
-        foreach (AccessorDeclarationSyntax accessor in indexerDeclaration.AccessorList.Accessors)
+        foreach (IndexerBodiedAccessor accessor in IndexerAccessorRules.FindBodiedAccessors(indexerDeclaration))
         {
-            if (accessor.Body == null && accessor.ExpressionBody == null)
+            if (IndexerAccessorRules.IsAccessorUnchangedFromBaseline(
+                    typeMetadataNameFromSyntax,
+                    indexerDeclaration,
+                    accessor.Kind,
+                    snapshotIndexerMap,
+                    plainCurrentIndexerMap)
+                || IndexerAccessorRules.IsReportedByEmitter(
+                    indexerDeclaration,
+                    indexerSymbol,
+                    accessor.Kind,
+                    compiledType,
+                    servedByRetainedArtifact))
             {
                 continue;
             }
 
-            IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(propertySymbol, accessor.Kind());
+            IMethodSymbol accessorMethod = ResolveAccessorMethodSymbol(indexerSymbol, accessor.Kind);
             if (accessorMethod == null)
             {
                 continue;
@@ -307,7 +324,7 @@ internal static class UnsupportedMemberSkipCollector
 
     // What: reports instance/static constructors, operators, conversion operators, and
     // explicit event accessors as Skipped. Unchanged members matching a verified snapshot
-    // are omitted. Field-like events and finalizers are not listed.
+    // are omitted. Field-like events are not listed.
     internal static void AppendUnsupportedMemberKindSkips(
         string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
@@ -315,9 +332,11 @@ internal static class UnsupportedMemberSkipCollector
         SemanticModel semanticModel,
         List<WorkerSkipped> skipped,
         Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> snapshotDestructorMap,
         Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
         Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
         Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> plainCurrentDestructorMap,
         Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
         Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap,
         bool servedByRetainedArtifact)
@@ -339,6 +358,13 @@ internal static class UnsupportedMemberSkipCollector
             skipped,
             snapshotConstructorMap,
             plainCurrentConstructorMap);
+        AppendFinalizerSkips(
+            typeDeclaration,
+            typeMetadataNameFromSyntax,
+            semanticModel,
+            skipped,
+            snapshotDestructorMap,
+            plainCurrentDestructorMap);
         AppendOperatorSkips(
             typeDeclaration,
             typeMetadataNameFromSyntax,
@@ -398,6 +424,38 @@ internal static class UnsupportedMemberSkipCollector
             }
 
             IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(constructorDeclaration);
+            AppendUnsupportedKindSkip(skipped, methodSymbol);
+        }
+    }
+
+    // Why the same branches as AppendConstructorSkips: a finalizer row must appear under exactly
+    // the conditions a constructor row does (edited, added, or no verified baseline).
+    internal static void AppendFinalizerSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped,
+        Dictionary<string, DestructorDeclarationSyntax> snapshotDestructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> plainCurrentDestructorMap)
+    {
+        foreach (DestructorDeclarationSyntax destructorDeclaration in typeDeclaration.Members
+            .OfType<DestructorDeclarationSyntax>())
+        {
+            string destructorKey = WorkerSyntaxIndex.BuildSyntaxDestructorKey(typeMetadataNameFromSyntax);
+            if (snapshotDestructorMap != null
+                && plainCurrentDestructorMap != null
+                && snapshotDestructorMap.TryGetValue(
+                    destructorKey,
+                    out DestructorDeclarationSyntax snapshotDestructor)
+                && plainCurrentDestructorMap.TryGetValue(
+                    destructorKey,
+                    out DestructorDeclarationSyntax plainDestructor)
+                && SyntaxFactory.AreEquivalent(snapshotDestructor, plainDestructor, topLevel: false))
+            {
+                continue;
+            }
+
+            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(destructorDeclaration);
             AppendUnsupportedKindSkip(skipped, methodSymbol);
         }
     }

@@ -342,7 +342,7 @@ func printCompileCheckHelp(stdout io.Writer) {
 func parseCompileCheckOptions(args []string, globalProjectPath string) (compileCheckOptions, error) {
 	options := compileCheckOptions{
 		projectPath: globalProjectPath,
-		maxDepth:    defaultProjectSearchDepth,
+		maxDepth:    project.DefaultProjectSearchDepth,
 	}
 
 	for index := 0; index < len(args); index++ {

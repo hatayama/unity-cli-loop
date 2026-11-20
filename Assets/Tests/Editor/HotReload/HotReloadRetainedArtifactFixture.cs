@@ -110,7 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 SiblingSource,
                 DefaultArtifactMethodNames,
                 NoArtifactMethodNames,
-                RetainedArtifactReferrerShape.None);
+                RetainedArtifactReferrerShape.None,
+                withExplicitGauge: false);
         }
 
         /// <summary>
@@ -129,7 +130,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 SiblingSource,
                 DefaultArtifactMethodNames,
                 NoArtifactMethodNames,
-                referrerShape);
+                referrerShape,
+                withExplicitGauge: false);
         }
 
         /// <summary>
@@ -147,7 +149,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 siblingSource,
                 DefaultArtifactMethodNames,
                 NoArtifactMethodNames,
-                RetainedArtifactReferrerShape.None);
+                RetainedArtifactReferrerShape.None,
+                withExplicitGauge: false);
         }
 
         /// <summary>
@@ -168,7 +171,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 SiblingSource,
                 publicMethodNames,
                 privateMethodNames,
-                RetainedArtifactReferrerShape.None);
+                RetainedArtifactReferrerShape.None,
+                withExplicitGauge: false);
+        }
+
+        /// <summary>
+        /// Builds the world with an interface Example.IGauge (int Gauge { get; }) in the target
+        /// assembly and the artifact type implementing it through an explicit property, so a test
+        /// can edit the explicit getter of a type the artifact serves.
+        /// </summary>
+        public static Task<HotReloadRetainedArtifactFixture> CreateWithExplicitGaugeAsync(
+            string name,
+            string editedSource,
+            string[] publicMethodNames,
+            string[] privateMethodNames)
+        {
+            return BuildAsync(
+                name,
+                editedSource,
+                SiblingSource,
+                publicMethodNames,
+                privateMethodNames,
+                RetainedArtifactReferrerShape.None,
+                withExplicitGauge: true);
         }
 
         private static async Task<HotReloadRetainedArtifactFixture> BuildAsync(
@@ -177,7 +202,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string siblingSource,
             string[] publicMethodNames,
             string[] privateMethodNames,
-            RetainedArtifactReferrerShape referrerShape)
+            RetainedArtifactReferrerShape referrerShape,
+            bool withExplicitGauge)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -193,9 +219,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string siblingSourcePath = Path.Combine(directory, "Sibling.cs");
             File.WriteAllText(siblingSourcePath, siblingSource);
             string targetAssemblyPath = Path.Combine(directory, "RetainedTarget.dll");
-            string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath);
+            string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath, withExplicitGauge);
             string artifactPath = Path.Combine(directory, "RetainedArtifact.dll");
-            CreateArtifactAssembly(artifactPath, publicMethodNames, privateMethodNames, referrerShape);
+            CreateArtifactAssembly(
+                artifactPath,
+                publicMethodNames,
+                privateMethodNames,
+                referrerShape,
+                withExplicitGauge ? targetAssemblyPath : null);
             HotReloadRetainedArtifactFixture fixture = new HotReloadRetainedArtifactFixture(
                 sourcePath,
                 "Assets/RetainedDeclaration/" + name + "/Edited.cs",
@@ -437,7 +468,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
-        private static string CreateTargetAssembly(string path)
+        private static string CreateTargetAssembly(string path, bool withExplicitGauge)
         {
             AssemblyNameDefinition assemblyName = new AssemblyNameDefinition("RetainedTarget", new Version(1, 0, 0, 0));
             using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(assemblyName, "RetainedTarget", ModuleKind.Dll))
@@ -456,6 +487,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 processor.Append(processor.Create(OpCodes.Ret));
                 caller.Methods.Add(read);
                 assembly.MainModule.Types.Add(caller);
+                if (withExplicitGauge)
+                {
+                    AddGaugeInterface(assembly);
+                }
+
                 assembly.Write(path);
             }
 
@@ -469,7 +505,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string path,
             string[] publicMethodNames,
             string[] privateMethodNames,
-            RetainedArtifactReferrerShape referrerShape)
+            RetainedArtifactReferrerShape referrerShape,
+            string gaugeInterfaceAssemblyPathOrNull)
         {
             AssemblyNameDefinition assemblyName = new AssemblyNameDefinition("RetainedArtifact", new Version(1, 0, 0, 0));
             using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(assemblyName, "RetainedArtifact", ModuleKind.Dll))
@@ -496,6 +533,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 AddInstanceInt32Property(assembly, retained, "Number");
+                if (gaugeInterfaceAssemblyPathOrNull != null)
+                {
+                    AddExplicitGauge(assembly, retained, gaugeInterfaceAssemblyPathOrNull);
+                }
+
                 assembly.MainModule.Types.Add(retained);
 
                 // A type whose only constructor is private is what a source class with a private
@@ -618,6 +660,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             processor.Append(processor.Create(OpCodes.Ldc_I4_0));
             processor.Append(processor.Create(OpCodes.Ret));
             type.Methods.Add(method);
+        }
+
+        // Example.IGauge with an abstract int Gauge { get; }, which the artifact type implements
+        // explicitly.
+        private static void AddGaugeInterface(AssemblyDefinition assembly)
+        {
+            TypeDefinition gauge = new TypeDefinition(
+                "Example",
+                "IGauge",
+                CecilTypeAttributes.Public | CecilTypeAttributes.Interface | CecilTypeAttributes.Abstract);
+            MethodDefinition getter = new MethodDefinition(
+                "get_Gauge",
+                CecilMethodAttributes.Public
+                    | CecilMethodAttributes.HideBySig
+                    | CecilMethodAttributes.SpecialName
+                    | CecilMethodAttributes.NewSlot
+                    | CecilMethodAttributes.Abstract
+                    | CecilMethodAttributes.Virtual,
+                assembly.MainModule.TypeSystem.Int32);
+            gauge.Methods.Add(getter);
+            gauge.Properties.Add(new PropertyDefinition(
+                "Gauge",
+                Mono.Cecil.PropertyAttributes.None,
+                assembly.MainModule.TypeSystem.Int32)
+            {
+                GetMethod = getter
+            });
+            assembly.MainModule.Types.Add(gauge);
+        }
+
+        // The explicit property `int IGauge.Gauge` as the compiler emits it: a private final
+        // virtual getter named Example.IGauge.get_Gauge that overrides the interface getter.
+        private static void AddExplicitGauge(AssemblyDefinition assembly, TypeDefinition retained, string interfaceAssemblyPath)
+        {
+            using (ModuleDefinition interfaceModule = ModuleDefinition.ReadModule(interfaceAssemblyPath))
+            {
+                TypeDefinition gaugeDefinition = interfaceModule.GetType("Example.IGauge");
+                TypeReference gauge = assembly.MainModule.ImportReference(gaugeDefinition);
+                MethodReference interfaceGetter = assembly.MainModule.ImportReference(gaugeDefinition.Methods[0]);
+                retained.Interfaces.Add(new InterfaceImplementation(gauge));
+                MethodDefinition getter = new MethodDefinition(
+                    "Example.IGauge.get_Gauge",
+                    CecilMethodAttributes.Private
+                        | CecilMethodAttributes.Final
+                        | CecilMethodAttributes.HideBySig
+                        | CecilMethodAttributes.SpecialName
+                        | CecilMethodAttributes.NewSlot
+                        | CecilMethodAttributes.Virtual,
+                    assembly.MainModule.TypeSystem.Int32);
+                getter.Overrides.Add(interfaceGetter);
+                ILProcessor processor = getter.Body.GetILProcessor();
+                processor.Append(processor.Create(OpCodes.Ldc_I4_0));
+                processor.Append(processor.Create(OpCodes.Ret));
+                retained.Methods.Add(getter);
+                retained.Properties.Add(new PropertyDefinition(
+                    "Example.IGauge.Gauge",
+                    Mono.Cecil.PropertyAttributes.None,
+                    assembly.MainModule.TypeSystem.Int32)
+                {
+                    GetMethod = getter
+                });
+            }
         }
 
         private static void AddInstanceInt32Property(

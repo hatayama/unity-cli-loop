@@ -301,6 +301,9 @@ func tokenizePausePointTriggerValue(raw string) ([]string, error) {
 
 // dispatchPausePointTriggerCommand delegates to runResolvedProjectCommand by default. Injectable
 // so tests can simulate a trigger command's dispatch outcome without a real Unity connection.
+// Why not runProjectCommand, the entry of a uloop run: that entry checks for a dialog before
+// sending, and the run that starts a trigger has already been checked there, so the trigger goes
+// straight to the dispatch below it.
 // runResolvedProjectCommand's own call graph loops back through waitForPausePoint into this very
 // variable, so it is assigned in init() (a statement, not a variable initializer) rather than as
 // this var's own initializer expression — Go's package-initialization dependency analysis reports
@@ -326,9 +329,9 @@ type pausePointTriggerHandle struct {
 	done    chan *pausePointTriggerResult
 }
 
-// startPausePointTrigger dispatches the trigger command in-process, through the same command
-// dispatch entry point every ordinary CLI invocation uses (runResolvedProjectCommand) — not a
-// subprocess. It races against the pause-point wait loop that started it.
+// startPausePointTrigger dispatches the trigger command in-process, through the command dispatch
+// every ordinary CLI invocation reaches (runResolvedProjectCommand, below the entry that checks for
+// a dialog) — not a subprocess. It races against the pause-point wait loop that started it.
 func startPausePointTrigger(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -341,8 +344,12 @@ func startPausePointTrigger(
 		done:    make(chan *pausePointTriggerResult, 1),
 	}
 
+	// Why the pause-point interval: the trigger runs while the pause point may hold the main thread on
+	// purpose, so its send's look for a dialog would find none most of the time. Only here: other
+	// triggers, such as record-video's, run without a pause point.
+	triggerContext := withHeartbeatDialogInterval(ctx, pausePointDialogWatchInterval)
 	go func() {
-		handle.done <- runPausePointTriggerSync(ctx, connection, startPath, triggerCommand, triggerArgs, handle.command)
+		handle.done <- runPausePointTriggerSync(triggerContext, connection, startPath, triggerCommand, triggerArgs, handle.command)
 	}()
 
 	return handle

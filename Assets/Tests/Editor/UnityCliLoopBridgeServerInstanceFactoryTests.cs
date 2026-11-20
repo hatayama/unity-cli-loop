@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopBridgeServerInstanceFactory factory = new UnityCliLoopBridgeServerInstanceFactory(
                 new NoOpDomainReloadDetectionService(),
                 CreateRegistrarService(),
-                new EditorExecutionActivity(new InertProcessActivityApi()));
+                new EditorExecutionActivity(new InertProcessActivityApi()),
+                new EditorDialogTracker());
 
             IUnityCliLoopServerInstance first = factory.Create();
             IUnityCliLoopServerInstance second = factory.Create();

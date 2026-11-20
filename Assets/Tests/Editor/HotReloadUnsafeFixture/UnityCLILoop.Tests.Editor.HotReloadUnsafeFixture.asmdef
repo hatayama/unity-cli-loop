@@ -1,0 +1,16 @@
+{
+    "name": "UnityCLILoop.Tests.Editor.HotReloadUnsafeFixture",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

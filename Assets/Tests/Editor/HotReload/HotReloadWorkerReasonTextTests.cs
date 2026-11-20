@@ -199,7 +199,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformBaseMemberCall,
                 NoArgs,
-                "Methods that call base. members are skipped; C# cannot express base calls outside the type.");
+                "Uses base. for something other than a direct call to a base method (a base property, indexer, "
+                + "event, or method group); C# cannot express that outside the type, so run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallOutsideOwnStatements,
+                NoArgs,
+                "Calls a base method from a lambda, local function, query, async or iterator body, a property "
+                + "accessor, a member or type hot reload added, or a body patched through a delegating shim; "
+                + "hot reload applies a base call only in a compiled method's own statements. Move the call "
+                + "there, or run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallArgumentShape,
+                NoArgs,
+                "Calls a generic or ref-returning base method, or one with a params parameter or a pointer type "
+                + "in its signature, or passes named or omitted optional arguments to a base method; for named or "
+                + "omitted arguments write every argument positionally, otherwise run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallTargetNotCompiled,
+                NoArgs,
+                "Calls a base method the compiled assembly does not hold yet (added or re-signatured since the "
+                + "last compile); run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallConditionalTarget,
+                NoArgs,
+                "Calls a base method marked [Conditional]; the compiler removes such a call when the symbol is "
+                + "not defined, and hot reload cannot do the same; run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformBaseCallAmbiguousTarget,
+                NoArgs,
+                "Calls a base method whose type declares another method with the same name and the same "
+                + "parameter types once type arguments are filled in; hot reload cannot tell the two apart, so "
+                + "run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformClosureInaccessibleAccess,
                 NoArgs,
@@ -272,9 +302,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Generic methods and methods inside generic types cannot be safely patched with Harmony. "
                 + "Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUnsafeCode,
+                NoArgs,
+                "Methods and accessors that need an unsafe context (pointers, function pointers, fixed "
+                + "statements, or unsafe blocks) are skipped; the patch is compiled without unsafe code. "
+                + "Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 NoArgs,
-                "Explicit interface implementations are skipped.");
+                "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
+                + "of explicit interface indexers, are skipped. Run 'uloop compile'.");
+            yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember,
+                NoArgs,
+                "Init accessors that assign a readonly field or an init-only property are skipped; the patch "
+                + "is compiled outside the type, where only the type's own constructors and init accessors "
+                + "may assign them. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformSiblingBodyBindsCompiledType,
                 new[] { "CS1061: 'Host' does not contain a definition for 'Hit'", "'Host'", "'Assets/Host.cs'" },
@@ -568,12 +611,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor,
                 NoArgs,
-                "Property setter, init, or indexer accessors are skipped; "
+                "Getters, setters, property init accessors, and indexer accessors with no matching accessor on the compiled type, and explicit interface or indexer init accessors, are skipped; "
                 + "run 'uloop compile' to apply accessor edits.");
             yield return Case(
                 HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind,
                 NoArgs,
-                "Constructors, operators, and event accessors are skipped; "
+                "Constructors, finalizers, operators, and event accessors are skipped; "
                 + "run 'uloop compile' to apply these edits.");
             yield return Case(
                 HotReloadWorkerReasonCode.EventCustomAccessor,
@@ -660,13 +703,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "inaccessible indexer access has no accessor rewrite shape.");
             yield return Case(
+                HotReloadWorkerReasonCode.AccessorStructMemberNoShape,
+                NoArgs,
+                "inaccessible instance member of a struct has no accessor rewrite shape.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
+                new[] { "GetEnumerator", "foreach" },
+                "inaccessible method 'GetEnumerator' that the compiler calls for foreach has no accessor rewrite shape.");
+            yield return Case(
                 HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape,
                 NoArgs,
                 "compound assignment to an event has no accessor rewrite shape.");
             yield return Case(
-                HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten,
+                HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape,
                 NoArgs,
-                "inaccessible extension method calls are not rewritten.");
+                "inaccessible extension method used as a method group (not called) has no accessor rewrite shape.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                new[] { "AddedTriple", "Extensions" },
+                "extension method 'AddedTriple' added in this reload has no rewrite shape when called on a receiver; write the call as 'Extensions.AddedTriple(receiver, ...)'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 NoArgs,
@@ -731,6 +786,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 NoArgs,
                 "inaccessible methods that return by ref have no accessor rewrite shape.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten,
+                NoArgs,
+                "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them when the condition symbol is not defined.");
+            yield return Case(
+                HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape,
+                NoArgs,
+                "inaccessible method with a ref struct parameter or return type has no accessor rewrite shape.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 NoArgs,

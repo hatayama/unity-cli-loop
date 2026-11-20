@@ -1,5 +1,42 @@
 # Changelog
 
+## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.13.1...uloop-project-runner-v3.14.0) (2026-11-16)
+
+
+### Features
+
+* uloop launch presses Ignore on Unity's "Enter Safe Mode?" prompt ([#3551](https://github.com/hatayama/unity-cli-loop/issues/3551)) ([be86be7](https://github.com/hatayama/unity-cli-loop/commit/be86be7fdf79cff73204ec4484e10844dfc530eb))
+
+
+### Bug Fixes
+
+* Tool commands now find the Unity project from a repository root that keeps it in a subdirectory ([#3552](https://github.com/hatayama/unity-cli-loop/issues/3552)) ([9cf84f2](https://github.com/hatayama/unity-cli-loop/commit/9cf84f2eed51587872c776b1e9d4a0ade669c6df))
+
+## [3.13.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.13.0...uloop-project-runner-v3.13.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* a command sent just after a dialog opens now reports it in seconds instead of after 30 ([#3502](https://github.com/hatayama/unity-cli-loop/issues/3502)) ([eff8585](https://github.com/hatayama/unity-cli-loop/commit/eff8585e7c18a6aba5ff1c0b7a28b5a3ca78fd01))
+* A pause-point wait behind a dialog now says its --trigger was not sent or not run, and to keep it ([#3505](https://github.com/hatayama/unity-cli-loop/issues/3505)) ([5670873](https://github.com/hatayama/unity-cli-loop/commit/567087364d40b61bb0528f646527f7241a6000e0))
+* on macOS, a command sent just after a dialog opens now reports it in 3 to 4 seconds instead of 5 to 6 ([#3504](https://github.com/hatayama/unity-cli-loop/issues/3504)) ([a543208](https://github.com/hatayama/unity-cli-loop/commit/a5432080fc4c3cb6421a9c3bec9ebf7f923ba213))
+* on Windows, a message box from another thread no longer blocks commands, and a dialog hidden by minimizing Unity is still found ([#3498](https://github.com/hatayama/unity-cli-loop/issues/3498)) ([aafca78](https://github.com/hatayama/unity-cli-loop/commit/aafca78269e3e1460fc9880e263ea95172b0f69e))
+
+## [3.13.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.8...uloop-project-runner-v3.13.0) (2026-11-13)
+
+
+### Features
+
+* uloop status reports the dialog that blocks Unity, and uloop press-dialog-button presses one of its buttons ([#3470](https://github.com/hatayama/unity-cli-loop/issues/3470)) ([1a6e99a](https://github.com/hatayama/unity-cli-loop/commit/1a6e99a4b0158571f92298c09baaab55a837095b))
+
+## [3.12.8](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.7...uloop-project-runner-v3.12.8) (2026-11-12)
+
+
+### Bug Fixes
+
+* execute-dynamic-code no longer tells you to retry a snippet that reloaded scripts before Unity could answer ([#3491](https://github.com/hatayama/unity-cli-loop/issues/3491)) ([20868bf](https://github.com/hatayama/unity-cli-loop/commit/20868bf64960665914f3e663359a909110a0c71d))
+* uloop no longer mistakes Unity Hub's helper for an Editor on Windows, and counts an Editor it cannot read as one it cannot identify ([#3478](https://github.com/hatayama/unity-cli-loop/issues/3478)) ([017603b](https://github.com/hatayama/unity-cli-loop/commit/017603bdc868d71525899a3fac57bfce9db6b3e2))
+
 ## [3.12.7](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.12.6...uloop-project-runner-v3.12.7) (2026-11-08)
 
 

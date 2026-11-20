@@ -374,7 +374,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, "get_BaseValue"), Is.Null);
             Assert.That(
                 FindSkipReason(result, "get_BaseValue"),
-                Does.Contain("base. members are skipped"));
+                Does.Contain("Calls a base method from a lambda, local function, query, async or iterator body, a property accessor"));
         }
 
         /// <summary>

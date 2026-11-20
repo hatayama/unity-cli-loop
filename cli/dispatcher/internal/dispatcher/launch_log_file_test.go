@@ -74,7 +74,7 @@ func TestBuildUnityLaunchArgsPassesLogFile(t *testing.T) {
 		"/tmp/project",
 		"-logFile",
 		"/tmp/my logs/editor.log",
-		"-ignorecompilererrors",
+		"-launchedByUloop",
 	}
 
 	if !slices.Equal(args, expectedArgs) {
@@ -89,7 +89,7 @@ func TestRunLaunchRequiresRestartForLogFileWithExistingUnityProcess(t *testing.T
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
 		readinessChecked = true
 		return nil
 	}
@@ -204,6 +204,7 @@ func TestRunLaunchQuitIgnoresUnusableLogFile(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	deps.requestUnityQuit = func(context.Context, string) bool {
 		return false
 	}
@@ -260,7 +261,7 @@ func TestRunLaunchReportsTheRequestedLogFile(t *testing.T) {
 			deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 				return nil
 			}
-			deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+			deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
 				return nil
 			}
 			deps.focusUnityProcess = func(context.Context, int) error {

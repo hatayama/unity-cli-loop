@@ -13,6 +13,7 @@ using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -30,7 +31,14 @@ internal static class AccessorAccessRegistrar
         AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
-        rejectReason = null;
+        // Why first: a call the compiler generates has no syntax this registrar could rewrite, and
+        // the node that causes it (a deconstruction assignment, a collection initializer) would
+        // otherwise be taken by the branches below.
+        rejectReason = ImplicitCallTargets.FindInaccessibleCallReasonOrNull(semanticModel, node);
+        if (rejectReason != null)
+        {
+            return false;
+        }
 
         if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
         {
@@ -92,7 +100,7 @@ internal static class AccessorAccessRegistrar
         out WorkerReason rejectReason)
     {
         rejectReason = null;
-        ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol ctorSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, node);
         if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
         {
             rejectReason =
@@ -110,7 +118,7 @@ internal static class AccessorAccessRegistrar
     {
         rejectReason = null;
         // Initializer assignments are always writes (including ImplicitElementAccess indexers).
-        ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol initializerSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
             ? AccessibilityRules.IsInaccessibleAccessor(AssignmentTargetRules.AccessorCalledByWrite(initializerProperty))
             : initializerSymbol != null
@@ -137,7 +145,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, elementAccess);
         if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
         {
             if (AssignmentTargetRules.IsDeconstructedThroughSetter(indexer, elementAccess))
@@ -196,7 +204,9 @@ internal static class AccessorAccessRegistrar
         if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
             && parentInvocation.Expression == memberAccess)
         {
-            ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+            // Why the bound symbol: a call into a static class seen twice binds to no symbol, and
+            // the method would otherwise be taken for a method group here.
+            ISymbol invocationTarget = AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
                 ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
             if (invocationTarget is IMethodSymbol)
             {
@@ -211,7 +221,7 @@ internal static class AccessorAccessRegistrar
 
         return TryRegisterUseOutsideAssignment(
             memberAccess,
-            semanticModel.GetSymbolInfo(memberAccess).Symbol
+            AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
             plan,
             addedMemberAccess,
@@ -301,7 +311,7 @@ internal static class AccessorAccessRegistrar
         out WorkerReason rejectReason)
     {
         rejectReason = null;
-        ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        ISymbol leftSymbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, assignment.Left);
         if (leftSymbol is IFieldSymbol fieldSymbol)
         {
             if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
@@ -312,6 +322,12 @@ internal static class AccessorAccessRegistrar
             if (fieldSymbol.IsConst)
             {
                 return true;
+            }
+
+            if (AccessibilityRules.NeedsStructInstanceReceiver(fieldSymbol))
+            {
+                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+                return false;
             }
 
             plan.GetOrAddField(fieldSymbol);
@@ -331,30 +347,48 @@ internal static class AccessorAccessRegistrar
 
         if (leftSymbol is IEventSymbol eventSymbol)
         {
-            // An added event the store keeps is written through the store, never a backing field.
-            if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
-            {
-                return false;
-            }
-
-            if (EventAccessorRules.IsSubscriptionAssignment(assignment))
-            {
-                // += / -= stay on the publicized add/remove accessors, which keep the
-                // compiler's Interlocked.CompareExchange loop. Nothing to register.
-                return false;
-            }
-
-            if (!EventAccessorRules.IsBackingFieldWrite(assignment))
-            {
-                rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape);
-                return false;
-            }
-
-            plan.GetOrAddEventBackingField(eventSymbol);
-            return true;
+            return TryRegisterEventAssignment(assignment, eventSymbol, plan, addedMemberAccess, out rejectReason);
         }
 
         return false;
+    }
+
+    private static bool TryRegisterEventAssignment(
+        AssignmentExpressionSyntax assignment,
+        IEventSymbol eventSymbol,
+        AccessorPlan plan,
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
+    {
+        rejectReason = null;
+        // An added event the store keeps is written through the store, never a backing field.
+        if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
+        {
+            return false;
+        }
+
+        if (EventAccessorRules.IsSubscriptionAssignment(assignment))
+        {
+            // += / -= stay on the publicized add/remove accessors, which keep the
+            // compiler's Interlocked.CompareExchange loop. Nothing to register.
+            return false;
+        }
+
+        if (!EventAccessorRules.IsBackingFieldWrite(assignment))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape);
+            return false;
+        }
+
+        // Why: the backing field of a struct instance has no field ref to bind.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(eventSymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
+        }
+
+        plan.GetOrAddEventBackingField(eventSymbol);
+        return true;
     }
 
     internal static bool TryRegisterInvocation(
@@ -370,12 +404,15 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
-        if (symbol is not IMethodSymbol methodSymbol)
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, invocation);
+        if (symbol is not IMethodSymbol invokedMethod)
         {
             return false;
         }
 
+        // Why unreduce first: a reduced extension call is not MethodKind.Ordinary, and returning
+        // here left it unregistered and unrefused, so the shim called the method and failed.
+        IMethodSymbol methodSymbol = AccessibilityRules.UnreducedMethod(invokedMethod);
         if (methodSymbol.MethodKind != MethodKind.Ordinary)
         {
             return false;
@@ -383,6 +420,29 @@ internal static class AccessorAccessRegistrar
 
         if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
+            return false;
+        }
+
+        // Why refuse here: the shim rewrite leaves a call on a conditional-access spine as written,
+        // anywhere down its receiver chain, so registering it would transplant a direct call the
+        // shim cannot make.
+        if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(invocation))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalAccessNoShape);
+            return false;
+        }
+
+        // Why only the receiver form: its accessor finds no compiled method to bind, because the
+        // compiled class does not hold a method this reload adds, and the shim fails at binding.
+        // A call written in the static form applies (measured in a lambda and an async body).
+        if (invokedMethod.MethodKind == MethodKind.ReducedExtension
+            && addedMemberAccess != null
+            && addedMemberAccess.IsAddedExtensionMethod(methodSymbol))
+        {
+            rejectReason = WorkerReason.Of(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                methodSymbol.Name,
+                methodSymbol.ContainingType.Name);
             return false;
         }
 
@@ -400,30 +460,15 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        rejectReason = FindDelegateCallRejectReason(methodSymbol);
+        if (rejectReason != null)
         {
-            if (parameter.RefKind != RefKind.None)
-            {
-                rejectReason =
-                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
-                return false;
-            }
+            return false;
         }
 
-        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        rejectReason = FindArgumentRejectReason(semanticModel, invocation, invokedMethod, methodSymbol);
+        if (rejectReason != null)
         {
-            if (argument.NameColon != null)
-            {
-                rejectReason =
-                    WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
-                return false;
-            }
-        }
-
-        if (invocation.ArgumentList.Arguments.Count != methodSymbol.Parameters.Length)
-        {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
             return false;
         }
 
@@ -431,11 +476,69 @@ internal static class AccessorAccessRegistrar
         return true;
     }
 
+    // The accessor delegate takes exactly the method's parameters by value, in order.
+    private static WorkerReason FindArgumentRejectReason(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol invokedMethod,
+        IMethodSymbol methodSymbol)
+    {
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            if (parameter.RefKind != RefKind.None)
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten);
+            }
+        }
+
+        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.NameColon != null)
+            {
+                return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorNamedArgumentNotRewritten);
+            }
+        }
+
+        // A reduced extension call passes its receiver as the first parameter, outside the list.
+        int receiverArgumentCount = invokedMethod.MethodKind == MethodKind.ReducedExtension ? 1 : 0;
+        if (invocation.ArgumentList.Arguments.Count + receiverArgumentCount != methodSymbol.Parameters.Length
+            || HasExpandedParamsArgument(semanticModel, invocation))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten);
+        }
+
+        return null;
+    }
+
+    // Why the bound form and not the count: one element passed to a params parameter matches the
+    // parameter count, yet the accessor delegate takes the array, so the element must be refused.
+    // Why the enforcing binding when the first finds no call: the accessor target of a call left
+    // unbound by an internal BCL copy came from that binding, so only it shows how the arguments map.
+    private static bool HasExpandedParamsArgument(SemanticModel semanticModel, InvocationExpressionSyntax invocation)
+    {
+        IInvocationOperation operation = semanticModel.GetOperation(invocation) as IInvocationOperation
+            ?? AccessibilityRules.EnforcingModel(semanticModel).GetOperation(invocation) as IInvocationOperation;
+        if (operation == null)
+        {
+            return false;
+        }
+
+        foreach (IArgumentOperation argument in operation.Arguments)
+        {
+            if (argument.ArgumentKind == ArgumentKind.ParamArray)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static WorkerReason FindMethodShapeRejectReason(IMethodSymbol methodSymbol)
     {
-        if (methodSymbol.IsExtensionMethod)
+        if (AccessibilityRules.NeedsStructInstanceReceiver(methodSymbol))
         {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten);
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
         }
 
         if (methodSymbol.IsGenericMethod)
@@ -448,6 +551,49 @@ internal static class AccessorAccessRegistrar
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape);
         }
 
+        // Why refuse: the accessor call is an ordinary delegate call, so it would run the method
+        // and evaluate its arguments where the compiler omits the call. Why before the added-method
+        // exemption: the added-method rewrite also runs the call (measured), so an added
+        // [Conditional] method is refused too.
+        if (BaseCallRules.IsConditional(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten);
+        }
+
         return null;
+    }
+
+    // What: refuses a method whose call an accessor delegate cannot carry. Only asked for a
+    // method the compiled assembly holds; a method added in the same reload is called directly.
+    private static WorkerReason FindDelegateCallRejectReason(IMethodSymbol methodSymbol)
+    {
+
+        // Why refuse: the accessor is a Func or Action, and a ref struct cannot be a generic
+        // type argument, so the shim would not compile. Parameters count too: a call that passes a
+        // Span or ReadOnlySpan binds, and its delegate would not compile either.
+        if (HasRefLikeSignature(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape);
+        }
+
+        return null;
+    }
+
+    private static bool HasRefLikeSignature(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.ReturnType.IsRefLikeType)
+        {
+            return true;
+        }
+
+        foreach (IParameterSymbol parameter in methodSymbol.Parameters)
+        {
+            if (parameter.Type.IsRefLikeType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

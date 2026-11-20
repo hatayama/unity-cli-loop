@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/common/project"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/compilecheck"
 )
 
@@ -27,7 +28,7 @@ func TestParseCompileCheckOptionsDefaultsToTheChangedScope(t *testing.T) {
 	if options.projectPath != "/projects/sample" {
 		t.Fatalf("expected the global project path, got %q", options.projectPath)
 	}
-	if options.maxDepth != defaultProjectSearchDepth {
+	if options.maxDepth != project.DefaultProjectSearchDepth {
 		t.Fatalf("expected the default search depth, got %d", options.maxDepth)
 	}
 	if options.jobs != 0 {

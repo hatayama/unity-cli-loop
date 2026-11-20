@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -24,16 +25,16 @@ internal sealed class UnpassedInternalMemberUse
 
     private UnpassedInternalMemberUse(
         INamedTypeSymbol declaringType,
-        string memberName,
+        string memberArgument,
         UnpassedInternalMemberUseForm form,
         bool isOfAPatchableKind,
         bool canBePatchedInPlace,
         bool mayRunOutsideThePatchedMethod,
         bool isSimpleNameLookup)
     {
-        Debug.Assert(!string.IsNullOrEmpty(memberName), "memberName must not be null or empty.");
+        Debug.Assert(!string.IsNullOrEmpty(memberArgument), "memberArgument must not be null or empty.");
         DeclaringType = declaringType;
-        MemberName = memberName;
+        MemberArgument = memberArgument;
         Form = form;
         IsOfAPatchableKind = isOfAPatchableKind;
         CanBePatchedInPlace = canBePatchedInPlace;
@@ -44,8 +45,12 @@ internal sealed class UnpassedInternalMemberUse
     /// <summary>The compiled type that declares the member, read with every member visible.</summary>
     internal INamedTypeSymbol DeclaringType { get; }
 
-    /// <summary>The name of the internal member the use names.</summary>
-    internal string MemberName { get; }
+    /// <summary>
+    /// How a reason names what is internal: the quoted name of the member the use names, or the
+    /// accessor of a public property or indexer, such as "The setter of 'Length'", when only that
+    /// accessor is internal.
+    /// </summary>
+    internal string MemberArgument { get; }
 
     /// <summary>Where the use runs and how it is named.</summary>
     internal UnpassedInternalMemberUseForm Form { get; }
@@ -67,9 +72,11 @@ internal sealed class UnpassedInternalMemberUse
     internal bool MayRunOutsideThePatchedMethod { get; }
 
     /// <summary>
-    /// True when the lookup of a bare name failed (CS0103), such as an inherited member named
-    /// without 'this.'. Not a member name of an object initializer or a property pattern, which has
-    /// no receiver either but is looked up on the type being created or matched.
+    /// True when the use names the member by its bare name, such as an inherited member named
+    /// without 'this.': a failed bare-name lookup (CS0103), or a bare-name use of a property whose
+    /// accessor is internal (CS0200, CS0154). Not a member name of an object or with initializer or
+    /// a property pattern, which has no receiver either but is looked up on the value being created
+    /// or matched.
     /// </summary>
     internal bool IsSimpleNameLookup { get; }
 
@@ -114,6 +121,7 @@ internal sealed class UnpassedInternalMemberUse
         ISymbol member = FindInternalMemberOfUnpassedTypeOrNull(
             start,
             name.Identifier.ValueText,
+            outParameterCount: null,
             semanticModel,
             targetAssembly);
         if (member == null)
@@ -134,10 +142,71 @@ internal sealed class UnpassedInternalMemberUse
             && !mayRunOutsideThePatchedMethod;
         return new UnpassedInternalMemberUse(
             member.ContainingType,
-            member.Name,
+            "'" + member.Name + "'",
             ChooseForm(runPlace, isSimpleNameLookup),
             isOfAPatchableKind,
             canBePatchedInPlace,
+            mayRunOutsideThePatchedMethod,
+            isSimpleNameLookup);
+    }
+
+    /// <summary>
+    /// The use of <paramref name="method"/>, an internal method of a compiled type of the target
+    /// assembly, by a call the compiler generates for <paramref name="construct"/> (an await, a
+    /// foreach, a deconstruction, ...). Such a call has a receiver and no name in the source, so
+    /// its form is never the bare name.
+    /// </summary>
+    internal static UnpassedInternalMemberUse ForImplicitCall(
+        IMethodSymbol method,
+        SyntaxNode construct,
+        SyntaxNode bodyNode,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        SemanticModel semanticModel)
+    {
+        return ForCall(method, construct, isSimpleNameLookup: false, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+    }
+
+    /// <summary>
+    /// The use of <paramref name="accessor"/>, an internal accessor of a public or protected
+    /// property or indexer of a compiled type of the target assembly, by <paramref name="access"/>,
+    /// which reads or writes that member with its receiver or, when
+    /// <paramref name="isSimpleNameLookup"/>, by its bare name.
+    /// </summary>
+    internal static UnpassedInternalMemberUse ForAccessorCall(
+        IMethodSymbol accessor,
+        SyntaxNode access,
+        bool isSimpleNameLookup,
+        SyntaxNode bodyNode,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        SemanticModel semanticModel)
+    {
+        return ForCall(accessor, access, isSimpleNameLookup, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+    }
+
+    // Why one shape for both: a call the compiler generates and an accessor call each run where the
+    // node that makes them runs, so only the name the reason prints and whether the call is named by
+    // a bare name depend on the call, and an accessor names itself when it alone is internal.
+    private static UnpassedInternalMemberUse ForCall(
+        IMethodSymbol method,
+        SyntaxNode caller,
+        bool isSimpleNameLookup,
+        SyntaxNode bodyNode,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        SemanticModel semanticModel)
+    {
+        Debug.Assert(method != null, "method must not be null.");
+        UseRunPlace runPlace = FindWhereTheUseMayRun(caller, bodyNode, methodDeclarationOrNull, decision, semanticModel);
+        bool mayRunOutsideThePatchedMethod = runPlace != UseRunPlace.PatchedMethod;
+        return new UnpassedInternalMemberUse(
+            method.ContainingType,
+            UnpassedInternalAccessorLookup.DescribeInternalAccessorOrNull(method)
+                ?? "'" + ImplicitCallTargets.DisplayName(method) + "'",
+            ChooseForm(runPlace, isSimpleNameLookup),
+            isOfAPatchableKind: true,
+            canBePatchedInPlace: !isSimpleNameLookup && !mayRunOutsideThePatchedMethod,
             mayRunOutsideThePatchedMethod,
             isSimpleNameLookup);
     }
@@ -216,9 +285,37 @@ internal sealed class UnpassedInternalMemberUse
         return type;
     }
 
-    private static ISymbol FindInternalMemberOfUnpassedTypeOrNull(
+    internal static ISymbol FindInternalMemberOfUnpassedTypeOrNull(
         INamedTypeSymbol start,
         string memberName,
+        int? outParameterCount,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        foreach (INamedTypeSymbol type in EnumerateUnpassedCompiledTypes(start, semanticModel, targetAssembly))
+        {
+            // Why internal only: another type's private member is a use the real compiler rejects
+            // too, and protected or protected internal members already bind in the worker.
+            foreach (ISymbol member in type.GetMembers(memberName))
+            {
+                if (member.DeclaredAccessibility == Accessibility.Internal
+                    && HasOutParameterCount(member, outParameterCount))
+                {
+                    return member;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// What: <paramref name="start"/> and its base types as the target assembly declares them, read
+    /// with every member visible, leaving out the types of other assemblies and the types the run
+    /// declares from source.
+    /// </summary>
+    internal static IEnumerable<INamedTypeSymbol> EnumerateUnpassedCompiledTypes(
+        INamedTypeSymbol start,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
@@ -241,18 +338,32 @@ internal sealed class UnpassedInternalMemberUse
                 continue;
             }
 
-            // Why internal only: another type's private member is a use the real compiler rejects
-            // too, and protected or protected internal members already bind in the worker.
-            foreach (ISymbol member in type.GetMembers(memberName))
-            {
-                if (member.DeclaredAccessibility == Accessibility.Internal)
-                {
-                    return member;
-                }
-            }
+            yield return type;
+        }
+    }
+
+    /// <summary>
+    /// What: whether the member is a method whose parameters are exactly the expected number of out
+    /// parameters, or no count is expected. A deconstruction calls the Deconstruct with one out
+    /// parameter per part and nothing else.
+    /// </summary>
+    internal static bool HasOutParameterCount(ISymbol member, int? outParameterCount)
+    {
+        if (outParameterCount == null)
+        {
+            return true;
         }
 
-        return null;
+        if (member is not IMethodSymbol method)
+        {
+            return false;
+        }
+
+        // Why every part must be out: a Deconstruct with any other parameter is not one a
+        // deconstruction can call. An extension's receiver is not a part.
+        IEnumerable<IParameterSymbol> parts = method.IsExtensionMethod ? method.Parameters.Skip(1) : method.Parameters;
+        return parts.Count() == outParameterCount.Value
+            && parts.All(parameter => parameter.RefKind == RefKind.Out);
     }
 
     // Why names and not symbols: the target assembly comes from a separate compilation that

@@ -173,7 +173,7 @@ func TestWaitForV2ServerReadySucceedsWhenSessionDialAndIdle(t *testing.T) {
 		ServerSessionID: "new-session",
 	})
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, 5*time.Millisecond, time.Second)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, nil, 5*time.Millisecond, time.Second)
 	if err != nil {
 		t.Fatalf("wait for V2 server ready: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestWaitForV2ServerReadyWaitsWhileCompilingLockPresent(t *testing.T) {
 		_ = os.Remove(compilingLockPath)
 	}()
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, 5*time.Millisecond, time.Second)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, nil, 5*time.Millisecond, time.Second)
 	if err != nil {
 		t.Fatalf("wait while compiling: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestWaitForV2ServerReadyWaitsWhileDomainReloadLockPresent(t *testing.T) {
 		_ = os.Remove(domainReloadLockPath)
 	}()
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, 5*time.Millisecond, time.Second)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dialTCPPort, nil, 5*time.Millisecond, time.Second)
 	if err != nil {
 		t.Fatalf("wait while domain reload: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestWaitForV2ServerReadyWaitsForSessionIdGenerationChange(t *testing.T) {
 		writeErr = os.WriteFile(settingsPath, changedPayload, 0o644)
 	}()
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "same-session", dialTCPPort, 5*time.Millisecond, time.Second)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "same-session", dialTCPPort, nil, 5*time.Millisecond, time.Second)
 	<-writeDone
 	if writeErr != nil {
 		t.Fatalf("write changed session settings: %v", writeErr)
@@ -281,7 +281,7 @@ func TestWaitForV2ServerReadyRejectsEmptyServerSessionID(t *testing.T) {
 		ServerSessionID: "",
 	})
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "", dialTCPPort, 5*time.Millisecond, 40*time.Millisecond)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "", dialTCPPort, nil, 5*time.Millisecond, 40*time.Millisecond)
 	var timeoutErr v2ServerReadyTimeoutError
 	if !errors.As(err, &timeoutErr) {
 		t.Fatalf("expected V2 server ready timeout, got %v", err)
@@ -297,7 +297,7 @@ func TestWaitForV2ServerReadyTimesOut(t *testing.T) {
 		ServerSessionID: "session",
 	})
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "other", dialTCPPort, 5*time.Millisecond, 30*time.Millisecond)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "other", dialTCPPort, nil, 5*time.Millisecond, 30*time.Millisecond)
 	var timeoutErr v2ServerReadyTimeoutError
 	if !errors.As(err, &timeoutErr) {
 		t.Fatalf("expected V2 server ready timeout, got %v", err)
@@ -314,7 +314,7 @@ func TestWaitForV2ServerReadySucceedsWithEmptyPreviousSessionID(t *testing.T) {
 		ServerSessionID: "any-non-empty",
 	})
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "", dialTCPPort, 5*time.Millisecond, time.Second)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "", dialTCPPort, nil, 5*time.Millisecond, time.Second)
 	if err != nil {
 		t.Fatalf("wait with empty previous session: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestWaitForV2ServerReadyFollowsCustomPortChange(t *testing.T) {
 		writeErr = os.WriteFile(settingsPath, changedPayload, 0o644)
 	}()
 
-	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dial, 5*time.Millisecond, time.Second)
+	err := waitForV2ServerReady(context.Background(), projectRoot, "old-session", dial, nil, 5*time.Millisecond, time.Second)
 	<-writeDone
 	if writeErr != nil {
 		t.Fatalf("write port-change settings: %v", writeErr)
@@ -391,7 +391,7 @@ func TestWaitForV2ServerReadyReturnsCallerCancellation(t *testing.T) {
 	err := waitForV2ServerReady(canceled, t.TempDir(), "", func(int) error {
 		t.Fatal("no dial may happen without server settings")
 		return nil
-	}, time.Millisecond, time.Second)
+	}, nil, time.Millisecond, time.Second)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected the caller's cancellation, got %v", err)

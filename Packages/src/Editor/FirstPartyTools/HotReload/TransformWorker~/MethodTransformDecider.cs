@@ -36,6 +36,8 @@ internal static class MethodTransformDecider
             typeSymbol,
             methodDeclaration,
             methodSymbol,
+            bodyNode,
+            semanticModel,
             partialTypeParts);
         if (hardSkip != null)
         {
@@ -47,11 +49,48 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformNoBody));
         }
 
-        if (ContainsBaseExpression(bodyNode))
+        WorkerReason baseCallSkip = BaseCallRules.EvaluateSkipReason(
+            methodDeclaration,
+            typeSymbol,
+            bodyNode,
+            semanticModel,
+            compiledType);
+        if (baseCallSkip != null)
         {
-            return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseMemberCall));
+            return MethodTransformDecision.Skip(baseCallSkip);
         }
 
+        MethodTransformDecision decision = DecideBodyShape(
+            typeSymbol,
+            methodDeclaration,
+            methodSymbol,
+            bodyNode,
+            semanticModel,
+            compiledType,
+            addedMemberAccess,
+            addedEvents);
+        // Why: a delegating shim runs in the shim assembly, where a base call cannot be redirected.
+        if (decision.SkipReason == null && decision.UsesDelegation && ContainsBaseExpression(bodyNode))
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBaseCallOutsideOwnStatements));
+        }
+
+        return decision;
+    }
+
+    // Picks transplant, closure-scoped accessors, delegation, or an access skip for a body that
+    // passed the hard-skip and base-use checks.
+    private static MethodTransformDecision DecideBodyShape(
+        INamedTypeSymbol typeSymbol,
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        INamedTypeSymbol compiledType,
+        AddedMemberAccessLookup addedMemberAccess,
+        AddedEventLookup addedEvents)
+    {
         WorkerReason eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
             bodyNode,
             semanticModel,
@@ -198,6 +237,8 @@ internal static class MethodTransformDecider
         INamedTypeSymbol typeSymbol,
         MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
         PartialTypeParts partialTypeParts)
     {
         // Why only an untrusted part skips: the loader put every trusted part into the binding,
@@ -219,12 +260,11 @@ internal static class MethodTransformDecider
             return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformGenericMethodOrType);
         }
 
-        // Explicit interface implementations have dotted metadata names (e.g. IFoo.Bar) that are
-        // not valid C# identifiers for shim method names; sanitizing would also desync the
-        // matcher (Cecil MethodDefinition.Name). They are skipped with an explicit reason.
-        if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
+        // Why only with a body: a bodyless member keeps its own no-body reason, and patches are
+        // compiled without unsafe code, so a body that needs it would fail the whole file's compile.
+        if (bodyNode != null && UnsafeContextRules.NeedsUnsafeContext(methodSymbol, bodyNode, semanticModel))
         {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUnsafeCode);
         }
 
         return null;
@@ -467,6 +507,13 @@ internal static class MethodTransformDecider
             return WorkerReason.Of(
                 HotReloadWorkerReasonCode.AddedMethodSignatureTypeUnresolved,
                 unresolvedType.ToDisplayString());
+        }
+
+        // Why refused: the compiled type's interface map has no slot for an implementation added
+        // since the last compile, so nothing would dispatch to it.
+        if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
         }
 
         if (methodSymbol.IsAbstract || methodSymbol.IsVirtual || methodSymbol.IsOverride)

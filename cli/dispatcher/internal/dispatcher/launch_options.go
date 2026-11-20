@@ -185,7 +185,7 @@ func printLaunchHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "      --log-file <path>  Write this Editor's log to <path> instead of the log every Editor shares")
 	clicore.WriteLine(stdout, "      --max-depth <n>    Max directory depth when auto-searching for the project (default: 3, -1 = unlimited)")
 	clicore.WriteLine(stdout, "")
-	clicore.WriteLine(stdout, "Compiler errors are ignored by default during Unity startup.")
+	clicore.WriteLine(stdout, "When Unity offers Safe Mode for compile errors at startup, launch presses Ignore (macOS and Windows).")
 	clicore.WriteLine(stdout, "")
 	printGlobalOptionsHelp(stdout)
 	// launch renders its own help instead of going through printNativeSingleCommandHelp, so the

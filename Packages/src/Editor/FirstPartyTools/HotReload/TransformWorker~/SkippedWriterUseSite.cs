@@ -53,12 +53,18 @@ internal sealed class SkippedWriterUseSiteClassifier
     private readonly HashSet<string> _skippedLabels;
     private readonly HashSet<SyntaxNode> _queuedMethods;
     private readonly AddedPropertyCatalog _addedPropertyCatalog;
+    private readonly IReadOnlyDictionary<ISymbol, INamedTypeSymbol> _compiledTypeBySourceType;
 
+    // compiledTypeBySourceType lets a method be labelled the way its skip row is: an explicit
+    // implementation by its compiled name, which can differ from the source spelling.
     public SkippedWriterUseSiteClassifier(
         HashSet<string> skippedLabels,
         HashSet<SyntaxNode> queuedMethods,
-        AddedPropertyCatalog addedPropertyCatalog)
+        AddedPropertyCatalog addedPropertyCatalog,
+        IReadOnlyDictionary<ISymbol, INamedTypeSymbol> compiledTypeBySourceType)
     {
+        _compiledTypeBySourceType = compiledTypeBySourceType
+            ?? throw new ArgumentNullException(nameof(compiledTypeBySourceType));
         _skippedLabels = skippedLabels ?? throw new ArgumentNullException(nameof(skippedLabels));
         _queuedMethods = queuedMethods ?? throw new ArgumentNullException(nameof(queuedMethods));
         _addedPropertyCatalog = addedPropertyCatalog ?? throw new ArgumentNullException(nameof(addedPropertyCatalog));
@@ -82,7 +88,9 @@ internal sealed class SkippedWriterUseSiteClassifier
 
     private SkippedWriterUseSite ClassifyMethod(SemanticModel semanticModel, MethodDeclarationSyntax method)
     {
-        string label = WorkerMethodKeys.FormatMethodLabel(semanticModel.GetDeclaredSymbol(method));
+        IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(method);
+        _compiledTypeBySourceType.TryGetValue(methodSymbol.ContainingType, out INamedTypeSymbol compiledType);
+        string label = WorkerMethodKeys.FormatRowLabel(compiledType, methodSymbol);
         if (_skippedLabels.Contains(label))
         {
             return new SkippedWriterUseSite(label, SkippedWriterUseSiteKind.Skipped);

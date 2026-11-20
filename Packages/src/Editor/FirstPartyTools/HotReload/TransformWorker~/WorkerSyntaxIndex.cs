@@ -179,6 +179,13 @@ internal static class WorkerSyntaxIndex
         return typeMetadataName + "::this(" + string.Join(",", parameterKeys) + ")";
     }
 
+    // Why the type name alone is unique: a finalizer takes no parameters and a type can
+    // declare at most one.
+    internal static string BuildSyntaxDestructorKey(string typeMetadataName)
+    {
+        return typeMetadataName + "::Finalize()";
+    }
+
     internal static string BuildSyntaxConstructorKey(
         string typeMetadataName,
         ConstructorDeclarationSyntax constructorDeclaration)

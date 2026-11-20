@@ -62,7 +62,7 @@ func TestWaitForControlPlayModeStateRestartsTheExitCountAfterAnAnswer(t *testing
 		},
 	)
 
-	_, _, err := waitForControlPlayModeState(context.Background(), connection, "Play", 5*time.Second, exitWatch)
+	_, _, err := waitForControlPlayModeState(context.Background(), connection, "Play", 5*time.Second, exitWatch, dialogWatchDeps{})
 
 	var notRunning clierrors.UnityNotRunningError
 	if !errors.As(err, &notRunning) {

@@ -59,6 +59,15 @@ internal sealed class AddedEventLookup
             FindCompiledDeclaringType(eventSymbol.ContainingType.OriginalDefinition));
     }
 
+    /// <summary>
+    /// The compiled counterpart of a declaring type, wherever this run serves it, or null for a
+    /// type new to the Editor. Also answers for members other than events.
+    /// </summary>
+    internal INamedTypeSymbol FindCompiledDeclaringTypeOrNull(INamedTypeSymbol declaringType)
+    {
+        return FindCompiledDeclaringType(declaringType);
+    }
+
     // Why not the subscribing type's compiled counterpart and its assembly: when a retained
     // artifact serves the subscribing type, that assembly is the artifact, which never holds a
     // type the patch target compiled. The declaring type is looked up where it is served instead:

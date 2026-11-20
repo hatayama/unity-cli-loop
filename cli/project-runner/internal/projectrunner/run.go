@@ -20,6 +20,17 @@ import (
 )
 
 func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
+	return runProjectLocalWithDeps(ctx, args, stdout, stderr, defaultPreSendDialogWatchDeps())
+}
+
+// runProjectLocalWithDeps is RunProjectLocal with the dialog check before sending replaceable.
+func runProjectLocalWithDeps(
+	ctx context.Context,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+	dialogCheck dialogWatchDeps,
+) int {
 	remainingArgs, projectPath, err := clicore.ParseGlobalProjectPath(args)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
@@ -64,7 +75,7 @@ func RunProjectLocal(ctx context.Context, args []string, stdout io.Writer, stder
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: command})
 		return 1
 	}
-	return runResolvedProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr)
+	return runProjectCommand(ctx, connection, command, commandArgs, startPath, stdout, stderr, dialogCheck)
 }
 
 func runTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -305,6 +316,8 @@ func runFreshCompileAttempt(
 	}
 	if !shouldWaitForCompileStatus(err, outcome) {
 		spinner.Stop()
+		// The send itself stops when a dialog holds Unity after the compile started.
+		persistCompilePendingRecordWhenBlockedByDialog(connection.ProjectRoot, requestID, err, stderr)
 		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
@@ -324,7 +337,8 @@ func runFreshCompileAttempt(
 		resendBefore:   options.resendBefore,
 		// Only a dispatched send reaches this wait, so a dropped connection here came after the
 		// request was sent.
-		serverRestartSeen: err != nil && clierrors.IsTransportDisconnectError(err),
+		serverRestartSeen:  err != nil && clierrors.IsTransportDisconnectError(err),
+		sendWentUnanswered: compileSendWentUnanswered(err, outcome),
 	}, compileWait)
 	if errors.Is(waitErr, errCompileRequestMissing) {
 		spinner.Stop()
@@ -332,6 +346,7 @@ func runFreshCompileAttempt(
 	}
 	if waitErr != nil {
 		spinner.Stop()
+		persistCompilePendingRecordWhenBlockedByDialog(connection.ProjectRoot, requestID, waitErr, stderr)
 		clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
@@ -426,4 +441,12 @@ func runSync(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 	}
 	clicore.WriteFormat(stdout, "Tools synced to %s\n", cachePath)
 	return 0
+}
+
+// compileSendWentUnanswered reports whether Unity accepted the compile request and then left it
+// unanswered past the send's response timeout.
+// Why only then: a compile Unity answered has started, and a dropped connection means a domain
+// reload; neither waits behind a dialog, so an ordinary compile pays for no extra look.
+func compileSendWentUnanswered(err error, outcome unityipc.UnitySendOutcome) bool {
+	return err != nil && outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err)
 }

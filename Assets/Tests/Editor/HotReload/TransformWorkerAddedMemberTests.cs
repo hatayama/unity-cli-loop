@@ -1900,6 +1900,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing the body of a compiled interface default property getter emits a patch
+        /// entry for the getter and no Skipped row, like an ordinary getter.
+        /// </summary>
+        [Test]
+        public async Task CompiledInterfaceDefaultPropertyGetterEdit_EmitsPatchEntry()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "            get { return 805; }",
+                "            get { return 806; }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("CompiledInterfaceDefaultGetterPatch.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_DefaultValue"), Is.Not.Null);
+            Assert.That(
+                FindSkipReason(result, "get_DefaultValue"),
+                Is.Null,
+                "An edited interface default getter must not emit a Skipped row.");
+        }
+
+        /// <summary>
         /// What: a worker skip on a nested generic multi-parameter method uses the same
         /// Methods[].Method label as FormatMethodLabelParts.
         /// </summary>

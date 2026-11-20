@@ -67,6 +67,12 @@ internal static class AccessorPropertyWriteRules
             return false;
         }
 
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
+        }
+
         if (setterInaccessible)
         {
             if (propertySymbol.SetMethod == null)
@@ -102,6 +108,14 @@ internal static class AccessorPropertyWriteRules
         rejectReason = null;
         if (!AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
         {
+            return false;
+        }
+
+        // Why the struct reason first: the deconstruction reason suggests setting the property in
+        // its own statement, which is refused as well for an instance property of a struct.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
             return false;
         }
 
@@ -141,7 +155,7 @@ internal static class AccessorPropertyWriteRules
         }
 
         // Setter delegates are void — consuming the assignment expression value cannot compile.
-        if (assignment.Parent is not ExpressionStatementSyntax)
+        if (!IsAssignmentValueDiscarded(semanticModel, assignment))
         {
             return
                 WorkerReason.Of(HotReloadWorkerReasonCode.AccessorAssignmentValueConsumed);
@@ -166,5 +180,31 @@ internal static class AccessorPropertyWriteRules
         }
 
         return null;
+    }
+
+    // What: true when nothing reads the value of this assignment expression, so the void setter
+    // call can stand in its place.
+    private static bool IsAssignmentValueDiscarded(SemanticModel semanticModel, AssignmentExpressionSyntax assignment)
+    {
+        if (assignment.Parent is ExpressionStatementSyntax)
+        {
+            return true;
+        }
+
+        // Why the delegate's return type: an expression-bodied lambda converted to a delegate that
+        // returns void discards its body's value; one that returns a value hands it to the caller.
+        if (assignment.Parent is AnonymousFunctionExpressionSyntax lambda && lambda.ExpressionBody == assignment)
+        {
+            return semanticModel.GetSymbolInfo(lambda).Symbol is IMethodSymbol lambdaSymbol && lambdaSymbol.ReturnsVoid;
+        }
+
+        // Why the declared member: `void F() => P = v;` on a local function, method, or accessor
+        // discards the value the same way; a property or indexer arrow body returns it.
+        if (assignment.Parent is ArrowExpressionClauseSyntax arrow)
+        {
+            return semanticModel.GetDeclaredSymbol(arrow.Parent) is IMethodSymbol declared && declared.ReturnsVoid;
+        }
+
+        return false;
     }
 }

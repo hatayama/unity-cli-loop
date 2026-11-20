@@ -21,8 +21,7 @@ func runResolvedProjectCommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
-	if settingsToolName, isSettingsManaged := settingsToolNameForNativeCommand(command); isSettingsManaged &&
-		clicore.IsToolDisabledByToolSettings(settingsToolName, clicore.LoadDisabledTools(connection.ProjectRoot)) {
+	if isNativeCommandDisabled(connection, command) {
 		clierrors.WriteErrorEnvelope(stderr, nativeToolDisabledError(connection.ProjectRoot, command))
 		return 1
 	}
@@ -43,6 +42,10 @@ func runResolvedProjectCommand(
 		return runStatusCommand(ctx, connection, commandArgs, stdout, stderr)
 	case clicore.CancelCommandName:
 		return runCancelCommand(ctx, connection, commandArgs, stdout, stderr)
+	case clicore.GetDialogsCommandName:
+		return runGetDialogsCommand(ctx, connection, commandArgs, stdout, stderr)
+	case clicore.PressDialogButtonCommandName:
+		return runPressDialogButtonCommand(ctx, connection, commandArgs, stdout, stderr)
 	case pausePointEnableCommandName:
 		return runEnablePausePointCommand(ctx, connection, commandArgs, startPath, stdout, stderr)
 	case tooldocs.RecordVideoCommandName:
@@ -50,6 +53,14 @@ func runResolvedProjectCommand(
 	default:
 		return runDynamicProjectTool(ctx, connection, command, commandArgs, startPath, stdout, stderr)
 	}
+}
+
+// isNativeCommandDisabled reports whether command is a native command whose tool the project's
+// tool settings turn off.
+func isNativeCommandDisabled(connection unityipc.Connection, command string) bool {
+	settingsToolName, isSettingsManaged := settingsToolNameForNativeCommand(command)
+	return isSettingsManaged &&
+		clicore.IsToolDisabledByToolSettings(settingsToolName, clicore.LoadDisabledTools(connection.ProjectRoot))
 }
 
 func runDynamicProjectTool(

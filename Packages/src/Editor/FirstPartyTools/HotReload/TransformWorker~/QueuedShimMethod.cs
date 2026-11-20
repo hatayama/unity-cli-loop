@@ -25,6 +25,9 @@ internal sealed class QueuedShimMethod
 
     public string ShimMethodName { get; set; }
 
+    // The method name the Editor resolves the original by: the compiled metadata name.
+    public string EntryMethodName { get; set; }
+
     public ShimTypeBuilder ShimType { get; set; }
 
     public int SourceStartLine { get; set; }

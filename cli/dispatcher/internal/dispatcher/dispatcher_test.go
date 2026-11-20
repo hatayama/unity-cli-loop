@@ -71,7 +71,39 @@ func TestRunDispatcherUsesProjectPinAndCachedRealCLI(t *testing.T) {
 	if stderr.String() != "" {
 		t.Fatalf("cached CLI should not write dispatcher download status: %s", stderr.String())
 	}
-	assertStringSliceEqual(t, actualArgs, []string{"compile", "--force-recompile"})
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", canonicalDispatcherTestPath(t, projectRoot), "compile", "--force-recompile"})
+}
+
+func TestRunDispatcherForwardsProjectResolvedFromRepositoryRootToRealCLI(t *testing.T) {
+	// Verifies a command run from a repository root reaches the child Unity project and hands its
+	// root to the runner, so a runner that only searches upward still targets the same project.
+	repositoryRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repositoryRoot, ".git"), 0o755); err != nil {
+		t.Fatalf("failed to create .git: %v", err)
+	}
+	projectRoot := filepath.Join(repositoryRoot, "UnityProject")
+	createDispatcherUnityProjectAt(t, projectRoot)
+	cacheRoot := t.TempDir()
+	writeDispatcherProjectPin(t, projectRoot, clicontract.ProjectRunnerVersion())
+	writeCachedDispatcherRealCLI(t, cacheRoot, clicontract.ProjectRunnerVersion())
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	t.Setenv(dispatcherDisableSelfUpdateEnvName, "1")
+	t.Chdir(repositoryRoot)
+
+	deps := defaultDispatcherRunDeps()
+	var actualArgs []string
+	deps.runRealCLI = func(ctx context.Context, realCLIPath string, args []string, stdout io.Writer, stderr io.Writer) int {
+		actualArgs = append([]string{}, args...)
+		return 0
+	}
+
+	var stderr bytes.Buffer
+	code := runDispatcherWithDeps(context.Background(), []string{"compile"}, io.Discard, &stderr, deps)
+
+	if code != 0 {
+		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
+	}
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", canonicalDispatcherTestPath(t, projectRoot), "compile"})
 }
 
 func TestRunDispatcherPreservesExplicitProjectPathForRealCLI(t *testing.T) {
@@ -185,7 +217,7 @@ func TestRunDispatcherForwardsRunnerOwnedCommandHelpToPinnedRunner(t *testing.T)
 	if code != 0 {
 		t.Fatalf("dispatcher failed: code=%d stderr=%s", code, stderr.String())
 	}
-	assertStringSliceEqual(t, actualArgs, []string{clicore.PausePointAwaitCommandName, "--help"})
+	assertStringSliceEqual(t, actualArgs, []string{"--project-path", canonicalDispatcherTestPath(t, projectRoot), clicore.PausePointAwaitCommandName, "--help"})
 	if stdout.String() != "" {
 		t.Fatalf("dispatcher must not answer runner-owned command help locally: %s", stdout.String())
 	}
@@ -232,6 +264,7 @@ func TestRunDispatcherLaunchQuitDoesNotRequireProjectPin(t *testing.T) {
 	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
+	deps.launch.findRunningUnityProcessDefinitively = deps.launch.findRunningUnityProcess
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -254,6 +287,7 @@ func TestRunDispatcherLaunchOptionsDoNotRequireProjectPin(t *testing.T) {
 	deps.launch.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
+	deps.launch.findRunningUnityProcessDefinitively = deps.launch.findRunningUnityProcess
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -412,6 +446,7 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	handled, code := enforceDispatcherFreshness(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		"",
 		&stderr)
 
 	if !handled || code != 1 {
@@ -435,15 +470,16 @@ func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpda
 		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
 	}
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		t.Fatal("runUpdate must not run for Homebrew-managed required freshness")
-		return false, nil
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		t.Fatal("runRequiredUpdate must not run for Homebrew-managed required freshness")
+		return "", nil
 	}
 
 	var stderr bytes.Buffer
 	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		"",
 		&stderr,
 		deps)
 
@@ -469,15 +505,16 @@ func TestEnforceDispatcherFreshnessRequiresWingetUpgradeWhenWingetManagedAndUpda
 		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
 	}
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		t.Fatal("runUpdate must not run for winget-managed required freshness")
-		return false, nil
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		t.Fatal("runRequiredUpdate must not run for winget-managed required freshness")
+		return "", nil
 	}
 
 	var stderr bytes.Buffer
 	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		"",
 		&stderr,
 		deps)
 
@@ -489,255 +526,6 @@ func TestEnforceDispatcherFreshnessRequiresWingetUpgradeWhenWingetManagedAndUpda
 	}
 	if !strings.Contains(stderr.String(), "Run `winget upgrade --id hatayama.uloop` and retry the command.") {
 		t.Fatalf("expected winget NextActions guidance in stderr, got: %s", stderr.String())
-	}
-}
-
-func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenWingetManaged(t *testing.T) {
-	// Verifies winget-managed installs skip optional auto-update without running the installer.
-	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	previousResolver := resolveUpdateExecutablePathFunc
-	defer func() {
-		resolveUpdateExecutablePathFunc = previousResolver
-	}()
-	resolveUpdateExecutablePathFunc = func() (string, error) {
-		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
-	}
-	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		t.Fatal("runUpdate must not run for winget-managed optional freshness")
-		return false, nil
-	}
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 || stderr.Len() != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
-	}
-}
-
-func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenHomebrewManaged(t *testing.T) {
-	// Verifies Homebrew-managed installs skip optional auto-update without running the installer.
-	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	previousResolver := resolveUpdateExecutablePathFunc
-	defer func() {
-		resolveUpdateExecutablePathFunc = previousResolver
-	}()
-	resolveUpdateExecutablePathFunc = func() (string, error) {
-		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
-	}
-	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		t.Fatal("runUpdate must not run for Homebrew-managed optional freshness")
-		return false, nil
-	}
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("expected no optional update output for Homebrew installs, got: %s", stderr.String())
-	}
-}
-
-func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T) {
-	// Verifies transient optional update failures are throttled until the next check interval.
-	cacheRoot := t.TempDir()
-	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
-
-	deps := defaultDispatcherRunDeps()
-	runnerCalls := 0
-	deps.runUpdate = func(context.Context) (bool, error) {
-		runnerCalls++
-		return false, errors.New("network unavailable")
-	}
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
-	}
-	if !bytes.Contains(stderr.Bytes(), []byte("dispatcher self-update skipped")) {
-		t.Fatalf("freshness output mismatch: %s", stderr.String())
-	}
-	statePath := filepath.Join(cacheRoot, dispatcherUpdateStateFileName)
-	if _, err := os.Stat(statePath); err != nil {
-		t.Fatalf("expected update state after failed optional update: %v", err)
-	}
-
-	stderr.Reset()
-	handled, code = enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("second freshness result mismatch: handled=%t code=%d", handled, code)
-	}
-	if runnerCalls != 1 {
-		t.Fatalf("optional update should be throttled after failure, got %d calls", runnerCalls)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("expected no throttled optional update output, got: %s", stderr.String())
-	}
-}
-
-func TestEnforceDispatcherFreshnessReportsOptionalUpdateVersionChange(t *testing.T) {
-	// Verifies optional dispatcher self-updates tell users which dispatcher version will run next.
-	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "9.9.9")
-	defer restoreDispatcherUpdateHooks()
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
-	}
-	expected := "uloop: dispatcher updated from " + dispatcherVersion + " to 9.9.9"
-	if !bytes.Contains(stderr.Bytes(), []byte(expected)) {
-		t.Fatalf("freshness output mismatch: %s", stderr.String())
-	}
-}
-
-func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotChange(t *testing.T) {
-	// Verifies no-op optional dispatcher self-updates do not add noise before the real command output.
-	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, dispatcherVersion)
-	defer restoreDispatcherUpdateHooks()
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("expected no optional update output, got: %s", stderr.String())
-	}
-}
-
-func TestEnforceDispatcherFreshnessSkipsInstallerWhenOptionalTargetIsCurrent(t *testing.T) {
-	// Verifies an optional current target skips the installer, records the check, and continues silently.
-	cacheRoot := t.TempDir()
-	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
-	previousRunner := updateRunCommand
-	previousResolver := resolveUpdateTargetVersionFunc
-	previousExecutablePath := resolveUpdateExecutablePathFunc
-	defer func() {
-		updateRunCommand = previousRunner
-		resolveUpdateTargetVersionFunc = previousResolver
-		resolveUpdateExecutablePathFunc = previousExecutablePath
-	}()
-	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
-		t.Fatal("updateRunCommand must not run when the optional target is current")
-		return nil
-	}
-	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
-		options.TargetVersion = "v" + dispatcherVersion
-		return options, nil
-	}
-	resolveUpdateExecutablePathFunc = func() (string, error) {
-		return "/tmp/uloop", nil
-	}
-	deps := defaultDispatcherRunDeps()
-	checkedAt := time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
-	deps.now = func() time.Time {
-		return checkedAt
-	}
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("expected no optional update output, got: %s", stderr.String())
-	}
-	statePath := filepath.Join(cacheRoot, dispatcherUpdateStateFileName)
-	if _, err := os.Stat(statePath); err != nil {
-		t.Fatalf("expected update state after current optional target: %v", err)
-	}
-	if dispatcherSelfUpdateDueWithDeps(deps) {
-		t.Fatal("expected the current optional target check to reset the update interval")
-	}
-}
-
-func TestEnforceDispatcherFreshnessRunsInstallerWhenOptionalTargetIsNewer(t *testing.T) {
-	// Verifies an optional newer target still runs the installer and continues successfully.
-	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
-	previousRunner := updateRunCommand
-	previousReader := dispatcherReadInstalledVersion
-	previousResolver := resolveUpdateTargetVersionFunc
-	previousExecutablePath := resolveUpdateExecutablePathFunc
-	defer func() {
-		updateRunCommand = previousRunner
-		dispatcherReadInstalledVersion = previousReader
-		resolveUpdateTargetVersionFunc = previousResolver
-		resolveUpdateExecutablePathFunc = previousExecutablePath
-	}()
-	installerRan := false
-	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
-		installerRan = true
-		return nil
-	}
-	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
-		return "999.0.0", nil
-	}
-	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
-		options.TargetVersion = "999.0.0"
-		return options, nil
-	}
-	resolveUpdateExecutablePathFunc = func() (string, error) {
-		return "/tmp/uloop", nil
-	}
-	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(ctx context.Context) (bool, error) {
-		return runDispatcherUpdateCommandForOS(ctx, "darwin")
-	}
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
-	}
-	if !installerRan {
-		t.Fatal("expected updateRunCommand to run for a newer optional target")
 	}
 }
 
@@ -768,30 +556,23 @@ func TestRunDispatcherUpdateCommandRejectsInvalidResolvedTarget(t *testing.T) {
 				return options, nil
 			}
 
-			updated, err := runDispatcherUpdateCommandForOS(context.Background(), "darwin")
+			installed, err := runRequiredDispatcherUpdateForOS(context.Background(), dispatcherVersion, "darwin")
 
 			if err == nil || !strings.Contains(err.Error(), "expected semantic version") {
 				t.Fatalf("expected invalid resolved target error, got: %v", err)
 			}
-			if updated {
+			if installed != "" {
 				t.Fatal("invalid resolved target must not report installer execution")
 			}
 		})
 	}
 }
 
-func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *testing.T) {
-	// Verifies required freshness keeps its retry contract even if the update dependency reports no installation.
-	previousReader := dispatcherReadInstalledVersion
-	defer func() {
-		dispatcherReadInstalledVersion = previousReader
-	}()
-	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
-		return dispatcherVersion, nil
-	}
-	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		return false, nil
+func TestRequiredDispatcherFreshnessAsksForManualUpdateWhenNothingWasInstalled(t *testing.T) {
+	// Verifies a required update that installs nothing ends in the manual-update error instead of a retry request that would repeat forever.
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		return "", nil
 	}
 
 	var stderr bytes.Buffer
@@ -804,13 +585,19 @@ func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *te
 	if !handled || code != 1 {
 		t.Fatalf("required freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "Retry the same uloop command.") {
-		t.Fatalf("required freshness retry guidance missing: %s", stderr.String())
+	if strings.Contains(stderr.String(), "Retry the same uloop command.") {
+		t.Fatalf("a retry request would repeat forever: %s", stderr.String())
+	}
+	for _, expected := range []string{"The dispatcher could not be updated to 999.0.0 or later (installed: " + dispatcherVersion + ").", "Run `uloop update` and retry the command."} {
+		if !strings.Contains(stderr.String(), expected) {
+			t.Fatalf("missing %q in: %s", expected, stderr.String())
+		}
 	}
 }
 
 func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing.T) {
 	// Verifies required dispatcher self-updates include the version change before asking for a retry.
+	enableSelfUpdateForTest(t)
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
 	deps, restoreDispatcherUpdateHooks := stubDispatcherUpdateHooks(t, "999.0.0")
 	defer restoreDispatcherUpdateHooks()
@@ -819,6 +606,7 @@ func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing
 	handled, code := enforceDispatcherFreshnessWithDeps(
 		context.Background(),
 		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		"",
 		&stderr,
 		deps)
 
@@ -841,8 +629,6 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 		minimumVersion     string
 		currentVersion     string
 		selfUpdateDisabled bool
-		hasSiblingRealCLI  bool
-		updateDue          bool
 		managedInstall     update.ManagedInstall
 		expectedAction     dispatcherFreshnessAction
 		expectedReason     string
@@ -858,7 +644,6 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			minimumVersion:     "999.0.0",
 			currentVersion:     dispatcherVersion,
 			selfUpdateDisabled: true,
-			updateDue:          true,
 			expectedAction:     dispatcherFreshnessManualUpdateRequired,
 			expectedReason:     dispatcherFreshnessReasonSelfUpdateDisabled,
 			expectedNextAction: "Run `uloop update` and retry the command.",
@@ -868,7 +653,6 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			minimumVersion:     "999.0.0",
 			currentVersion:     dispatcherVersion,
 			managedInstall:     update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
-			updateDue:          true,
 			expectedAction:     dispatcherFreshnessManualUpdateRequired,
 			expectedReason:     "This uloop install is managed by Homebrew. Run `brew upgrade uloop` to update.",
 			expectedNextAction: "Run `brew upgrade uloop` and retry the command.",
@@ -878,7 +662,6 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			minimumVersion:     "999.0.0",
 			currentVersion:     dispatcherVersion,
 			managedInstall:     update.DetectManagedInstall(`C:\Program Files\WinGet\Links\uloop.exe`),
-			updateDue:          true,
 			expectedAction:     dispatcherFreshnessManualUpdateRequired,
 			expectedReason:     "This uloop install is managed by winget. Run `winget upgrade --id hatayama.uloop` to update.",
 			expectedNextAction: "Run `winget upgrade --id hatayama.uloop` and retry the command.",
@@ -890,32 +673,16 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			expectedAction: dispatcherFreshnessRunRequiredUpdate,
 		},
 		{
-			name:              "optional sibling skip",
-			minimumVersion:    dispatcherVersion,
-			currentVersion:    dispatcherVersion,
-			hasSiblingRealCLI: true,
-			updateDue:         true,
-			expectedAction:    dispatcherFreshnessNoop,
-		},
-		{
-			name:           "optional homebrew skip",
+			name:           "minimum met",
 			minimumVersion: dispatcherVersion,
 			currentVersion: dispatcherVersion,
-			managedInstall: update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
-			updateDue:      true,
 			expectedAction: dispatcherFreshnessNoop,
 		},
 		{
-			name:           "optional due",
+			name:           "minimum met while homebrew managed",
 			minimumVersion: dispatcherVersion,
 			currentVersion: dispatcherVersion,
-			updateDue:      true,
-			expectedAction: dispatcherFreshnessRunOptionalUpdate,
-		},
-		{
-			name:           "optional not due",
-			minimumVersion: dispatcherVersion,
-			currentVersion: dispatcherVersion,
+			managedInstall: update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
 			expectedAction: dispatcherFreshnessNoop,
 		},
 	}
@@ -926,8 +693,6 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 				MinimumVersion:     tt.minimumVersion,
 				CurrentVersion:     tt.currentVersion,
 				SelfUpdateDisabled: tt.selfUpdateDisabled,
-				HasSiblingRealCLI:  tt.hasSiblingRealCLI,
-				UpdateDue:          tt.updateDue,
 				ManagedInstall:     tt.managedInstall,
 			})
 
@@ -951,9 +716,9 @@ func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherR
 	t.Helper()
 	previousReader := dispatcherReadInstalledVersion
 	previousExecutablePath := resolveUpdateExecutablePathFunc
-	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		return true, nil
+	deps := runFromInstallDir(defaultDispatcherRunDeps())
+	deps.runRequiredUpdate = func(context.Context, string) (string, error) {
+		return updatedVersion, nil
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return updatedVersion, nil
@@ -1535,12 +1300,28 @@ func TestResolveDispatcherProjectRootLaunchDoesNotRequireExistingEndpointDirecto
 func createDispatcherUnityProject(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
+	createDispatcherUnityProjectAt(t, projectRoot)
+	return projectRoot
+}
+
+func createDispatcherUnityProjectAt(t *testing.T, projectRoot string) {
+	t.Helper()
 	for _, dirName := range []string{"Assets", "ProjectSettings"} {
 		if err := os.MkdirAll(filepath.Join(projectRoot, dirName), 0o755); err != nil {
 			t.Fatalf("failed to create Unity project directory: %v", err)
 		}
 	}
-	return projectRoot
+}
+
+// canonicalDispatcherTestPath returns the symlink-free form the dispatcher forwards as the project root
+// (temp directories sit behind a symlink on macOS).
+func canonicalDispatcherTestPath(t *testing.T, path string) string {
+	t.Helper()
+	canonicalPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("failed to canonicalize %s: %v", path, err)
+	}
+	return canonicalPath
 }
 
 func writeDispatcherProjectPin(t *testing.T, projectRoot string, projectRunnerVersion string) {
@@ -1714,30 +1495,5 @@ func TestDispatcherRealCLIResolutionErrorKeepsGenericGuidance(t *testing.T) {
 	}
 	if _, present := cliErr.Details["GitHubRateLimitResetAt"]; present {
 		t.Fatalf("reset detail must be absent for non-rate-limit causes")
-	}
-}
-
-// Verifies a rate-limited optional self-update adds the token hint after the skip warning.
-func TestEnforceDispatcherFreshnessRateLimitedOptionalUpdateSuggestsToken(t *testing.T) {
-	cacheRoot := t.TempDir()
-	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
-
-	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) (bool, error) {
-		return false, fmt.Errorf("list releases: %w", githubapi.RateLimitError{})
-	}
-
-	var stderr bytes.Buffer
-	handled, code := enforceDispatcherFreshnessWithDeps(
-		context.Background(),
-		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
-		&stderr,
-		deps)
-
-	if handled || code != 0 {
-		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
-	}
-	if !strings.Contains(stderr.String(), "rate limit exhausted") || !strings.Contains(stderr.String(), "GH_TOKEN") {
-		t.Fatalf("expected rate-limit warning with token hint, got: %s", stderr.String())
 	}
 }

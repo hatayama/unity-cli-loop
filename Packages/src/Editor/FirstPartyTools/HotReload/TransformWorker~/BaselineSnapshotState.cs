@@ -34,6 +34,8 @@ internal sealed class BaselineSnapshotState
 
     public Dictionary<string, ConstructorDeclarationSyntax> SnapshotConstructorMap { get; set; }
 
+    public Dictionary<string, DestructorDeclarationSyntax> SnapshotDestructorMap { get; set; }
+
     public Dictionary<string, MemberDeclarationSyntax> SnapshotOperatorMap { get; set; }
 
     public Dictionary<string, EventDeclarationSyntax> SnapshotEventMap { get; set; }
@@ -43,6 +45,8 @@ internal sealed class BaselineSnapshotState
     public Dictionary<string, IndexerDeclarationSyntax> PlainCurrentIndexerMap { get; set; }
 
     public Dictionary<string, ConstructorDeclarationSyntax> PlainCurrentConstructorMap { get; set; }
+
+    public Dictionary<string, DestructorDeclarationSyntax> PlainCurrentDestructorMap { get; set; }
 
     public Dictionary<string, MemberDeclarationSyntax> PlainCurrentOperatorMap { get; set; }
 
@@ -65,23 +69,27 @@ internal sealed class BaselineSnapshotState
 
     public (
         Dictionary<string, ConstructorDeclarationSyntax> SnapshotConstructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> SnapshotDestructorMap,
         Dictionary<string, MemberDeclarationSyntax> SnapshotOperatorMap,
         Dictionary<string, EventDeclarationSyntax> SnapshotEventMap,
         Dictionary<string, ConstructorDeclarationSyntax> PlainCurrentConstructorMap,
+        Dictionary<string, DestructorDeclarationSyntax> PlainCurrentDestructorMap,
         Dictionary<string, MemberDeclarationSyntax> PlainCurrentOperatorMap,
         Dictionary<string, EventDeclarationSyntax> PlainCurrentEventMap)
         GetUnsupportedMemberBaselineMaps()
     {
         if (!HasBaseline)
         {
-            return (null, null, null, null, null, null);
+            return (null, null, null, null, null, null, null, null);
         }
 
         return (
             SnapshotConstructorMap,
+            SnapshotDestructorMap,
             SnapshotOperatorMap,
             SnapshotEventMap,
             PlainCurrentConstructorMap,
+            PlainCurrentDestructorMap,
             PlainCurrentOperatorMap,
             PlainCurrentEventMap);
     }

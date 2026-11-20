@@ -1,5 +1,192 @@
 # Changelog
 
+## [3.34.6](https://github.com/hatayama/unity-cli-loop/compare/v3.34.5...v3.34.6) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body that uses an internal getter, setter or init accessor of a property in a file the reload was not given instead of failing at run time ([#3579](https://github.com/hatayama/unity-cli-loop/issues/3579)) ([ceed5d5](https://github.com/hatayama/unity-cli-loop/commit/ceed5d5685a6b00999d6b1d12307e6a9ff76bd28))
+
+## [3.34.5](https://github.com/hatayama/unity-cli-loop/compare/v3.34.4...v3.34.5) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose interpolated string handler calls an internal member when the project declares the handler attribute in a file the reload was not given ([#3575](https://github.com/hatayama/unity-cli-loop/issues/3575)) ([b751192](https://github.com/hatayama/unity-cli-loop/commit/b751192fb20a7432c1c446eb914183ae1a66ef35))
+
+## [3.34.4](https://github.com/hatayama/unity-cli-loop/compare/v3.34.3...v3.34.4) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload no longer reports Patched for a lambda or async body that passes a Span or Memory to an internal member and then fails at run time ([#3568](https://github.com/hatayama/unity-cli-loop/issues/3568)) ([051bb5c](https://github.com/hatayama/unity-cli-loop/commit/051bb5c2d6d45e7b565406cb6ab9a2e1eafa3f5a))
+
+## [3.34.3](https://github.com/hatayama/unity-cli-loop/compare/v3.34.2...v3.34.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body that reaches an internal member of an unpassed file through an interpolated string handler, index or range, await using or await foreach awaiter, or generic extension method ([#3566](https://github.com/hatayama/unity-cli-loop/issues/3566)) ([4d3fd0b](https://github.com/hatayama/unity-cli-loop/commit/4d3fd0b966d483504f51ecae11ba8893041d21dd))
+
+## [3.34.2](https://github.com/hatayama/unity-cli-loop/compare/v3.34.1...v3.34.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips an edited member that needs unsafe code instead of failing the whole file ([#3564](https://github.com/hatayama/unity-cli-loop/issues/3564)) ([04508b9](https://github.com/hatayama/unity-cli-loop/commit/04508b96a2c0bc4ae6e0980f8ecd6d73d7f395fb))
+
+## [3.34.1](https://github.com/hatayama/unity-cli-loop/compare/v3.34.0...v3.34.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose interpolated string handler, index or range, or await using and await foreach awaiter calls an internal member instead of failing at run time ([#3565](https://github.com/hatayama/unity-cli-loop/issues/3565)) ([43043e5](https://github.com/hatayama/unity-cli-loop/commit/43043e5389fe5a50258551f45d5166da806adde6))
+
+## [3.34.0](https://github.com/hatayama/unity-cli-loop/compare/v3.33.0...v3.34.0) (2026-11-17)
+
+
+### Features
+
+* uloop launch works on projects whose Unity package is older than the CLI's IPC protocol ([#3558](https://github.com/hatayama/unity-cli-loop/issues/3558)) ([41750fd](https://github.com/hatayama/unity-cli-loop/commit/41750fd9ea1ec0a3e51461c66d2e489992c8b3ec))
+
+## [3.33.0](https://github.com/hatayama/unity-cli-loop/compare/v3.32.0...v3.33.0) (2026-11-16)
+
+
+### Features
+
+* uloop launch presses Ignore on Unity's "Enter Safe Mode?" prompt ([#3551](https://github.com/hatayama/unity-cli-loop/issues/3551)) ([be86be7](https://github.com/hatayama/unity-cli-loop/commit/be86be7fdf79cff73204ec4484e10844dfc530eb))
+
+## [3.32.0](https://github.com/hatayama/unity-cli-loop/compare/v3.31.0...v3.32.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies a lambda or async body that calls an internal extension method of a public class ([#3539](https://github.com/hatayama/unity-cli-loop/issues/3539)) ([6e8cb10](https://github.com/hatayama/unity-cli-loop/commit/6e8cb1063ce3ded8588221da219bf207a974d7a3))
+
+## [3.31.0](https://github.com/hatayama/unity-cli-loop/compare/v3.30.1...v3.31.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to init accessor bodies ([#3536](https://github.com/hatayama/unity-cli-loop/issues/3536)) ([b3e3ab8](https://github.com/hatayama/unity-cli-loop/commit/b3e3ab848c619994f8930af9d71ae49961698b89))
+
+## [3.30.1](https://github.com/hatayama/unity-cli-loop/compare/v3.30.0...v3.30.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose await, foreach, deconstruction, collection initializer, or query calls an internal method instead of failing at run time ([#3532](https://github.com/hatayama/unity-cli-loop/issues/3532)) ([1e9c70a](https://github.com/hatayama/unity-cli-loop/commit/1e9c70a26ab83f0d24daea85a8db350a82652e4f))
+
+## [3.30.0](https://github.com/hatayama/unity-cli-loop/compare/v3.29.0...v3.30.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to explicit interface property accessors ([#3535](https://github.com/hatayama/unity-cli-loop/issues/3535)) ([9d9349c](https://github.com/hatayama/unity-cli-loop/commit/9d9349c1114567a53feab6cea303ce4e3ef05ba2))
+
+## [3.29.0](https://github.com/hatayama/unity-cli-loop/compare/v3.28.2...v3.29.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to indexer accessor bodies ([#3528](https://github.com/hatayama/unity-cli-loop/issues/3528)) ([8bf68fe](https://github.com/hatayama/unity-cli-loop/commit/8bf68fe37ac853fe709550dd6ea3b0e51325bb73))
+
+## [3.28.2](https://github.com/hatayama/unity-cli-loop/compare/v3.28.1...v3.28.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload no longer treats a partial type's method as added when the type's other parts were not scanned ([#3530](https://github.com/hatayama/unity-cli-loop/issues/3530)) ([3d13da8](https://github.com/hatayama/unity-cli-loop/commit/3d13da81ff529f395b95b91ee6b08e6b0a1aa19c))
+
+## [3.28.1](https://github.com/hatayama/unity-cli-loop/compare/v3.28.0...v3.28.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload no longer applies a lambda that calls an extension method of an internal class declared in the edited file and then fails at run time ([#3525](https://github.com/hatayama/unity-cli-loop/issues/3525)) ([006e867](https://github.com/hatayama/unity-cli-loop/commit/006e867741bce5224c7aa367f23d4b0021543161))
+
+## [3.28.0](https://github.com/hatayama/unity-cli-loop/compare/v3.27.2...v3.28.0) (2026-11-16)
+
+
+### Features
+
+* Hot reload now applies edits to explicit interface method implementations ([#3526](https://github.com/hatayama/unity-cli-loop/issues/3526)) ([c6cb90f](https://github.com/hatayama/unity-cli-loop/commit/c6cb90f09e3950782a52b4ea7e3da69ad8d257b5))
+
+## [3.27.2](https://github.com/hatayama/unity-cli-loop/compare/v3.27.1...v3.27.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda that reaches an internal member of a struct instead of failing the whole file ([#3521](https://github.com/hatayama/unity-cli-loop/issues/3521)) ([158b4e4](https://github.com/hatayama/unity-cli-loop/commit/158b4e44fc1598e03b4ea1e25a2ca05b60108aa7))
+
+## [3.27.1](https://github.com/hatayama/unity-cli-loop/compare/v3.27.0...v3.27.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* Hot reload no longer suggests a lambda wrapper for an internal extension method group, which is skipped as well ([#3522](https://github.com/hatayama/unity-cli-loop/issues/3522)) ([8fd9198](https://github.com/hatayama/unity-cli-loop/commit/8fd91985ce644de6a78db18559f8e865773b4287))
+
+## [3.27.0](https://github.com/hatayama/unity-cli-loop/compare/v3.26.1...v3.27.0) (2026-11-15)
+
+
+### Features
+
+* Hot reload now applies methods that call a base method ([#3510](https://github.com/hatayama/unity-cli-loop/issues/3510)) ([8c105db](https://github.com/hatayama/unity-cli-loop/commit/8c105dbfb9a81547610bb3ac88d53cadcac25efa))
+
+## [3.26.1](https://github.com/hatayama/unity-cli-loop/compare/v3.26.0...v3.26.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* Hot reload applies a method that uses a nested type as a generic type argument ([#3518](https://github.com/hatayama/unity-cli-loop/issues/3518)) ([fd785c2](https://github.com/hatayama/unity-cli-loop/commit/fd785c2fbd553a5f9424bbe37a840413263dbf45))
+
+## [3.26.0](https://github.com/hatayama/unity-cli-loop/compare/v3.25.0...v3.26.0) (2026-11-15)
+
+
+### Features
+
+* Hot reload now applies edits to property setter bodies ([#3511](https://github.com/hatayama/unity-cli-loop/issues/3511)) ([115896c](https://github.com/hatayama/unity-cli-loop/commit/115896cd00d982c2e8b61fbce8a4e3bee6c243d4))
+
+## [3.25.0](https://github.com/hatayama/unity-cli-loop/compare/v3.24.3...v3.25.0) (2026-11-15)
+
+
+### Features
+
+* Hot reload now applies a lambda whose whole body assigns a private property ([#3514](https://github.com/hatayama/unity-cli-loop/issues/3514)) ([81c4c9a](https://github.com/hatayama/unity-cli-loop/commit/81c4c9a796da2f6db4ee649f1769568e8c81a300))
+
+## [3.24.3](https://github.com/hatayama/unity-cli-loop/compare/v3.24.2...v3.24.3) (2026-11-15)
+
+
+### Bug Fixes
+
+* Hot reload no longer applies a lambda that calls an internal extension method and then fails at run time ([#3512](https://github.com/hatayama/unity-cli-loop/issues/3512)) ([82f04a7](https://github.com/hatayama/unity-cli-loop/commit/82f04a7e0be74b558feecea50cfce370ce093892))
+
+## [3.24.2](https://github.com/hatayama/unity-cli-loop/compare/v3.24.1...v3.24.2) (2026-11-15)
+
+
+### Bug Fixes
+
+* A pause point on a hot-reloaded method no longer arms the patched method declared just above it ([#3508](https://github.com/hatayama/unity-cli-loop/issues/3508)) ([31b7b1e](https://github.com/hatayama/unity-cli-loop/commit/31b7b1e1bcf9cd9f808ecfeedcb6d89cdaad1b74))
+* Hot reload reports an edited finalizer as Skipped instead of saying nothing ([#3506](https://github.com/hatayama/unity-cli-loop/issues/3506)) ([908feac](https://github.com/hatayama/unity-cli-loop/commit/908feac36ae0ddceaea5dc2a8d7f9d91c71f24c4))
+
+## [3.24.1](https://github.com/hatayama/unity-cli-loop/compare/v3.24.0...v3.24.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* a command sent just after a dialog opens now reports it in seconds instead of after 30 ([#3502](https://github.com/hatayama/unity-cli-loop/issues/3502)) ([eff8585](https://github.com/hatayama/unity-cli-loop/commit/eff8585e7c18a6aba5ff1c0b7a28b5a3ca78fd01))
+* A pause-point wait behind a dialog now says its --trigger was not sent or not run, and to keep it ([#3505](https://github.com/hatayama/unity-cli-loop/issues/3505)) ([5670873](https://github.com/hatayama/unity-cli-loop/commit/567087364d40b61bb0528f646527f7241a6000e0))
+* on macOS, a command sent just after a dialog opens now reports it in 3 to 4 seconds instead of 5 to 6 ([#3504](https://github.com/hatayama/unity-cli-loop/issues/3504)) ([a543208](https://github.com/hatayama/unity-cli-loop/commit/a5432080fc4c3cb6421a9c3bec9ebf7f923ba213))
+* on Windows, a message box from another thread no longer blocks commands, and a dialog hidden by minimizing Unity is still found ([#3498](https://github.com/hatayama/unity-cli-loop/issues/3498)) ([aafca78](https://github.com/hatayama/unity-cli-loop/commit/aafca78269e3e1460fc9880e263ea95172b0f69e))
+* uloop launch marks the Editors it starts with -launchedByUloop instead of passing -ignorecompilererrors ([#3503](https://github.com/hatayama/unity-cli-loop/issues/3503)) ([691d33f](https://github.com/hatayama/unity-cli-loop/commit/691d33f18bee6220e232fb33b2db20257148156c))
+
+## [3.24.0](https://github.com/hatayama/unity-cli-loop/compare/v3.23.1...v3.24.0) (2026-11-13)
+
+
+### Features
+
+* uloop status reports the dialog that blocks Unity, and uloop press-dialog-button presses one of its buttons ([#3470](https://github.com/hatayama/unity-cli-loop/issues/3470)) ([1a6e99a](https://github.com/hatayama/unity-cli-loop/commit/1a6e99a4b0158571f92298c09baaab55a837095b))
+
 ## [3.23.1](https://github.com/hatayama/unity-cli-loop/compare/v3.23.0...v3.23.1) (2026-11-08)
 
 

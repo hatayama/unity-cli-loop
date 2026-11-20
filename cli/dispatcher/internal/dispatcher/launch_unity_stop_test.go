@@ -160,6 +160,7 @@ func TestRunLaunchQuitReportsAnEditorThatQuitOnItsOwn(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -187,6 +188,7 @@ func TestRunLaunchQuitReportsAForceKilledEditor(t *testing.T) {
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 333}, nil
 	}
+	deps.findRunningUnityProcessDefinitively = deps.findRunningUnityProcess
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -214,7 +216,7 @@ func TestRunLaunchRestartReportsHowThePreviousEditorStopped(t *testing.T) {
 	fakeUnityPath := fakeUnityExecutablePath(t)
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityPath, nil }
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return nil }
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error { return nil }
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error { return nil }
 	deps.focusUnityProcess = func(context.Context, int) error { return nil }
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
