@@ -188,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private static JsonRpcRequestProcessor CreateProcessor(UnityCliLoopToolRegistrarService service)
         {
-            UnityCliLoopExecutionRouter executionRouter = new(service, new EditorExecutionActivity(new InertProcessActivityApi()));
+            UnityCliLoopExecutionRouter executionRouter = new(service, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker());
             return new JsonRpcRequestProcessor(executionRouter);
         }
 

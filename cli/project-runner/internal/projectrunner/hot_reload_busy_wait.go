@@ -116,8 +116,8 @@ type hotReloadBusyWait struct {
 	resendCorrelationIDs []string
 }
 
-// waitForBusyEditor polls the Editor status until it is ready, the budget runs out, or ctx is
-// cancelled. While a cancelled execute-dynamic-code request holds the Editor, it also sends the
+// waitForBusyEditor polls the Editor status until it is ready, the budget runs out, the Editor
+// reports a modal dialog, or ctx is cancelled. While a cancelled execute-dynamic-code request holds the Editor, it also sends the
 // request again every busyResendInterval: the Editor takes such a request's slot back only when a
 // tool request arrives, never on a status answer, so status polling alone would wait the whole
 // budget for a slot the first attempt already started to free.
@@ -135,6 +135,7 @@ func waitForBusyEditor(
 	// The first attempt counts: its arrival started the Editor's grace period for the slot.
 	lastResend := startedAt
 	wait := hotReloadBusyWait{}
+	dialogWatch := newHotReloadDialogWatch(connection, options)
 	for {
 		status, probeErr := probeHotReloadEditorStatus(ctx, connection, options.probeTimeout)
 		answered := probeErr == nil
@@ -145,6 +146,11 @@ func waitForBusyEditor(
 		if answered && classifyEditorState(status) == statusStateReady {
 			wait.waited, wait.ready = time.Since(startedAt), true
 			return wait, nil
+		}
+		// Why before the resend: a request sent while a dialog holds the Editor cannot run either.
+		if dialogErr := dialogWatch.hotReloadBlock(ctx, status, answered); dialogErr != nil {
+			wait.waited = time.Since(startedAt)
+			return wait, dialogErr
 		}
 		if answered && isHeldByExecuteDynamicCode(status) && time.Since(lastResend) >= options.busyResendInterval {
 			answer, outcome, err := sendPlainTool(ctx, connection, hotReloadCommandName, params, stderr, deps)

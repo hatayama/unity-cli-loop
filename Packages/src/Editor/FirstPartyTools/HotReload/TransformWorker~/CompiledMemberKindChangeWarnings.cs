@@ -128,8 +128,12 @@ internal static class CompiledMemberKindChangeWarnings
         // Why still check IsImplicitlyDeclared: source-compiled symbols can be implicit.
         // Metadata symbols from the PE almost always report false, so this is best-effort
         // and does not filter compiler-generated members out of the compiled assembly.
+        // Why parameters as well as IsIndexer: metadata reports an explicit interface indexer
+        // implementation as an ordinary property named after the interface, and the source has no
+        // property by that name, so it would be reported as removed on every edit of the file.
         if (compiledMember is IPropertySymbol property
             && !property.IsIndexer
+            && property.Parameters.Length == 0
             && !property.IsImplicitlyDeclared
             && !SourceDeclaresProperty(sourceType, property.Name))
         {

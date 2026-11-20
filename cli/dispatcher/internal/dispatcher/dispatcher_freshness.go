@@ -3,7 +3,6 @@ package dispatcher
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,14 +11,15 @@ import (
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
-	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
-func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, stderr io.Writer) (bool, int) {
-	return enforceDispatcherFreshnessWithDeps(ctx, pin, stderr, defaultDispatcherRunDeps())
+// enforceDispatcherFreshness enforces the pin's minimumDispatcherVersion floor. The periodic
+// update to the newest release lives in runPeriodicDispatcherSelfUpdate; this path only ever
+// runs the required update.
+func enforceDispatcherFreshness(ctx context.Context, pin dispatcherPin, installedVersion string, stderr io.Writer) (bool, int) {
+	return enforceDispatcherFreshnessWithDeps(ctx, pin, installedVersion, stderr, defaultDispatcherRunDeps())
 }
 
 type dispatcherFreshnessAction string
@@ -28,16 +28,15 @@ const (
 	dispatcherFreshnessNoop                 dispatcherFreshnessAction = "noop"
 	dispatcherFreshnessManualUpdateRequired dispatcherFreshnessAction = "manual-update-required"
 	dispatcherFreshnessRunRequiredUpdate    dispatcherFreshnessAction = "run-required-update"
-	dispatcherFreshnessRunOptionalUpdate    dispatcherFreshnessAction = "run-optional-update"
 )
 
 type dispatcherFreshnessInputs struct {
 	MinimumVersion     string
 	CurrentVersion     string
 	SelfUpdateDisabled bool
-	HasSiblingRealCLI  bool
-	UpdateDue          bool
 	ManagedInstall     sharedupdate.ManagedInstall
+	VersionHeld        bool
+	HeldVersion        string
 }
 
 type dispatcherFreshnessPlan struct {
@@ -51,28 +50,26 @@ const (
 	dispatcherFreshnessReasonSelfUpdateDisabled = "Automatic update is disabled."
 )
 
-func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
-	minimumVersion := strings.TrimSpace(pin.MinimumDispatcherVersion)
-	selfUpdateDisabled := dispatcherSelfUpdateDisabled()
-	updateRequired := minimumVersion != "" && sharedversion.IsLessThan(dispatcherVersion, minimumVersion)
-	hasSiblingRealCLI := false
-	if minimumVersion != "" && !updateRequired {
-		if _, ok := dispatcherSiblingRealCLIPath(pin); ok {
-			hasSiblingRealCLI = true
-		}
-	}
-	updateDue := false
-	if minimumVersion != "" && !updateRequired && !hasSiblingRealCLI && !selfUpdateDisabled {
-		updateDue = dispatcherSelfUpdateDueWithDeps(deps)
-	}
+// enforceDispatcherFreshnessWithDeps returns handled=true when the command must stop because the
+// running dispatcher is below the pin's floor. installedVersion is the release the periodic
+// update installed earlier in this process ("" when it installed nothing).
+func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, installedVersion string, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
+	versionHeld, heldVersion := readDispatcherVersionHold()
 	plan := decideDispatcherFreshness(dispatcherFreshnessInputs{
-		MinimumVersion:     minimumVersion,
+		MinimumVersion:     pin.MinimumDispatcherVersion,
 		CurrentVersion:     dispatcherVersion,
-		SelfUpdateDisabled: selfUpdateDisabled,
-		HasSiblingRealCLI:  hasSiblingRealCLI,
-		UpdateDue:          updateDue,
+		SelfUpdateDisabled: dispatcherSelfUpdateDisabled(),
 		ManagedInstall:     detectManagedDispatcherInstall(),
+		VersionHeld:        versionHeld,
+		HeldVersion:        heldVersion,
 	})
+	// Why not install again: the periodic update already put a release that meets the floor in
+	// place, and comparing against the embedded version would download and reinstall it. A
+	// periodic install below the floor still runs the required update, which installs the floor.
+	if plan.Action == dispatcherFreshnessRunRequiredUpdate && dispatcherVersionMeetsMinimum(installedVersion, plan.MinimumVersion) {
+		writeDispatcherSelfUpdateRequiredError(stderr, installedVersion)
+		return true, 1
+	}
 	return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 }
 
@@ -89,11 +86,10 @@ func detectManagedDispatcherInstall() sharedupdate.ManagedInstall {
 
 func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFreshnessPlan {
 	minimumVersion := strings.TrimSpace(inputs.MinimumVersion)
-	if minimumVersion == "" {
-		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop}
+	if minimumVersion == "" || !sharedversion.IsLessThan(inputs.CurrentVersion, minimumVersion) {
+		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop, MinimumVersion: minimumVersion}
 	}
-	updateRequired := sharedversion.IsLessThan(inputs.CurrentVersion, minimumVersion)
-	if updateRequired && inputs.ManagedInstall.IsManaged() {
+	if inputs.ManagedInstall.IsManaged() {
 		return dispatcherFreshnessPlan{
 			Action:         dispatcherFreshnessManualUpdateRequired,
 			MinimumVersion: minimumVersion,
@@ -101,7 +97,7 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 			NextAction:     "Run `" + inputs.ManagedInstall.UpgradeCommand + "` and retry the command.",
 		}
 	}
-	if updateRequired && inputs.SelfUpdateDisabled {
+	if inputs.SelfUpdateDisabled {
 		return dispatcherFreshnessPlan{
 			Action:         dispatcherFreshnessManualUpdateRequired,
 			MinimumVersion: minimumVersion,
@@ -109,13 +105,20 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 			NextAction:     "Run `uloop update` and retry the command.",
 		}
 	}
-	if updateRequired {
-		return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
+	if inputs.VersionHeld {
+		return versionHeldFreshnessPlan(minimumVersion, inputs.HeldVersion)
 	}
-	if inputs.ManagedInstall.IsManaged() || inputs.HasSiblingRealCLI || !inputs.UpdateDue {
-		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop, MinimumVersion: minimumVersion}
+	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
+}
+
+// versionHeldFreshnessPlan asks for a manual update because a version hold pauses automatic updates.
+func versionHeldFreshnessPlan(minimumVersion string, heldVersion string) dispatcherFreshnessPlan {
+	return dispatcherFreshnessPlan{
+		Action:         dispatcherFreshnessManualUpdateRequired,
+		MinimumVersion: minimumVersion,
+		Reason:         "This uloop is held at " + heldVersion + " by `uloop update --to-version`.",
+		NextAction:     "Run `uloop update` to resume automatic updates, then retry the command.",
 	}
-	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunOptionalUpdate, MinimumVersion: minimumVersion}
 }
 
 func managedInstallFreshnessReason(managedInstall sharedupdate.ManagedInstall) string {
@@ -129,7 +132,7 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 	case dispatcherFreshnessManualUpdateRequired:
 		writeDispatcherManualUpdateRequiredError(stderr, plan)
 		return true, 1
-	case dispatcherFreshnessRunRequiredUpdate, dispatcherFreshnessRunOptionalUpdate:
+	case dispatcherFreshnessRunRequiredUpdate:
 		return runDispatcherFreshnessUpdate(ctx, plan, stderr, deps)
 	default:
 		clierrors.WriteErrorEnvelope(stderr, clierrors.InternalCLIError(
@@ -141,39 +144,88 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 }
 
 func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
-	updated, err := deps.runUpdate(ctx)
-	if err == nil {
-		markDispatcherSelfUpdateCheckedWithDeps(deps)
-		if plan.Action == dispatcherFreshnessRunRequiredUpdate {
-			updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
-			writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
-			return true, 1
-		}
-		if !updated {
-			return false, 0
-		}
-		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
-		writeOptionalDispatcherUpdateCompletion(stderr, dispatcherVersion, updatedVersion)
-		return false, 0
+	// Why stop before installing: the installer writes into the install directory, so a dispatcher
+	// running from elsewhere would still be below the floor on the retry and install forever.
+	if outsidePlan, outside := requiredUpdateOutsideInstallDirPlan(plan, deps); outside {
+		return executeDispatcherFreshnessPlan(ctx, outsidePlan, stderr, deps)
 	}
-
-	if plan.Action == dispatcherFreshnessRunRequiredUpdate {
+	release, lockResult := acquireDispatcherUpdateLockInCache(deps)
+	if lockResult == dispatcherUpdateLockHeld {
+		writeDispatcherUpdateInProgressError(stderr, plan)
+		return true, 1
+	}
+	// Why an unavailable lock still updates: a cache that cannot be written must not stop the
+	// required update, which is the only way past the pin's floor.
+	defer release()
+	// Why read the hold again under the lock: `uloop update --to-version` may have recorded one
+	// after the plan was made, and the hold takes precedence over the required update.
+	if held, heldVersion := readDispatcherVersionHold(); held {
+		return executeDispatcherFreshnessPlan(ctx, versionHeldFreshnessPlan(plan.MinimumVersion, heldVersion), stderr, deps)
+	}
+	installedVersion, err := deps.runRequiredUpdate(ctx, plan.MinimumVersion)
+	if err != nil {
 		plan.Action = dispatcherFreshnessManualUpdateRequired
 		plan.Reason = "Automatic update failed: " + err.Error()
 		plan.NextAction = "Run `uloop update` and retry the command."
 		return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 	}
-
-	// Why: optional update failures should not retry and redraw installer progress on every command.
-	markDispatcherSelfUpdateCheckedWithDeps(deps)
-	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
-	var rateLimit githubapi.RateLimitError
-	if errors.As(err, &rateLimit) {
-		for _, action := range rateLimit.NextActions() {
-			clicore.WriteFormat(stderr, "warning: %s\n", action)
-		}
+	// Why not ask for a retry here: the retried command would run this same update again and end
+	// in the same place, so the user would be told to retry forever.
+	if !dispatcherVersionMeetsMinimum(installedVersion, plan.MinimumVersion) {
+		plan.Action = dispatcherFreshnessManualUpdateRequired
+		plan.Reason = "The dispatcher could not be updated to " + plan.MinimumVersion + " or later (installed: " + installedVersionOrRunning(installedVersion) + ")."
+		plan.NextAction = "Run `uloop update` and retry the command."
+		return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 	}
-	return false, 0
+	markDispatcherSelfUpdateCheckedWithDeps(deps)
+	writeDispatcherSelfUpdateRequiredError(stderr, installedVersion)
+	return true, 1
+}
+
+// requiredUpdateOutsideInstallDirPlan asks for a manual update when the running dispatcher is not
+// the one the installer replaces. When either location cannot be resolved it reports false, so an
+// unknown location never blocks the required update, the only way past the pin's floor.
+func requiredUpdateOutsideInstallDirPlan(plan dispatcherFreshnessPlan, deps dispatcherRunDeps) (dispatcherFreshnessPlan, bool) {
+	executablePath, installDir, err := deps.resolveSelfUpdateLocation()
+	if err != nil || strings.TrimSpace(executablePath) == "" || strings.TrimSpace(installDir) == "" {
+		return plan, false
+	}
+	if isRunningFromInstallDir(executablePath, installDir, runtime.GOOS) {
+		return plan, false
+	}
+	plan.Action = dispatcherFreshnessManualUpdateRequired
+	plan.Reason = "This uloop runs from " + filepath.Dir(executablePath) + ", but `uloop update` installs into " + installDir + "."
+	plan.NextAction = "Update the uloop at " + executablePath + " the way you installed it, or remove it so the one in " +
+		installDir + " is found first, then retry the command."
+	return plan, true
+}
+
+// dispatcherVersionMeetsMinimum reports whether an installed version ("" when nothing was
+// installed) satisfies the pin's floor.
+func dispatcherVersionMeetsMinimum(installedVersion string, minimumVersion string) bool {
+	return installedVersion != "" && !sharedversion.IsLessThan(installedVersion, minimumVersion)
+}
+
+func installedVersionOrRunning(installedVersion string) string {
+	if installedVersion == "" {
+		return dispatcherVersion
+	}
+	return installedVersion
+}
+
+func writeDispatcherUpdateInProgressError(stderr io.Writer, plan dispatcherFreshnessPlan) {
+	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
+		ErrorCode:   clierrors.ErrorCodeCLIUpdateRequired,
+		Phase:       clierrors.ErrorPhaseExecution,
+		Message:     "Another uloop command is updating the dispatcher. Retry the same command when it finishes.",
+		Retryable:   true,
+		SafeToRetry: true,
+		NextActions: []string{"Retry the same uloop command when the other uloop command finishes."},
+		Details: map[string]any{
+			"CurrentDispatcherVersion": dispatcherVersion,
+			"MinimumDispatcherVersion": plan.MinimumVersion,
+		},
+	})
 }
 
 func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion string) {
@@ -236,45 +288,18 @@ func dispatcherSelfUpdateDueWithDeps(deps dispatcherRunDeps) bool {
 	return deps.now().Sub(state.LastChecked) >= dispatcherSelfUpdateInterval
 }
 
-func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) {
+// markDispatcherSelfUpdateCheckedWithDeps records the check time and reports whether it was written.
+func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) bool {
 	cacheRoot, err := dispatcherCacheRoot(runtime.GOOS)
 	if err != nil {
-		return
+		return false
 	}
 	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
-		return
+		return false
 	}
 	content, err := json.Marshal(dispatcherUpdateState{LastChecked: deps.now().UTC()})
 	if err != nil {
-		return
+		return false
 	}
-	_ = os.WriteFile(filepath.Join(cacheRoot, dispatcherUpdateStateFileName), content, 0o644)
-}
-
-func runDispatcherUpdateCommand(ctx context.Context) (bool, error) {
-	return runDispatcherUpdateCommandForOS(ctx, runtime.GOOS)
-}
-
-func runDispatcherUpdateCommandForOS(ctx context.Context, goos string) (bool, error) {
-	resolved, err := resolveUpdateTargetVersionFunc(ctx, sharedupdate.Options{
-		CurrentVersion: dispatcherVersion,
-	})
-	if err != nil {
-		return false, err
-	}
-	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolved.TargetVersion)
-	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
-		return false, err
-	}
-	if !targetChanged {
-		return false, nil
-	}
-	command, err := sharedupdate.CommandForOS(goos, resolved)
-	if err != nil {
-		return false, err
-	}
-	if err := updateRunCommand(ctx, command, io.Discard, io.Discard); err != nil {
-		return false, err
-	}
-	return true, nil
+	return os.WriteFile(filepath.Join(cacheRoot, dispatcherUpdateStateFileName), content, 0o644) == nil
 }

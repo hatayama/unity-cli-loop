@@ -126,6 +126,7 @@ func TestWaitForRunTestsResultReturnsStoredResult(t *testing.T) {
 		time.Second,
 		5*time.Millisecond,
 		query,
+		dialogWatchDeps{},
 	)
 	if err != nil {
 		t.Fatalf("waitForRunTestsResult failed: %v", err)
@@ -155,6 +156,7 @@ func TestWaitForRunTestsResultTimesOutWithoutResult(t *testing.T) {
 		20*time.Millisecond,
 		5*time.Millisecond,
 		query,
+		dialogWatchDeps{},
 	)
 	if err != nil {
 		t.Fatalf("waitForRunTestsResult failed: %v", err)
@@ -183,6 +185,7 @@ func TestWaitForRunTestsResultReturnsContextError(t *testing.T) {
 		time.Second,
 		time.Second,
 		query,
+		dialogWatchDeps{},
 	)
 	if err == nil {
 		t.Fatal("waitForRunTestsResult should return the cancellation error")
@@ -394,7 +397,7 @@ func TestFinishRunTestsRecoveredResultReportsFailures(t *testing.T) {
 				spinner,
 				time.Now(),
 				unityipc.UnitySendOutcome{},
-				noResult,
+				runTestsWaitDeps{query: noResult},
 			)
 
 			if execution.exitCode != 1 || len(execution.result) != 0 {

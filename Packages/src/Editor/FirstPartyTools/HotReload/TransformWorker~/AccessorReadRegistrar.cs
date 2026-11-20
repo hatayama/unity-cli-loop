@@ -17,7 +17,7 @@ internal static class AccessorReadRegistrar
         rejectReason = null;
         if (symbol is IFieldSymbol fieldSymbol)
         {
-            return TryRegisterFieldRead(fieldSymbol, plan);
+            return TryRegisterFieldRead(fieldSymbol, plan, out rejectReason);
         }
 
         if (symbol is IPropertySymbol propertySymbol)
@@ -27,7 +27,7 @@ internal static class AccessorReadRegistrar
 
         if (symbol is IEventSymbol eventSymbol)
         {
-            return TryRegisterEventRead(eventSymbol, plan, addedMemberAccess);
+            return TryRegisterEventRead(eventSymbol, plan, addedMemberAccess, out rejectReason);
         }
 
         if (symbol is IMethodSymbol methodSymbol
@@ -56,6 +56,20 @@ internal static class AccessorReadRegistrar
     // and on the right of '+=' a lambda could no longer be removed by a compiled '-='.
     private static WorkerReason DescribeMethodGroupReject(IMethodSymbol methodSymbol, SyntaxKind handlerAssignmentKind)
     {
+        // Why no lambda example: the method-group reasons suggest a lambda that calls the method,
+        // but a call to an extension method whose class is not public is refused as well, so that
+        // advice would lead to another skip.
+        if (AccessibilityRules.UnreducedMethod(methodSymbol).IsExtensionMethod)
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape);
+        }
+
+        // Why the struct reason: a lambda calling an instance method of a struct is refused too.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(methodSymbol))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+        }
+
         if (handlerAssignmentKind == SyntaxKind.SubtractAssignmentExpression)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorMethodGroupUnsubscribeNoShape, methodSymbol.Name);
@@ -67,8 +81,9 @@ internal static class AccessorReadRegistrar
         return WorkerReason.Of(code, methodSymbol.Name, MethodGroupLambdaExample.BuildSuffix(methodSymbol));
     }
 
-    private static bool TryRegisterFieldRead(IFieldSymbol fieldSymbol, AccessorPlan plan)
+    private static bool TryRegisterFieldRead(IFieldSymbol fieldSymbol, AccessorPlan plan, out WorkerReason rejectReason)
     {
+        rejectReason = null;
         if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             return false;
@@ -79,6 +94,12 @@ internal static class AccessorReadRegistrar
             return true;
         }
 
+        if (AccessibilityRules.NeedsStructInstanceReceiver(fieldSymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+            return false;
+        }
+
         plan.GetOrAddField(fieldSymbol);
         return true;
     }
@@ -86,12 +107,22 @@ internal static class AccessorReadRegistrar
     private static bool TryRegisterEventRead(
         IEventSymbol eventSymbol,
         AccessorPlan plan,
-        AddedMemberAccessLookup addedMemberAccess)
+        AddedMemberAccessLookup addedMemberAccess,
+        out WorkerReason rejectReason)
     {
+        rejectReason = null;
         // An added event the store keeps has no backing field to reach; its reads become
         // store calls any assembly can compile.
         if (addedMemberAccess != null && addedMemberAccess.IsStoreBackedEvent(eventSymbol))
         {
+            return false;
+        }
+
+        // Why: only code inside the struct's text (a nested class) can read its event as a
+        // field, and the backing field of a struct instance has no field ref to bind.
+        if (AccessibilityRules.NeedsStructInstanceReceiver(eventSymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
             return false;
         }
 
@@ -139,6 +170,12 @@ internal static class AccessorReadRegistrar
         {
             rejectReason =
                 WorkerReason.Of(HotReloadWorkerReasonCode.AccessorRefReturningPropertyNoShape);
+            return false;
+        }
+
+        if (AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol))
+        {
+            rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
             return false;
         }
 

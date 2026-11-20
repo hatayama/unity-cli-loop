@@ -81,7 +81,7 @@ func tryHandleLaunchRequestWithDeps(
 func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions, error) {
 	options := launchOptions{
 		projectPath: globalProjectPath,
-		maxDepth:    defaultProjectSearchDepth,
+		maxDepth:    project.DefaultProjectSearchDepth,
 	}
 
 	for index := 0; index < len(args); index++ {
@@ -172,22 +172,39 @@ func findLaunchRunningProcess(
 	stderr io.Writer,
 	deps launchDeps,
 ) (*unityprocess.UnityProcess, bool, int) {
-	runningProcess, err := deps.findRunningUnityProcess(ctx, projectRoot)
+	runningProcess, err := launchRunningProcessLookup(options, deps)(ctx, projectRoot)
 	if err == nil {
 		return runningProcess, false, 0
 	}
 	// Sandboxes can block the process scan (e.g. /bin/ps). A responding project IPC
 	// proves Unity is running, so plain launch must not fail on the scan alone.
 	// Restart and quit still fail because they need a process id to kill.
-	if !options.restart && !options.quit && deps.probeProjectIpcFallback(ctx, projectRoot) == nil {
-		if options.logFile != "" {
-			clierrors.WriteClassifiedError(stderr, launchLogFileNeedsProcessScanError(options.logFile, err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
-			return nil, true, 1
+	if !options.restart && !options.quit {
+		if answers, readiness := probeProjectIpcAnswers(ctx, projectRoot, deps); answers {
+			if options.logFile != "" {
+				clierrors.WriteClassifiedError(stderr, launchLogFileNeedsProcessScanError(options.logFile, err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+				return nil, true, 1
+			}
+			return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err, readiness)
 		}
-		return nil, true, writeDetectionFallbackLaunchReadyResponse(stdout, stderr, projectRoot, err)
 	}
-	clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
+	clierrors.WriteClassifiedError(stderr, launchStopLookupError(err), clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 	return nil, true, 1
+}
+
+// launchRunningProcessLookup picks the lookup that decides whether this project's Editor runs. Quit uses the
+// definitive one, because reading "no Editor" while one may be this project's would report a quit that stopped
+// nothing, and no one could notice. Plain launch and restart keep the ordinary one: when the unidentified Editor
+// is this project's, Unity itself refuses to open the project a second time, while failing whenever an unrelated
+// Editor's project is unknown would make them unusable beside it.
+func launchRunningProcessLookup(
+	options launchOptions,
+	deps launchDeps,
+) func(context.Context, string) (*unityprocess.UnityProcess, error) {
+	if options.quit {
+		return deps.findRunningUnityProcessDefinitively
+	}
+	return deps.findRunningUnityProcess
 }
 
 func handleExistingLaunchProcess(
@@ -225,29 +242,18 @@ func handleExistingLaunchProcess(
 	return stopMethod, false, 0
 }
 
-func launchEditorVersionRequiresRestartError(editorVersion string) error {
-	return &clierrors.ArgumentError{
-		Message:  "--editor-version requires --restart when Unity is already running for this project.",
-		Option:   "--editor-version",
-		Received: editorVersion,
-		Command:  clicore.LaunchCommandName,
-		NextActions: []string{
-			fmt.Sprintf("Run `uloop launch --restart --editor-version %s` to relaunch Unity with the requested Editor version.", editorVersion),
-		},
-	}
-}
-
 func waitForExistingLaunchReadiness(ctx context.Context, projectRoot string, pid int, stdout io.Writer, stderr io.Writer, deps launchDeps) int {
 	logLaunchExistingFocusWithDeps(ctx, projectRoot, pid, deps)
 	spinner := ui.NewLaunchSpinner(stdout, stderr)
 	defer spinner.Stop()
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, false, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
 	spinner.Stop()
-	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid)
+	return writeExistingLaunchReadyResponse(stdout, stderr, projectRoot, pid, readiness)
 }
 
 func startUnityAndWaitForReadiness(
@@ -309,7 +315,7 @@ func startUnityAndWaitForReadiness(
 		return 1
 	}
 	if isV2 {
-		return waitForV2ProjectOpened(ctx, projectRoot, runningProcess, previousStop, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
+		return waitForV2ProjectOpened(ctx, projectRoot, options.restart, runningProcess, previousStop, currentPid, stdout, stderr, launchStartedAt, previousV2ServerSessionID, spinner, deps)
 	}
 	if err := deps.waitForUnityStartupMarker(ctx, unityLockfilePath(projectRoot), launchLockfilePoll, launchLockfileTimeout); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
@@ -317,7 +323,8 @@ func startUnityAndWaitForReadiness(
 	}
 	logLaunchFreshFocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
-	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
+	readiness, err := waitForLaunchReadinessWithDeps(ctx, projectRoot, options.restart, deps)
+	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
@@ -326,8 +333,13 @@ func startUnityAndWaitForReadiness(
 	if runningProcess != nil {
 		previousPid = &runningProcess.Pid
 	}
-	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid)
+	return writeLaunchedReadyResponse(stdout, stderr, projectRoot, previousPid, previousStop, currentPid, readiness)
 }
+
+// uloopLaunchMarkerArg tells an Editor started by uloop launch apart from one started by
+// Unity Hub or by hand when several Unity processes are running. Unity ignores arguments it
+// does not know, so the marker only shows up in the process command line and Editor.log.
+const uloopLaunchMarkerArg = "-launchedByUloop"
 
 func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 	launchArgs := []string{"-projectPath", projectRoot}
@@ -337,7 +349,7 @@ func buildUnityLaunchArgs(projectRoot string, options launchOptions) []string {
 	if options.logFile != "" {
 		launchArgs = append(launchArgs, "-logFile", options.logFile)
 	}
-	launchArgs = append(launchArgs, "-ignorecompilererrors")
+	launchArgs = append(launchArgs, uloopLaunchMarkerArg)
 	return launchArgs
 }
 

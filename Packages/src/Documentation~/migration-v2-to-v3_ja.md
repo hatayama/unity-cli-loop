@@ -38,7 +38,7 @@
 
 誤ってSafe Modeに入ってしまっても、やり直せます。Safe Modeではパッケージのコードが動かないため、移行状態は何も記録されていません。Unityを再起動して `Ignore` を選べば、以下のとおりウィザードが開きます。
 
-CLIから起動してもこのダイアログは回避できません。`uloop launch` でも同じダイアログが出ます。Unityの仕様上、`-ignorecompilererrors` はGUIモードではこのダイアログを抑止しないためです。
+CLIから起動してもこのダイアログは回避できません。`uloop launch` でも同じダイアログが出ます。Unityの `-ignorecompilererrors` はGUIモードではこのダイアログを抑止しないため、`uloop launch` はこの引数を渡しません。
 
 ## Step 2: Migrateを押す
 

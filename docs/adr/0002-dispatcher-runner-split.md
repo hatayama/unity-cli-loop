@@ -84,8 +84,8 @@ heavier contract than the current one.
 
 ### The dispatcher's cost is deliberately small
 
-The dispatcher's responsibilities are pin resolution, runner download, and self-update via
-the pin's `minimumDispatcherVersion` floor (see `docs/project-runner-pin.md`). Keeping it
+The dispatcher's responsibilities are pin resolution, runner download, and a periodic
+self-update to the newest release, plus the pin's `minimumDispatcherVersion` floor (see `docs/project-runner-pin.md`). Keeping it
 thin keeps global-install churn low; the price of the second binary is the pin machinery,
 which is already built and documented.
 

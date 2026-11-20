@@ -94,6 +94,21 @@ type waitForPausePointOptions struct {
 	// first status query, and a real hit can race into that window on continuous/trace markers.
 	// Baselining that hit would demand a later sequence that never comes (continuous pauses on hit).
 	markerJustEnabled bool
+
+	// expiryExtensionUnanswered is set by await-pause-point when Unity did not answer the expiry
+	// extension it sends first, so the wait looks for a dialog before it queries anything else.
+	expiryExtensionUnanswered bool
+
+	// dialogWatch ends the wait when its polls go unanswered because a modal dialog holds Unity.
+	dialogWatch dialogWatchDeps
+}
+
+// commandName is the command whose wait this is, as the user typed it.
+func (options waitForPausePointOptions) commandName() string {
+	if options.markerJustEnabled {
+		return pausePointEnableCommandName
+	}
+	return clicore.PausePointAwaitCommandName
 }
 
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
@@ -195,7 +210,7 @@ func runWaitForPausePointCommand(
 	}
 	options.startPath = startPath
 
-	extendPausePointExpiryBeforeWait(ctx, connection, options, stderr)
+	options.expiryExtensionUnanswered = extendPausePointExpiryBeforeWait(ctx, connection, options, stderr)
 	announceAwaitPausePointWaitStart(stderr, options.id, options.timeoutSeconds)
 
 	return runWaitForPausePoint(ctx, connection, options, stdout, stderr)
@@ -206,18 +221,21 @@ func runWaitForPausePointCommand(
 // observe a hit, since the marker's countdown starts at enable time, not at await time. Best
 // effort: an older Unity package without this bridge command, or a transient IPC failure, must
 // not fail the whole await-pause-point call over a lifetime extension it can still work without.
+// It returns whether the extension failed without an answer from Unity.
 func extendPausePointExpiryBeforeWait(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 	stderr io.Writer,
-) {
-	if _, err := extendPausePointExpiry(ctx, connection, options.id, options.timeoutSeconds); err != nil {
+) bool {
+	_, err := extendPausePointExpiry(ctx, connection, options.id, options.timeoutSeconds)
+	if err != nil {
 		_, _ = fmt.Fprintf(
 			stderr,
 			"warning: could not extend pause point %q expiry before waiting: %v\n",
 			options.id, err)
 	}
+	return pausePointArmQueryWentUnanswered(err)
 }
 
 func runPausePointStatusCommand(
@@ -385,6 +403,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		timeout:               time.Duration(pausePointDefaultTimeoutSeconds) * time.Second,
 		matchingLogsMaxCount:  pausePointDefaultLogsMaxCount,
 		capturedVariablesMode: pausePointCapturedVariablesModeFull,
+		dialogWatch:           defaultDialogWatchDeps(),
 	}
 
 	for index := 0; index < len(args); index++ {

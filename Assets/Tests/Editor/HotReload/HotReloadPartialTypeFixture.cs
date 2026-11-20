@@ -12,6 +12,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private int _ownSeed = 2;
 
+        // A field whose type only the other part declares; unbound when that part is not scanned.
+        public OtherPartNested OtherPartTypedField;
+
+        // The same, under an escaped identifier, whose syntax text differs from its symbol name.
+        public OtherPartNested @event;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int OwnOnly()
         {

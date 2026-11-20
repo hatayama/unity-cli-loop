@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     /// <summary>
     /// Routes JSON-RPC execution requests received by JsonRpcRequestProcessor to either the
     /// internal bridge command router or the registered tools in the Application layer.
-    /// get-editor-status and cancel-running-tool are answered here, off the main thread and outside
+    /// get-editor-status, cancel-running-tool, and report-blocking-dialog are answered here, off the main thread and outside
     /// the activity hold, because they must answer while a tool blocks the Editor main thread.
     /// Terminology for "tool" vs "internal bridge command" is defined in docs/glossary.md.
     /// </summary>
@@ -22,18 +22,30 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly EditorExecutionActivity _executionActivity;
+        private readonly EditorDialogTracker _dialogTracker;
+        // Why read here: the router is built once when the server starts, and get-editor-status must
+        // stay cheap because it answers while the main thread is blocked.
+        private readonly int _editorProcessId;
 
         internal UnityCliLoopExecutionRouter(
             UnityCliLoopToolRegistrarService toolRegistrarService,
-            EditorExecutionActivity executionActivity)
+            EditorExecutionActivity executionActivity,
+            EditorDialogTracker dialogTracker)
         {
             System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             System.Diagnostics.Debug.Assert(executionActivity != null, "executionActivity must not be null");
+            System.Diagnostics.Debug.Assert(dialogTracker != null, "dialogTracker must not be null");
 
             _toolRegistrarService = toolRegistrarService
                 ?? throw new ArgumentNullException(nameof(toolRegistrarService));
             _executionActivity = executionActivity
                 ?? throw new ArgumentNullException(nameof(executionActivity));
+            _dialogTracker = dialogTracker
+                ?? throw new ArgumentNullException(nameof(dialogTracker));
+            using (System.Diagnostics.Process editorProcess = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                _editorProcessId = editorProcess.Id;
+            }
         }
 
         /// <summary>
@@ -60,7 +72,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 EditorApplicationTickBridge.SignalTick();
                 return EditorStatusBridgeCommand.Execute(
                     _toolRegistrarService,
-                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick());
+                    EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
+                    _dialogTracker.GetOpenDialogs(),
+                    _editorProcessId);
             }
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_CANCEL_RUNNING_TOOL)
@@ -71,9 +85,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return CancelRunningToolBridgeCommand.Execute(_toolRegistrarService);
             }
 
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG)
+            {
+                // Why before the main-thread switch below: the report is about a main thread a dialog
+                // holds, so it must be taken without waiting for it.
+                ct.ThrowIfCancellationRequested();
+                return ReportBlockingDialogBridgeCommand.Execute(_toolRegistrarService, paramsToken);
+            }
+
             // Why hold an activity for the length of the request: macOS throttles an Editor that is not
             // frontmost, and a request that arrives while it is throttled is served several times slower.
-            // Why not around the status and cancel answers above: those paths must stay free of anything
+            // Why not around the status, cancel, and dialog-report answers above: those paths must stay free of anything
             // that can block or fail, because they answer while the main thread is stuck.
             using (_executionActivity.Hold())
             {

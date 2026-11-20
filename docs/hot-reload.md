@@ -396,6 +396,31 @@ what the measurements say would have to be built.
 - Not covered: play-mode behaviour is a single manual measurement, not a regression test. If
   this becomes a feature it needs a play-mode test of its own.
 
+### S8 — non-virtual base calls from a transpiled body
+
+Test file: `HotReloadSpikeS8BaseCallRedirectTests.cs` (measured on Unity 2022.3.62f3).
+
+What the spike **proved**: a body emitted by a Harmony transpiler can call an overridden
+virtual base method non-virtually with `OpCodes.Call`, running the base body instead of
+re-entering the override, in five shapes:
+
+- `Transpiler_NonVirtualCallToOverriddenBaseMethod_RunsTheBaseBody` — a base method in the
+  same assembly, called from the override itself, without infinite recursion.
+- `Transpiler_NonVirtualCallToProtectedBaseMethod_RunsTheBaseBody` — a protected base method.
+- `Transpiler_NonVirtualCallToOtherAssemblyBaseMethod_RunsTheBaseBody` — a base method declared
+  in another assembly (`System.Object.ToString`).
+- `Transpiler_NonVirtualCallOnGenericBaseType_RunsTheBaseBody` — a method of a constructed
+  generic base type.
+- `Transpiler_OperandSwapOnDonorIl_RunsTheBaseBody` — the IL of a separate static method,
+  transplanted with only the operand of its `call` to a stand-in swapped for the base method.
+
+**Where production uses it.** The worker rewrites `base.M(args)` in a shim into a call to a
+stand-in static method on the shim type, and the transplant transpiler swaps each stand-in
+`call` operand for the real base method before returning the IL (opcode left as `Call`).
+This works only for transplanted IL. A delegating shim, and the closures, async state machines,
+and iterators of any shim, keep their IL in the shim assembly, where a stand-in call is never
+swapped; base calls there stay `Skipped`.
+
 ## Mechanism Decision
 
 **Transplant-primary.** Stage (5) applies a Harmony transpiler per patched method that
@@ -474,8 +499,8 @@ Wire details:
   plan, which lets a closure or async body of an `internal` class apply when that is all it
   reaches.
 - Still skipped in v2: bodies using internal types as types (above), private accesses with no
-  accessor-delegate shape (conditional access, indexers, static field writes, and the other
-  condition-b cases in the skill), and event add/remove on inaccessible events.
+  accessor-delegate shape (conditional access, indexers, and the other condition-b cases in
+  the skill), and event add/remove on inaccessible events.
 
 ## Convergence and Lifecycle
 

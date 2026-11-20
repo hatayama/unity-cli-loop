@@ -90,7 +90,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Editor/FirstPartyTools/HotReload/Shared/HotReloadIntroducedTypeFingerprint.cs",
             "Editor/FirstPartyTools/HotReload/Shared/HotReloadWorkerReasonCode.cs",
             "Editor/FirstPartyTools/HotReload/Shared/HotReloadNotForwardedUnityMessageNames.cs",
-            "Editor/FirstPartyTools/HotReload/Shared/HotReloadSourcePathMatching.cs"
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadSourcePathMatching.cs",
+            "Editor/FirstPartyTools/HotReload/Shared/HotReloadBaseCallStandInNames.cs"
         };
 
         public const string WorkerDllFileName = "worker.dll";

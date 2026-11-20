@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -440,10 +441,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a method containing base. is reported as Skipped with an explanatory reason.
+        /// What: a method whose own statements call a base method is Patched, and the patched body
+        /// runs the base implementation.
         /// </summary>
         [Test]
-        public async Task Run_MethodWithBaseCall_IsSkippedWithReason()
+        public async Task Run_MethodWithBaseCall_IsPatched()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -460,19 +462,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.CallsBase));
 
-            bool found = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsBase))
-                    && outcome.Reason.Contains("base"))
-                {
-                    found = true;
-                }
-            }
-
-            Assert.That(found, Is.True, "Expected CallsBase to be Skipped for base. usage.");
+            // Why reflection: the fixture method has no NoInlining, and a direct call compiled into
+            // this test before the apply could inline the old body.
+            MethodInfo callsBase = typeof(HotReloadE2EFixture).GetMethod(nameof(HotReloadE2EFixture.CallsBase));
+            Assert.That(
+                callsBase.Invoke(new HotReloadE2EFixture(), null),
+                Is.EqualTo(1 + 2),
+                "The patched body must run the base BaseSeed and the edited literal.");
         }
 
         /// <summary>
@@ -558,11 +556,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: property getters with bodies are Patched; property setters and indexer getters
-        /// with bodies stay Skipped with the accessor reason; auto-property accessors stay unlisted.
+        /// What: property getters and setters with bodies and an edited expression-bodied indexer
+        /// getter are Patched; auto-property accessors stay unlisted.
         /// </summary>
         [Test]
-        public async Task Run_PropertyGettersPatched_SetterAndIndexerAccessorsSkipped()
+        public async Task Run_PropertyGettersSettersAndIndexerGetterPatched()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
@@ -580,7 +578,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "            get { return _secret + 1; }\n"
                     + "        }\n"
                     + "\n"
-                    + "        // Explicit-body setter — worker must report set_ExplicitBodySetter as Skipped.\n"
+                    + "        // Explicit-body setter — worker must patch set_ExplicitBodySetter.\n"
                     + "        public int ExplicitBodySetter\n"
                     + "        {\n"
                     + "            set { _secret = value + 1; }\n"
@@ -597,9 +595,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
 
-            const string expectedReason =
-                "Property setter, init, or indexer accessors are skipped; "
-                + "run 'uloop compile' to apply accessor edits.";
             bool foundPropertyGetterPatched = false;
             bool foundIndexerGetter = false;
             bool foundPropertySetter = false;
@@ -612,14 +607,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     foundPropertyGetterPatched = true;
                 }
 
-                bool skippedWithAccessorReason = outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Reason == expectedReason;
-                if (skippedWithAccessorReason && outcome.Method.Contains("get_Item"))
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("get_Item"))
                 {
                     foundIndexerGetter = true;
                 }
 
-                if (skippedWithAccessorReason && outcome.Method.Contains("set_ExplicitBodySetter"))
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    && outcome.Method.Contains("set_ExplicitBodySetter"))
                 {
                     foundPropertySetter = true;
                 }
@@ -637,11 +632,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 foundIndexerGetter,
                 Is.True,
-                "Expected the expression-bodied indexer getter (get_Item) to be Skipped with the accessor out-of-scope reason.");
+                "Expected the edited expression-bodied indexer getter (get_Item) to be Patched; got: " + FormatOutcomes(result));
             Assert.That(
                 foundPropertySetter,
                 Is.True,
-                "Expected the explicit-body setter (set_ExplicitBodySetter) to be Skipped with the accessor out-of-scope reason.");
+                "Expected the explicit-body setter (set_ExplicitBodySetter) to be Patched; got: " + FormatOutcomes(result));
             Assert.That(
                 foundAutoPropertyAccessor,
                 Is.False,
@@ -672,7 +667,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
 
             const string expectedReason =
-                "Constructors, operators, and event accessors are skipped; "
+                "Constructors, finalizers, operators, and event accessors are skipped; "
                 + "run 'uloop compile' to apply these edits.";
             AssertHasSkipped(result, ".ctor()", expectedReason);
 
@@ -781,6 +776,233 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadPropertyGetterFixture.HeightAmplitude,
                 Is.EqualTo(5f),
                 "RevertAll must restore the compiled getter body.");
+        }
+
+        /// <summary>
+        /// What: editing an interface default property getter patches it; a read through the
+        /// interface on a class that does not override the property returns the edited value,
+        /// and RevertAll restores the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInterfaceDefaultPropertyGetter_ApplyAndRevert_UpdatesRuntimeValue()
+        {
+            string fixturePath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "            get { return 805; }",
+                "            get { return 806; }",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: getter body must differ.");
+            string editedPath = WriteEditedSource("InterfaceDefaultGetter.cs", editedSource);
+            IHotReloadInterfaceDefaultGetterFixture instance = new HotReloadInterfaceDefaultGetterImplementer();
+
+            Assert.That(instance.DefaultValue, Is.EqualTo(805));
+
+            HotReloadOrchestratorResult patched = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "get_DefaultValue");
+            Assert.That(instance.DefaultValue, Is.EqualTo(806), "Patched interface getter must return the edited literal.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(
+                instance.DefaultValue,
+                Is.EqualTo(805),
+                "RevertAll must restore the compiled interface getter body.");
+        }
+
+        /// <summary>
+        /// What: editing a compiled property's setter body patches the next assignment, --status
+        /// lists the Active set_ row with its parameter type, and RevertAll restores the compiled
+        /// setter body.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedPropertySetter_ApplyStatusRevert_UpdatesRuntimeBehavior()
+        {
+            HotReloadPropertySetterFixture before = new HotReloadPropertySetterFixture();
+            before.Stored = 1;
+            Assert.That(before.Stored, Is.EqualTo(1002));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterStored.cs",
+                "value + 1001",
+                "value + 1002");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_Stored");
+            HotReloadPropertySetterFixture after = new HotReloadPropertySetterFixture();
+            after.Stored = 1;
+            Assert.That(after.Stored, Is.EqualTo(1003), "Patched setter must run the edited body.");
+
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                CancellationToken.None);
+            HotReloadResponse status = baseResponse as HotReloadResponse;
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Success, Is.True);
+            bool foundActiveSetter = false;
+            foreach (HotReloadMethodResult method in status.Methods)
+            {
+                if (method.Kind == "Active" && method.Method.Contains("set_Stored(System.Int32)"))
+                {
+                    foundActiveSetter = true;
+                }
+            }
+
+            Assert.That(foundActiveSetter, Is.True, "Status must list the Active set_Stored(System.Int32) row.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            HotReloadPropertySetterFixture reverted = new HotReloadPropertySetterFixture();
+            reverted.Stored = 1;
+            Assert.That(reverted.Stored, Is.EqualTo(1002), "RevertAll must restore the compiled setter body.");
+        }
+
+        /// <summary>
+        /// What: after a setter patch, applying the source restored to the baseline records the
+        /// setter as unchanged, which removes its patch and runs the compiled body again.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedSetterRestoredToBaseline_RevertsThePatch()
+        {
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterRestored.cs",
+                "value + 1001",
+                "value + 1002");
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_Stored");
+
+            string fixturePath = ResolveSetterFixturePath();
+            string restoredPath = WriteEditedSource("PropertySetterRestored.cs", File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult restored = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                restoredPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(restored);
+            HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
+            fixture.Stored = 1;
+            Assert.That(fixture.Stored, Is.EqualTo(1002), "A setter restored to the baseline must run the compiled body.");
+            foreach (HotReloadActivePatchInfo active in HotReloadCompositionRoot.Services.Patcher.DescribeActivePatches())
+            {
+                Assert.That(active.MethodKey, Does.Not.Contain("set_Stored("), "The restored setter must have no active patch.");
+            }
+        }
+
+        /// <summary>
+        /// What: an edited setter whose lambda reads a private field is accessor-rewritten and
+        /// patched, so the next assignment runs the edited body.
+        /// </summary>
+        [Test]
+        public async Task Run_SetterWithLambdaPrivateAccess_AccessorizesAndPatches()
+        {
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterLambdaStored.cs",
+                "_stored + 6006",
+                "_stored + 6106");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_LambdaStored");
+            HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
+            fixture.LambdaStored = 1;
+            Assert.That(fixture.LambdaStored, Is.EqualTo(6107), "Patched setter must run the edited lambda.");
+        }
+
+        /// <summary>
+        /// What: a bodied property of a nested enum type added in the reload is emitted with the
+        /// type qualified in both shim signatures, so both accessors are reported Added instead of
+        /// failing the shim compile with CS0246.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedNestedTypeBodiedProperty_AccessorsApply()
+        {
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertyAddedNestedType.cs",
+                "        public Mode NestedMode\n",
+                "        public Mode AddedNestedMode\n        {\n            get { return (Mode)(LastNested % 2); }\n            set { LastNested = (int)value + 1818; }\n        }\n\n        public Mode NestedMode\n");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasAdded(patched, "get_AddedNestedMode");
+            AssertHasAdded(patched, "set_AddedNestedMode");
+        }
+
+        /// <summary>
+        /// What: editing the getter of a property typed as a nested enum patches it (the shim names
+        /// the type qualified), the read returns the edited value, and RevertAll restores it.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedNestedTypePropertyGetter_ApplyAndRevert_UpdatesRuntimeValue()
+        {
+            HotReloadPropertySetterNestedTypeFixture fixture = new HotReloadPropertySetterNestedTypeFixture();
+            HotReloadPropertySetterNestedTypeFixture.LastNested = 4;
+            Assert.That(fixture.NestedMode, Is.EqualTo(HotReloadPropertySetterNestedTypeFixture.Mode.On));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertyNestedTypeGetter.cs",
+                "(Mode)(LastNested % 3)",
+                "(Mode)(LastNested % 2)");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "get_NestedMode");
+            Assert.That(fixture.NestedMode, Is.EqualTo(HotReloadPropertySetterNestedTypeFixture.Mode.Off));
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(fixture.NestedMode, Is.EqualTo(HotReloadPropertySetterNestedTypeFixture.Mode.On));
+        }
+
+        /// <summary>
+        /// What: editing the setter of a property typed as a nested enum patches it (the shim's
+        /// value parameter names the type qualified), and RevertAll restores the compiled setter.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedNestedTypePropertySetter_ApplyAndRevert_UpdatesRuntimeBehavior()
+        {
+            HotReloadPropertySetterNestedTypeFixture fixture = new HotReloadPropertySetterNestedTypeFixture();
+            fixture.NestedMode = HotReloadPropertySetterNestedTypeFixture.Mode.On;
+            Assert.That(HotReloadPropertySetterNestedTypeFixture.LastNested, Is.EqualTo(1617));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertyNestedTypeSetter.cs",
+                "(int)value + 1616;",
+                "(int)value + 1626;");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_NestedMode");
+            fixture.NestedMode = HotReloadPropertySetterNestedTypeFixture.Mode.On;
+            Assert.That(HotReloadPropertySetterNestedTypeFixture.LastNested, Is.EqualTo(1627));
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            fixture.NestedMode = HotReloadPropertySetterNestedTypeFixture.Mode.On;
+            Assert.That(HotReloadPropertySetterNestedTypeFixture.LastNested, Is.EqualTo(1617));
+        }
+
+        /// <summary>
+        /// What: editing an interface default property setter patches assignments made through the
+        /// interface, and RevertAll restores the compiled default setter.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInterfaceDefaultPropertySetter_ApplyAndRevert_UpdatesRuntimeBehavior()
+        {
+            IHotReloadPropertySetterInterfaceFixture target = new HotReloadPropertySetterInterfaceImpl();
+            target.Sink = 1;
+            Assert.That(HotReloadPropertySetterInterfaceSink.Last, Is.EqualTo(8009));
+
+            HotReloadOrchestratorResult patched = await ApplyEditedSetterFixtureAsync(
+                "PropertySetterInterfaceSink.cs",
+                "value + 8008",
+                "value + 8009");
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, "set_Sink");
+            target.Sink = 1;
+            Assert.That(HotReloadPropertySetterInterfaceSink.Last, Is.EqualTo(8010), "Patched default setter must run the edited body.");
+
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            target.Sink = 1;
+            Assert.That(HotReloadPropertySetterInterfaceSink.Last, Is.EqualTo(8009), "RevertAll must restore the compiled default setter.");
         }
 
         /// <summary>
@@ -2662,7 +2884,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
             string skippedMixSource = BuildFixtureSource(
                 computeWithPrivateMethod:
-                "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }",
+                "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            System.Func<int> viaLambda = () => base.BaseSeed();\n"
+                + "            return viaLambda() + delta;\n        }",
                 sumGridMethod:
                 "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
             string firstPath = WriteEditedSource("SkippedMixThenIdentical1.cs", firstSource);
@@ -2681,7 +2905,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedMixPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             AssertHasPatched(second, nameof(HotReloadE2EFixture.SumGrid));
             AssertNoAlreadyActive(second);
 
@@ -2690,7 +2914,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedMixPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(third);
-            AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             AssertHasPatched(third, nameof(HotReloadE2EFixture.SumGrid));
             AssertNoAlreadyActive(third);
             AssertHasUnchangedSourceNonBaselineWarning(third);
@@ -2708,14 +2932,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "AllSkippedThenIdenticalReload.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
+                    "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            System.Func<int> viaLambda = () => base.BaseSeed();\n"
+                + "            return viaLambda() + delta;\n        }"));
 
             HotReloadOrchestratorResult first = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(first);
-            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             Assert.That(first.PatchedTotal, Is.EqualTo(0));
             AssertNoUnchangedSourceNonBaselineWarning(first);
 
@@ -2724,7 +2950,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
             AssertNoAlreadyActive(second);
             AssertHasUnchangedSourceNonBaselineWarning(second);
         }
@@ -2741,7 +2967,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "NonBaselineThenChanged1.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
-                    "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
+                    "public int ComputeWithPrivate(int delta)\n        {\n"
+                + "            System.Func<int> viaLambda = () => base.BaseSeed();\n"
+                + "            return viaLambda() + delta;\n        }"));
             string changedPath = WriteEditedSource(
                 "NonBaselineThenChanged2.cs",
                 BuildFixtureSource(
@@ -2753,7 +2981,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedPath,
                 CancellationToken.None);
             AssertNoFileLevelFailure(first);
-            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "Calls a base method from a lambda");
 
             HotReloadOrchestratorResult second = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
@@ -5925,13 +6153,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(first);
             AssertHasPatched(first, nameof(HotReloadSignatureChangeExternalHost.Target));
 
-            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
-            // sees this writer as skipped while the first run's patch stays what runs.
+            // Why base.GetHashCode() inside a lambda: a base call inside a lambda is a worker-side
+            // skip, so the worker itself sees this writer as skipped while the first run's patch
+            // stays what runs.
             string secondEdit = onDisk
                 .Replace(
                     targetOriginal,
                     "        public int Target(int value)\n        {\n            AddedCount = value;\n"
-                    + "            return value + base.GetHashCode() * 0;\n        }",
+                    + "            System.Func<int> viaLambda = () => base.GetHashCode();\n"
+                    + "            return value + viaLambda() * 0;\n        }",
                     StringComparison.Ordinal)
                 .Replace(unrelatedOriginal, readingUnrelated, StringComparison.Ordinal);
 
@@ -6041,13 +6271,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(first);
             AssertHasPatched(first, writerName);
 
-            // Why base.GetHashCode(): a base call is a worker-side skip, so the worker itself
-            // sees this writer as skipped while the first run's patch stays what runs.
+            // Why base.GetHashCode() inside a lambda: a base call inside a lambda is a worker-side
+            // skip, so the worker itself sees this writer as skipped while the first run's patch
+            // stays what runs.
             string secondEdit = onDisk
                 .Replace(
                     writerOriginal,
                     writerHeader + "            AddedCount = " + writerResult + ";\n"
-                    + "            return " + writerResult + " + base.GetHashCode() * 0;\n        }",
+                    + "            System.Func<int> viaLambda = () => base.GetHashCode();\n"
+                    + "            return " + writerResult + " + viaLambda() * 0;\n        }",
                     StringComparison.Ordinal)
                 .Replace(readOriginal, readingRead, StringComparison.Ordinal);
 
@@ -8865,6 +9097,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Path.GetFullPath(path);
         }
 
+        private static string ResolveSetterFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadPropertySetterFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Setter fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        /// <summary>
+        /// Applies the setter fixture with one unique fragment replaced, through the orchestrator.
+        /// </summary>
+        private static async Task<HotReloadOrchestratorResult> ApplyEditedSetterFixtureAsync(
+            string fileName,
+            string fragment,
+            string replacement)
+        {
+            string fixturePath = ResolveSetterFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            Assert.That(
+                onDisk.IndexOf(fragment, StringComparison.Ordinal),
+                Is.EqualTo(onDisk.LastIndexOf(fragment, StringComparison.Ordinal)).And.GreaterThanOrEqualTo(0),
+                "Precondition: the fixture must hold " + fragment + " exactly once.");
+            string editedPath = WriteEditedSource(fileName, onDisk.Replace(fragment, replacement, StringComparison.Ordinal));
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+        }
+
         private static string ResolveShapeFixturePath()
         {
             string path = Path.Combine(
@@ -9072,12 +9337,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Precondition: compiled sibling const declaration must still be on disk.");
             EditorApplication.LockReloadAssemblies();
+            FileRestoreScope restore = new FileRestoreScope(new[] { path });
             File.WriteAllText(
                 path,
                 original.Replace(
                     compiledDeclaration,
                     "public const int SiblingTuning = " + newValue + ";"));
-            return new FileRestoreScope(new[] { path }, new[] { original });
+            return restore;
         }
 
         private static IDisposable MutateSiblingDefinitionsToAddConst()
@@ -9090,12 +9356,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Precondition: compiled sibling const declaration must still be on disk.");
             EditorApplication.LockReloadAssemblies();
+            FileRestoreScope restore = new FileRestoreScope(new[] { path });
             File.WriteAllText(
                 path,
                 original.Replace(
                     compiledDeclaration,
                     compiledDeclaration + "\n        public const int AddedSiblingTuning = 9;"));
-            return new FileRestoreScope(new[] { path }, new[] { original });
+            return restore;
         }
 
         private static string ResolveSiblingEnumDefinitionsPath()
@@ -9138,15 +9405,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Precondition: compiled sibling enum fixtures must still be on disk.");
             EditorApplication.LockReloadAssemblies();
+            FileRestoreScope restore = new FileRestoreScope(new[] { definitionsPath, userPath });
             File.WriteAllText(
                 definitionsPath,
                 originalDefinitions.Replace(compiledMember, compiledMember + ",\n        Third = 3"));
             File.WriteAllText(
                 userPath,
                 originalUser.Replace(compiledUse, "(int)HotReloadSiblingEnum.Third"));
-            return new FileRestoreScope(
-                new[] { definitionsPath, userPath },
-                new[] { originalDefinitions, originalUser });
+            return restore;
+        }
+
+        /// <summary>
+        /// What: touching a fixture file and disposing the restore scope leaves its bytes exactly as
+        /// they were, including a UTF-8 BOM and CRLF line endings.
+        /// </summary>
+        [Test]
+        public void TouchFilesWithTrailingComment_OnBomCrlfFile_RestoresOriginalBytes()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "uloop-restore-bytes-" + Guid.NewGuid().ToString("N") + ".cs");
+            byte[] original = new byte[] { 0xEF, 0xBB, 0xBF, (byte)'a', (byte)'\r', (byte)'\n', (byte)'b', (byte)'\r', (byte)'\n' };
+            File.WriteAllBytes(path, original);
+            try
+            {
+                using (TouchFilesWithTrailingComment(new[] { path }))
+                {
+                    Assert.That(File.ReadAllBytes(path), Is.Not.EqualTo(original), "Precondition: the touch changes the file.");
+                }
+
+                Assert.That(File.ReadAllBytes(path), Is.EqualTo(original));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         private static IDisposable TouchSmallestSiblingsWithTrailingComment(
@@ -9194,17 +9485,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // contains multi-thousand-line test files that would dominate runtime without
             // changing what the cap warning asserts.
             siblingPaths.Sort(CompareByFileLengthThenPath);
-            string[] paths = new string[siblingCount];
-            string[] originals = new string[siblingCount];
+            return TouchFilesWithTrailingComment(siblingPaths.GetRange(0, siblingCount).ToArray());
+        }
+
+        // What: appends a probe comment to each file and returns the scope that restores them.
+        private static IDisposable TouchFilesWithTrailingComment(string[] paths)
+        {
             EditorApplication.LockReloadAssemblies();
-            for (int index = 0; index < siblingCount; index++)
+            FileRestoreScope restore = new FileRestoreScope(paths);
+            // Why append: the original bytes stay untouched, so the file keeps its BOM and line endings.
+            UTF8Encoding withoutBom = new UTF8Encoding(false);
+            foreach (string path in paths)
             {
-                paths[index] = siblingPaths[index];
-                originals[index] = File.ReadAllText(paths[index]);
-                File.WriteAllText(paths[index], originals[index] + "\n// sibling-scan-cap-probe");
+                File.AppendAllText(path, "\n// sibling-scan-cap-probe", withoutBom);
             }
 
-            return new FileRestoreScope(paths, originals);
+            return restore;
         }
 
         private static int CompareByFileLengthThenPath(string left, string right)
@@ -9247,19 +9543,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new DirectoryRestoreScope(snapshotDirectory, hiddenDirectory);
         }
 
+        // What: holds the files' original bytes from construction and writes them back on Dispose.
+        // Why bytes: a string round trip through File.WriteAllText drops a UTF-8 BOM, so a restored
+        // fixture would differ from the committed one.
         private sealed class FileRestoreScope : IDisposable
         {
             private readonly string[] _paths;
-            private readonly string[] _originals;
+            private readonly byte[][] _originals;
             private bool _disposed;
 
-            public FileRestoreScope(string[] paths, string[] originals)
+            public FileRestoreScope(string[] paths)
             {
                 Debug.Assert(paths != null, "paths must not be null.");
-                Debug.Assert(originals != null, "originals must not be null.");
-                Debug.Assert(paths.Length == originals.Length, "paths and originals must be the same length.");
                 _paths = paths;
-                _originals = originals;
+                _originals = new byte[paths.Length][];
+                for (int index = 0; index < paths.Length; index++)
+                {
+                    _originals[index] = File.ReadAllBytes(paths[index]);
+                }
             }
 
             public void Dispose()
@@ -9272,7 +9573,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 _disposed = true;
                 for (int index = 0; index < _paths.Length; index++)
                 {
-                    File.WriteAllText(_paths[index], _originals[index]);
+                    File.WriteAllBytes(_paths[index], _originals[index]);
                 }
 
                 EditorApplication.UnlockReloadAssemblies();
@@ -9500,6 +9801,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         " + computeWithPrivateMethod + @"
 
         " + callsBase + @"
+
+        public int CallsBaseInLambda()
+        {
+            System.Func<int> viaLambda = () => base.BaseSeed();
+            return viaLambda() + 5;
+        }
 
         " + callsMissingHelper + @"
 

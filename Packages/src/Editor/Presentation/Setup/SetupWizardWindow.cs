@@ -56,7 +56,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ThirdPartyToolMigrationWizardWindow.ShowWindowForAutoScan);
 
             // A session that hits the native "Scripts have compiler errors" dialog at Editor
-            // startup (-ignorecompilererrors does not suppress it) never flushes
+            // startup (Unity's -ignorecompilererrors switch does not suppress it in GUI mode,
+            // so uloop launch does not pass it) never flushes
             // EditorApplication.delayCall again for the rest of that process's lifetime, even
             // for calls registered long after the dialog is dismissed -- confirmed live via
             // repeated probes where EditorApplication.update kept ticking normally but freshly

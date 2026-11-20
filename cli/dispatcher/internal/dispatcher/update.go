@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -55,48 +54,7 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
-
-	resolvedOptions, err := resolveUpdateTargetVersionFunc(ctx, update.Options{
-		CurrentVersion: dispatcherVersion,
-		TargetVersion:  options.targetVersion,
-	})
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
-		return true, 1
-	}
-	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolvedOptions.TargetVersion)
-	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
-		return true, 1
-	}
-	if !targetChanged {
-		clicore.WriteLine(stdout, "uloop dispatcher is already up to date ("+targetVersion+").")
-		return true, 0
-	}
-	updateCommand, err := update.CommandForOS(runtime.GOOS, resolvedOptions)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, wrapUnsupportedPlatformError(err), clierrors.ErrorContext{Command: clicore.UpdateCommandName})
-		return true, 1
-	}
-
-	clicore.WriteLine(stdout, "Updating global uloop dispatcher...")
-	if err := updateRunCommand(ctx, updateCommand, stdout, stderr); err != nil {
-		clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
-			ErrorCode:   clierrors.ErrorCodeInternalError,
-			Phase:       clierrors.ErrorPhaseExecution,
-			Message:     "Update failed: " + err.Error(),
-			Retryable:   true,
-			SafeToRetry: true,
-			Command:     clicore.UpdateCommandName,
-			NextActions: []string{"Retry `uloop update` after checking network access to GitHub."},
-			Details: map[string]any{
-				"Cause": err.Error(),
-			},
-		})
-		return true, 1
-	}
-	writeManualDispatcherUpdateCompletion(stdout, dispatcherVersion, dispatcherInstalledVersionOrEmpty(ctx))
-	return true, 0
+	return true, runDispatcherUpdateRequest(ctx, options, stdout, stderr)
 }
 
 func updateCommandForOS(goos string) (string, []string, error) {
@@ -137,14 +95,21 @@ func runUpdateCommand(ctx context.Context, updateCommand update.Command, stdout 
 	command := exec.CommandContext(ctx, updateCommand.Name, args...)
 	command.Stdout = stdout
 	command.Stderr = stderr
-	env := append(os.Environ(), updateCommand.Env...)
+	command.Env = updateInstallerEnvironment(os.Environ(), updateCommand, manifest)
+	return command.Run()
+}
+
+// updateInstallerEnvironment builds the environment the installer child process runs with.
+func updateInstallerEnvironment(baseEnvironment []string, updateCommand update.Command, manifest string) []string {
+	env := append(append([]string{}, baseEnvironment...), updateCommand.Env...)
 	// Why: installer scripts now fall back to the repository pin when this env
 	// var is absent; self-update MUST keep passing the Sigstore-derived
 	// manifest explicitly so the update installs the requested release tag
 	// rather than the pinned one.
 	env = append(env, updateArchiveManifestEnvName+"="+manifest)
-	command.Env = env
-	return command.Run()
+	// Why: the installer runs `uloop install` and similar commands with the binary it just
+	// placed; those must not start a second self-update from inside this one.
+	return append(env, dispatcherDisableSelfUpdateEnvName+"=1")
 }
 
 func downloadVerifiedUpdateInstaller(ctx context.Context, updateCommand update.Command, tempDir string) (string, error) {
@@ -174,7 +139,8 @@ func updateExecutionArgs(updateCommand update.Command, installerPath string) []s
 
 func printUpdateHelp(stdout io.Writer) {
 	clicore.WriteLine(stdout, "Usage:")
-	clicore.WriteLine(stdout, "  uloop update [--to-version <version>]")
+	clicore.WriteLine(stdout, "  uloop update                          Update to the newest release and resume automatic updates")
+	clicore.WriteLine(stdout, "  uloop update --to-version <version>   Install that release and hold it; automatic updates pause")
 }
 
 // resolveUpdateExecutablePath returns the on-disk path of this dispatcher binary.

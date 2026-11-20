@@ -32,6 +32,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     internal readonly HarmonyAccessorShimRewrite HarmonyAccessors;
     private readonly ClosureAccessorScope _closureScope;
 
+    // Null for every body that cannot host a base call; the decider skipped those bodies already.
+    internal BaseCallStandInPlan BaseCallStandIns { get; init; }
+
     // closureScopeBody is the method body whose closures alone take accessor rewrites (a
     // transplanted body); null rewrites every inaccessible access the plan covers.
     public ShimBodyRewriter(
@@ -80,7 +83,13 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitGenericName(GenericNameSyntax node)
     {
-        return VisitName(node, node);
+        // Why visit the type arguments first: a nested type named by its simple name inside <...>
+        // must be qualified like any other nested name, and every path below that keeps or wraps
+        // the name must keep those visited arguments. Symbols are still looked up on `node`,
+        // because the semantic model only knows the original tree.
+        GenericNameSyntax withVisitedArguments = node.WithTypeArgumentList(
+            (TypeArgumentListSyntax)Visit(node.TypeArgumentList));
+        return VisitName(node, withVisitedArguments);
     }
 
     public override SyntaxNode VisitInterpolation(InterpolationSyntax node)
@@ -165,7 +174,14 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol invokedSymbol = AccessibilityRules.BoundSymbolOrNull(_semanticModel, node);
+        if (BaseCallShimRewrite.IsBaseCall(node))
+        {
+            // Why here: a base call has no receiver the later rewrites could qualify, and C# cannot
+            // express it from the shim type, so it becomes a stand-in call the Editor redirects.
+            return BaseCallShimRewrite.Rewrite(this, node, (IMethodSymbol)invokedSymbol, BaseCallStandIns, _targetType);
+        }
+
         if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(node))
         {
             // Why not rewrite the spine invocation: ExtractReceiver cannot recover a
@@ -189,18 +205,24 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        ISymbol symbol = invokedSymbol;
-        if (symbol is not IMethodSymbol methodSymbol
-            || methodSymbol.MethodKind != MethodKind.Ordinary
-            || !AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol)
-            || methodSymbol.IsExtensionMethod)
+        if (invokedSymbol is not IMethodSymbol invokedMethod)
+        {
+            return base.VisitInvocationExpression(node);
+        }
+
+        // Why unreduce: the accessor binds the static extension method, whose first parameter is
+        // the receiver of a reduced call (x.M(a) becomes __M(x, a)).
+        IMethodSymbol methodSymbol = AccessibilityRules.UnreducedMethod(invokedMethod);
+        bool isReducedExtensionCall = invokedMethod.MethodKind == MethodKind.ReducedExtension;
+        if (methodSymbol.MethodKind != MethodKind.Ordinary
+            || !AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
             return base.VisitInvocationExpression(node);
         }
 
         AccessorEntry entry = _accessorPlan.GetOrAddMethod(methodSymbol);
         List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
-        if (!methodSymbol.IsStatic)
+        if (isReducedExtensionCall || !methodSymbol.IsStatic)
         {
             ExpressionSyntax receiver = ExtractReceiver(node.Expression);
             arguments.Add(SyntaxFactory.Argument(VisitReceiver(receiver)));
@@ -468,18 +490,21 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         return base.VisitMemberAccessExpression(node);
     }
 
-    private SyntaxNode VisitName(SimpleNameSyntax node, SyntaxNode original)
+    // What: rewrites a name for the shim. `node` is the bound original used for every symbol and
+    // context lookup; `rewritten` is what the name becomes when no rewrite replaces it (the same
+    // node, or a generic name with visited type arguments).
+    private SyntaxNode VisitName(SimpleNameSyntax node, SimpleNameSyntax rewritten)
     {
         if (HarmonyAccessorShimRewrite.IsNameSideOfLargerExpression(node))
         {
-            return original;
+            return rewritten;
         }
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? UnboundOwnedCallQualifier.ResolveOwnedMethodOrNull(node, _semanticModel, _targetType);
         if (symbol == null)
         {
-            return original;
+            return rewritten;
         }
 
         TypeSyntax qualifiedNestedType = NestedTypeNameQualifier.QualifyOrNull(node, symbol);
@@ -503,7 +528,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
         if (HarmonyAccessorShimRewrite.IsLocalOrAnonymousFunctionSymbol(symbol))
         {
-            return original;
+            return rewritten;
         }
 
         SyntaxNode accessorRead = HarmonyAccessors.TryRewriteNameAsAccessorRead(node, symbol);
@@ -515,7 +540,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = HarmonyAccessors.ResolveOwnedMember(symbol);
         if (!ownership.owned)
         {
-            return original;
+            return rewritten;
         }
 
         // Why only before the final qualification, not with the name-side checks at the top:
@@ -523,10 +548,10 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         // a pattern naming a member the shim cannot reach could then compile and fail at run time.
         if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(node))
         {
-            return original;
+            return rewritten;
         }
 
-        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
+        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(rewritten, ownership.isStatic, ownership.containingType);
     }
 
     internal static SyntaxKind GetCompoundAssignmentBinaryKind(SyntaxKind assignmentKind)

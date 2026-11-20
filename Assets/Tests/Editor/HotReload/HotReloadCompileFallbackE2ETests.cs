@@ -122,24 +122,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             // Why the lock: the fixture is a compiled source of this project, and a reload of the
             // assemblies triggered by the edit would tear the test down mid-run.
             EditorApplication.LockReloadAssemblies();
+            FixtureRestoreScope restore = new FixtureRestoreScope(path);
             File.WriteAllText(
                 path,
                 original.Replace(CallerCallBodyAnchor, BrokenCallBody, StringComparison.Ordinal));
-            return new FixtureRestoreScope(path, original);
+            return restore;
         }
 
+        // What: holds the fixture's original bytes from construction and writes them back on Dispose.
+        // Why bytes: a string round trip through File.WriteAllText drops a UTF-8 BOM.
         private sealed class FixtureRestoreScope : IDisposable
         {
             private readonly string _path;
-            private readonly string _original;
+            private readonly byte[] _original;
             private bool _disposed;
 
-            internal FixtureRestoreScope(string path, string original)
+            internal FixtureRestoreScope(string path)
             {
                 Debug.Assert(!string.IsNullOrEmpty(path), "path must not be empty.");
-                Debug.Assert(original != null, "original must not be null.");
                 _path = path;
-                _original = original;
+                _original = File.ReadAllBytes(path);
             }
 
             public void Dispose()
@@ -150,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 _disposed = true;
-                File.WriteAllText(_path, _original);
+                File.WriteAllBytes(_path, _original);
                 EditorApplication.UnlockReloadAssemblies();
             }
         }

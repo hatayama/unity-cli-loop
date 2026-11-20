@@ -75,10 +75,13 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 new NativeCliInstallerService(),
                 cliPinReaderService);
             EditorExecutionActivity executionActivity = EditorExecutionActivity.CreateForEditor();
+            EditorDialogTracker dialogTracker = new();
+            new EditorDialogEventsSubscriber(dialogTracker).Subscribe();
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
                 domainReloadDetectionService,
                 toolRegistrarService,
-                executionActivity);
+                executionActivity,
+                dialogTracker);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = new();
             lifecycleRegistry.RegisterSource(serverFactory);
             UnityCliLoopServerStartupService serverStartupService = new(

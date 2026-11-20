@@ -108,6 +108,9 @@ Make sure you have:
 > [!NOTE]
 > **Upgrading from V2**: if the project has custom tools written against the V2 API, compile errors appear right after the V3 package is installed. This is expected. Do not fix them by hand: choose `Ignore` in Unity's Safe Mode prompt on startup, then press **Migrate** in the migration window that opens automatically (`Window > Unity Loop Harness > Custom Tool Migration`). See [Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md) for the full procedure.
 
+> [!NOTE]
+> **macOS permission prompts**: when Unity does not answer, `uloop status` looks at Unity's windows for a dialog that blocks it, and `uloop get-dialogs` / `uloop press-dialog-button` read and press that dialog. The first time, macOS asks whether the app that runs uloop (your terminal or LLM tool) may control System Events and use Accessibility. Allow both under System Settings > Privacy & Security (Automation and Accessibility). Without them uloop still works, but it cannot report or press dialogs, and `uloop status` can take about 5 seconds longer while a prompt is waiting for an answer.
+
 ## Install from the terminal
 
 ### Step 1: Install the CLI
@@ -139,6 +142,17 @@ uloop -v
 ```
 
 The install succeeded when the first line shows the CLI version (for example `3.0.1`).
+
+<details>
+<summary>Automatic CLI updates</summary>
+
+While you use it, the CLI checks for a newer release at most once a day and installs it; the new version takes effect from the next command.
+
+- Stay on one version: `uloop update --to-version <version>` installs that release and holds it there. Run `uloop update` to resume automatic updates.
+- Turn automatic updates off: set `ULOOP_DISABLE_SELF_UPDATE=1` in the environment.
+- Homebrew installs never update themselves; use `brew upgrade uloop` (and `brew pin uloop` to hold a version).
+
+</details>
 
 ### Step 2: Install the Unity package
 
@@ -198,7 +212,7 @@ Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.23.1).
+2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity Loop Harness (listed as Unity CLI Loop up to v3.34.6).
 
 </details>
 

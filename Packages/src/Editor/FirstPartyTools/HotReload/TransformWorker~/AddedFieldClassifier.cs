@@ -31,7 +31,8 @@ internal static class AddedFieldClassifier
                 }
 
                 CompiledFieldMatch fieldMatch = CompiledMemberMatcher.MatchCompiledField(compiledType, fieldSymbol);
-                if (fieldMatch == CompiledFieldMatch.Matched)
+                if (fieldMatch == CompiledFieldMatch.Matched
+                    || IsTypeUnboundForUntrustedParts(typeState, fieldMatch, fieldSymbol, fieldDeclaration, variable))
                 {
                     continue;
                 }
@@ -49,6 +50,54 @@ internal static class AddedFieldClassifier
         }
 
         ClassifyAddedEvents(typeState, semanticModel, home, addedFieldCatalog);
+    }
+
+    // Why not added: when another part of the partial type was not bound (it changed, or the scan
+    // that would prove it unchanged did not finish), a field typed from that part does not resolve,
+    // so its type looks changed. Calling it added recorded an added key that the drift check strips
+    // from the current tree only, which reported an outside-body edit for a file that had none.
+    // Bodies that use the field are skipped by the same untrusted-parts reason.
+    private static bool IsTypeUnboundForUntrustedParts(
+        TypeEmitState typeState,
+        CompiledFieldMatch fieldMatch,
+        IFieldSymbol fieldSymbol,
+        FieldDeclarationSyntax fieldDeclaration,
+        VariableDeclaratorSyntax variable)
+    {
+        return fieldMatch == CompiledFieldMatch.FieldTypeChanged
+            && UnresolvedSignatureTypes.TryFind(fieldSymbol.Type, out ITypeSymbol _)
+            && typeState.SourceUnit.PartialTypeParts.FindUntrustedOtherPartReasonOrNull(typeState.TypeDeclaration) != null
+            && SnapshotDeclaresSameFieldType(typeState, fieldDeclaration, variable);
+    }
+
+    // Why the snapshot must agree: an unresolved type alone does not prove the type is unchanged.
+    // A field whose declared type really changed to one from the unbound part must stay an
+    // unavailable added binding, so a body of another type that uses it is skipped. Without a
+    // snapshot nothing proves the type unchanged, so the field keeps that path too.
+    private static bool SnapshotDeclaresSameFieldType(
+        TypeEmitState typeState,
+        FieldDeclarationSyntax fieldDeclaration,
+        VariableDeclaratorSyntax variable)
+    {
+        BaselineSnapshotState baseline = typeState.SourceUnit.Baseline;
+        if (!baseline.HasBaseline || baseline.SnapshotRoot == null)
+        {
+            return false;
+        }
+
+        Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
+            WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
+        // Why the identifier text, not the symbol name: the snapshot map is keyed by the text as
+        // written, which keeps the @ of an escaped identifier such as @event.
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, variable.Identifier.Text);
+        if (snapshotFieldMap == null
+            || !snapshotFieldMap.TryGetValue(syntaxKey, out VariableDeclaratorSyntax snapshotVariable)
+            || !(snapshotVariable.Parent is VariableDeclarationSyntax snapshotDeclaration))
+        {
+            return false;
+        }
+
+        return SyntaxFactory.AreEquivalent(snapshotDeclaration.Type, fieldDeclaration.Declaration.Type, topLevel: false);
     }
 
     /// <summary>

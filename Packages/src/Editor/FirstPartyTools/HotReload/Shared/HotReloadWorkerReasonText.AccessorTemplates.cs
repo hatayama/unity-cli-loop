@@ -13,13 +13,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor,
                 Plain(
-                    "Property setter, init, or indexer accessors are skipped; "
+                    "Getters, setters, property init accessors, and indexer accessors with no matching accessor on the compiled type, and explicit interface or indexer init accessors, are skipped; "
                     + "run 'uloop compile' to apply accessor edits.",
                     0));
             templates.Add(
                 HotReloadWorkerReasonCode.UnsupportedMemberUnsupportedKind,
                 Plain(
-                    "Constructors, operators, and event accessors are skipped; "
+                    "Constructors, finalizers, operators, and event accessors are skipped; "
                     + "run 'uloop compile' to apply these edits.",
                     0));
 
@@ -126,11 +126,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorIndexerNoShape,
                 Plain("inaccessible indexer access has no accessor rewrite shape.", 0));
             templates.Add(
+                HotReloadWorkerReasonCode.AccessorStructMemberNoShape,
+                Plain("inaccessible instance member of a struct has no accessor rewrite shape.", 0));
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
+                Plain(
+                    "inaccessible method '{0}' that the compiler calls for {1} has no accessor rewrite shape.",
+                    2));
+            templates.Add(
                 HotReloadWorkerReasonCode.AccessorEventCompoundAssignmentNoShape,
                 Plain("compound assignment to an event has no accessor rewrite shape.", 0));
             templates.Add(
-                HotReloadWorkerReasonCode.AccessorExtensionMethodNotRewritten,
-                Plain("inaccessible extension method calls are not rewritten.", 0));
+                HotReloadWorkerReasonCode.AccessorExtensionMethodGroupNoShape,
+                Plain("inaccessible extension method used as a method group (not called) has no accessor rewrite shape.", 0));
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
+                Plain(
+                    "extension method '{0}' added in this reload has no rewrite shape when called on a receiver; write the call as '{1}.{0}(receiver, ...)'.",
+                    2));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 Plain("inaccessible generic method calls are not rewritten.", 0));
@@ -190,6 +203,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 Plain("inaccessible methods that return by ref have no accessor rewrite shape.", 0));
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorConditionalMethodNotRewritten,
+                Plain(
+                    "inaccessible [Conditional] method calls are not rewritten, because the compiler omits them "
+                    + "when the condition symbol is not defined.",
+                    0));
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape,
+                Plain("inaccessible method with a ref struct parameter or return type has no accessor rewrite shape.", 0));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefOutInParameterNotRewritten,
                 Plain(

@@ -143,6 +143,8 @@ func TestRunResolvedProjectCommandRoutesNativeCommandsToTheirOwnParsers(t *testi
 		{command: pausePointEnableCommandName, args: []string{"--resume-play"}, wantMessage: "require --await"},
 		{command: clicore.StatusCommandName, args: []string{"--bogus-flag"}, wantMessage: `"Message": "status takes no options: --bogus-flag"`},
 		{command: clicore.CancelCommandName, args: []string{"--foo"}, wantMessage: `"Message": "cancel takes no options: --foo"`},
+		{command: clicore.GetDialogsCommandName, args: []string{"--foo"}, wantMessage: `"Message": "get-dialogs takes no options: --foo"`},
+		{command: clicore.PressDialogButtonCommandName, args: []string{"--foo"}, wantMessage: `"Message": "press-dialog-button does not accept --foo"`},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.command, func(t *testing.T) {

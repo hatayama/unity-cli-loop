@@ -73,7 +73,7 @@ func resolveVerifyProjectRoot(startPath string, explicitProjectPath string) (str
 	if explicitProjectPath != "" {
 		return project.ResolveExplicitProjectRoot(explicitProjectPath)
 	}
-	return project.FindUnityProjectRootPreferringParents(startPath, defaultProjectSearchDepth)
+	return project.FindUnityProjectRootPreferringParents(startPath, project.DefaultProjectSearchDepth)
 }
 
 // unknownVerifyProjectOptionError rejects an argument verify-project has no meaning for.

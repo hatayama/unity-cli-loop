@@ -12,14 +12,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         // Why no main-thread switch and no Unity API: this must answer while the main thread is
         // blocked, so it reads only thread-safe snapshots. The stall seconds come in as a
-        // parameter so tests can choose the value.
+        // parameter so tests can choose the value, and so does the process ID, which the caller reads
+        // once instead of on every answer.
         internal static GetEditorStatusResponse Execute(
             UnityCliLoopToolRegistrarService toolRegistrarService,
-            double secondsSinceLastMainThreadTick)
+            double secondsSinceLastMainThreadTick,
+            EditorDialogInfo[] openDialogs,
+            int editorProcessId)
         {
             if (toolRegistrarService == null)
             {
                 throw new ArgumentNullException(nameof(toolRegistrarService));
+            }
+
+            if (openDialogs == null)
+            {
+                throw new ArgumentNullException(nameof(openDialogs));
+            }
+
+            if (editorProcessId <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(editorProcessId), editorProcessId, "editorProcessId must name a process");
             }
 
             UnityCliLoopExecutionStatus executionStatus = toolRegistrarService.GetExecutionStatus();
@@ -38,7 +51,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsPaused = playState.IsPaused,
                 IsCompiling = compileState.IsCompiling,
                 IsUpdating = compileState.IsUpdating,
-                SecondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick
+                SecondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick,
+                OpenDialogs = openDialogs,
+                ProcessId = editorProcessId
             };
         }
     }

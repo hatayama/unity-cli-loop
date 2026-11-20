@@ -131,6 +131,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return new UnityCliLoopToolCancelledException(toolName);
         }
 
+        // Passes the CLI's dialog sighting to the guard of the requests still waiting for the main thread.
+        internal void ReportBlockingDialog(string toolName)
+        {
+            _watchdog.ReportBlockingDialog(toolName);
+        }
+
         // Why convert here: Infrastructure cannot see the Domain result type, so the outcome leaves
         // in an Application type, the same way GetExecutionStatus does.
         internal UnityCliLoopCancelRequestResult CancelRunningTool()
