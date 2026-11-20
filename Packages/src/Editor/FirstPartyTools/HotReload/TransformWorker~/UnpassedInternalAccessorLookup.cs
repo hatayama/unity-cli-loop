@@ -122,24 +122,51 @@ internal static class UnpassedInternalAccessorLookup
     // The members whose getter a construct calls without naming it: an awaiter's IsCompleted, and
     // the Length, Count and indexer of an Index or Range access. Why not any name: a property named
     // like a method the construct calls, such as GetAwaiter, is not what the compiler calls, and the
-    // error it raises stays the shim compile's to report.
+    // error it raises stays the shim compile's to report. Why the indexer only for an Index or Range
+    // argument: any other element access names the indexer itself, which the accessor route judges
+    // by its parameter types, so a wrong argument or an undefined name inside it stays a genuine
+    // error rather than a use of some other indexer's internal getter.
     private static readonly HashSet<string> ImplicitlyReadPropertyNames =
         new HashSet<string>(StringComparer.Ordinal) { "IsCompleted", "Length", "Count", WellKnownMemberNames.Indexer };
 
     /// <summary>
     /// The internal getter of a public or protected property or indexer named
     /// <paramref name="memberName"/> of <paramref name="start"/> or a base type, as the target
-    /// assembly declares it, or null, also for a name the compiler never reads implicitly. An await
-    /// reads an awaiter's IsCompleted through it, and an Index or Range access Length, Count or the
-    /// indexer.
+    /// assembly declares it, or null, also for a name the compiler never reads implicitly, and for the
+    /// indexer unless <paramref name="isIndexOrRangeAccess"/>. An await reads an awaiter's
+    /// IsCompleted through it, and an Index or Range access Length, Count or the indexer.
     /// </summary>
+    /// <summary>
+    /// Whether the construct is an element access with a single System.Index or System.Range
+    /// argument, the only access for which the compiler calls Length, Count or the int indexer
+    /// instead of an indexer the argument names.
+    /// </summary>
+    internal static bool IsIndexOrRangeAccess(SemanticModel semanticModel, SyntaxNode construct)
+    {
+        BracketedArgumentListSyntax arguments = construct switch
+        {
+            ElementAccessExpressionSyntax elementAccess => elementAccess.ArgumentList,
+            ElementBindingExpressionSyntax elementBinding => elementBinding.ArgumentList,
+            _ => null
+        };
+        if (arguments == null || arguments.Arguments.Count != 1)
+        {
+            return false;
+        }
+
+        string argumentType = semanticModel.GetTypeInfo(arguments.Arguments[0].Expression).Type?.ToDisplayString();
+        return argumentType == "System.Index" || argumentType == "System.Range";
+    }
+
     internal static IMethodSymbol FindInternalGetterOrNull(
         INamedTypeSymbol start,
         string memberName,
+        bool isIndexOrRangeAccess,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
-        if (!ImplicitlyReadPropertyNames.Contains(memberName))
+        if (!ImplicitlyReadPropertyNames.Contains(memberName)
+            || memberName == WellKnownMemberNames.Indexer && !isIndexOrRangeAccess)
         {
             return null;
         }

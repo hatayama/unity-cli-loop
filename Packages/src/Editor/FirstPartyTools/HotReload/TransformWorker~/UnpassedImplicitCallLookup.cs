@@ -42,6 +42,7 @@ internal static class UnpassedImplicitCallLookup
         SyntaxNode reported = bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
         foreach (SyntaxNode construct in reported.AncestorsAndSelf())
         {
+            bool isIndexOrRangeAccess = UnpassedInternalAccessorLookup.IsIndexOrRangeAccess(semanticModel, construct);
             foreach ((ITypeSymbol receiver, string methodName, int? outParameterCount)
                 in EnumerateMissingCalls(semanticModel, construct))
             {
@@ -49,6 +50,7 @@ internal static class UnpassedImplicitCallLookup
                     receiver,
                     methodName,
                     outParameterCount,
+                    isIndexOrRangeAccess,
                     semanticModel,
                     targetAssembly);
                 if (method != null)
@@ -427,6 +429,7 @@ internal static class UnpassedImplicitCallLookup
         ITypeSymbol receiver,
         string methodName,
         int? outParameterCount,
+        bool isIndexOrRangeAccess,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
@@ -463,7 +466,12 @@ internal static class UnpassedImplicitCallLookup
         // Range access Length, Count or the indexer, through a getter the worker's public-only
         // import leaves out.
         IMethodSymbol internalGetter = outParameterCount == null
-            ? UnpassedInternalAccessorLookup.FindInternalGetterOrNull(namedReceiver, methodName, semanticModel, targetAssembly)
+            ? UnpassedInternalAccessorLookup.FindInternalGetterOrNull(
+                namedReceiver,
+                methodName,
+                isIndexOrRangeAccess,
+                semanticModel,
+                targetAssembly)
             : null;
         if (internalGetter != null)
         {
