@@ -123,7 +123,7 @@ internal static class RetainedNonPublicMemberUseGuard
         AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(site);
         if (assignment != null)
         {
-            return !IsNestedInitializer(assignment);
+            return !AssignmentTargetRules.IsNestedInitializer(assignment);
         }
 
         return IsIncrementOperand(site) || AssignmentTargetRules.IsDeconstructionTarget(site);
@@ -134,16 +134,11 @@ internal static class RetainedNonPublicMemberUseGuard
         AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(site);
         if (assignment != null)
         {
-            return !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) || IsNestedInitializer(assignment);
+            return !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                || AssignmentTargetRules.IsNestedInitializer(assignment);
         }
 
         return !AssignmentTargetRules.IsDeconstructionTarget(site);
-    }
-
-    // `P = { ... }` inside an object initializer reads P and fills what it returns, never setting it.
-    private static bool IsNestedInitializer(AssignmentExpressionSyntax assignment)
-    {
-        return assignment.Right is InitializerExpressionSyntax;
     }
 
     private static bool IsIncrementOperand(SyntaxNode site)
