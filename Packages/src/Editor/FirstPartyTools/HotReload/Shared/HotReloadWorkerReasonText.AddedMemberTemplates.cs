@@ -198,6 +198,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "store rewrite handles.",
                     0).EndingWith(CompileCallToAction));
             templates.Add(
+                HotReloadWorkerReasonCode.AddedFieldPropertyPattern,
+                // Why name the member access: the store rewrite reads an added field through one, so
+                // the same test written outside the pattern applies without a compile.
+                Plain(
+                    "Property patterns that match an added field are skipped; a pattern member name cannot be "
+                    + "replaced by a read of the field's store. Read '{0}' from the matched value with a member "
+                    + "access outside the pattern instead ('value.{0}'), which the store rewrite handles.",
+                    1).EndingWith(CompileCallToAction));
+            templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 Plain(
                     "Writes to members of an added value-type field, and instance method calls on that field, "

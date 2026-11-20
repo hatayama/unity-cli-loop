@@ -124,7 +124,7 @@ internal static class AddedPropertyBodyScan
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyNameofReference);
         }
 
-        if (IsPropertyPatternMemberName(expression))
+        if (PropertyPatternMemberPath.Contains(expression))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedPropertyPropertyPattern);
         }
@@ -230,35 +230,6 @@ internal static class AddedPropertyBodyScan
         return addedPropertyCatalog.FindOrNull(AddedPropertyCatalog.FormatPropertyKey(
             CecilTypeNames.ToMetadataName(enclosingType),
             identifier.Identifier.ValueText));
-    }
-
-    // Why the walk needs no spine test: it stops as soon as a parent is not an expression, and
-    // every way into the when-not-null side (an argument, a bracketed index, an interpolation)
-    // passes through such a node. Only the receiver spine, as in Label?.Length, reaches here.
-    // Why the colon's parent must be a subpattern: NameColonSyntax also carries named arguments
-    // such as Call(value: Added), where the name's sibling is a real read that must still be
-    // rewritten. Only a pattern member name is a position no expression can stand in.
-    private static bool IsPropertyPatternMemberName(ExpressionSyntax expression)
-    {
-        SyntaxNode current = expression;
-        while (current != null)
-        {
-            if (current.Parent is BaseExpressionColonSyntax colon
-                && colon.Expression == current
-                && colon.Parent is SubpatternSyntax)
-            {
-                return true;
-            }
-
-            if (current.Parent is not ExpressionSyntax parent)
-            {
-                return false;
-            }
-
-            current = parent;
-        }
-
-        return false;
     }
 
     private static bool IsConditionalAccess(ExpressionSyntax expression)

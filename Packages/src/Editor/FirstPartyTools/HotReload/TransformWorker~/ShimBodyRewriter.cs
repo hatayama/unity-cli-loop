@@ -436,9 +436,22 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
     {
+        SyntaxNode replacement = ReplaceMemberAccessOrNull(node);
+        if (PropertyPatternMemberPath.Contains(node))
+        {
+            return PropertyPatternMemberPath.RequireNoReplacement(node, replacement, base.VisitMemberAccessExpression(node));
+        }
+
+        return replacement ?? base.VisitMemberAccessExpression(node);
+    }
+
+    // What: the node a member access becomes in the shim, or null when it is kept as written and
+    // only its parts are visited.
+    private SyntaxNode ReplaceMemberAccessOrNull(MemberAccessExpressionSyntax node)
+    {
         if (NameofRules.IsInsideNameofArgument(node))
         {
-            return base.VisitMemberAccessExpression(node);
+            return null;
         }
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
@@ -464,7 +477,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         if (!AppliesAccessorRewrite(node))
         {
-            return base.VisitMemberAccessExpression(node);
+            return null;
         }
 
         // Method-group invocation targets stay with VisitInvocationExpression; field/property
@@ -473,21 +486,15 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             && invocation.Expression == node
             && symbol is IMethodSymbol)
         {
-            return base.VisitMemberAccessExpression(node);
+            return null;
         }
 
         if (AssignmentTargetRules.AssignmentTargetedBy(node) != null)
         {
-            return base.VisitMemberAccessExpression(node);
+            return null;
         }
 
-        ExpressionSyntax rewritten = HarmonyAccessors.TryRewriteInaccessibleRead(symbol, node.Expression, node);
-        if (rewritten != null)
-        {
-            return rewritten;
-        }
-
-        return base.VisitMemberAccessExpression(node);
+        return HarmonyAccessors.TryRewriteInaccessibleRead(symbol, node.Expression, node);
     }
 
     // What: rewrites a name for the shim. `node` is the bound original used for every symbol and
@@ -507,6 +514,38 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return rewritten;
         }
 
+        SyntaxNode replacement = ReplaceNameOrNull(node, symbol);
+        // Why the qualification is dropped too: a pattern link reads the matched value, not the
+        // running instance.
+        if (PropertyPatternMemberPath.Contains(node))
+        {
+            return PropertyPatternMemberPath.RequireNoReplacement(node, replacement, rewritten);
+        }
+
+        if (replacement != null)
+        {
+            return replacement;
+        }
+
+        // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
+        if (HarmonyAccessorShimRewrite.IsLocalOrAnonymousFunctionSymbol(symbol))
+        {
+            return rewritten;
+        }
+
+        (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = HarmonyAccessors.ResolveOwnedMember(symbol);
+        if (!ownership.owned)
+        {
+            return rewritten;
+        }
+
+        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(rewritten, ownership.isStatic, ownership.containingType);
+    }
+
+    // What: the node a bound name becomes in the shim other than by qualification, or null when
+    // none applies.
+    private SyntaxNode ReplaceNameOrNull(SimpleNameSyntax node, ISymbol symbol)
+    {
         TypeSyntax qualifiedNestedType = NestedTypeNameQualifier.QualifyOrNull(node, symbol);
         if (qualifiedNestedType != null)
         {
@@ -525,33 +564,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return addedPropertyRead;
         }
 
-        // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
         if (HarmonyAccessorShimRewrite.IsLocalOrAnonymousFunctionSymbol(symbol))
         {
-            return rewritten;
+            return null;
         }
 
-        SyntaxNode accessorRead = HarmonyAccessors.TryRewriteNameAsAccessorRead(node, symbol);
-        if (accessorRead != null)
-        {
-            return accessorRead;
-        }
-
-        (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = HarmonyAccessors.ResolveOwnedMember(symbol);
-        if (!ownership.owned)
-        {
-            return rewritten;
-        }
-
-        // Why only before the final qualification, not with the name-side checks at the top:
-        // returning there would also skip the accessor-read and added-field rewrites above, and
-        // a pattern naming a member the shim cannot reach could then compile and fail at run time.
-        if (HarmonyAccessorShimRewrite.IsSubpatternMemberName(node))
-        {
-            return rewritten;
-        }
-
-        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(rewritten, ownership.isStatic, ownership.containingType);
+        return HarmonyAccessors.TryRewriteNameAsAccessorRead(node, symbol);
     }
 
     internal static SyntaxKind GetCompoundAssignmentBinaryKind(SyntaxKind assignmentKind)
