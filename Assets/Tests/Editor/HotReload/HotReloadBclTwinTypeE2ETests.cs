@@ -44,13 +44,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an edited lambda that passes a ReadOnlySpan, a Memory, or a ReadOnlySpan receiver to a
-        /// non-public method, constructor, or indexer with no accessor shape is Skipped and the method
-        /// keeps returning its compiled value without throwing.
+        /// non-public method, constructor, or indexer with no accessor shape, or converts a non-public
+        /// method group to a delegate over Memory, is Skipped and the method keeps returning its
+        /// compiled value without throwing.
         /// </summary>
         [TestCase("6011", "ClosureCallsInternalMethodWithSpan", 6013)]
         [TestCase("6031", "ClosureCallsInternalExtensionWithSpan", 6036)]
         [TestCase("6121", "ClosureCreatesWithInternalConstructorTakingMemory", 6123)]
         [TestCase("6161", "ClosureReadsPrivateIndexerWithMemory", 6163)]
+        [TestCase("6761", "ClosureConvertsPrivateMethodGroupTakingMemory", 6763)]
+        [TestCase("6801", "ClosureConvertsInternalStaticMethodGroupTakingMemory", 6803)]
         public async Task Run_ClosurePassingTwinTypeToMemberWithoutAccessor_IsSkippedAndKeepsTheCompiledValue(
             string token,
             string methodName,
@@ -84,6 +87,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an edited lambda that declares and calls a delegate typed with Memory is Patched and
+        /// returns the edited value, which it reaches only when the shim runs.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureDeclaringDelegateTakingMemory_IsPatchedAndReturnsTheEditedValue()
+        {
+            HotReloadBclTwinHost host = new HotReloadBclTwinHost();
+            Assert.That(host.ClosureDeclaresDelegateTakingMemory(), Is.EqualTo(6783));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("6781");
+
+            AssertKind(result, "ClosureDeclaresDelegateTakingMemory", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureDeclaresDelegateTakingMemory(), Is.EqualTo(6784));
+        }
+
+        /// <summary>
         /// What: an edited async method that passes a Memory to an internal method is Patched and
         /// returns the edited value through the accessor.
         /// </summary>
@@ -111,6 +130,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return host.ClosureCreatesWithInternalConstructorTakingMemory();
                 case "ClosureReadsPrivateIndexerWithMemory":
                     return host.ClosureReadsPrivateIndexerWithMemory();
+                case "ClosureConvertsPrivateMethodGroupTakingMemory":
+                    return host.ClosureConvertsPrivateMethodGroupTakingMemory();
+                case "ClosureConvertsInternalStaticMethodGroupTakingMemory":
+                    return host.ClosureConvertsInternalStaticMethodGroupTakingMemory();
                 default:
                     throw new ArgumentException("No call for " + methodName, nameof(methodName));
             }

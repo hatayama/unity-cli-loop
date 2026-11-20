@@ -241,6 +241,7 @@ internal static class AccessorEligibility
         SyntaxNode bodyNode,
         out WorkerReason rejectReason)
     {
+        SemanticModel enforcingModel = null;
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
             if (NameofRules.IsInsideNameofArgument(node))
@@ -248,22 +249,26 @@ internal static class AccessorEligibility
                 continue;
             }
 
-            ITypeSymbol typeSymbol = null;
-            if (node is TypeSyntax typeSyntax)
+            ITypeSymbol typeSymbol = FindUsedTypeOrNull(semanticModel, node);
+            if (typeSymbol != null && AccessibilityRules.IsExternallyVisibleType(typeSymbol))
             {
-                typeSymbol = semanticModel.GetTypeInfo(typeSyntax).Type
-                    ?? semanticModel.GetSymbolInfo(typeSyntax).Symbol as ITypeSymbol;
-            }
-            else if (node is VariableDeclarationSyntax variableDeclaration
-                && variableDeclaration.Type.IsVar)
-            {
-                typeSymbol = semanticModel.GetTypeInfo(variableDeclaration.Type).Type;
-            }
-            else if (node is ImplicitObjectCreationExpressionSyntax implicitObjectCreation)
-            {
-                typeSymbol = semanticModel.GetTypeInfo(implicitObjectCreation).Type;
+                continue;
             }
 
+            // Why bind again with accessibility enforced when the lenient binding sees an error or an
+            // invisible type: a referenced assembly carries internal copies of BCL types (Memory<T>,
+            // ReadOnlySpan<T>), so with accessibility ignored their names are ambiguous, and
+            // 'Func<Memory<int>, int>' read as a delegate over an error type the shim cannot see.
+            // The enforcing binding resolves the name as Unity's compiler does.
+            enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
+            ITypeSymbol enforcedType = FindUsedTypeOrNull(enforcingModel, node);
+            if (enforcedType != null && enforcedType.TypeKind != TypeKind.Error)
+            {
+                typeSymbol = enforcedType;
+            }
+
+            // Why a type neither binding resolves is let through: the edited source must compile
+            // before the reload runs, and the compiler reports it.
             if (typeSymbol == null || typeSymbol.TypeKind == TypeKind.Error)
             {
                 continue;
@@ -280,6 +285,28 @@ internal static class AccessorEligibility
 
         rejectReason = null;
         return true;
+    }
+
+    // What: the type a body node names or creates, or null when the node names none.
+    private static ITypeSymbol FindUsedTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        if (node is TypeSyntax typeSyntax)
+        {
+            return semanticModel.GetTypeInfo(typeSyntax).Type
+                ?? semanticModel.GetSymbolInfo(typeSyntax).Symbol as ITypeSymbol;
+        }
+
+        if (node is VariableDeclarationSyntax variableDeclaration && variableDeclaration.Type.IsVar)
+        {
+            return semanticModel.GetTypeInfo(variableDeclaration.Type).Type;
+        }
+
+        if (node is ImplicitObjectCreationExpressionSyntax implicitObjectCreation)
+        {
+            return semanticModel.GetTypeInfo(implicitObjectCreation).Type;
+        }
+
+        return null;
     }
 
     // What: the reason an increment or decrement of an inaccessible property in the body cannot be

@@ -31,8 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a body that passes a BCL twin type to a non-public member whose shape has no accessor
-        /// (ref struct parameter, constructor, indexer, initializer indexer, expanded params) is skipped with the reason
-        /// its oracle shape gets, and produces no entry.
+        /// (ref struct parameter, constructor, indexer, initializer indexer, expanded params, method
+        /// group converted to a delegate over the twin type) is skipped with the reason its oracle
+        /// shape gets, and produces no entry.
         /// </summary>
         [TestCase("6011", "ClosureCallsInternalMethodWithSpan", "6091", "ClosureCallsInternalMethodWithUserRefStruct", nameof(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape))]
         [TestCase("6021", "ClosureCallsInternalExtensionOnSpan", "6091", "ClosureCallsInternalMethodWithUserRefStruct", nameof(HotReloadWorkerReasonCode.AccessorRefLikeSignatureNoShape))]
@@ -51,6 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6311", "ClosureIncrementsPrivateIndexerWithMemory", "6321", "ClosureIncrementsPrivateIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorIndexerNoShape))]
         [TestCase("6371", "ClosureCallsInternalParamsMethodWithOneMemory", "6381", "ClosureCallsInternalParamsMethodWithOneArraySegment", nameof(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten))]
         [TestCase("6331", "ClosureInitializesInternalIndexerWithMemory", "6341", "ClosureInitializesInternalIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorInitializerAssignmentNoShape))]
+        [TestCase("6761", "ClosureConvertsPrivateMethodGroupTakingMemory", "6771", "ClosureConvertsPrivateMethodGroupTakingArraySegment", nameof(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape))]
+        [TestCase("6801", "ClosureConvertsInternalStaticMethodGroupTakingMemory", "6811", "ClosureConvertsInternalStaticMethodGroupTakingArraySegment", nameof(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape))]
         public async Task TwinTypedShapeWithoutAccessor_IsSkippedWithTheOracleReason(
             string token,
             string methodName,
@@ -161,6 +164,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
 
             AssertEntry(result, methodName);
+        }
+
+        /// <summary>
+        /// What: a lambda that declares a delegate typed with Memory and calls it becomes an entry, as
+        /// the same delegate typed with ArraySegment does; the twin type argument does not make the
+        /// delegate type read as one the shim assembly cannot see.
+        /// </summary>
+        [Test]
+        public async Task ClosureDeclaringDelegateTakingMemory_IsAnEntryAsItsOracleIs()
+        {
+            TransformWorkerClientResult oracle = await RunEditedFixtureAsync("6791");
+            AssertEntry(oracle, "ClosureDeclaresDelegateTakingArraySegment");
+
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("6781");
+            AssertEntry(result, "ClosureDeclaresDelegateTakingMemory");
+            Assert.That(result.Output.shimSource, Does.Contain("Func<Memory<int>, int> length = memory => memory.Length;"));
         }
 
         /// <summary>

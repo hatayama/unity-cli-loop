@@ -167,6 +167,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return span.Length;
         }
 
+        private int PrivateMemoryLength(Memory<int> memory)
+        {
+            return memory.Length;
+        }
+
+        private int PrivateSegmentLength(ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureCallsInternalMethodWithSpan()
         {
@@ -451,6 +461,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ClosureCallsInternalParamsMethodWithOneArraySegment()
         {
             Func<int> read = () => HotReloadBclTwinTargets.ParamsSegmentLength(new ArraySegment<int>(_ints)) + 6381;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsPrivateMethodGroupTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = PrivateMemoryLength;
+                return length(new Memory<int>(_ints)) + 6761;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsPrivateMethodGroupTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = PrivateSegmentLength;
+                return length(new ArraySegment<int>(_ints)) + 6771;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsInternalStaticMethodGroupTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = HotReloadBclTwinTargets.MemoryLength;
+                return length(new Memory<int>(_ints)) + 6801;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsInternalStaticMethodGroupTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = HotReloadBclTwinTargets.SegmentLength;
+                return length(new ArraySegment<int>(_ints)) + 6811;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeclaresDelegateTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = memory => memory.Length;
+                return length(new Memory<int>(_ints)) + 6781;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeclaresDelegateTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = segment => segment.Count;
+                return length(new ArraySegment<int>(_ints)) + 6791;
+            };
             return read();
         }
     }
