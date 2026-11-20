@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.9](https://github.com/hatayama/unity-cli-loop/compare/v3.34.8...v3.34.9) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload binds Memory and ReadOnlySpan uses as the compiler does when it checks delegate types, method groups, added members and retained types, instead of failing the file or patching a body that throws ([#3587](https://github.com/hatayama/unity-cli-loop/issues/3587)) ([9f072bb](https://github.com/hatayama/unity-cli-loop/commit/9f072bb81fb8a936912134f18407d7ea053d08fa))
+
 ## [3.34.8](https://github.com/hatayama/unity-cli-loop/compare/v3.34.7...v3.34.8) (2026-11-20)
 
 
