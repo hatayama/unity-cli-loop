@@ -1,6 +1,8 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using HotReloadExplicitRetargetedArgument = io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadExplicitArgA;
+using HotReloadExplicitRetargetedInterface = io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.IHotReloadExplicitA;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -60,6 +62,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public interface IHotReloadExplicitIndexed
     {
         int this[int index] { get; }
+    }
+
+    /// <summary>Interface with an event.</summary>
+    public interface IHotReloadExplicitNotifier
+    {
+        event Action Changed;
+    }
+
+    /// <summary>First argument type of the overloaded interface, which a using alias can name.</summary>
+    public sealed class HotReloadExplicitArgA
+    {
+    }
+
+    /// <summary>Second argument type of the overloaded interface, which a using alias can name.</summary>
+    public sealed class HotReloadExplicitArgB
+    {
+    }
+
+    /// <summary>Interface with two overloads that differ only in the argument type.</summary>
+    public interface IHotReloadExplicitOverloaded
+    {
+        int Take(HotReloadExplicitArgA value);
+
+        int Take(HotReloadExplicitArgB value);
     }
 
     /// <summary>Generic interface with a read-write property.</summary>
@@ -263,6 +289,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             [MethodImpl(MethodImplOptions.NoInlining)]
             get { return index + 8210; }
+        }
+    }
+
+    /// <summary>
+    /// An explicit implementation whose interface is named through a using alias, beside a public
+    /// method that implements the other interface, so retargeting the alias moves it there.
+    /// </summary>
+    public class HotReloadExplicitRetargetedFixture : IHotReloadExplicitA, IHotReloadExplicitB
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        int HotReloadExplicitRetargetedInterface.Run() { return 8141; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Run() { return 8142; }
+    }
+
+    /// <summary>
+    /// An explicit implementation whose argument type is named through a using alias, beside public
+    /// methods for both overloads, so retargeting the alias moves it to the other overload while the
+    /// class still implements both.
+    /// </summary>
+    public class HotReloadExplicitRetargetedOverloadFixture : IHotReloadExplicitOverloaded
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        int IHotReloadExplicitOverloaded.Take(HotReloadExplicitRetargetedArgument value) { return 8143; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Take(HotReloadExplicitArgA value) { return 8144; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Take(HotReloadExplicitArgB value) { return 8145; }
+    }
+
+    /// <summary>An explicit event with add and remove accessors.</summary>
+    public class HotReloadExplicitNotifierFixture : IHotReloadExplicitNotifier
+    {
+        private Action _handlers;
+
+        event Action IHotReloadExplicitNotifier.Changed
+        {
+            add { _handlers += value; }
+            remove { _handlers -= value; }
         }
     }
 
