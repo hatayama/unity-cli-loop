@@ -329,4 +329,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         internal int this[T[] keys] => 99;
     }
+
+    /// <summary>
+    /// A key that an Index converts to through its own implicit conversion.
+    /// </summary>
+    public readonly struct HotReloadUnpassedIndexKey
+    {
+        public HotReloadUnpassedIndexKey(Index index)
+        {
+            Index = index;
+        }
+
+        public Index Index { get; }
+
+        public static implicit operator HotReloadUnpassedIndexKey(Index index)
+        {
+            return new HotReloadUnpassedIndexKey(index);
+        }
+    }
+
+    /// <summary>
+    /// An internal indexer that takes a key an Index converts to, beside a public Length and int
+    /// indexer, so the compiler calls that indexer for an Index access.
+    /// </summary>
+    public sealed class HotReloadUnpassedConvertedKeyIndexerHolder
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[HotReloadUnpassedIndexKey key] => 99;
+    }
 }

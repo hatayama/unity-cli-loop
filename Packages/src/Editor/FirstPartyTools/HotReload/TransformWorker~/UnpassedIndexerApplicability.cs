@@ -10,7 +10,8 @@ using Microsoft.CodeAnalysis;
 /// Why by display name and not by conversion: the compiled copy lives in a separate compilation
 /// that imports every member, so its symbols never equal the worker's, and a conversion cannot be
 /// classified across the two. An Index or Range converts only to itself, its nullable form, object,
-/// ValueType, dynamic and the interfaces it implements, so those names are the whole set.
+/// ValueType, dynamic, the interfaces it implements, and a type that declares its own implicit
+/// conversion from it, so those are the whole set.
 /// </remarks>
 internal static class UnpassedIndexerApplicability
 {
@@ -32,14 +33,14 @@ internal static class UnpassedIndexerApplicability
 
         IParameterSymbol first = indexer.Parameters[0];
         HashSet<string> acceptedNames = AcceptedParameterTypeNames(argumentType);
-        if (TakesTheArgument(first.Type, constructed, acceptedNames))
+        if (TakesTheArgument(first.Type, constructed, argumentType, acceptedNames))
         {
             return true;
         }
 
         return first.IsParams
             && first.Type is IArrayTypeSymbol array
-            && TakesTheArgument(array.ElementType, constructed, acceptedNames);
+            && TakesTheArgument(array.ElementType, constructed, argumentType, acceptedNames);
     }
 
     /// <summary>
@@ -51,10 +52,14 @@ internal static class UnpassedIndexerApplicability
             == ConstDriftCollector.ToReflectionMetadataName(right.OriginalDefinition);
     }
 
-    private static bool TakesTheArgument(ITypeSymbol parameterType, INamedTypeSymbol constructed, HashSet<string> acceptedNames)
+    private static bool TakesTheArgument(
+        ITypeSymbol parameterType,
+        INamedTypeSymbol constructed,
+        ITypeSymbol argumentType,
+        HashSet<string> acceptedNames)
     {
         ITypeSymbol substituted = SubstituteOrNull(parameterType, constructed);
-        if (substituted == null)
+        if (substituted == null || DeclaresImplicitConversionFrom(substituted, argumentType))
         {
             return true;
         }
@@ -80,6 +85,32 @@ internal static class UnpassedIndexerApplicability
         return substituted is INamedTypeSymbol named
             && (named.TypeKind == TypeKind.Interface
                 || named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T);
+    }
+
+    // Why the type, its nullable form's underlying type and their base types: those are where the
+    // compiler looks for a user-defined conversion to the parameter type. Why the argument's nullable
+    // form too: a conversion from Index? also takes an Index.
+    private static bool DeclaresImplicitConversionFrom(ITypeSymbol parameterType, ITypeSymbol argumentType)
+    {
+        ITypeSymbol target = parameterType is INamedTypeSymbol nullable
+            && nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+                ? nullable.TypeArguments[0]
+                : parameterType;
+        string argumentName = argumentType.ToDisplayString();
+        for (ITypeSymbol type = target; type != null; type = type.BaseType)
+        {
+            bool declares = type.GetMembers(WellKnownMemberNames.ImplicitConversionName)
+                .OfType<IMethodSymbol>()
+                .Any(conversion => conversion.Parameters.Length == 1
+                    && (conversion.Parameters[0].Type.ToDisplayString() == argumentName
+                        || conversion.Parameters[0].Type.ToDisplayString() == argumentName + "?"));
+            if (declares)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // A type parameter of the declaring type, or of a type containing it, becomes the matching type
