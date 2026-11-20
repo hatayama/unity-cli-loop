@@ -627,6 +627,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByTheSecondTypeArgument()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedBySecond();
+                return first + second + 7805;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsASelfReferencingReceiver()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedSelfReferencing();
+                return first + second + 7815;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAProducerOfADerivedType()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedDerivedProducer();
+                return first + second + 7825;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesTwoArgumentsWithInternalIndexer()
         {
             Func<int> read = () => new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7615;

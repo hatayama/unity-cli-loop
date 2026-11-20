@@ -219,6 +219,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a deconstruction of a receiver marked by the second of two type arguments is skipped
+        /// with a reason that names the extension constrained to that marker, not the one declared
+        /// before it and constrained to the first, though both constraints share one generic
+        /// definition.
+        /// </summary>
+        [Test]
+        public async Task DeconstructionBesideAConstraintOnAnotherTypeArgument_NamesTheCalledExtension()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("7805");
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, "ClosureDeconstructsAReceiverMarkedByTheSecondTypeArgument(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            string reason = HotReloadWorkerReasonText.Render(skipped.reason);
+            Assert.That(reason, Does.Contain("HotReloadUnpassedSecondMarkExtensions"));
+            Assert.That(reason, Does.Not.Contain("HotReloadUnpassedFirstMarkExtensions"));
+            Assert.That(FindEntry(result, "ClosureDeconstructsAReceiverMarkedByTheSecondTypeArgument"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a deconstruction whose receiver satisfies an internal generic extension's constraint
+        /// only through the constraint's own type parameter, or only through variance, is skipped
+        /// with a reason that names that extension rather than patched into a body that throws.
+        /// </summary>
+        [TestCase("7815", "ClosureDeconstructsASelfReferencingReceiver", "HotReloadUnpassedSelfReferencingExtensions")]
+        [TestCase("7825", "ClosureDeconstructsAProducerOfADerivedType", "HotReloadUnpassedVariantProducerExtensions")]
+        public async Task DeconstructionThroughAnOpenOrVariantConstraint_NamesTheCalledExtension(
+            string token,
+            string methodName,
+            string calledType)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            TransformWorkerSkippedDto skipped = FindSkipped(result, methodName + "(");
+            Assert.That(skipped, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(HotReloadWorkerReasonText.Render(skipped.reason), Does.Contain(calledType));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
         /// What: a lambda or async body whose handler is declared in the passed file, with its
         /// InterpolatedStringHandler attribute declared internally in a file the run does not pass,
         /// is skipped with the implicit-call reason naming the internal AppendFormatted, also when

@@ -63,11 +63,88 @@ internal static class UnpassedInternalExtensionLookup
                         AcceptedThisTypeNames(arrayReceiver.ElementType));
             case ITypeParameterSymbol typeParameter:
                 return SatisfiesKindConstraints(typeParameter, receiver)
-                    && typeParameter.ConstraintTypes.All(constraint => constraint is INamedTypeSymbol namedConstraint
-                        && acceptedThisTypes.Contains(
-                            ConstDriftCollector.ToReflectionMetadataName(namedConstraint.OriginalDefinition)));
+                    && typeParameter.ConstraintTypes.All(constraint => AcceptsConstraint(constraint, receiver, acceptedThisTypes));
             default:
                 return false;
+        }
+    }
+
+    // Whether the receiver satisfies one type constraint of a 'this T' parameter.
+    // Why the constructed type only when it is closed and invariant: then the compiler needs the
+    // receiver to have exactly that type among its own, base and interface types, so 'IMarker<A>'
+    // rejects a receiver marked by 'IMarker<B>'. A constraint that names a type parameter
+    // ('IEquatable<T>') is constructed from the receiver, and a variant one ('IProducer<Base>',
+    // 'IComparable<T>') is met by other type arguments, so both keep the match by the generic
+    // definition, which never rejects a receiver the compiler accepts.
+    private static bool AcceptsConstraint(ITypeSymbol constraint, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)
+    {
+        if (constraint is not INamedTypeSymbol namedConstraint
+            || !acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(namedConstraint.OriginalDefinition)))
+        {
+            return false;
+        }
+
+        string constraintKey = HasVariantTypeParameter(namedConstraint) ? null : IdentityKeyOrNull(namedConstraint);
+        return constraintKey == null || ReceiverAndSupertypes(receiver).Any(type => IdentityKeyOrNull(type) == constraintKey);
+    }
+
+    private static bool HasVariantTypeParameter(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol current = type; current != null; current = current.ContainingType)
+        {
+            if (current.OriginalDefinition.TypeParameters.Any(parameter => parameter.Variance != VarianceKind.None))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // What: a name of the type that the two compilations agree on and that ignores what identity
+    // conversions ignore (tuple element names, dynamic for object); null when the type holds a type
+    // parameter or a shape the name does not cover, which leaves the definition match in place.
+    private static string IdentityKeyOrNull(ITypeSymbol type)
+    {
+        switch (type)
+        {
+            case IDynamicTypeSymbol _:
+                return "System.Object";
+            case IArrayTypeSymbol array:
+                string elementKey = IdentityKeyOrNull(array.ElementType);
+                return elementKey == null ? null : elementKey + "[" + array.Rank + "]";
+            case INamedTypeSymbol named:
+                INamedTypeSymbol underlying = named.TupleUnderlyingType ?? named;
+                List<string> argumentKeys = AllTypeArguments(underlying).Select(IdentityKeyOrNull).ToList();
+                return argumentKeys.Contains(null)
+                    ? null
+                    : ConstDriftCollector.ToReflectionMetadataName(underlying.OriginalDefinition)
+                        + "<" + string.Join(",", argumentKeys) + ">";
+            default:
+                return null;
+        }
+    }
+
+    // Why the containing types' arguments too: 'Outer<A>.Inner' and 'Outer<B>.Inner' share the
+    // definition and differ only there.
+    private static IEnumerable<ITypeSymbol> AllTypeArguments(INamedTypeSymbol type)
+    {
+        return type.ContainingType == null
+            ? type.TypeArguments
+            : AllTypeArguments(type.ContainingType).Concat(type.TypeArguments);
+    }
+
+    // The receiver, its base types and its interfaces, as constructed types.
+    private static IEnumerable<INamedTypeSymbol> ReceiverAndSupertypes(ITypeSymbol receiver)
+    {
+        for (INamedTypeSymbol type = receiver as INamedTypeSymbol ?? receiver.BaseType; type != null; type = type.BaseType)
+        {
+            yield return type;
+        }
+
+        foreach (INamedTypeSymbol implemented in receiver.AllInterfaces)
+        {
+            yield return implemented;
         }
     }
 
@@ -105,18 +182,10 @@ internal static class UnpassedInternalExtensionLookup
     // The receiver, its base types and its interfaces, any of which an extension's 'this' may name.
     private static HashSet<string> AcceptedThisTypeNames(ITypeSymbol receiver)
     {
-        HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
-        for (INamedTypeSymbol type = receiver as INamedTypeSymbol ?? receiver.BaseType; type != null; type = type.BaseType)
-        {
-            names.Add(ConstDriftCollector.ToReflectionMetadataName(type.OriginalDefinition));
-        }
-
-        foreach (INamedTypeSymbol implemented in receiver.AllInterfaces)
-        {
-            names.Add(ConstDriftCollector.ToReflectionMetadataName(implemented.OriginalDefinition));
-        }
-
-        return names;
+        return new HashSet<string>(
+            ReceiverAndSupertypes(receiver)
+                .Select(type => ConstDriftCollector.ToReflectionMetadataName(type.OriginalDefinition)),
+            StringComparer.Ordinal);
     }
 
     private static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceSymbol namespaceSymbol)

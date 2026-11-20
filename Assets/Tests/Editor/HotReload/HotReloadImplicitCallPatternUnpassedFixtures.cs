@@ -504,6 +504,133 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Generic marker interface whose type argument alone tells two constrained extensions apart.
+    /// </summary>
+    public interface IHotReloadUnpassedMarker<T>
+    {
+    }
+
+    /// <summary>
+    /// First type argument of the marker interface.
+    /// </summary>
+    public sealed class HotReloadUnpassedFirstMark
+    {
+    }
+
+    /// <summary>
+    /// Second type argument of the marker interface.
+    /// </summary>
+    public sealed class HotReloadUnpassedSecondMark
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of the first type argument, declared
+    /// before the one a receiver marked by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedFirstMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<HotReloadUnpassedFirstMark>
+        {
+            first = value == null ? 0 : 1;
+            second = 2;
+        }
+    }
+
+    /// <summary>
+    /// The two-out Deconstruct a receiver marked by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedSecondMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<HotReloadUnpassedSecondMark>
+        {
+            first = value == null ? 0 : 3;
+            second = 4;
+        }
+    }
+
+    /// <summary>
+    /// Receiver marked by the second type argument only.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedBySecond : IHotReloadUnpassedMarker<HotReloadUnpassedSecondMark>
+    {
+    }
+
+    /// <summary>
+    /// Invariant interface a type implements with itself as the type argument. Unlike
+    /// IComparable&lt;T&gt;, it has no variant type parameter, so only the type parameter in the
+    /// constraint below keeps that constraint from a comparison of the constructed type.
+    /// </summary>
+    public interface IHotReloadUnpassedSelfReferencing<T>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct whose constraint names its own type parameter, so the
+    /// constructed constraint never equals an interface the receiver implements.
+    /// </summary>
+    public static class HotReloadUnpassedSelfReferencingExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedSelfReferencing<T>
+        {
+            first = value == null ? 0 : 5;
+            second = 6;
+        }
+    }
+
+    /// <summary>
+    /// Receiver referencing itself, deconstructed through the self-referencing constraint.
+    /// </summary>
+    public sealed class HotReloadUnpassedSelfReferencing : IHotReloadUnpassedSelfReferencing<HotReloadUnpassedSelfReferencing>
+    {
+    }
+
+    /// <summary>
+    /// Covariant producer interface, so a producer of a derived type is a producer of its base.
+    /// </summary>
+    public interface IHotReloadUnpassedProducer<out T>
+    {
+    }
+
+    /// <summary>
+    /// Base of the produced types.
+    /// </summary>
+    public class HotReloadUnpassedProducedBase
+    {
+    }
+
+    /// <summary>
+    /// Derived produced type.
+    /// </summary>
+    public sealed class HotReloadUnpassedProducedDerived : HotReloadUnpassedProducedBase
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct constrained to a producer of the base type, which a producer of
+    /// the derived type satisfies through variance only.
+    /// </summary>
+    public static class HotReloadUnpassedVariantProducerExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedProducer<HotReloadUnpassedProducedBase>
+        {
+            first = value == null ? 0 : 6;
+            second = 7;
+        }
+    }
+
+    /// <summary>
+    /// Producer of the derived type, deconstructed through the variant constraint.
+    /// </summary>
+    public sealed class HotReloadUnpassedDerivedProducer : IHotReloadUnpassedProducer<HotReloadUnpassedProducedDerived>
+    {
+    }
+
+    /// <summary>
     /// Pair deconstructed through a constrained generic extension Deconstruct in an unpassed file.
     /// </summary>
     public class HotReloadUnpassedGenericPair
