@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.11](https://github.com/hatayama/unity-cli-loop/compare/v3.34.10...v3.34.11) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload names the internal generic extension the compiler calls when two constraints differ only in type arguments ([#3593](https://github.com/hatayama/unity-cli-loop/issues/3593)) ([ab538f2](https://github.com/hatayama/unity-cli-loop/commit/ab538f26de82f73e88712c3e9f6902cd8b6cdcf4))
+
 ## [3.34.10](https://github.com/hatayama/unity-cli-loop/compare/v3.34.9...v3.34.10) (2026-11-20)
 
 
