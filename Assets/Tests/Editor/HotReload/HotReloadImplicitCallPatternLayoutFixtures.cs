@@ -705,6 +705,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByMemory()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedByMemory();
+                return first + second + 7875;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsALocalTypedAsAMarkerOfMemory()
+        {
+            IHotReloadUnpassedMarker<Memory<int>> marked = new HotReloadUnpassedMarkedByMemory();
+            Func<int> read = () =>
+            {
+                (int first, int second) = marked;
+                return first + second + 7885;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverTaggedByMemory()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedTaggedByMemory();
+                return first + second + 7895;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsALocalTypedAsATagOfMemory()
+        {
+            IHotReloadUnpassedTag<Memory<int>> tagged = new HotReloadUnpassedTaggedByMemory();
+            Func<int> read = () =>
+            {
+                (int first, int second) = tagged;
+                return first + second + 7905;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverMarkedByAnArrayOfTheSecond()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedMarkedBySecondArray();
+                return first + second + 7915;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverOfTheInnerOfTheSecond()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedInnerOfSecond();
+                return first + second + 7925;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesTwoArgumentsWithInternalIndexer()
         {
             Func<int> read = () => new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7615;
