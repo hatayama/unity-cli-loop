@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     }
 
     /// <summary>
-    /// Selects the shell profile target for the single PATH line owned by Unity CLI Loop.
+    /// Selects the shell profile target for the single PATH line owned by Unity Loop Harness.
     /// </summary>
     public static class CliPathSetupProfileResolver
     {

@@ -7,7 +7,7 @@ using UnityEditor.Compilation;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Assembly Builder Fallback Compiler Backend behavior for Unity CLI Loop.
+    /// Provides Assembly Builder Fallback Compiler Backend behavior for Unity Loop Harness.
     /// </summary>
     internal static class AssemblyBuilderFallbackCompilerBackend
     {

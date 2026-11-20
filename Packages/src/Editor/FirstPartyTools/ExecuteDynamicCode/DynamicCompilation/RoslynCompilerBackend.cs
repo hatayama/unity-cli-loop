@@ -13,7 +13,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Roslyn Compiler Backend behavior for Unity CLI Loop.
+    /// Provides Roslyn Compiler Backend behavior for Unity Loop Harness.
     /// </summary>
     internal static class RoslynCompilerBackend
     {

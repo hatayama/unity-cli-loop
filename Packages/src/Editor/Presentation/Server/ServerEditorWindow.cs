@@ -9,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
     /// Standalone window for server status monitoring and lifecycle control.
-    /// Accessible from Window > Unity CLI Loop > Server.
+    /// Accessible from Window > Unity Loop Harness > Server.
     /// </summary>
     public class ServerEditorWindow : EditorWindow
     {

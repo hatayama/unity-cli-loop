@@ -5,7 +5,7 @@ using Debug = UnityEngine.Debug;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Compiled Assembly Loader behavior for Unity CLI Loop.
+    /// Provides Compiled Assembly Loader behavior for Unity Loop Harness.
     /// </summary>
     internal static class CompiledAssemblyLoader
     {

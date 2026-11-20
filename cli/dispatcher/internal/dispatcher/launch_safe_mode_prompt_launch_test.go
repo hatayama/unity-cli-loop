@@ -98,7 +98,7 @@ func TestLaunchStartsEditorAndIgnoresTheSafeModePrompt(t *testing.T) {
 
 	assertReadyAfterIgnoringThePrompt(t, run)
 	assertOneIgnorePressOnThePrompt(t, presses)
-	if !strings.Contains(run.stdout, `"Launched": true`) || !strings.Contains(run.stdout, "Unity CLI Loop is ready. uloop pressed") {
+	if !strings.Contains(run.stdout, `"Launched": true`) || !strings.Contains(run.stdout, "Unity Loop Harness is ready. uloop pressed") {
 		t.Fatalf("launch output is not a fresh launch's:\n%s", run.stdout)
 	}
 }
@@ -132,7 +132,7 @@ func TestLaunchWithoutTheSafeModePromptLeavesTheResponseUnchanged(t *testing.T) 
 	if run.code != 0 || len(presses.titles) != 0 {
 		t.Fatalf("exit code = %d, presses = %+v, want 0 and no press\nstderr=%s", run.code, presses, run.stderr)
 	}
-	if strings.Contains(run.stdout, "SafeModePromptIgnored") || !strings.Contains(run.stdout, `"Message": "Unity CLI Loop is ready."`) {
+	if strings.Contains(run.stdout, "SafeModePromptIgnored") || !strings.Contains(run.stdout, `"Message": "Unity Loop Harness is ready."`) {
 		t.Fatalf("launch output changed:\n%s", run.stdout)
 	}
 }

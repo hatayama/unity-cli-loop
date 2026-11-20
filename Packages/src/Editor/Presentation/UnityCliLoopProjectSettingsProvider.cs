@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Shows Unity CLI Loop project-scoped (git-shared) settings under Edit > Project Settings.
+    /// Shows Unity Loop Harness project-scoped (git-shared) settings under Edit > Project Settings.
     /// </summary>
     internal static class UnityCliLoopProjectSettingsProvider
     {

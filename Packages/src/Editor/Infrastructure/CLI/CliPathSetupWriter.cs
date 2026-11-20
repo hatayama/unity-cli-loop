@@ -10,7 +10,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Appends the single PATH setup line owned by Unity CLI Loop without interpreting full shell startup semantics.
+    /// Appends the single PATH setup line owned by Unity Loop Harness without interpreting full shell startup semantics.
     /// </summary>
     internal static class CliPathSetupWriter
     {

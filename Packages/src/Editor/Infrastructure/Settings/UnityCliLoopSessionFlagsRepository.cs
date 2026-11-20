@@ -3,7 +3,7 @@ using io.github.hatayama.UnityCliLoop.Domain;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Stores Unity CLI Loop runtime flags for the current Editor session.
+    /// Stores Unity Loop Harness runtime flags for the current Editor session.
     /// </summary>
     public sealed class UnityCliLoopSessionFlagsRepository : ISessionFlagsRepository
     {

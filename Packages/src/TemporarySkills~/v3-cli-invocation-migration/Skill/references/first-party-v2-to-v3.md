@@ -93,7 +93,7 @@ Bare `--force-recompile` on `uloop compile` and bare `--compile-only` on
 | --- | --- |
 | `uloop get-project-info` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop get-version` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
-| `uloop record-input` | Removed. Create recordings in the Unity Editor from **Window > Unity CLI Loop > Recordings**. Report only unless the user explicitly asks for removed command migration. |
+| `uloop record-input` | Removed. Create recordings in the Unity Editor from **Window > Unity Loop Harness > Recordings**. Report only unless the user explicitly asks for removed command migration. |
 | `uloop unity-search` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop execute-menu-item` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop get-menu-items` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |

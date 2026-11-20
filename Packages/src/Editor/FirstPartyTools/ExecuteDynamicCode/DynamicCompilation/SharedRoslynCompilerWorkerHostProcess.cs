@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string VibeLogSharedWorkerStarted = "dynamic_code_shared_worker_started";
 
         /// <summary>
-        /// Provides Worker Paths behavior for Unity CLI Loop.
+        /// Provides Worker Paths behavior for Unity Loop Harness.
         /// </summary>
         internal sealed class WorkerPaths
         {

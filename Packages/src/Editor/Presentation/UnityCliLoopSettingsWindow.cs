@@ -10,7 +10,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Defines the Unity Editor window for Unity CLI Loop Settings workflows.
+    /// Defines the Unity Editor window for Unity Loop Harness Settings workflows.
     /// </summary>
     public class UnityCliLoopSettingsWindow : EditorWindow
     {

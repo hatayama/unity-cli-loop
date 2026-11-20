@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Dynamic Code Source Preparer behavior for Unity CLI Loop.
+    /// Provides Dynamic Code Source Preparer behavior for Unity Loop Harness.
     /// </summary>
     internal static class DynamicCodeSourcePreparer
     {

@@ -5,7 +5,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.Presentation
 {
     /// <summary>
-    /// Provides CLI Uninstall Prompt behavior for Unity CLI Loop.
+    /// Provides CLI Uninstall Prompt behavior for Unity Loop Harness.
     /// </summary>
     internal static class CliUninstallPrompt
     {

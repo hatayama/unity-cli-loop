@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME);
                 LogAssert.Expect(
                     LogType.Warning,
-                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package source pin was not found at {sourcePath}.");
+                    $"Unity Loop Harness skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package source pin was not found at {sourcePath}.");
 
                 bool changed = CliPinSynchronizer.SyncProjectPinFile(packageRoot, projectRoot);
 
@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 Directory.CreateDirectory(projectRoot);
                 string expectedWarning =
-                    $"Unity CLI Loop skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package root is empty.";
+                    $"Unity Loop Harness skipped {UnityCliLoopConstants.ULOOP_PROJECT_RUNNER_PIN_FILE_NAME} synchronization because the package root is empty.";
                 LogAssert.Expect(
                     LogType.Warning,
                     expectedWarning);

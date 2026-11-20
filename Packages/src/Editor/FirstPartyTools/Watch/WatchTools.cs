@@ -184,7 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes watch expression registration through the Unity CLI Loop tool catalog.
+    /// Exposes watch expression registration through the Unity Loop Harness tool catalog.
     /// </summary>
     [UnityCliLoopTool]
     public sealed class EnableWatchTool : UnityCliLoopTool<EnableWatchSchema, WatchResponse>
@@ -198,7 +198,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes watch expression clearing through the Unity CLI Loop tool catalog.
+    /// Exposes watch expression clearing through the Unity Loop Harness tool catalog.
     /// </summary>
     [UnityCliLoopTool]
     public sealed class ClearWatchTool : UnityCliLoopTool<ClearWatchSchema, WatchResponse>
@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes watch expression histories through the Unity CLI Loop tool catalog.
+    /// Exposes watch expression histories through the Unity Loop Harness tool catalog.
     /// </summary>
     [UnityCliLoopTool]
     public sealed class GetWatchValuesTool : UnityCliLoopTool<GetWatchValuesSchema, WatchResponse>

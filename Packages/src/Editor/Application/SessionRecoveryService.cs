@@ -7,7 +7,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
-    /// Defines the coordination boundary for Unity CLI Loop Server Recovery behavior.
+    /// Defines the coordination boundary for Unity Loop Harness Server Recovery behavior.
     /// </summary>
     public interface IUnityCliLoopServerRecoveryCoordinator
     {

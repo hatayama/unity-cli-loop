@@ -2,7 +2,7 @@
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Provides Input Event Types behavior for Unity CLI Loop.
+    /// Provides Input Event Types behavior for Unity Loop Harness.
     /// </summary>
     internal static class InputEventTypes
     {

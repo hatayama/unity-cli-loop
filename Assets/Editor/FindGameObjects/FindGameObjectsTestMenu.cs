@@ -9,7 +9,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Dev
 {
     /// <summary>
-    /// Provides Find Game Objects Test Menu behavior for Unity CLI Loop.
+    /// Provides Find Game Objects Test Menu behavior for Unity Loop Harness.
     /// </summary>
     public static class FindGameObjectsTestMenu
     {

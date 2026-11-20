@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Provides Dynamic Compilation Backend behavior for Unity CLI Loop.
+    /// Provides Dynamic Compilation Backend behavior for Unity Loop Harness.
     /// </summary>
     internal sealed class DynamicCompilationBackend
     {

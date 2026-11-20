@@ -3,7 +3,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Application
 {
     /// <summary>
-    /// Unity CLI Loop Editor UI constants
+    /// Unity Loop Harness Editor UI constants
     /// Centralized management of UI-related constants
     /// </summary>
     public static class UnityCliLoopUIConstants

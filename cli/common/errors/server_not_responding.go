@@ -7,7 +7,7 @@ import (
 )
 
 // UnityServerNotRespondingError reports that a running Unity Editor accepted a
-// connection but its Unity CLI Loop server did not respond in time. Both the
+// connection but its Unity Loop Harness server did not respond in time. Both the
 // dispatcher's launch-readiness wait and the runner's connection retry loop
 // construct this error, and the shared CORE classifiers turn it into a CLIError.
 type UnityServerNotRespondingError struct {

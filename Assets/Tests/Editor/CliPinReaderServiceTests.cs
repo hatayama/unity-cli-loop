@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliPinLoadResult result = CliPinReaderService.LoadPinFromPath(pinPath);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo($"Unity CLI Loop pin file not found at {pinPath}."));
+            Assert.That(result.ErrorMessage, Is.EqualTo($"Unity Loop Harness pin file not found at {pinPath}."));
         }
 
         [Test]
@@ -72,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CliPinLoadResult result = CliPinReaderService.LoadPinFromPath(pinPath);
 
                 Assert.That(result.Success, Is.False);
-                Assert.That(result.ErrorMessage, Is.EqualTo($"Unity CLI Loop pin file at {pinPath} is empty."));
+                Assert.That(result.ErrorMessage, Is.EqualTo($"Unity Loop Harness pin file at {pinPath} is empty."));
             }
             finally
             {
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(result.Success, Is.False);
                 Assert.That(
                     result.ErrorMessage,
-                    Is.EqualTo($"Unity CLI Loop pin file at {pinPath} is missing projectRunnerVersion."));
+                    Is.EqualTo($"Unity Loop Harness pin file at {pinPath} is missing projectRunnerVersion."));
             }
             finally
             {
@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(result.Success, Is.False);
                 Assert.That(
                     result.ErrorMessage,
-                    Is.EqualTo($"Unity CLI Loop pin file at {pinPath} is missing minimumDispatcherVersion."));
+                    Is.EqualTo($"Unity Loop Harness pin file at {pinPath} is missing minimumDispatcherVersion."));
             }
             finally
             {
@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(result.Success, Is.False);
                 Assert.That(
                     result.ErrorMessage,
-                    Does.StartWith($"Unity CLI Loop pin file at {pinPath} contains invalid JSON:"));
+                    Does.StartWith($"Unity Loop Harness pin file at {pinPath} contains invalid JSON:"));
             }
             finally
             {
@@ -389,7 +389,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CliPinLoadResult result = CliPinReaderService.LoadPinFromPath("   ");
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo("Unity CLI Loop pin file path is empty."));
+            Assert.That(result.ErrorMessage, Is.EqualTo("Unity Loop Harness pin file path is empty."));
         }
 
         /// <summary>
@@ -404,7 +404,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             DispatcherBootstrapPinLoadResult result = CliPinReaderService.LoadDispatcherBootstrapPinFromPath(pinPath);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo($"Unity CLI Loop pin file not found at {pinPath}."));
+            Assert.That(result.ErrorMessage, Is.EqualTo($"Unity Loop Harness pin file not found at {pinPath}."));
         }
 
         /// <summary>
@@ -505,7 +505,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(result.Success, Is.False);
                 Assert.That(
                     result.ErrorMessage,
-                    Is.EqualTo($"Unity CLI Loop pin file at {pinPath} {expectedMessageSuffix}"));
+                    Is.EqualTo($"Unity Loop Harness pin file at {pinPath} {expectedMessageSuffix}"));
             }
             finally
             {

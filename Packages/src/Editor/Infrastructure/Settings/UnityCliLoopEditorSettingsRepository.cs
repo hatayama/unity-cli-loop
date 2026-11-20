@@ -12,7 +12,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
-    /// Management class for Unity CLI Loop Editor settings.
+    /// Management class for Unity Loop Harness Editor settings.
     /// Saves as a JSON file in the UserSettings folder.
     /// </summary>
     public sealed class UnityCliLoopEditorSettingsRepository : IUnityCliLoopEditorSettingsPort

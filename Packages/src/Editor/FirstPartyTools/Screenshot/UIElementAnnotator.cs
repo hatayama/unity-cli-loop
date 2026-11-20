@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     // over interactive UI elements. The overlay is captured by PlayModeView.m_TargetTexture
     // (OnGUI-based overlays are NOT included in the RT).
     /// <summary>
-    /// Provides UI Element Annotator behavior for Unity CLI Loop.
+    /// Provides UI Element Annotator behavior for Unity Loop Harness.
     /// </summary>
     public static class UIElementAnnotator
     {

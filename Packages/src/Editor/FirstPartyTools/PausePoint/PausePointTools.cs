@@ -361,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes pause point enabling as a Unity CLI Loop tool.
+    /// Exposes pause point enabling as a Unity Loop Harness tool.
     /// </summary>
     [UnityCliLoopTool]
     public class EnablePausePointTool : UnityCliLoopTool<EnablePausePointSchema, PausePointResponse>
@@ -378,7 +378,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Exposes pause point clearing as a Unity CLI Loop tool.
+    /// Exposes pause point clearing as a Unity Loop Harness tool.
     /// </summary>
     [UnityCliLoopTool]
     public class ClearPausePointTool : UnityCliLoopTool<ClearPausePointSchema, PausePointResponse>
