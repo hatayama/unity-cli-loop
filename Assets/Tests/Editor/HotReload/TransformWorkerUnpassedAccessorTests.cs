@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
         private const string InsideClosureAdvice = "Move the use out of the lambda, local function or query, or run 'uloop compile'.";
         private const string OutOfReachAdvice = "Run 'uloop compile'.";
+        private const string BareNameAdvice = "Qualify the bare name with 'this.' or the type name, or run 'uloop compile'.";
 
         /// <summary>
         /// What: a lambda that calls an internal accessor of a public property or indexer of a type
@@ -43,6 +44,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7301", "RangeThroughLengthGetterInLambda", "The getter of 'Length'")]
         [TestCase("7321", "StaticSetterWriteInLambda", "The setter of 'Shared'")]
         [TestCase("7341", "GenericIndexerSetterWriteInLambda", "The setter of 'this[]'")]
+        [TestCase("7351", "NestedInitializerGetterInLambda", "The getter of 'Inner'")]
+        [TestCase("7371", "WithInitializerInitInLambda", "The init accessor of 'Length'")]
+        [TestCase("7391", "IndexInitializerSetterInLambda", "The setter of 'this[]'")]
+        [TestCase("7441", "CompoundAssignmentOfInternalGetterInLambda", "The getter of 'Value'")]
+        [TestCase("7451", "IncrementOfInternalGetterInLambda", "The getter of 'Value'")]
+        [TestCase("7461", "DeconstructionIntoInternalSetterInLambda", "The setter of 'Length'")]
+        [TestCase("7571", "PropertyPatternGetterInLambda", "The getter of 'Value'")]
+        [TestCase("7591", "NestedPropertyPatternGetterInLambda", "The getter of 'Inner'")]
+        [TestCase("7541", "BareSetterWriteInLambda", "The setter of 'Length'")]
         public async Task LambdaCallingUnpassedInternalAccessor_IsSkippedWithTheInsideClosureReason(
             string token,
             string methodName,
@@ -74,6 +84,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7291", "IndexFromEndThroughIndexerGetterInAsync", "The getter of 'this[]'")]
         [TestCase("7311", "RangeThroughLengthGetterInAsync", "The getter of 'Length'")]
         [TestCase("7331", "StaticSetterWriteInAsync", "The setter of 'Shared'")]
+        [TestCase("7361", "NestedInitializerGetterInAsync", "The getter of 'Inner'")]
+        [TestCase("7381", "WithInitializerInitInAsync", "The init accessor of 'Length'")]
+        [TestCase("7431", "IndexInitializerSetterInAsync", "The setter of 'this[]'")]
+        [TestCase("7581", "PropertyPatternGetterInAsync", "The getter of 'Value'")]
+        [TestCase("7551", "BareSetterWriteInAsync", "The setter of 'Length'")]
         public async Task AsyncCallingUnpassedInternalAccessor_IsSkippedWithTheOutOfReachReason(
             string token,
             string methodName,
@@ -124,6 +139,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda whose extended property pattern reads, through an internal getter, the
+        /// member that the pattern goes through is skipped with the inside-closure reason that names
+        /// that getter.
+        /// </summary>
+        [Test]
+        public async Task LambdaWithExtendedPropertyPatternThroughUnpassedInternalGetter_IsSkippedWithTheInsideClosureReason()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(
+                "{ Inner: { Count: 7591 } }",
+                "{ Inner.Count: 7592 }");
+
+            string reason = FindSkipReason(result, "NestedPropertyPatternGetterInLambda(");
+            Assert.That(reason, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.Contain("The getter of 'Inner' is internal to "));
+            Assert.That(reason, Does.EndWith(InsideClosureAdvice));
+        }
+
+        /// <summary>
+        /// What: a method of a type in the edited file that writes, by its bare name, an inherited
+        /// property or static property whose setter is internal to a base type in a file the run does
+        /// not pass is skipped with the bare-name reason, as a bare-name use of an internal member
+        /// is, because the shim cannot qualify a name the worker does not bind as written.
+        /// </summary>
+        [TestCase("7531", "BareSetterWriteInOwnStatements", "The setter of 'Length'")]
+        [TestCase("7561", "BareStaticSetterWriteInOwnStatements", "The setter of 'Shared'")]
+        public async Task OwnStatementsWritingUnpassedInternalSetterByBareName_IsSkippedWithTheBareNameReason(
+            string token,
+            string methodName,
+            string accessor)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
+
+            string reason = FindSkipReason(result, methodName + "(");
+            Assert.That(reason, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.StartWith(accessor + " is internal to 'HotReloadUnpassedAccessorBase'"));
+            Assert.That(reason, Does.EndWith(BareNameAdvice));
+            Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
+        }
+
+        /// <summary>
+        /// What: a lambda with a genuine error that only looks like a use of an internal accessor (an
+        /// index of the wrong type or an undefined name against an indexer whose getter is internal,
+        /// a write to a property with no setter, a write to a read-only indexer beside an overload
+        /// whose getter is internal) is not skipped by the transform worker, as before this lookup,
+        /// so the shim compile reports the error.
+        /// </summary>
+        [TestCase("7471 - 7471", "\"a\"", "WrongIndexTypeInLambda")]
+        [TestCase("7481 - 7481", "undefinedIndex7481", "UndefinedIndexInLambda")]
+        [TestCase("int value = 7491;", "holder.Fixed = 7491; int value = 1;", "GetOnlyWriteInLambda")]
+        [TestCase("int value = 7521;", "holder[0] = 7521; int value = 1;", "ReadOnlyIndexerWriteBesideInternalGetterOverloadInLambda")]
+        public async Task LambdaWithGenuineErrorNearUnpassedInternalAccessor_IsNotSkippedByTheWorker(
+            string fragment,
+            string replacement,
+            string methodName)
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(fragment, replacement);
+
+            Assert.That(FindSkipReason(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
+        }
+
+        /// <summary>
         /// What: a lambda that calls only the public accessor of a property whose other accessor is
         /// internal, and a lambda whose range never reads the Length with the internal getter, stay
         /// patch entries, because the shim assembly can run every call they make.
@@ -146,6 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("7501", "SetterWriteInOwnStatements")]
         [TestCase("7511", "GetterReadInOwnStatements")]
+        [TestCase("7601", "PropertyPatternGetterInOwnStatements")]
         public async Task OwnStatementsCallingUnpassedInternalAccessor_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
@@ -154,15 +231,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
         }
 
-        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
+        private static Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)
+        {
+            return RunEditedFixtureAsync(token, token.Substring(0, 3) + "2");
+        }
+
+        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(string fragment, string replacement)
         {
             string fixturePath = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
             string onDisk = File.ReadAllText(fixturePath);
-            string editedToken = token.Substring(0, 3) + "2";
-            string edited = onDisk.Replace(token, editedToken, StringComparison.Ordinal);
-            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the token must be in the fixture.");
-            string editedPath = HotReloadTestSourceWriter.WriteEditedSource("UnpassedAccessor" + token + ".cs", edited);
+            int first = onDisk.IndexOf(fragment, StringComparison.Ordinal);
+            Assert.That(first, Is.GreaterThanOrEqualTo(0), "Precondition: the fragment must be in the fixture.");
+            Assert.That(
+                onDisk.IndexOf(fragment, first + fragment.Length, StringComparison.Ordinal),
+                Is.EqualTo(-1),
+                "Precondition: the fragment must occur once in the fixture.");
+            string edited = onDisk.Replace(fragment, replacement, StringComparison.Ordinal);
+            string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "UnpassedAccessor" + Math.Abs(fragment.GetHashCode()) + ".cs",
+                edited);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildInputForSource(
                 editedPath,
                 FixtureProjectRelativePath,

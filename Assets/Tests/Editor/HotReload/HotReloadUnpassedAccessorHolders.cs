@@ -120,4 +120,88 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         public static int Shared { get; internal set; }
     }
+
+    /// <summary>
+    /// A record whose public property has an internal init accessor, set through a with expression.
+    /// </summary>
+    public sealed record HotReloadUnpassedInternalInitRecord
+    {
+        public int Length { get; internal init; } = 3;
+    }
+
+    /// <summary>
+    /// A public property whose getter is internal and whose value is filled by a nested object
+    /// initializer, which reads the property rather than setting it.
+    /// </summary>
+    public sealed class HotReloadUnpassedNestedInitializerOuter
+    {
+        public HotReloadUnpassedNestedInitializerInner Inner { internal get; set; } = new HotReloadUnpassedNestedInitializerInner();
+
+        public int ReadInner()
+        {
+            return Inner.Count;
+        }
+    }
+
+    /// <summary>
+    /// The object a nested object initializer fills.
+    /// </summary>
+    public sealed class HotReloadUnpassedNestedInitializerInner
+    {
+        public int Count;
+    }
+
+    /// <summary>
+    /// A base type whose public property has an internal setter, which a type in the edited file
+    /// writes by its bare name.
+    /// </summary>
+    public class HotReloadUnpassedAccessorBase
+    {
+        public int Length { get; internal set; } = 3;
+
+        public static int Shared { get; internal set; }
+
+        public int ReadLength()
+        {
+            return Length;
+        }
+    }
+
+    /// <summary>
+    /// A public property with no setter at all, whose write is a genuine error.
+    /// </summary>
+    public sealed class HotReloadUnpassedGetOnlyHolder
+    {
+        public int Fixed { get; } = 3;
+    }
+
+    /// <summary>
+    /// An indexer whose getter is internal, indexed with an argument of the wrong type, whose read
+    /// is a genuine error rather than a use of the internal getter.
+    /// </summary>
+    public sealed class HotReloadUnpassedIntIndexerInternalGetterHolder
+    {
+        private readonly int[] _items = { 61, 62, 63 };
+
+        public int this[int index]
+        {
+            internal get => _items[index];
+            set => _items[index] = value;
+        }
+    }
+
+    /// <summary>
+    /// A read-only int indexer beside a string indexer whose getter is internal, so a write through
+    /// the int indexer is a genuine error that the string indexer must not explain.
+    /// </summary>
+    public sealed class HotReloadUnpassedOverloadedIndexerHolder
+    {
+        public int this[int index] => index;
+
+        public int this[string key]
+        {
+            internal get => key.Length;
+            set { }
+        }
+    }
 }
