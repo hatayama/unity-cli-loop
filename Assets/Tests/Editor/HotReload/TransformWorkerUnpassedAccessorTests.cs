@@ -236,12 +236,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a lambda that calls only the public accessor of a property whose other accessor is
         /// internal, a lambda whose range never reads the Length with the internal getter, and a
         /// lambda whose int argument binds to the public indexer beside an internal Index indexer,
-        /// stay patch entries, because the shim assembly can run every call they make.
+        /// and a lambda whose Index access sits beside an internal indexer taking an array of the
+        /// type parameter, which an Index never converts to, stay patch entries, because the shim
+        /// assembly can run every call they make.
         /// </summary>
         [TestCase("7401", "GetterReadOfInternalSetterInLambda")]
         [TestCase("7411", "SetterWriteOfInternalGetterInLambda")]
         [TestCase("7421", "RangeWithoutLengthInLambda")]
         [TestCase("7691", "IndexWithIntArgumentBesideInternalIndexIndexerInLambda")]
+        [TestCase("7771", "IndexBesideInternalGenericArrayKeyIndexerInLambda")]
         public async Task LambdaCallingOnlyPublicAccessors_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);

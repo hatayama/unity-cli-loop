@@ -315,4 +315,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         internal int this[object key] => 99;
     }
+
+    /// <summary>
+    /// A generic type whose internal indexer takes an array of the type parameter, beside a public
+    /// Length and int indexer. An Index never converts to an array, so an Index access calls only
+    /// the public members.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericArrayKeyIndexerHolder<T>
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[T[] keys] => 99;
+    }
 }

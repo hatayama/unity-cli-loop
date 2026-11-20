@@ -18,8 +18,9 @@ internal static class UnpassedIndexerApplicability
     /// Whether <paramref name="indexer"/>, declared by the compiled copy of
     /// <paramref name="constructed"/>, accepts <paramref name="argumentType"/> as its only
     /// argument: its first parameter takes that type, its other parameters are optional, or its
-    /// only parameter is a params array of it. A parameter whose type still holds a type parameter
-    /// after substitution counts as accepting it, so a skip rather than a run-time failure follows.
+    /// only parameter is a params array of it. A parameter that is still a type parameter after
+    /// substitution, or a nullable form or an interface built on one, counts as accepting it, so a
+    /// skip rather than a run-time failure follows.
     /// </summary>
     internal static bool Accepts(IPropertySymbol indexer, INamedTypeSymbol constructed, ITypeSymbol argumentType)
     {
@@ -53,12 +54,32 @@ internal static class UnpassedIndexerApplicability
     private static bool TakesTheArgument(ITypeSymbol parameterType, INamedTypeSymbol constructed, HashSet<string> acceptedNames)
     {
         ITypeSymbol substituted = SubstituteOrNull(parameterType, constructed);
-        if (substituted == null || ContainsTypeParameter(substituted))
+        if (substituted == null)
         {
             return true;
         }
 
+        if (ContainsTypeParameter(substituted))
+        {
+            return MayStillTakeTheArgument(substituted);
+        }
+
         return acceptedNames.Contains(substituted.ToDisplayString());
+    }
+
+    // Why only these shapes: an Index or Range is a struct, which converts to a type parameter it may
+    // stand for, its nullable form or an interface, but never to an array or another generic class,
+    // whatever the type arguments are.
+    private static bool MayStillTakeTheArgument(ITypeSymbol substituted)
+    {
+        if (substituted is ITypeParameterSymbol)
+        {
+            return true;
+        }
+
+        return substituted is INamedTypeSymbol named
+            && (named.TypeKind == TypeKind.Interface
+                || named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T);
     }
 
     // A type parameter of the declaring type, or of a type containing it, becomes the matching type
