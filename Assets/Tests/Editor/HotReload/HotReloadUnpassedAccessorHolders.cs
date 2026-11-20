@@ -1,3 +1,5 @@
+using System;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     // No test passes this file to a run. The worker therefore binds these types through the
@@ -218,5 +220,208 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             internal get => key.Length;
             set { }
         }
+    }
+
+    /// <summary>
+    /// A public Length and Slice beside an internal indexer that takes a Range. On the public
+    /// surface a range binds through Slice, while the compiler calls the internal indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalRangeIndexerHolder
+    {
+        private readonly int[] _items = { 1, 2, 3, 4 };
+
+        public int Length => _items.Length;
+
+        public int[] Slice(int start, int length)
+        {
+            return new[] { start, length };
+        }
+
+        internal int[] this[Range range] => _items[range];
+    }
+
+    /// <summary>
+    /// A public Length and int indexer beside an internal indexer that takes an Index. On the
+    /// public surface an Index binds through Length and the int indexer, while the compiler calls
+    /// the internal indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalIndexIndexerHolder
+    {
+        private readonly int[] _items = { 1, 2, 3, 4 };
+
+        public int Length => _items.Length;
+
+        public int this[int index]
+        {
+            get => _items[index];
+            set => _items[index] = value;
+        }
+
+        internal int this[Index index]
+        {
+            get => _items[index] * 10;
+            set => _items[index] = value * 10;
+        }
+    }
+
+    /// <summary>
+    /// A base type with a public Length and Slice beside an internal indexer that takes a Range,
+    /// reached through a derived type and through a type parameter constrained to it.
+    /// </summary>
+    public class HotReloadUnpassedInternalRangeIndexerBase
+    {
+        private readonly int[] _items = { 1, 2, 3, 4 };
+
+        public int Length => _items.Length;
+
+        public int[] Slice(int start, int length)
+        {
+            return new[] { start, length };
+        }
+
+        internal int[] this[Range range] => _items[range];
+    }
+
+    /// <summary>
+    /// A derived type with no indexer of its own, so a Range access finds the internal indexer of
+    /// its base.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalRangeIndexerDerived : HotReloadUnpassedInternalRangeIndexerBase
+    {
+    }
+
+    /// <summary>
+    /// A generic type whose internal indexer takes the type parameter, beside a public Length and
+    /// int indexer, so an Index access through the type constructed with Index calls that indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericKeyIndexerHolder<T>
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[T key] => 99;
+    }
+
+    /// <summary>
+    /// An internal indexer that takes object, beside a public Length and int indexer. An Index
+    /// argument converts to object, so the compiler calls that indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedObjectKeyIndexerHolder
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[object key] => 99;
+    }
+
+    /// <summary>
+    /// A generic type whose internal indexer takes an array of the type parameter, beside a public
+    /// Length and int indexer. An Index never converts to an array, so an Index access calls only
+    /// the public members.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericArrayKeyIndexerHolder<T>
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[T[] keys] => 99;
+    }
+
+    /// <summary>
+    /// A key that an Index converts to through its own implicit conversion.
+    /// </summary>
+    public readonly struct HotReloadUnpassedIndexKey
+    {
+        public HotReloadUnpassedIndexKey(Index index)
+        {
+            Index = index;
+        }
+
+        public Index Index { get; }
+
+        public static implicit operator HotReloadUnpassedIndexKey(Index index)
+        {
+            return new HotReloadUnpassedIndexKey(index);
+        }
+    }
+
+    /// <summary>
+    /// An internal indexer that takes a key an Index converts to, beside a public Length and int
+    /// indexer, so the compiler calls that indexer for an Index access.
+    /// </summary>
+    public sealed class HotReloadUnpassedConvertedKeyIndexerHolder
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[HotReloadUnpassedIndexKey key] => 99;
+    }
+
+    /// <summary>
+    /// A base key with an implicit conversion from Index, which yields the base key itself.
+    /// </summary>
+    public class HotReloadUnpassedBaseKey
+    {
+        public static implicit operator HotReloadUnpassedBaseKey(Index index)
+        {
+            return new HotReloadUnpassedBaseKey();
+        }
+    }
+
+    /// <summary>
+    /// A derived key with no conversion of its own. The base key's conversion yields a base key,
+    /// which converts to it only explicitly, so an Index does not convert to it.
+    /// </summary>
+    public sealed class HotReloadUnpassedDerivedKey : HotReloadUnpassedBaseKey
+    {
+    }
+
+    /// <summary>
+    /// An internal indexer that takes the derived key, beside a public Length and int indexer, so an
+    /// Index access calls only the public members.
+    /// </summary>
+    public sealed class HotReloadUnpassedDerivedKeyIndexerHolder
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[HotReloadUnpassedDerivedKey key] => 99;
+    }
+
+    /// <summary>
+    /// A generic key that converts implicitly from its type argument.
+    /// </summary>
+    public readonly struct HotReloadUnpassedGenericKey<T>
+    {
+        public HotReloadUnpassedGenericKey(T value)
+        {
+            Value = value;
+        }
+
+        public T Value { get; }
+
+        public static implicit operator HotReloadUnpassedGenericKey<T>(T value)
+        {
+            return new HotReloadUnpassedGenericKey<T>(value);
+        }
+    }
+
+    /// <summary>
+    /// An internal indexer that takes the generic key of the type parameter, beside a public Length
+    /// and int indexer. Constructed with Index, an Index converts to that key, so the compiler calls
+    /// that indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericConvertedKeyIndexerHolder<T>
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[HotReloadUnpassedGenericKey<T> key] => 99;
     }
 }

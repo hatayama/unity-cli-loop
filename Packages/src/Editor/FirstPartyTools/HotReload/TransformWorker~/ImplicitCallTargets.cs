@@ -36,7 +36,7 @@ internal static class ImplicitCallTargets
     private const string AwaitUsingConstruct = "await using";
     private const string PositionalPatternConstruct = "a positional pattern";
     private const string InterpolatedStringHandlerConstruct = "an interpolated string handler";
-    private const string IndexOrRangeConstruct = "an index or range";
+    internal const string IndexOrRangeConstruct = "an index or range";
     private const string AwaitForEachConstruct = "await foreach";
 
     /// <summary>

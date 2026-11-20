@@ -384,10 +384,14 @@ internal static class UnpassedInternalAccessorLookup
         return writes && IsInternalAccessorOfAVisibleMember(store) ? store : null;
     }
 
-    // A simple assignment, an initializer and a deconstruction only store; a nested initializer
-    // ('P = { ... }') only reads, filling what P returns; a compound assignment, an increment and a
-    // decrement read and store; every other use, a property pattern included, reads.
-    private static (bool Reads, bool Writes) AccessorsCalledBy(ExpressionSyntax access)
+    /// <summary>
+    /// Whether <paramref name="access"/> calls the getter, the setter, or both, of the property or
+    /// indexer it names. A simple assignment, an initializer and a deconstruction only store; a
+    /// nested initializer ('P = { ... }') only reads, filling what P returns; a compound assignment,
+    /// an increment and a decrement read and store; every other use, a property pattern included,
+    /// reads.
+    /// </summary>
+    internal static (bool Reads, bool Writes) AccessorsCalledBy(ExpressionSyntax access)
     {
         AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(access);
         if (assignment != null && AssignmentTargetRules.IsNestedInitializer(assignment))

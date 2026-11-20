@@ -125,6 +125,22 @@ internal static class UnresolvedBodyNameGuard
             return Describe(use, isPartial, diagnosticText);
         }
 
+        // Why after the errors and without one: the worker binds such an access through the implicit
+        // Index or Range support without an error, while the shim compile calls an indexer of the
+        // compiled type that the worker's public-only import leaves out.
+        foreach ((UnpassedInternalMemberUse hiddenIndexer, string evidence) in UnpassedExplicitIndexerLookup.FindAll(
+            semanticModel,
+            bodyNode,
+            methodDeclarationOrNull,
+            decision,
+            targetAssembly))
+        {
+            if (!IsWithinReach(hiddenIndexer, isPartial))
+            {
+                return Describe(hiddenIndexer, isPartial, evidence);
+            }
+        }
+
         return null;
     }
 

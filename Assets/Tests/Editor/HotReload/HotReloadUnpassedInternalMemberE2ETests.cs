@@ -315,15 +315,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a lambda that writes through an internal setter, and an async method that reads
+        /// What: a lambda that writes through an internal setter, an async method that reads
         /// through an internal indexer getter, of a public member of a compiled type the reload was
-        /// not given are skipped, on a plain type and for the lambda on a partial type too, and the
-        /// method keeps the compiled value instead of being reported as patched and then failing
-        /// when called.
+        /// not given, and a lambda or async method whose range or index the compiler sends to an
+        /// internal Range or Index indexer of such a type, are skipped, on a plain type and for the
+        /// lambda on a partial type too, and the method keeps the compiled value instead of being
+        /// reported as patched and then failing when called.
         /// </summary>
         [TestCase("InternalSetterInLambda", FixtureKind.Plain)]
         [TestCase("InternalIndexerGetterInAsyncMethod", FixtureKind.Plain)]
         [TestCase("InternalSetterInLambda", FixtureKind.Partial)]
+        [TestCase("InternalRangeIndexerInLambda", FixtureKind.Plain)]
+        [TestCase("InternalIndexIndexerInAsyncMethod", FixtureKind.Plain)]
         public async Task Run_LambdaOrAsyncUsingInternalAccessorOfUnpassedType_IsSkippedAndKeepsTheCompiledValue(
             string editName,
             FixtureKind fixture)
@@ -485,6 +488,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "HotReloadUnpassedIndexerInternalGetterHolder holder = new HotReloadUnpassedIndexerInternalGetterHolder();\n"
                         + "            return holder[0] + 100;",
                         121);
+                case "InternalRangeIndexerInLambda":
+                    return new BodyEdit(
+                        ClosureValue,
+                        "() => 30",
+                        "() => new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 100",
+                        102);
+                case "InternalIndexIndexerInAsyncMethod":
+                    return new BodyEdit(
+                        AsyncValue,
+                        "return 50;",
+                        "return new HotReloadUnpassedInternalIndexIndexerHolder()[^1] + 100;",
+                        140);
                 default:
                     throw new ArgumentException("Unknown edit: " + editName);
             }

@@ -369,6 +369,124 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return read();
         }
 
+        public int RangeThroughInternalRangeIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7631;
+            return read();
+        }
+
+        public async Task<int> RangeThroughInternalRangeIndexerInAsync()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7641;
+        }
+
+        public int IndexThroughInternalIndexIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalIndexIndexerHolder()[^1] + 7651;
+            return read();
+        }
+
+        public async Task<int> IndexThroughInternalIndexIndexerInAsync()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedInternalIndexIndexerHolder()[^1] + 7661;
+        }
+
+        public int IndexWriteThroughInternalIndexIndexerInLambda()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadUnpassedInternalIndexIndexerHolder holder = new HotReloadUnpassedInternalIndexIndexerHolder();
+                holder[^1] = 7671;
+                return holder[0];
+            };
+            return read();
+        }
+
+        public int RangeThroughInternalRangeIndexerInOwnStatements()
+        {
+            return new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7681;
+        }
+
+        public int RangeInOwnStatementsThenInLambda()
+        {
+            int own = new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0];
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7711;
+            return own + read();
+        }
+
+        public int IndexWithIntArgumentBesideInternalIndexIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalIndexIndexerHolder()[0] + 7691;
+            return read();
+        }
+
+        public int ConditionalIndexThroughInternalIndexIndexerInLambda()
+        {
+            HotReloadUnpassedInternalIndexIndexerHolder holder = new HotReloadUnpassedInternalIndexIndexerHolder();
+            Func<int> read = () => (holder?[^1] ?? 0) + 7721;
+            return read();
+        }
+
+        public int RangeThroughInternalRangeIndexerOfBaseInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexerDerived()[1..3][0] + 7731;
+            return read();
+        }
+
+        public int IndexThroughInternalGenericKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedGenericKeyIndexerHolder<Index>()[^1] + 7741;
+            return read();
+        }
+
+        public int IndexThroughInternalObjectKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedObjectKeyIndexerHolder()[^1] + 7751;
+            return read();
+        }
+
+        public int IndexBesideInternalGenericArrayKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedGenericArrayKeyIndexerHolder<int>()[^1] + 7771;
+            return read();
+        }
+
+        public int IndexThroughInternalConvertedKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedConvertedKeyIndexerHolder()[^1] + 7781;
+            return read();
+        }
+
+        public int IndexBesideInternalDerivedKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedDerivedKeyIndexerHolder()[^1] + 7791;
+            return read();
+        }
+
+        public int IndexThroughInternalGenericConvertedKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedGenericConvertedKeyIndexerHolder<Index>()[^1] + 7801;
+            return read();
+        }
+
+        public int IndexBesideInternalGenericConvertedKeyIndexerOfStringInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedGenericConvertedKeyIndexerHolder<string>()[^1] + 7811;
+            return read();
+        }
+
+        public int RangeThroughConstrainedTypeParameterInLocalFunction()
+        {
+            static int Read<T>(T holder) where T : HotReloadUnpassedInternalRangeIndexerBase
+            {
+                return holder[1..3][0] + 7761;
+            }
+
+            return Read(new HotReloadUnpassedInternalRangeIndexerDerived());
+        }
+
         public int SetterWriteInOwnStatements()
         {
             HotReloadUnpassedInternalSetterHolder holder = new HotReloadUnpassedInternalSetterHolder();
