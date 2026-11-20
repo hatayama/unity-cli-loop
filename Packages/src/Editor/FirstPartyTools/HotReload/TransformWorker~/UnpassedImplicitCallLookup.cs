@@ -42,6 +42,7 @@ internal static class UnpassedImplicitCallLookup
         SyntaxNode reported = bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
         foreach (SyntaxNode construct in reported.AncestorsAndSelf())
         {
+            string indexOrRangeArgumentType = UnpassedInternalAccessorLookup.IndexOrRangeArgumentTypeOrNull(semanticModel, construct);
             foreach ((ITypeSymbol receiver, string methodName, int? outParameterCount)
                 in EnumerateMissingCalls(semanticModel, construct))
             {
@@ -49,6 +50,7 @@ internal static class UnpassedImplicitCallLookup
                     receiver,
                     methodName,
                     outParameterCount,
+                    indexOrRangeArgumentType,
                     semanticModel,
                     targetAssembly);
                 if (method != null)
@@ -427,6 +429,7 @@ internal static class UnpassedImplicitCallLookup
         ITypeSymbol receiver,
         string methodName,
         int? outParameterCount,
+        string indexOrRangeArgumentType,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
@@ -457,6 +460,22 @@ internal static class UnpassedImplicitCallLookup
         if (member is IPropertySymbol { GetMethod: not null } property)
         {
             return property.GetMethod;
+        }
+
+        // Why a public member's internal getter too: an await reads IsCompleted, and an Index or
+        // Range access Length, Count or the indexer, through a getter the worker's public-only
+        // import leaves out.
+        IMethodSymbol internalGetter = outParameterCount == null
+            ? UnpassedInternalAccessorLookup.FindInternalGetterOrNull(
+                namedReceiver,
+                methodName,
+                indexOrRangeArgumentType,
+                semanticModel,
+                targetAssembly)
+            : null;
+        if (internalGetter != null)
+        {
+            return internalGetter;
         }
 
         return FindInternalExtensionOrNull(namedReceiver, methodName, outParameterCount, targetAssembly);
