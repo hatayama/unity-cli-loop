@@ -1,3 +1,5 @@
+using System;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     // No test passes this file to a run. The worker therefore binds these types through the
@@ -217,6 +219,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             internal get => key.Length;
             set { }
+        }
+    }
+
+    /// <summary>
+    /// A public Length and Slice beside an internal indexer that takes a Range. On the public
+    /// surface a range binds through Slice, while the compiler calls the internal indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalRangeIndexerHolder
+    {
+        private readonly int[] _items = { 1, 2, 3, 4 };
+
+        public int Length => _items.Length;
+
+        public int[] Slice(int start, int length)
+        {
+            return new[] { start, length };
+        }
+
+        internal int[] this[Range range] => _items[range];
+    }
+
+    /// <summary>
+    /// A public Length and int indexer beside an internal indexer that takes an Index. On the
+    /// public surface an Index binds through Length and the int indexer, while the compiler calls
+    /// the internal indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalIndexIndexerHolder
+    {
+        private readonly int[] _items = { 1, 2, 3, 4 };
+
+        public int Length => _items.Length;
+
+        public int this[int index]
+        {
+            get => _items[index];
+            set => _items[index] = value;
+        }
+
+        internal int this[Index index]
+        {
+            get => _items[index] * 10;
+            set => _items[index] = value * 10;
         }
     }
 }

@@ -28,8 +28,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an internal accessor of a public property or indexer of a type
-        /// in a file the run does not pass is skipped with the inside-closure reason, which names
-        /// that accessor, and produces no entry.
+        /// in a file the run does not pass, or whose range or index the compiler sends to an
+        /// internal Range or Index indexer of such a type, is skipped with the inside-closure
+        /// reason, which names that accessor or indexer, and produces no entry, also when the
+        /// method's own statements make the same call first.
         /// </summary>
         [TestCase("7101", "SetterWriteInLambda", "The setter of 'Length'")]
         [TestCase("7121", "GetterReadInLambda", "The getter of 'Value'")]
@@ -53,6 +55,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7571", "PropertyPatternGetterInLambda", "The getter of 'Value'")]
         [TestCase("7591", "NestedPropertyPatternGetterInLambda", "The getter of 'Inner'")]
         [TestCase("7541", "BareSetterWriteInLambda", "The setter of 'Length'")]
+        [TestCase("7631", "RangeThroughInternalRangeIndexerInLambda", "'this[]'")]
+        [TestCase("7651", "IndexThroughInternalIndexIndexerInLambda", "'this[]'")]
+        [TestCase("7671", "IndexWriteThroughInternalIndexIndexerInLambda", "'this[]'")]
+        [TestCase("7711", "RangeInOwnStatementsThenInLambda", "'this[]'")]
         public async Task LambdaCallingUnpassedInternalAccessor_IsSkippedWithTheInsideClosureReason(
             string token,
             string methodName,
@@ -69,8 +75,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an async method that calls an internal accessor of a public property or indexer of
-        /// a type in a file the run does not pass is skipped with the out-of-reach reason, which
-        /// names that accessor, and produces no entry.
+        /// a type in a file the run does not pass, or whose range or index the compiler sends to an
+        /// internal Range or Index indexer of such a type, is skipped with the out-of-reach reason,
+        /// which names that accessor or indexer, and produces no entry.
         /// </summary>
         [TestCase("7111", "SetterWriteInAsync", "The setter of 'Length'")]
         [TestCase("7131", "GetterReadInAsync", "The getter of 'Value'")]
@@ -89,6 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7431", "IndexInitializerSetterInAsync", "The setter of 'this[]'")]
         [TestCase("7581", "PropertyPatternGetterInAsync", "The getter of 'Value'")]
         [TestCase("7551", "BareSetterWriteInAsync", "The setter of 'Length'")]
+        [TestCase("7641", "RangeThroughInternalRangeIndexerInAsync", "'this[]'")]
+        [TestCase("7661", "IndexThroughInternalIndexIndexerInAsync", "'this[]'")]
         public async Task AsyncCallingUnpassedInternalAccessor_IsSkippedWithTheOutOfReachReason(
             string token,
             string methodName,
@@ -105,9 +114,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: the full reason of a lambda that writes through an internal setter, and of an
-        /// async method that reads through an internal indexer getter, names the accessor, its
-        /// type, the worker's diagnostic and the change that brings the use within reach.
+        /// What: the full reason of a lambda that writes through an internal setter, of an async
+        /// method that reads through an internal indexer getter, and of a range or index that the
+        /// compiler sends to an internal Range or Index indexer, names the member, its type, the
+        /// evidence the worker saw and the change that brings the use within reach.
         /// </summary>
         [TestCase(
             "7101",
@@ -118,6 +128,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "7211",
             "IndexerGetterReadInAsync",
             "The getter of 'this[]' is internal to 'HotReloadUnpassedIndexerInternalGetterHolder', whose source this reload was not given (CS0154: ",
+            OutOfReachAdvice)]
+        [TestCase(
+            "7631",
+            "RangeThroughInternalRangeIndexerInLambda",
+            "'this[]' is internal to 'HotReloadUnpassedInternalRangeIndexerHolder', whose source this reload was not given "
+                + "(the compiled type declares this[System.Range], which the compiler calls instead of Slice). ",
+            InsideClosureAdvice)]
+        [TestCase(
+            "7661",
+            "IndexThroughInternalIndexIndexerInAsync",
+            "'this[]' is internal to 'HotReloadUnpassedInternalIndexIndexerHolder', whose source this reload was not given "
+                + "(the compiled type declares this[System.Index], which the compiler calls instead of the int indexer). ",
             OutOfReachAdvice)]
         public async Task UnpassedInternalAccessorReason_NamesTheAccessorTheTypeAndTheAdvice(
             string token,
@@ -205,12 +227,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls only the public accessor of a property whose other accessor is
-        /// internal, and a lambda whose range never reads the Length with the internal getter, stay
-        /// patch entries, because the shim assembly can run every call they make.
+        /// internal, a lambda whose range never reads the Length with the internal getter, and a
+        /// lambda whose int argument binds to the public indexer beside an internal Index indexer,
+        /// stay patch entries, because the shim assembly can run every call they make.
         /// </summary>
         [TestCase("7401", "GetterReadOfInternalSetterInLambda")]
         [TestCase("7411", "SetterWriteOfInternalGetterInLambda")]
         [TestCase("7421", "RangeWithoutLengthInLambda")]
+        [TestCase("7691", "IndexWithIntArgumentBesideInternalIndexIndexerInLambda")]
         public async Task LambdaCallingOnlyPublicAccessors_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);
@@ -220,13 +244,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a method whose own statements write through an internal setter or read through an
-        /// internal getter of a type in a file the run does not pass stays a patch entry, because
-        /// the patched method itself makes the call.
+        /// What: a method whose own statements write through an internal setter, read through an
+        /// internal getter, or slice through an internal Range indexer of a type in a file the run
+        /// does not pass stays a patch entry, because the patched method itself makes the call.
         /// </summary>
         [TestCase("7501", "SetterWriteInOwnStatements")]
         [TestCase("7511", "GetterReadInOwnStatements")]
         [TestCase("7601", "PropertyPatternGetterInOwnStatements")]
+        [TestCase("7681", "RangeThroughInternalRangeIndexerInOwnStatements")]
         public async Task OwnStatementsCallingUnpassedInternalAccessor_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);

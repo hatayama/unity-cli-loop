@@ -369,6 +369,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return read();
         }
 
+        public int RangeThroughInternalRangeIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7631;
+            return read();
+        }
+
+        public async Task<int> RangeThroughInternalRangeIndexerInAsync()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7641;
+        }
+
+        public int IndexThroughInternalIndexIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalIndexIndexerHolder()[^1] + 7651;
+            return read();
+        }
+
+        public async Task<int> IndexThroughInternalIndexIndexerInAsync()
+        {
+            await Task.CompletedTask;
+            return new HotReloadUnpassedInternalIndexIndexerHolder()[^1] + 7661;
+        }
+
+        public int IndexWriteThroughInternalIndexIndexerInLambda()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadUnpassedInternalIndexIndexerHolder holder = new HotReloadUnpassedInternalIndexIndexerHolder();
+                holder[^1] = 7671;
+                return holder[0];
+            };
+            return read();
+        }
+
+        public int RangeThroughInternalRangeIndexerInOwnStatements()
+        {
+            return new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7681;
+        }
+
+        public int RangeInOwnStatementsThenInLambda()
+        {
+            int own = new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0];
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0] + 7711;
+            return own + read();
+        }
+
+        public int IndexWithIntArgumentBesideInternalIndexIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalIndexIndexerHolder()[0] + 7691;
+            return read();
+        }
+
         public int SetterWriteInOwnStatements()
         {
             HotReloadUnpassedInternalSetterHolder holder = new HotReloadUnpassedInternalSetterHolder();
