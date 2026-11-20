@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,9 +12,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
-    /// End-to-end coverage for edited bodies that call extension methods: an inaccessible one
-    /// reached from a lambda is skipped and keeps running the compiled body, and accessible
-    /// calls are patched and run the edited body.
+    /// End-to-end coverage for edited bodies that call extension methods, accessible ones and ones
+    /// of an internal class alike: they are patched and run the edited body, which calls the
+    /// overload the edited source calls.
     /// </summary>
     public class HotReloadExtensionCallE2ETests
     {
@@ -36,57 +37,116 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a lambda that calls an internal extension method in reduced form is Skipped, the
-        /// run reports no failure, and the method keeps returning the compiled value without
-        /// throwing.
+        /// What: a lambda that calls an internal extension method of an internal class in reduced
+        /// form is Patched and returns the edited value; RevertAll restores the compiled value.
         /// </summary>
         [Test]
-        public async Task Run_ClosureCallingInternalExtension_IsSkippedAndKeepsTheCompiledBody()
+        public async Task Run_ClosureCallingInternalExtension_IsPatchedAndReverts()
         {
             HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
             Assert.That(host.ClosureReadsPrivateFieldAndCallsInternalExtension(), Is.EqualTo(4107));
 
             HotReloadOrchestratorResult result = await RunEditedFixtureAsync("4101", "4102");
 
-            AssertKind(result, "ClosureReadsPrivateFieldAndCallsInternalExtension", HotReloadMethodOutcomeKind.Skipped);
-            AssertNoFailedRow(result);
+            AssertKind(result, "ClosureReadsPrivateFieldAndCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureReadsPrivateFieldAndCallsInternalExtension(), Is.EqualTo(4108));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(host.ClosureReadsPrivateFieldAndCallsInternalExtension(), Is.EqualTo(4107));
         }
 
         /// <summary>
-        /// What: a lambda that calls a public extension method of an internal class declared in
-        /// the same file is Skipped, the run reports no failure, and the method keeps returning
-        /// the compiled value instead of throwing MethodAccessException from the shim.
+        /// What: a lambda that calls a public extension method of an internal class declared in the
+        /// same file, which binds ambiguously against both copies of the class, is Patched and
+        /// returns the edited value.
         /// </summary>
         [Test]
-        public async Task Run_ClosureCallingPublicExtensionOfInternalClassInEditedFile_IsSkippedAndKeepsTheCompiledBody()
+        public async Task Run_ClosureCallingPublicExtensionOfInternalClassInEditedFile_IsPatched()
         {
             HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
             Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
 
             HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5101", "5102");
 
-            AssertKind(result, "ClosureCallsPublicExtensionOfInternalClass", HotReloadMethodOutcomeKind.Skipped);
-            AssertNoFailedRow(result);
-            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
+            AssertKind(result, "ClosureCallsPublicExtensionOfInternalClass", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5111));
         }
 
         /// <summary>
-        /// What: a lambda that calls an overloaded extension method of an internal class declared
-        /// in the same file is Skipped, the run reports no failure, and the method keeps returning
-        /// the compiled value instead of throwing MethodAccessException from the shim.
+        /// What: a lambda that calls an overloaded extension method of an internal class declared in
+        /// the same file is Patched, runs no shim that fails to compile, and returns the value of
+        /// the overload the edited source calls.
         /// </summary>
         [Test]
-        public async Task Run_ClosureCallingOverloadedExtensionOfInternalClassInEditedFile_IsSkippedAndKeepsTheCompiledBody()
+        public async Task Run_ClosureCallingOverloadedExtensionOfInternalClassInEditedFile_IsPatched()
         {
             HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
             Assert.That(host.ClosureCallsOverloadedExtensionOfInternalClass(), Is.EqualTo(5410));
 
             HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5401", "5402");
 
-            AssertKind(result, "ClosureCallsOverloadedExtensionOfInternalClass", HotReloadMethodOutcomeKind.Skipped);
             AssertNoFailedRow(result);
-            Assert.That(host.ClosureCallsOverloadedExtensionOfInternalClass(), Is.EqualTo(5410));
+            AssertKind(result, "ClosureCallsOverloadedExtensionOfInternalClass", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsOverloadedExtensionOfInternalClass(), Is.EqualTo(5411));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method of an internal class in the same file, where
+        /// an int and a long overload both apply, is Patched and runs the int overload the edited
+        /// source calls, not the long one, which would return 1000 more.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingBetterOverloadOfExtensionOfInternalClass_RunsTheEditedOverload()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureCallsBetterOverloadOfExtensionOfInternalClass(), Is.EqualTo(5504));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("5501", "5502");
+
+            AssertKind(result, "ClosureCallsBetterOverloadOfExtensionOfInternalClass", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsBetterOverloadOfExtensionOfInternalClass(), Is.EqualTo(5505));
+        }
+
+        /// <summary>
+        /// What: when one edit makes the internal extension class public and changes a lambda that
+        /// calls it, the lambda is Patched and calls the compiled class, which is still internal
+        /// while the Editor runs.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingExtensionOfClassMadePublicInSameEdit_IsPatched()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
+
+            HotReloadOrchestratorResult result = await RunEditAsync(onDisk => onDisk
+                .Replace(
+                    "    internal static class HotReloadInternalClassExtensionCallMath",
+                    "    public static class HotReloadInternalClassExtensionCallMath")
+                .Replace("5101", "5102"));
+
+            AssertKind(result, "ClosureCallsPublicExtensionOfInternalClass", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5111));
+        }
+
+        /// <summary>
+        /// What: a method added in this reload that calls an internal extension method of an
+        /// internal class in reduced form runs through the accessor: the compiled method edited to
+        /// call it returns what the added method computes.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodCallingInternalExtension_RunsThroughTheAccessor()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.OwnStatementCallsInternalExtension(), Is.EqualTo(4407));
+
+            HotReloadOrchestratorResult result = await RunEditAsync(onDisk => onDisk.Replace(
+                "            return _value.Twice(4401);\n        }",
+                "            return AddedCallsInternalExtension();\n        }\n\n"
+                + "        public int AddedCallsInternalExtension()\n        {\n"
+                + "            return _value.Twice(4801);\n        }"));
+
+            AssertNoFailedRow(result);
+            AssertKind(result, "OwnStatementCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.OwnStatementCallsInternalExtension(), Is.EqualTo(4807));
         }
 
         /// <summary>
@@ -144,15 +204,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.ClosureReadsPrivateFieldAndCallsPublicExtension(), Is.EqualTo(4607));
         }
 
-        private static async Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(
+        private static Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(
             string originalToken,
             string editedToken)
+        {
+            return RunEditAsync(onDisk => onDisk.Replace(originalToken, editedToken));
+        }
+
+        private static async Task<HotReloadOrchestratorResult> RunEditAsync(Func<string, string> edit)
         {
             string fixturePath = Path.GetFullPath(
                 Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
             string onDisk = File.ReadAllText(fixturePath);
-            string edited = onDisk.Replace(originalToken, editedToken);
-            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the token must be in the fixture.");
+            string edited = edit(onDisk);
+            Assert.That(edited, Is.Not.EqualTo(onDisk), "Precondition: the edit must change the fixture.");
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource("ExtensionCallE2E.cs", edited);
             return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },

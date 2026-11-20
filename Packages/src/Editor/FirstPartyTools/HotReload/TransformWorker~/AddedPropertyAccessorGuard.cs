@@ -148,7 +148,8 @@ internal static class AddedPropertyAccessorGuard
             typeState.CompiledType,
             accessorBodyLookup,
             typeState.AddedEvents,
-            typeState.SourceUnit.PartialTypeParts);
+            typeState.SourceUnit.PartialTypeParts,
+            typeState.TargetAssembly);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;

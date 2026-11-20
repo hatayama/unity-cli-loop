@@ -135,7 +135,8 @@ internal static class PropertyGetterClassifier
             compiledType,
             AddedMemberAccessLookup.ForAccessorBody(addedEvents),
             addedEvents,
-            partialTypeParts);
+            partialTypeParts,
+            targetAssembly);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped

@@ -482,8 +482,33 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        rejectReason = FindClassNameBindRejectReason(semanticModel, invocation, methodSymbol);
+        if (rejectReason != null)
+        {
+            return false;
+        }
+
         plan.GetOrAddMethod(methodSymbol);
         return true;
+    }
+
+    // Why refuse an unproven overload here, where the call is: an accessor that finds a non-public
+    // class by name binds the method it is given, so it must be the one the edited source calls;
+    // the reason is the one the class would get without that lookup.
+    private static WorkerReason FindClassNameBindRejectReason(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol methodSymbol)
+    {
+        if (!ExtensionClassNameBind.AppliesTo(methodSymbol)
+            || ExtensionClassNameBind.IsTheEditedOverload(semanticModel, invocation, methodSymbol))
+        {
+            return null;
+        }
+
+        return WorkerReason.Of(
+            HotReloadWorkerReasonCode.AccessorSignatureTypeNotVisible,
+            methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
     }
 
     // The accessor delegate takes exactly the method's parameters by value, in order.

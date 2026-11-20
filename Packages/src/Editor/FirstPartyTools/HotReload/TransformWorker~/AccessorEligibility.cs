@@ -27,6 +27,8 @@ internal static class AccessorEligibility
     // accessRoots limits which accesses are registered (null registers the whole body). The type
     // visibility and property increment checks still look at the whole body: a closure that
     // captures an outer local carries its type into the display class.
+    // targetAssembly is the compiled patch target read with every member visible, or null when the
+    // run could not read it; an accessor may name a non-public class only by finding it there.
     public static bool TryBuildPlan(
         SemanticModel semanticModel,
         IMethodSymbol methodSymbol,
@@ -34,6 +36,7 @@ internal static class AccessorEligibility
         SyntaxNode bodyNode,
         AddedMemberAccessLookup addedMemberAccess,
         IReadOnlyList<SyntaxNode> accessRoots,
+        IAssemblySymbol targetAssembly,
         out AccessorPlan plan,
         out WorkerReason rejectReason)
     {
@@ -44,6 +47,7 @@ internal static class AccessorEligibility
             bodyNode,
             addedMemberAccess,
             accessRoots,
+            targetAssembly,
             out AccessorPlan entries,
             out rejectReason);
 
@@ -68,6 +72,7 @@ internal static class AccessorEligibility
         SyntaxNode bodyNode,
         AddedMemberAccessLookup addedMemberAccess,
         IReadOnlyList<SyntaxNode> accessRoots,
+        IAssemblySymbol targetAssembly,
         out AccessorPlan plan,
         out WorkerReason rejectReason)
     {
@@ -79,24 +84,39 @@ internal static class AccessorEligibility
             return false;
         }
 
-        if (!AreBodyTypeUsagesVisible(semanticModel, bodyNode, out rejectReason))
+        List<ClassNamedByCall> classesNamedByCalls = new List<ClassNamedByCall>();
+        if (!AreBodyTypeUsagesVisible(semanticModel, bodyNode, classesNamedByCalls, out rejectReason))
         {
             return false;
         }
 
         AccessorPlan built = new AccessorPlan();
+        HashSet<SyntaxNode> registeredCalls = new HashSet<SyntaxNode>();
         IReadOnlyList<SyntaxNode> roots = accessRoots ?? new[] { bodyNode };
         foreach (SyntaxNode root in roots)
         {
-            if (!TryRegisterAccesses(semanticModel, root, built, addedMemberAccess, out rejectReason))
+            if (!TryRegisterAccesses(semanticModel, root, built, addedMemberAccess, registeredCalls, out rejectReason))
             {
+                return false;
+            }
+        }
+
+        // Why after registration: a class named only by a static-form call stays out of the shim only
+        // when the call is rewritten, which is what registering it means. A call outside the roots,
+        // such as a statement beside the closures of a transplanted body, is not registered, and its
+        // class name would reach a shim that compiles against the publicized copy and fails at run.
+        foreach (ClassNamedByCall classNamedByCall in classesNamedByCalls)
+        {
+            if (!registeredCalls.Contains(classNamedByCall.Call))
+            {
+                rejectReason = DescribeBodyTypeNotVisible(classNamedByCall.Class);
                 return false;
             }
         }
 
         foreach (AccessorEntry entry in built.Entries)
         {
-            if (entry.TryGetVisibilityFailure(out rejectReason))
+            if (entry.TryGetVisibilityFailure(targetAssembly, out rejectReason))
             {
                 return false;
             }
@@ -119,6 +139,7 @@ internal static class AccessorEligibility
         SyntaxNode root,
         AccessorPlan built,
         AddedMemberAccessLookup addedMemberAccess,
+        HashSet<SyntaxNode> registeredCalls,
         out WorkerReason rejectReason)
     {
         foreach (SyntaxNode node in root.DescendantNodesAndSelf())
@@ -128,17 +149,21 @@ internal static class AccessorEligibility
                 continue;
             }
 
-            if (!AccessorAccessRegistrar.TryRegisterInaccessibleAccess(
+            if (AccessorAccessRegistrar.TryRegisterInaccessibleAccess(
                     semanticModel,
                     node,
                     built,
                     addedMemberAccess,
                     out rejectReason))
             {
-                if (rejectReason != null)
+                if (node is InvocationExpressionSyntax)
                 {
-                    return false;
+                    registeredCalls.Add(node);
                 }
+            }
+            else if (rejectReason != null)
+            {
+                return false;
             }
         }
 
@@ -236,9 +261,13 @@ internal static class AccessorEligibility
         return false;
     }
 
+    // classesNamedByCalls receives each non-public class the body names only as the class of a
+    // static-form call; the caller refuses it unless that call is registered. Whether an accessor may
+    // then name the class is AccessorEntry's decision.
     private static bool AreBodyTypeUsagesVisible(
         SemanticModel semanticModel,
         SyntaxNode bodyNode,
+        List<ClassNamedByCall> classesNamedByCalls,
         out WorkerReason rejectReason)
     {
         SemanticModel enforcingModel = null;
@@ -274,17 +303,45 @@ internal static class AccessorEligibility
                 continue;
             }
 
-            if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
+            if (AccessibilityRules.IsExternallyVisibleType(typeSymbol))
             {
-                rejectReason = WorkerReason.Of(
-                    HotReloadWorkerReasonCode.AccessorBodyTypeNotVisible,
-                    typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                return false;
+                continue;
             }
+
+            InvocationExpressionSyntax call = StaticFormCall.FindCallNamingTheClassOrNull(semanticModel, node);
+            if (call != null)
+            {
+                classesNamedByCalls.Add(new ClassNamedByCall(call, typeSymbol));
+                continue;
+            }
+
+            rejectReason = DescribeBodyTypeNotVisible(typeSymbol);
+            return false;
         }
 
         rejectReason = null;
         return true;
+    }
+
+    private static WorkerReason DescribeBodyTypeNotVisible(ITypeSymbol typeSymbol)
+    {
+        return WorkerReason.Of(
+            HotReloadWorkerReasonCode.AccessorBodyTypeNotVisible,
+            typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+    }
+
+    // A non-public class a body names only as the class of a static-form call.
+    private sealed class ClassNamedByCall
+    {
+        internal ClassNamedByCall(InvocationExpressionSyntax call, ITypeSymbol @class)
+        {
+            Call = call;
+            Class = @class;
+        }
+
+        internal InvocationExpressionSyntax Call { get; }
+
+        internal ITypeSymbol Class { get; }
     }
 
     // What: the type a body node names or creates, or null when the node names none.

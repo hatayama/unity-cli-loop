@@ -77,11 +77,65 @@ internal static class AccessibilityRules
                 info.CandidateSymbols);
             if (twin != null)
             {
-                return twin;
+                return FindTwinOfTheEditedOverloadOrNull(semanticModel, node, twin, info.CandidateSymbols) ?? twin;
             }
         }
 
         return EnforcingModel(semanticModel).GetSymbolInfo(node).Symbol;
+    }
+
+    // What: the candidate of the twin's compiled class that has the signature of the overload the
+    // edited source calls, or null when the enforcing binding resolves no method or no candidate
+    // matches. Why not any candidate of that class: the twin is picked to refuse the call, and any
+    // overload refuses it, but an accessor that reaches the class by name binds the overload it is
+    // given, which must be the one the source calls (Pick(int) over Pick(long) for an int argument).
+    private static IMethodSymbol FindTwinOfTheEditedOverloadOrNull(
+        SemanticModel semanticModel,
+        SyntaxNode node,
+        IMethodSymbol twin,
+        ImmutableArray<ISymbol> candidates)
+    {
+        if (EnforcingModel(semanticModel).GetSymbolInfo(node).Symbol is not IMethodSymbol edited)
+        {
+            return null;
+        }
+
+        IMethodSymbol editedMethod = UnreducedMethod(edited);
+        IAssemblySymbol twinAssembly = twin.ContainingAssembly;
+        foreach (ISymbol candidate in candidates)
+        {
+            if (candidate is IMethodSymbol method
+                && SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, twinAssembly)
+                && HaveTheSameSignature(UnreducedMethod(method), editedMethod))
+            {
+                return method;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// What: whether two unreduced methods, which may come from different copies of an assembly,
+    /// have the same class, name, arity, static-ness and parameter types.
+    /// </summary>
+    internal static bool HaveTheSameSignature(IMethodSymbol first, IMethodSymbol second)
+    {
+        if (first.ContainingType == null
+            || second.ContainingType == null
+            || first.Name != second.Name
+            || first.Arity != second.Arity
+            || first.IsStatic != second.IsStatic
+            || first.Parameters.Length != second.Parameters.Length
+            || ConstDriftCollector.ToReflectionMetadataName(first.ContainingType.OriginalDefinition)
+                != ConstDriftCollector.ToReflectionMetadataName(second.ContainingType.OriginalDefinition))
+        {
+            return false;
+        }
+
+        return first.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .SequenceEqual(second.Parameters.Select(CecilTypeNames.ToParameterTypeFullName));
     }
 
     /// <summary>
