@@ -447,6 +447,24 @@ internal static class MethodTransformDecider
                     retainedNonPublicMember.ToDisplayString()));
         }
 
+        // Checked without a binding error and before the delegation path: the worker binds an Index
+        // or Range access through the implicit support, while the shim compile calls a non-public
+        // indexer of a compiled type it cannot see, from every statement of an added method.
+        IMethodSymbol hiddenIndexerAccessor = UnpassedExplicitIndexerLookup.FindFirstAccessorOrNull(
+            semanticModel,
+            methodBodyNode,
+            targetAssembly);
+        if (hiddenIndexerAccessor != null)
+        {
+            return MethodTransformDecision.Skip(
+                WorkerReason.Composite(
+                    HotReloadWorkerReasonCode.AddedMethodInaccessibleAccessNoRewrite,
+                    WorkerReason.Of(
+                        HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
+                        ImplicitCallTargets.DisplayName(hiddenIndexerAccessor),
+                        ImplicitCallTargets.IndexOrRangeConstruct)));
+        }
+
         if (current.UsesDelegation)
         {
             return MethodTransformDecision.AddedMethod(true);
