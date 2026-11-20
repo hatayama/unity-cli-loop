@@ -53,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6371", "ClosureCallsInternalParamsMethodWithOneMemory", "6381", "ClosureCallsInternalParamsMethodWithOneArraySegment", nameof(HotReloadWorkerReasonCode.AccessorOptionalOrParamsArgumentNotRewritten))]
         [TestCase("6331", "ClosureInitializesInternalIndexerWithMemory", "6341", "ClosureInitializesInternalIndexerWithArraySegment", nameof(HotReloadWorkerReasonCode.AccessorInitializerAssignmentNoShape))]
         [TestCase("6761", "ClosureConvertsPrivateMethodGroupTakingMemory", "6771", "ClosureConvertsPrivateMethodGroupTakingArraySegment", nameof(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape))]
+        [TestCase("6821", "ClosureConvertsOnlyPrivateMethodGroupTakingMemory", "6831", "ClosureConvertsOnlyPrivateMethodGroupTakingArraySegment", nameof(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape))]
         [TestCase("6801", "ClosureConvertsInternalStaticMethodGroupTakingMemory", "6811", "ClosureConvertsInternalStaticMethodGroupTakingArraySegment", nameof(HotReloadWorkerReasonCode.AccessorMethodGroupNoShape))]
         public async Task TwinTypedShapeWithoutAccessor_IsSkippedWithTheOracleReason(
             string token,

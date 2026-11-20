@@ -487,6 +487,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsOnlyPrivateMethodGroupTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = PrivateMemoryLength;
+                return length(default) + 6821;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsOnlyPrivateMethodGroupTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = PrivateSegmentLength;
+                return length(default) + 6831;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureConvertsInternalStaticMethodGroupTakingMemory()
         {
             Func<int> read = () =>

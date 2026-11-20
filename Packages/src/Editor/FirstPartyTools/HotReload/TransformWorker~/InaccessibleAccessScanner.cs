@@ -237,19 +237,21 @@ internal static class InaccessibleAccessScanner
             return false;
         }
 
+        // Why the bound symbol: a method group converted to a delegate type over a BCL type a
+        // referenced assembly also declares internally ('Func<Memory<int>, int> f = M;') binds to
+        // no symbol when accessibility is ignored, and a body whose only private use it is would
+        // reach the shim without an accessor plan.
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, name);
+
         // Invocation-target exclusion applies only to method groups; delegate-typed fields
         // invoked as `_cb()` must be detected as field reads.
         if (name.Parent is InvocationExpressionSyntax parentInvocation
-            && parentInvocation.Expression == name)
+            && parentInvocation.Expression == name
+            && symbol is IMethodSymbol)
         {
-            ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
-            if (invocationTarget is IMethodSymbol)
-            {
-                return false;
-            }
+            return false;
         }
 
-        ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
         if (symbol is IPropertySymbol propertySymbol)
         {
             return AccessibilityRules.IsInaccessibleAccessor(AccessorCalledOutsideAssignment(propertySymbol, name));

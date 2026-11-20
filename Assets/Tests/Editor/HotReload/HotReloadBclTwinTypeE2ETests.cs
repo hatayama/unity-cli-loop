@@ -54,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6161", "ClosureReadsPrivateIndexerWithMemory", 6163)]
         [TestCase("6761", "ClosureConvertsPrivateMethodGroupTakingMemory", 6763)]
         [TestCase("6801", "ClosureConvertsInternalStaticMethodGroupTakingMemory", 6803)]
+        [TestCase("6821", "ClosureConvertsOnlyPrivateMethodGroupTakingMemory", 6821)]
         public async Task Run_ClosurePassingTwinTypeToMemberWithoutAccessor_IsSkippedAndKeepsTheCompiledValue(
             string token,
             string methodName,
@@ -134,6 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return host.ClosureConvertsPrivateMethodGroupTakingMemory();
                 case "ClosureConvertsInternalStaticMethodGroupTakingMemory":
                     return host.ClosureConvertsInternalStaticMethodGroupTakingMemory();
+                case "ClosureConvertsOnlyPrivateMethodGroupTakingMemory":
+                    return host.ClosureConvertsOnlyPrivateMethodGroupTakingMemory();
                 default:
                     throw new ArgumentException("No call for " + methodName, nameof(methodName));
             }
