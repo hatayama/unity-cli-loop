@@ -51,7 +51,7 @@ internal static class UnpassedInternalExtensionLookup
         switch (thisType)
         {
             case INamedTypeSymbol named:
-                return acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition));
+                return ReceiverConvertsTo(named, receiver, acceptedThisTypes);
             // Why the element is compared as the receiver: `this T[]` takes an array of the same
             // rank whose element its element type accepts.
             case IArrayTypeSymbol arrayThisType:
@@ -63,33 +63,35 @@ internal static class UnpassedInternalExtensionLookup
                         AcceptedThisTypeNames(arrayReceiver.ElementType));
             case ITypeParameterSymbol typeParameter:
                 return SatisfiesKindConstraints(typeParameter, receiver)
-                    && typeParameter.ConstraintTypes.All(constraint => AcceptsConstraint(constraint, receiver, acceptedThisTypes));
+                    && typeParameter.ConstraintTypes.All(constraint => ReceiverConvertsTo(constraint, receiver, acceptedThisTypes));
             default:
                 return false;
         }
     }
 
-    // Whether the receiver satisfies one type constraint of a 'this T' parameter.
-    // Why the constructed type only for a named receiver and a closed, invariant constraint: then
-    // the compiler needs the receiver to have exactly that type among its own, base and interface
+    // Whether the receiver converts to 'target' by identity, reference or boxing, which is what the
+    // compiler asks of the receiver for a named 'this' parameter type and for each type constraint
+    // of a 'this T' parameter.
+    // Why the constructed type only for a named receiver and a closed, invariant target: then the
+    // compiler needs the receiver to have exactly that type among its own, base and interface
     // types, so 'IMarker<A>' rejects a receiver marked by 'IMarker<B>'. Every other case keeps the
     // match by the generic definition, which never rejects a receiver the compiler accepts:
-    // - a constraint that names a type parameter ('IEquatable<T>') is constructed from the receiver;
+    // - a target that names a type parameter ('IEquatable<T>') is constructed from the receiver;
     // - a variant one ('IProducer<Base>', 'IComparable<T>') is met by other type arguments;
     // - an array converts to 'IList<Base>' of a base element type (array covariance), which is
-    //   among none of its interfaces, and a type parameter meets a constraint through its own.
-    private static bool AcceptsConstraint(ITypeSymbol constraint, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)
+    //   among none of its interfaces, and a type parameter meets a target through its constraints.
+    private static bool ReceiverConvertsTo(ITypeSymbol target, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)
     {
-        if (constraint is not INamedTypeSymbol namedConstraint
-            || !acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(namedConstraint.OriginalDefinition)))
+        if (target is not INamedTypeSymbol namedTarget
+            || !acceptedThisTypes.Contains(ConstDriftCollector.ToReflectionMetadataName(namedTarget.OriginalDefinition)))
         {
             return false;
         }
 
-        string constraintKey = receiver is INamedTypeSymbol && !HasVariantTypeParameter(namedConstraint)
-            ? IdentityKeyOrNull(namedConstraint)
+        string targetKey = receiver is INamedTypeSymbol && !HasVariantTypeParameter(namedTarget)
+            ? IdentityKeyOrNull(namedTarget)
             : null;
-        return constraintKey == null || ReceiverAndSupertypes(receiver).Any(type => IdentityKeyOrNull(type) == constraintKey);
+        return targetKey == null || ReceiverAndSupertypes(receiver).Any(type => IdentityKeyOrNull(type) == targetKey);
     }
 
     private static bool HasVariantTypeParameter(INamedTypeSymbol type)
@@ -105,24 +107,30 @@ internal static class UnpassedInternalExtensionLookup
         return false;
     }
 
-    // What: a name of the type that the two compilations agree on; null when the type holds a type
-    // parameter or a shape the name does not cover, which leaves the definition match in place.
+    // What: a name of the type that the two compilations agree on and that two types related by an
+    // identity conversion share; null when the type holds a type parameter or a shape the name does
+    // not cover, which leaves the definition match in place.
     // Why metadata names and not the display: a tuple's element names are not part of its type, so
-    // '(int First, int Second)' and '(int Left, int Right)' must get one name. Why no case for
-    // dynamic: C# allows it neither in a constraint nor in a base or interface type.
+    // '(int First, int Second)' and '(int Left, int Right)' must get one name. Why dynamic is named
+    // as object: a receiver typed 'IMarker<dynamic>' meets 'IMarker<object>'.
     private static string IdentityKeyOrNull(ITypeSymbol type)
     {
         switch (type)
         {
+            case IDynamicTypeSymbol _:
+                return "System.Object";
             case IArrayTypeSymbol array:
                 string elementKey = IdentityKeyOrNull(array.ElementType);
                 return elementKey == null ? null : elementKey + "[" + array.Rank + "]";
             case INamedTypeSymbol named:
                 List<string> argumentKeys = AllTypeArguments(named).Select(IdentityKeyOrNull).ToList();
-                return argumentKeys.Contains(null)
-                    ? null
-                    : ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition)
-                        + "<" + string.Join(",", argumentKeys) + ">";
+                string definitionName = ConstDriftCollector.ToReflectionMetadataName(named.OriginalDefinition);
+                if (argumentKeys.Contains(null))
+                {
+                    return null;
+                }
+
+                return argumentKeys.Count == 0 ? definitionName : definitionName + "<" + string.Join(",", argumentKeys) + ">";
             default:
                 return null;
         }

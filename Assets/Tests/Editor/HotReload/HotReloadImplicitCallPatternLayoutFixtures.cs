@@ -682,6 +682,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverTypedAsAMarkerOfDynamic()
+        {
+            IHotReloadUnpassedMarker<dynamic> marked = new HotReloadUnpassedMarkedByObject();
+            Func<int> read = () =>
+            {
+                (int first, int second) = marked;
+                return first + second + 7855;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeconstructsAReceiverTaggedByTheSecondTypeArgument()
+        {
+            Func<int> read = () =>
+            {
+                (int first, int second) = new HotReloadUnpassedTaggedBySecond();
+                return first + second + 7865;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureIndexesTwoArgumentsWithInternalIndexer()
         {
             Func<int> read = () => new HotReloadUnpassedTwoArgumentIndexer()[0, ^1] + 7615;

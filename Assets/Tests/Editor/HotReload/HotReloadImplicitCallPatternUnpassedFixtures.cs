@@ -580,6 +580,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Internal two-out Deconstruct constrained to the marker of object, which a receiver typed as
+    /// the marker of dynamic meets through an identity conversion.
+    /// </summary>
+    public static class HotReloadUnpassedObjectMarkExtensions
+    {
+        internal static void Deconstruct<T>(this T value, out int first, out int second)
+            where T : IHotReloadUnpassedMarker<object>
+        {
+            first = value == null ? 0 : 11;
+            second = 12;
+        }
+    }
+
+    /// <summary>
+    /// Marked by object; the host holds it as the marker of dynamic.
+    /// </summary>
+    public sealed class HotReloadUnpassedMarkedByObject : IHotReloadUnpassedMarker<object>
+    {
+    }
+
+    /// <summary>
+    /// Generic tag interface for the non-generic extensions below, whose 'this' parameter types
+    /// differ only in the type argument.
+    /// </summary>
+    public interface IHotReloadUnpassedTag<T>
+    {
+    }
+
+    /// <summary>
+    /// Internal two-out Deconstruct on the tag of the first type argument, declared before the one a
+    /// receiver tagged by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedFirstTagExtensions
+    {
+        internal static void Deconstruct(this IHotReloadUnpassedTag<HotReloadUnpassedFirstMark> value, out int first, out int second)
+        {
+            first = value == null ? 0 : 13;
+            second = 14;
+        }
+    }
+
+    /// <summary>
+    /// The two-out Deconstruct a receiver tagged by the second type argument actually calls.
+    /// </summary>
+    public static class HotReloadUnpassedSecondTagExtensions
+    {
+        internal static void Deconstruct(this IHotReloadUnpassedTag<HotReloadUnpassedSecondMark> value, out int first, out int second)
+        {
+            first = value == null ? 0 : 15;
+            second = 16;
+        }
+    }
+
+    /// <summary>
+    /// Receiver tagged by the second type argument only.
+    /// </summary>
+    public sealed class HotReloadUnpassedTaggedBySecond : IHotReloadUnpassedTag<HotReloadUnpassedSecondMark>
+    {
+    }
+
+    /// <summary>
     /// Invariant interface a type implements with itself as the type argument. Unlike
     /// IComparable&lt;T&gt;, it has no variant type parameter, so only the type parameter in the
     /// constraint below keeps that constraint from a comparison of the constructed type.
