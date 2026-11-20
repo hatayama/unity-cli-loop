@@ -414,4 +414,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Shared;
         }
     }
+
+    /// <summary>
+    /// A type in the edited file that hides, with a get-only property, an inherited property whose
+    /// setter is internal to a base type in a file no run passes, so a write is a genuine error.
+    /// </summary>
+    public sealed class HotReloadUnpassedAccessorHidingHost : HotReloadUnpassedAccessorBase
+    {
+        public new int Length => 3;
+
+        public int HidingPropertyWriteInLambda()
+        {
+            Func<int> read = () =>
+            {
+                int value = 7611;
+                return value + this.Length;
+            };
+            return read();
+        }
+    }
 }

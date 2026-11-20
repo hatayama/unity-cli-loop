@@ -315,24 +315,26 @@ internal static class UnpassedInternalAccessorLookup
     // compilation that imports every member, so its properties are other symbols than the one this
     // body binds to. An indexer overload is told apart by its parameter types. Why the bound
     // member's original definition: the compiled types are generic definitions, so an access through
-    // 'Holder<int>' must be compared as 'Holder<T>.this[T]', not 'this[int]'.
+    // 'Holder<int>' must be compared as 'Holder<T>.this[T]', not 'this[int]'. Why only the declaring
+    // type: the bound property's containing type declares it, so a base type's property of the same
+    // name is one it hides, and when the run declares that type the error is genuine.
     private static IPropertySymbol FindCompiledPropertyOrNull(
         IPropertySymbol bound,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
-        foreach (INamedTypeSymbol type in UnpassedInternalMemberUse.EnumerateUnpassedCompiledTypes(bound.ContainingType, semanticModel, targetAssembly))
+        INamedTypeSymbol declaring = UnpassedInternalMemberUse
+            .EnumerateUnpassedCompiledTypes(bound.ContainingType, semanticModel, targetAssembly)
+            .FirstOrDefault();
+        if (declaring == null
+            || declaring.ToDisplayString() != bound.ContainingType.OriginalDefinition.ToDisplayString())
         {
-            foreach (IPropertySymbol property in type.GetMembers(bound.Name).OfType<IPropertySymbol>())
-            {
-                if (HasTheSameParameterTypes(property, bound.OriginalDefinition))
-                {
-                    return property;
-                }
-            }
+            return null;
         }
 
-        return null;
+        return declaring.GetMembers(bound.Name)
+            .OfType<IPropertySymbol>()
+            .FirstOrDefault(property => HasTheSameParameterTypes(property, bound.OriginalDefinition));
     }
 
     private static bool HasTheSameParameterTypes(IPropertySymbol compiled, IPropertySymbol bound)

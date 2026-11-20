@@ -182,13 +182,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a lambda with a genuine error that only looks like a use of an internal accessor (an
         /// index of the wrong type or an undefined name against an indexer whose getter is internal,
         /// a write to a property with no setter, a write to a read-only indexer beside an overload
-        /// whose getter is internal) is not skipped by the transform worker, as before this lookup,
+        /// whose getter is internal, a write to a get-only property of the edited file that hides an
+        /// inherited property whose setter is internal) is not skipped by the transform worker, as before this lookup,
         /// so the shim compile reports the error.
         /// </summary>
         [TestCase("7471 - 7471", "\"a\"", "WrongIndexTypeInLambda")]
         [TestCase("7481 - 7481", "undefinedIndex7481", "UndefinedIndexInLambda")]
         [TestCase("int value = 7491;", "holder.Fixed = 7491; int value = 1;", "GetOnlyWriteInLambda")]
         [TestCase("int value = 7521;", "holder[0] = 7521; int value = 1;", "ReadOnlyIndexerWriteBesideInternalGetterOverloadInLambda")]
+        [TestCase("int value = 7611;", "this.Length = 7611; int value = 1;", "HidingPropertyWriteInLambda")]
         public async Task LambdaWithGenuineErrorNearUnpassedInternalAccessor_IsNotSkippedByTheWorker(
             string fragment,
             string replacement,
