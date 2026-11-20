@@ -487,10 +487,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "store rewrite handles. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldPropertyPattern,
-                NoArgs,
+                new[] { "A._count" },
                 "Property patterns that match an added field are skipped; a pattern member name cannot be "
-                + "replaced by a read of the field's store. Read the field with a member access instead "
-                + "('value.Field'), which the store rewrite handles. Run 'uloop compile'.");
+                + "replaced by a read of the field's store. Read 'A._count' from the matched value with a member "
+                + "access outside the pattern instead ('value.A._count'), which the store rewrite handles. "
+                + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 NoArgs,
@@ -790,9 +791,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "inaccessible member access via conditional access has no rewrite shape.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorPropertyPatternNoShape,
-                new[] { "Secret" },
+                new[] { "Secret", "Inner.Secret" },
                 "inaccessible member 'Secret' named in a property pattern has no accessor rewrite shape; "
-                + "read it with a member access such as 'value.Secret' instead.");
+                + "read 'Inner.Secret' from the matched value with a member access outside the pattern instead "
+                + "('value.Inner.Secret').");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 NoArgs,

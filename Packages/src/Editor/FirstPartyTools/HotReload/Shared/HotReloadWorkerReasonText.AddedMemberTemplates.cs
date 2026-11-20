@@ -203,9 +203,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the same test written outside the pattern applies without a compile.
                 Plain(
                     "Property patterns that match an added field are skipped; a pattern member name cannot be "
-                    + "replaced by a read of the field's store. Read the field with a member access instead "
-                    + "('value.Field'), which the store rewrite handles.",
-                    0).EndingWith(CompileCallToAction));
+                    + "replaced by a read of the field's store. Read '{0}' from the matched value with a member "
+                    + "access outside the pattern instead ('value.{0}'), which the store rewrite handles.",
+                    1).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.AddedFieldValueTypeMemberWrite,
                 Plain(

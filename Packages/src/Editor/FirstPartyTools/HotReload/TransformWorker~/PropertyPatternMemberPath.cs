@@ -13,19 +13,34 @@ internal static class PropertyPatternMemberPath
 {
     internal static bool Contains(ExpressionSyntax expression)
     {
+        SyntaxNode path = WholePath(expression);
+        // Why the colon's parent must be a subpattern: a NameColonSyntax also names an argument, as
+        // in Call(value: x), and that name is not read from anything.
+        return path.Parent is BaseExpressionColonSyntax colon
+            && colon.Expression == path
+            && colon.Parent is SubpatternSyntax;
+    }
+
+    /// <summary>
+    /// The whole member path a link belongs to, as written: "A.B" for either link of '{ A.B: 1 }'.
+    /// A skip reason shows it so the same read can be written outside the pattern.
+    /// </summary>
+    internal static string PathText(ExpressionSyntax link)
+    {
+        return WholePath(link).ToString();
+    }
+
+    // Why climb member accesses only: an extended pattern's path is a chain of them, and any other
+    // parent (an argument, an operator) puts the node outside the path.
+    private static SyntaxNode WholePath(ExpressionSyntax expression)
+    {
         SyntaxNode current = expression;
-        // Why climb member accesses only: an extended pattern's path is a chain of them, and any
-        // other parent (an argument, an operator) puts the node outside the path.
         while (current.Parent is MemberAccessExpressionSyntax access)
         {
             current = access;
         }
 
-        // Why the colon's parent must be a subpattern: a NameColonSyntax also names an argument, as
-        // in Call(value: x), and that name is not read from anything.
-        return current.Parent is BaseExpressionColonSyntax colon
-            && colon.Expression == current
-            && colon.Parent is SubpatternSyntax;
+        return current;
     }
 
     /// <summary>
@@ -43,11 +58,12 @@ internal static class PropertyPatternMemberPath
             // reads as none, and the unpassed-member guard reports that use with its file.
             IPropertySymbol property => property.GetMethod != null
                 && AccessibilityRules.IsInaccessibleAccessor(property.GetMethod),
-            IFieldSymbol field => AccessibilityRules.IsInaccessibleFromExternalAssembly(field),
-            _ => false
+            // Why any other member too: a field, or an event a pattern reads as one, has no shape
+            // either; a positional pattern's parameter name is never inaccessible.
+            _ => member != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(member)
         };
         return unreachable
-            ? WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyPatternNoShape, member.Name)
+            ? WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyPatternNoShape, member.Name, PathText(link))
             : null;
     }
 

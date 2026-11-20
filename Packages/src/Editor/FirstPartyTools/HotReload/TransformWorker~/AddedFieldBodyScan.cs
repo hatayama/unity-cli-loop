@@ -237,9 +237,10 @@ internal static class AddedFieldBodyScan
         return false;
     }
 
-    // Why any binding: a pattern link reads the field by name on the matched value, where neither
-    // the store read nor a folded constant can stand.
-    internal static bool BodyNamesAddedFieldInPropertyPattern(
+    // Returns the member path, as written, of the first property pattern link naming an added
+    // field, or null. Why any binding: a pattern link reads the field by name on the matched value,
+    // where neither the store read nor a folded constant can stand.
+    internal static string FindAddedFieldPropertyPatternPathOrNull(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedFieldCatalog addedFieldCatalog)
@@ -250,11 +251,11 @@ internal static class AddedFieldBodyScan
                 && addedFieldCatalog.FindOrNull(
                     FormatAddedStoreKeyOrNull(semanticModel.GetSymbolInfo(expression).Symbol)) != null)
             {
-                return true;
+                return PropertyPatternMemberPath.PathText(expression);
             }
         }
 
-        return false;
+        return null;
     }
 
     internal static bool BodyHasNonNumericAddedFieldIncrement(

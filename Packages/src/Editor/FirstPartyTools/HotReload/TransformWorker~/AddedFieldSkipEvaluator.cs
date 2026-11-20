@@ -28,9 +28,13 @@ internal static class AddedFieldSkipEvaluator
             return unavailable;
         }
 
-        if (AddedFieldBodyScan.BodyNamesAddedFieldInPropertyPattern(bodyNode, semanticModel, addedFieldCatalog))
+        string patternPath = AddedFieldBodyScan.FindAddedFieldPropertyPatternPathOrNull(
+            bodyNode,
+            semanticModel,
+            addedFieldCatalog);
+        if (patternPath != null)
         {
-            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldPropertyPattern);
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldPropertyPattern, patternPath);
         }
 
         if (AddedFieldBodyScan.BodyPassesAddedFieldByRef(bodyNode, semanticModel, addedFieldCatalog))

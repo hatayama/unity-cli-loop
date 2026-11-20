@@ -206,8 +206,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // one, so the same test written outside the pattern applies.
                 Plain(
                     "inaccessible member '{0}' named in a property pattern has no accessor rewrite shape; "
-                    + "read it with a member access such as 'value.{0}' instead.",
-                    1));
+                    + "read '{1}' from the matched value with a member access outside the pattern instead "
+                    + "('value.{1}').",
+                    2));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 Plain("inaccessible methods that return by ref have no accessor rewrite shape.", 0));

@@ -35,10 +35,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "has no accessor rewrite (the added method JIT-compiles normally and fails accessibility "
             + "checks)."
             + AccessorRewriteUnavailable;
-        private const string AddedFieldReason =
-            "Property patterns that match an added field are skipped; a pattern member name cannot be "
-            + "replaced by a read of the field's store. Read the field with a member access instead "
-            + "('value.Field'), which the store rewrite handles. Run 'uloop compile'.";
         private const string AddedFields =
             " private int _addedSecret; public int AddedVisible; private HotReloadSubpatternNameHost _addedSelf;";
         private const string SecretFieldAnchor = "private int _secret;";
@@ -57,6 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("8121", "PrivatePatternOnThisInLambda", ClosureReason, "_secret")]
         [TestCase("8131", "PrivatePatternInSwitchArmInLambda", ClosureReason, "Secret")]
         [TestCase("8141", "PrivatePatternInAsync", AsyncReason, "Secret")]
+        // Why the bare name is the path: in a nested pattern each link is matched against the value
+        // of the pattern around it, so the reason shows only the link's own path.
         public async Task PatternNamingAnUnreachableMemberInShimCompiledCode_IsSkippedNamingTheMember(
             string token,
             string methodName,
@@ -65,13 +63,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunEditAsync(token, token.Substring(0, 3) + "2");
 
-            Assert.That(FindSkipReason(result, methodName), Is.EqualTo(expectedPrefix + PatternFragment(memberName)));
+            Assert.That(FindSkipReason(result, methodName), Is.EqualTo(expectedPrefix + PatternFragment(memberName, memberName)));
             Assert.That(FindEntry(result, methodName), Is.Null, methodName + " must not be an entry.");
         }
 
         /// <summary>
         /// What: an extended property pattern in a lambda is skipped on its own when either link of
-        /// its member path is a member the shim assembly cannot reach, and the reason names that link.
+        /// its member path is a member the shim assembly cannot reach; the reason names that link and
+        /// shows the whole path to read outside the pattern.
         /// </summary>
         [TestCase("{ Self: { Visible: 3 } } ? 8101", "{ Self.Visible: 3 } ? 8102", "PrivateHeadPatternInLambda", "Self")]
         [TestCase("{ Me: { Secret: 3 } } ? 8111", "{ Me.Secret: 3 } ? 8112", "PrivateTailPatternInLambda", "Secret")]
@@ -83,7 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunEditAsync(fragment, replacement);
 
-            Assert.That(FindSkipReason(result, methodName), Is.EqualTo(ClosureReason + PatternFragment(memberName)));
+            string path = replacement.Substring(2, replacement.IndexOf(':') - 2);
+            Assert.That(FindSkipReason(result, methodName), Is.EqualTo(ClosureReason + PatternFragment(memberName, path)));
         }
 
         /// <summary>
@@ -114,20 +114,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// own with the added-field reason, whether the field is the whole name, the head of an extended
         /// pattern, or its tail, in the method's own statements or, for a public field, in a lambda.
         /// </summary>
-        [TestCase("{ Secret: 3 } ? 8011", "{ _addedSecret: 0 } ? 8012", "PrivatePatternInOwnStatements")]
-        [TestCase("{ Me: { Visible: 3 } } ? 8021", "{ _addedSelf.Visible: 3 } ? 8022", "PublicNestedPatternInOwnStatements")]
-        [TestCase("{ Me: { Visible: 3 } } ? 8021", "{ Me._addedSecret: 0 } ? 8022", "PublicNestedPatternInOwnStatements")]
-        [TestCase("{ Visible: 3 } ? 8041", "{ AddedVisible: 0 } ? 8042", "PublicPatternInLambda")]
+        [TestCase("{ Secret: 3 } ? 8011", "{ _addedSecret: 0 } ? 8012", "PrivatePatternInOwnStatements", "_addedSecret")]
+        [TestCase("{ Me: { Visible: 3 } } ? 8021", "{ _addedSelf.Visible: 3 } ? 8022", "PublicNestedPatternInOwnStatements", "_addedSelf.Visible")]
+        [TestCase("{ Me: { Visible: 3 } } ? 8021", "{ Me._addedSecret: 0 } ? 8022", "PublicNestedPatternInOwnStatements", "Me._addedSecret")]
+        [TestCase("{ Visible: 3 } ? 8041", "{ AddedVisible: 0 } ? 8042", "PublicPatternInLambda", "AddedVisible")]
         public async Task PatternNamingAnAddedField_IsSkippedWithTheAddedFieldReason(
             string fragment,
             string replacement,
-            string methodName)
+            string methodName,
+            string path)
         {
             TransformWorkerClientResult result = await RunEditsAsync(
                 (fragment, replacement),
                 (SecretFieldAnchor, SecretFieldAnchor + AddedFields));
 
-            Assert.That(FindSkipReason(result, methodName), Is.EqualTo(AddedFieldReason));
+            Assert.That(FindSkipReason(result, methodName), Is.EqualTo(AddedFieldReason(path)));
         }
 
         /// <summary>
@@ -141,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ("{ Visible: 3 } ? 8041", "{ _addedSecret: 0 } ? 8042"),
                 (SecretFieldAnchor, SecretFieldAnchor + AddedFields));
 
-            Assert.That(FindSkipReason(result, "PublicPatternInLambda"), Is.EqualTo(ClosureReason + PatternFragment("_addedSecret")));
+            Assert.That(FindSkipReason(result, "PublicPatternInLambda"), Is.EqualTo(ClosureReason + PatternFragment("_addedSecret", "_addedSecret")));
         }
 
         /// <summary>
@@ -176,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AddedMethodAnchor,
                 AddedMethod(methodName, "{ Secret: 3 }") + AddedMethodAnchor);
 
-            Assert.That(FindSkipReason(result, methodName), Does.StartWith(AddedMethodReason + PatternFragment("Secret")));
+            Assert.That(FindSkipReason(result, methodName), Does.StartWith(AddedMethodReason + PatternFragment("Secret", "Secret")));
         }
 
         /// <summary>
@@ -196,10 +197,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(SliceShimMethod(result.Output.shimSource, entry), Does.Contain("other is { Me.Visible: 3 }"));
         }
 
-        private static string PatternFragment(string memberName)
+        /// <summary>
+        /// What: a lambda that reads a property whose getter is internal to a file the reload was not
+        /// given, both in a property pattern and with a member access, is skipped with the reason that
+        /// names that file's getter, and the worker does not fail the file.
+        /// </summary>
+        [Test]
+        public async Task LambdaReadingAnUnpassedInternalGetterInAPatternAndAMemberAccess_IsSkippedWithTheUnpassedReason()
+        {
+            TransformWorkerClientResult result = await RunEditAsync(
+                "other is { Visible: 3 } ? 8041",
+                "new HotReloadUnpassedInternalGetterHolder() is { Value: 7 } "
+                    + "&& new HotReloadUnpassedInternalGetterHolder().Value == 7 ? 8042");
+
+            Assert.That(FindSkipReason(result, "PublicPatternInLambda"), Does.Contain("The getter of 'Value' is internal to "));
+        }
+
+        private static string PatternFragment(string memberName, string path)
         {
             return "inaccessible member '" + memberName + "' named in a property pattern has no accessor "
-                + "rewrite shape; read it with a member access such as 'value." + memberName + "' instead.";
+                + "rewrite shape; read '" + path + "' from the matched value with a member access outside the "
+                + "pattern instead ('value." + path + "').";
+        }
+
+        private static string AddedFieldReason(string path)
+        {
+            return "Property patterns that match an added field are skipped; a pattern member name cannot be "
+                + "replaced by a read of the field's store. Read '" + path + "' from the matched value with a "
+                + "member access outside the pattern instead ('value." + path + "'), which the store rewrite "
+                + "handles. Run 'uloop compile'.";
         }
 
         // Why one line: an anchor the edit replaces must not hold a line break, or a checkout with
