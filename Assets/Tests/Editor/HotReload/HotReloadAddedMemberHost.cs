@@ -295,6 +295,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled interface with a default property getter for the interface getter patch tests.
+    /// Token 805 is unique in this file.
+    /// </summary>
+    public interface IHotReloadInterfaceDefaultGetterFixture
+    {
+        int DefaultValue
+        {
+            get { return 805; }
+        }
+    }
+
+    /// <summary>
+    /// Implements the getter fixture interface without overriding DefaultValue, so a read through
+    /// the interface runs the interface's default getter.
+    /// </summary>
+    public sealed class HotReloadInterfaceDefaultGetterImplementer : IHotReloadInterfaceDefaultGetterFixture
+    {
+    }
+
+    /// <summary>
     /// Compiled host that already implements the interface so an added explicit implementation
     /// is a new method on an existing type, not a new type.
     /// </summary>

@@ -198,6 +198,12 @@ internal static class ShimMethodFactory
         return SyntaxFactory.TriviaList(kept);
     }
 
+    /// <summary>The type of a shim's instance parameter for a method declared on <paramref name="hostType"/>.</summary>
+    internal static TypeSyntax BuildInstanceParameterType(INamedTypeSymbol hostType)
+    {
+        return SyntaxFactory.ParseTypeName(hostType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+    }
+
     private static SeparatedSyntaxList<ParameterSyntax> BuildShimParameters(
         MethodDeclarationSyntax rewrittenOriginal,
         IMethodSymbol methodSymbol)
@@ -205,11 +211,9 @@ internal static class ShimMethodFactory
         List<ParameterSyntax> parameters = new List<ParameterSyntax>();
         if (!methodSymbol.IsStatic)
         {
-            TypeSyntax instanceType = SyntaxFactory.ParseTypeName(
-                methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             parameters.Add(
                 SyntaxFactory.Parameter(SyntaxFactory.Identifier(TransformWorkerProgramMarker.InstanceParameterName))
-                    .WithType(instanceType));
+                    .WithType(BuildInstanceParameterType(methodSymbol.ContainingType)));
         }
 
         foreach (ParameterSyntax originalParameter in rewrittenOriginal.ParameterList.Parameters)

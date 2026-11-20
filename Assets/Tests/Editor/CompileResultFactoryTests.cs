@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -110,6 +111,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(new[] { first, second, third }));
             Assert.That(result.Errors, Is.EqualTo(new[] { second }));
             Assert.That(result.Warnings, Is.EqualTo(new[] { first, third }));
+        }
+
+        /// <summary>
+        /// What: a compile that never started while the Editor window was active is reported as an
+        /// indeterminate COMPILE_NOT_STARTED failure that explains the held-mouse-button cause and
+        /// carries the captured Editor state.
+        /// </summary>
+        [Test]
+        public void CreateNotStartedResult_WhenEditorWindowIsActive_ExplainsHeldMouseButton()
+        {
+            CompileStartPendingDiagnostics diagnostics = CreateDiagnostics(
+                pendingMs: 60000,
+                canReloadAssemblies: false,
+                isEditorWindowActive: true);
+
+            CompileResult result = CompileResultFactory.CreateNotStartedResult(diagnostics);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.IsIndeterminate, Is.True);
+            Assert.That(result.ErrorCode, Is.EqualTo(CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText));
+            Assert.That(result.Message, Does.Contain("within 60 seconds"));
+            Assert.That(result.Message, Does.Contain("Editor window is active"));
+            Assert.That(result.Message, Does.Contain("mouse button"));
+            Assert.That(result.NextActions, Is.Not.Null);
+            Assert.That(result.NextActions.Length, Is.GreaterThanOrEqualTo(2));
+            Assert.That(result.NextActions[0], Does.Contain("uloop compile"));
+            Assert.That(result.Details["PendingSeconds"], Is.EqualTo(60d));
+            Assert.That(result.Details["CanReloadAssemblies"], Is.False);
+            Assert.That(result.Details["EditorWindowActive"], Is.True);
+            Assert.That(result.PreserveDetailsWhenForceRecompile, Is.True);
+        }
+
+        /// <summary>
+        /// What: a compile that never started while the Editor window was in the background tells the
+        /// caller to click inside the window, without blaming a held mouse button.
+        /// </summary>
+        [Test]
+        public void CreateNotStartedResult_WhenEditorWindowIsInBackground_TellsToClickInsideWindow()
+        {
+            CompileStartPendingDiagnostics diagnostics = CreateDiagnostics(
+                pendingMs: 60000,
+                canReloadAssemblies: null,
+                isEditorWindowActive: false);
+
+            CompileResult result = CompileResultFactory.CreateNotStartedResult(diagnostics);
+
+            Assert.That(result.Message, Does.Contain("in the background"));
+            Assert.That(result.Message, Does.Contain("Click inside the Unity window"));
+            Assert.That(result.Message, Does.Not.Contain("mouse button"));
+            Assert.That(result.Details["CanReloadAssemblies"], Is.Null);
+            Assert.That(result.Details["EditorWindowActive"], Is.False);
+        }
+
+        private static CompileStartPendingDiagnostics CreateDiagnostics(
+            int pendingMs,
+            bool? canReloadAssemblies,
+            bool isEditorWindowActive)
+        {
+            return new CompileStartPendingDiagnostics(
+                pendingMs: pendingMs,
+                canReloadAssemblies: canReloadAssemblies,
+                isEditorWindowActive: isEditorWindowActive,
+                hotControl: 0,
+                isEditorCompiling: true,
+                isEditorUpdating: false,
+                isEditorPlaying: false,
+                isEditorPaused: false);
         }
 
         private static CompilerMessage Warning(string file, string message)

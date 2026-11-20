@@ -1,5 +1,98 @@
 # Changelog
 
+## [3.18.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.18.0...dispatcher-v3.18.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* A mistyped command outside a Unity project is reported as unknown, with the closest command suggested ([#3561](https://github.com/hatayama/unity-cli-loop/issues/3561)) ([5c302a5](https://github.com/hatayama/unity-cli-loop/commit/5c302a56dd8403c7fef98d8552e082ac8b4fea52))
+
+## [3.18.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.17.0...dispatcher-v3.18.0) (2026-11-17)
+
+
+### Features
+
+* The CLI now keeps itself up to date on every command, and can be held at a chosen version ([#3557](https://github.com/hatayama/unity-cli-loop/issues/3557)) ([b2d948d](https://github.com/hatayama/unity-cli-loop/commit/b2d948d29a662cd6cf3fb94df691b3d97bd8d5bc))
+* uloop launch works on projects whose Unity package is older than the CLI's IPC protocol ([#3558](https://github.com/hatayama/unity-cli-loop/issues/3558)) ([41750fd](https://github.com/hatayama/unity-cli-loop/commit/41750fd9ea1ec0a3e51461c66d2e489992c8b3ec))
+
+## [3.17.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.16.1...dispatcher-v3.17.0) (2026-11-16)
+
+
+### Features
+
+* uloop launch presses Ignore on Unity's "Enter Safe Mode?" prompt ([#3551](https://github.com/hatayama/unity-cli-loop/issues/3551)) ([be86be7](https://github.com/hatayama/unity-cli-loop/commit/be86be7fdf79cff73204ec4484e10844dfc530eb))
+
+
+### Bug Fixes
+
+* Tool commands now find the Unity project from a repository root that keeps it in a subdirectory ([#3552](https://github.com/hatayama/unity-cli-loop/issues/3552)) ([9cf84f2](https://github.com/hatayama/unity-cli-loop/commit/9cf84f2eed51587872c776b1e9d4a0ade669c6df))
+
+## [3.16.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.16.0...dispatcher-v3.16.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* on Windows, a message box from another thread no longer blocks commands, and a dialog hidden by minimizing Unity is still found ([#3498](https://github.com/hatayama/unity-cli-loop/issues/3498)) ([aafca78](https://github.com/hatayama/unity-cli-loop/commit/aafca78269e3e1460fc9880e263ea95172b0f69e))
+* uloop launch marks the Editors it starts with -launchedByUloop instead of passing -ignorecompilererrors ([#3503](https://github.com/hatayama/unity-cli-loop/issues/3503)) ([691d33f](https://github.com/hatayama/unity-cli-loop/commit/691d33f18bee6220e232fb33b2db20257148156c))
+
+## [3.16.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.15.1...dispatcher-v3.16.0) (2026-11-13)
+
+
+### Features
+
+* uloop status reports the dialog that blocks Unity, and uloop press-dialog-button presses one of its buttons ([#3470](https://github.com/hatayama/unity-cli-loop/issues/3470)) ([1a6e99a](https://github.com/hatayama/unity-cli-loop/commit/1a6e99a4b0158571f92298c09baaab55a837095b))
+
+## [3.15.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.15.0...dispatcher-v3.15.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* execute-dynamic-code no longer tells you to retry a snippet that reloaded scripts before Unity could answer ([#3491](https://github.com/hatayama/unity-cli-loop/issues/3491)) ([20868bf](https://github.com/hatayama/unity-cli-loop/commit/20868bf64960665914f3e663359a909110a0c71d))
+* uloop launch -q no longer reports success while an Editor it cannot identify keeps running ([#3475](https://github.com/hatayama/unity-cli-loop/issues/3475)) ([236389b](https://github.com/hatayama/unity-cli-loop/commit/236389b60723092200f5c4f5252478f401b52cea))
+* uloop launch no longer opens a second Unity Editor on a project that is already open ([#3464](https://github.com/hatayama/unity-cli-loop/issues/3464)) ([ed9d1af](https://github.com/hatayama/unity-cli-loop/commit/ed9d1af1bc572d8a6d9bb4f6202e720eddf8080d))
+* uloop launch on Windows reports a project another Editor has open as already open, instead of an internal error ([#3488](https://github.com/hatayama/unity-cli-loop/issues/3488)) ([9130ac6](https://github.com/hatayama/unity-cli-loop/commit/9130ac69949085783402849d499df9d901a236b8))
+* uloop no longer mistakes Unity Hub's helper for an Editor on Windows, and counts an Editor it cannot read as one it cannot identify ([#3478](https://github.com/hatayama/unity-cli-loop/issues/3478)) ([017603b](https://github.com/hatayama/unity-cli-loop/commit/017603bdc868d71525899a3fac57bfce9db6b3e2))
+
+## [3.15.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.2...dispatcher-v3.15.0) (2026-11-09)
+
+
+### Features
+
+* uloop keeps trusting its own releases after the GitHub repository is renamed ([#3457](https://github.com/hatayama/unity-cli-loop/issues/3457)) ([c92f3a2](https://github.com/hatayama/unity-cli-loop/commit/c92f3a2d94a6e5ce794cfe79e4fe3d5c786aa220))
+
+## [3.14.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.1...dispatcher-v3.14.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* uloop compile recovers when Unity accepts a compile but never starts it in the background ([#3453](https://github.com/hatayama/unity-cli-loop/issues/3453)) ([cafc564](https://github.com/hatayama/unity-cli-loop/commit/cafc5640c5604efc7963b0b2e303d72469ff3eba))
+
+## [3.14.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.14.0...dispatcher-v3.14.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* CLI binaries ship with Go 1.27.3 and sigstore-go 1.4.0, and now require macOS 13 or later ([#3447](https://github.com/hatayama/unity-cli-loop/issues/3447)) ([6ee816a](https://github.com/hatayama/unity-cli-loop/commit/6ee816a5c88c535a17a03871fccd27a8be1a8036))
+
+## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.3...dispatcher-v3.14.0) (2026-11-06)
+
+
+### Features
+
+* uloop launch can give each Editor its own log file ([#3438](https://github.com/hatayama/unity-cli-loop/issues/3438)) ([5273f3f](https://github.com/hatayama/unity-cli-loop/commit/5273f3f2a6d6b8d9a1e98325cea81c6c37b8bbfc))
+
+
+### Bug Fixes
+
+* A project path containing "-batchmode" no longer makes uloop lose the running Editor and open a second one ([#3442](https://github.com/hatayama/unity-cli-loop/issues/3442)) ([27177f2](https://github.com/hatayama/unity-cli-loop/commit/27177f2301c62eee9ede3c950625005999bc8e6e))
+
+## [3.13.3](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.2...dispatcher-v3.13.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* Repeated test runs no longer grow Unity's memory through log stack traces ([#3429](https://github.com/hatayama/unity-cli-loop/issues/3429)) ([527ade6](https://github.com/hatayama/unity-cli-loop/commit/527ade679a4cba766a7845a1c7eba2a51a65c4ca))
+
 ## [3.13.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.13.1...dispatcher-v3.13.2) (2026-10-29)
 
 

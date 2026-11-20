@@ -470,7 +470,7 @@ func TestWriteToolFailureClassifiesAcceptedDisconnect(t *testing.T) {
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, stderr.String())
 	}
-	if envelope.Error.ErrorCode != errorCodeUnityDisconnectedAfterAccept {
+	if envelope.Error.ErrorCode != ErrorCodeUnityDisconnectedAfterAccept {
 		t.Fatalf("error code mismatch: %#v", envelope.Error)
 	}
 	if envelope.Error.Phase != ErrorPhaseResponseWaiting {

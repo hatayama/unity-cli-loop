@@ -18,7 +18,7 @@ import (
 func TestMatchMacUnityProcessKeepsAnEditorWithoutProjectPathUnidentified(t *testing.T) {
 	process, matched := matchMacUnityProcess(
 		123,
-		`/Applications/Unity/Hub/Editor/6000.0.0f1/Unity.app/Contents/MacOS/Unity -useHub -hubIPC`)
+		[]string{macEditorForTest, "-useHub", "-hubIPC"})
 
 	if !matched || process.Pid != 123 || process.projectPath != "" {
 		t.Fatalf("expected an Editor with no project path, got matched = %v, %#v", matched, process)
@@ -156,23 +156,6 @@ func TestParseWindowsUnityProcessesSkipsMalformedLines(t *testing.T) {
 
 			if len(processes) != 1 || processes[0].Pid != 123 || processes[0].projectPath != `C:\Projects\Kept` {
 				t.Fatalf("expected only the valid line, got %#v", processes)
-			}
-		})
-	}
-}
-
-// Verifies project path extraction yields no path for commands whose flag is missing, empty, or has an unclosed quote.
-func TestExtractProjectPathReturnsEmptyForUnusableFlag(t *testing.T) {
-	cases := map[string]string{
-		"no project path flag":    `Unity -useHub -hubIPC`,
-		"flag with blank value":   "Unity -projectPath=   ",
-		"double quote never ends": `Unity -projectPath "/Users/<USER_NAME>/Unclosed -useHub`,
-		"single quote never ends": `Unity -projectPath '/Users/<USER_NAME>/Unclosed -useHub`,
-	}
-	for name, command := range cases {
-		t.Run(name, func(t *testing.T) {
-			if actual := extractProjectPath(command); actual != "" {
-				t.Fatalf("expected no project path for %q, got %q", command, actual)
 			}
 		})
 	}

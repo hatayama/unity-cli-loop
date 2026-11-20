@@ -33,6 +33,15 @@ internal static class AssignmentTargetRules
     }
 
     /// <summary>
+    /// Whether the assignment is `P = { ... }` inside an object initializer, which reads P and fills
+    /// what it returns, never setting it.
+    /// </summary>
+    internal static bool IsNestedInitializer(AssignmentExpressionSyntax assignment)
+    {
+        return assignment.Right is InitializerExpressionSyntax;
+    }
+
+    /// <summary>
     /// Whether the node is an element, at any depth and through any parentheses, of a tuple that an
     /// assignment deconstructs into.
     /// </summary>

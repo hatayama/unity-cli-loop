@@ -354,6 +354,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Labels need the same treatment: see HotReloadPatchIlRebind.RebindLabels.
             List<CodeInstruction> transplanted =
                 new List<CodeInstruction>(PatchProcessor.GetOriginalInstructions(shimMethod));
+            HotReloadBaseCallStandIns.RedirectToBaseMethods(transplanted, shimMethod, original);
             IReadOnlyList<LocalBuilder> transplantLocals =
                 HotReloadPatchIlRebind.RebindShortFormLocals(shimMethod, generator, transplanted);
             generation.RecordTransplantLocals(original, transplantLocals);

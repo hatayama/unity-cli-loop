@@ -14,6 +14,7 @@ var nativeCommandOptions = map[string][]string{
 		"--" + tooldocs.ProjectPathFlagName,
 		"--delete-recovery",
 		"--editor-version",
+		launchLogFileOption,
 		"--max-depth",
 		"--platform",
 		"--quit",

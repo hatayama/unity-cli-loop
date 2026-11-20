@@ -62,7 +62,7 @@ jobs:
       - name: Install golangci-lint
         if: steps.release.outputs.publish == 'true'
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Check native CLI

@@ -38,9 +38,10 @@ func loadHappyFixture(t *testing.T) happyFixture {
 		digest:    digest,
 		commitSHA: commitSHA,
 		identity: Identity{
-			Repository:   "hatayama/unity-cli-loop",
-			WorkflowPath: ".github/workflows/dispatcher-publish.yml",
-			Refs:         []string{"refs/heads/v3-beta", "refs/heads/main"},
+			RepositoryID:      "1002447118",
+			RepositoryOwnerID: "842587",
+			WorkflowPath:      ".github/workflows/dispatcher-publish.yml",
+			Refs:              []string{"refs/heads/v3-beta", "refs/heads/main"},
 		},
 	}
 }
@@ -166,16 +167,30 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 			wantErr: "attestation verification failed: ExpectedCommitSHA must be 40-char hex",
 		},
 		{
-			name: "missing repository",
+			name: "missing repository ID",
 			opts: SubjectsOptions{
 				BundleData:        f.bundle,
 				ExpectedCommitSHA: f.commitSHA,
 				Identity: Identity{
+					RepositoryOwnerID: f.identity.RepositoryOwnerID,
+					WorkflowPath:      f.identity.WorkflowPath,
+					Refs:              f.identity.Refs,
+				},
+			},
+			wantErr: "attestation verification failed: Identity.RepositoryID, RepositoryOwnerID, WorkflowPath, and at least one Ref required",
+		},
+		{
+			name: "missing repository owner ID",
+			opts: SubjectsOptions{
+				BundleData:        f.bundle,
+				ExpectedCommitSHA: f.commitSHA,
+				Identity: Identity{
+					RepositoryID: f.identity.RepositoryID,
 					WorkflowPath: f.identity.WorkflowPath,
 					Refs:         f.identity.Refs,
 				},
 			},
-			wantErr: "attestation verification failed: Identity.Repository, WorkflowPath, and at least one Ref required",
+			wantErr: "attestation verification failed: Identity.RepositoryID, RepositoryOwnerID, WorkflowPath, and at least one Ref required",
 		},
 		{
 			name: "missing workflow path",
@@ -183,11 +198,12 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 				BundleData:        f.bundle,
 				ExpectedCommitSHA: f.commitSHA,
 				Identity: Identity{
-					Repository: f.identity.Repository,
-					Refs:       f.identity.Refs,
+					RepositoryID:      f.identity.RepositoryID,
+					RepositoryOwnerID: f.identity.RepositoryOwnerID,
+					Refs:              f.identity.Refs,
 				},
 			},
-			wantErr: "attestation verification failed: Identity.Repository, WorkflowPath, and at least one Ref required",
+			wantErr: "attestation verification failed: Identity.RepositoryID, RepositoryOwnerID, WorkflowPath, and at least one Ref required",
 		},
 		{
 			name: "missing refs",
@@ -195,11 +211,12 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 				BundleData:        f.bundle,
 				ExpectedCommitSHA: f.commitSHA,
 				Identity: Identity{
-					Repository:   f.identity.Repository,
-					WorkflowPath: f.identity.WorkflowPath,
+					RepositoryID:      f.identity.RepositoryID,
+					RepositoryOwnerID: f.identity.RepositoryOwnerID,
+					WorkflowPath:      f.identity.WorkflowPath,
 				},
 			},
-			wantErr: "attestation verification failed: Identity.Repository, WorkflowPath, and at least one Ref required",
+			wantErr: "attestation verification failed: Identity.RepositoryID, RepositoryOwnerID, WorkflowPath, and at least one Ref required",
 		},
 	}
 
@@ -261,15 +278,15 @@ func TestVerify_DigestMismatch(t *testing.T) {
 	}
 }
 
-// Verifies fail-closed when SAN allowlist does not include the cert's signer.
-func TestVerify_IdentityMismatch_BadSAN(t *testing.T) {
+// Verifies fail-closed when the real certificate's repository ID differs from the identity's.
+func TestVerify_IdentityMismatch_OtherRepositoryID(t *testing.T) {
 	f := loadHappyFixture(t)
 	trusted, err := LoadEmbeddedTrustedMaterial()
 	if err != nil {
 		t.Fatalf("load trusted root: %v", err)
 	}
 	badIdentity := f.identity
-	badIdentity.Repository = "attacker/evil-fork"
+	badIdentity.RepositoryID = "1"
 	err = Verify(trusted, VerifyOptions{
 		AssetDigest:       f.digest,
 		BundleData:        f.bundle,
@@ -277,7 +294,7 @@ func TestVerify_IdentityMismatch_BadSAN(t *testing.T) {
 		Identity:          badIdentity,
 	})
 	if err == nil {
-		t.Fatalf("expected SAN mismatch to fail, got nil")
+		t.Fatalf("expected repository ID mismatch to fail, got nil")
 	}
 	if !errors.Is(err, ErrVerificationFailed) {
 		t.Fatalf("expected ErrVerificationFailed, got: %v", err)

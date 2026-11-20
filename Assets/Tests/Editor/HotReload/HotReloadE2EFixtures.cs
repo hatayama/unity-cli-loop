@@ -137,10 +137,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new List<int> { 1, 2, 3 };
         }
 
-        // Contains base. — worker must skip with an explicit reason (not an error).
+        // Calls a base method in its own statements — the worker patches it through a base-call stand-in.
         public int CallsBase()
         {
             return base.BaseSeed() + 1;
+        }
+
+        // Calls a base method inside a lambda — the worker must skip it with an explicit reason.
+        public int CallsBaseInLambda()
+        {
+            System.Func<int> viaLambda = () => base.BaseSeed();
+            return viaLambda() + 5;
         }
 
         // Edited copy will call a non-existent helper so shim compile fails with a new-member hint.
@@ -149,8 +156,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return value;
         }
 
-        // Explicit interface implementation — must be Skipped so its dotted metadata name cannot
-        // poison shim compilation for the rest of the file.
+        // Explicit interface implementation: patched, with a shim named after the interface member
+        // because its own dotted metadata name is not a legal identifier.
         int IHotReloadE2EMarker.ExplicitPing()
         {
             return _secret;

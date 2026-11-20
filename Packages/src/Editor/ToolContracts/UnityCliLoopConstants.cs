@@ -85,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string COMMAND_NAME_GET_RUN_TESTS_STATUS = "get-run-tests-status";
         public const string COMMAND_NAME_GET_EDITOR_STATUS = "get-editor-status";
         public const string COMMAND_NAME_CANCEL_RUNNING_TOOL = "cancel-running-tool";
+        public const string COMMAND_NAME_REPORT_BLOCKING_DIALOG = "report-blocking-dialog";
         public const string COMMAND_NAME_QUIT_EDITOR = "quit-editor";
         public const string COMMAND_NAME_AWAIT_PAUSE_POINT = "await-pause-point";
         public const string SETTINGS_TOOL_NAME_PAUSE_POINT = "pause-point";
@@ -171,6 +172,14 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
         public const int COMPILE_START_TIMEOUT_MS = 5000;
         public const int COMPILE_START_POLL_INTERVAL_MS = 100;
+        /// <summary>
+        /// Main-thread-ticking milliseconds Unity may report isCompiling without raising
+        /// compilationStarted before the request is aborted as COMPILE_NOT_STARTED. Measured in
+        /// watchdog polls, so a blocked main thread never counts toward it. Why 60 s: the longest
+        /// legitimate gap seen between a compile request and compilationStarted is well under that,
+        /// and the CLI brings the Editor to the front at 10 s, which is what recovers the known cause.
+        /// </summary>
+        public const int COMPILE_START_PENDING_TIMEOUT_MS = 60000;
         public const int COMPILE_FINISH_MISSED_CALLBACK_GRACE_MS = 2000;
         /// <summary>
         /// Wall-clock milliseconds without a new assemblyCompilationFinished callback while Unity

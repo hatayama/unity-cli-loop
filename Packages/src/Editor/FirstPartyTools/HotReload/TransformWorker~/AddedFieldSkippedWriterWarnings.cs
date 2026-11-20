@@ -75,7 +75,8 @@ internal static class AddedFieldSkippedWriterWarnings
             new HashSet<string>(skipped.Select(row => row.Method), StringComparer.Ordinal),
             new HashSet<SyntaxNode>(
                 allTypeEmitStates.SelectMany(state => state.QueuedMethods).Select(queued => queued.MethodDeclaration)),
-            addedPropertyCatalog);
+            addedPropertyCatalog,
+            BuildCompiledTypeBySourceType(allTypeEmitStates));
         foreach (WorkerSourceUnit scannedUnit in transformUnits)
         {
             RecordUses(scannedUnit, candidates, classifier);
@@ -89,6 +90,21 @@ internal static class AddedFieldSkippedWriterWarnings
                     FormatWarning(candidate.Key, candidate.Value, activeLabels));
             }
         }
+    }
+
+    private static Dictionary<ISymbol, INamedTypeSymbol> BuildCompiledTypeBySourceType(List<TypeEmitState> allTypeEmitStates)
+    {
+        Dictionary<ISymbol, INamedTypeSymbol> compiledTypes =
+            new Dictionary<ISymbol, INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        foreach (TypeEmitState state in allTypeEmitStates)
+        {
+            if (state.CompiledType != null)
+            {
+                compiledTypes[state.TypeSymbol] = state.CompiledType;
+            }
+        }
+
+        return compiledTypes;
     }
 
     // Only a store-rewritten field without an initializer starts at its default value; a const

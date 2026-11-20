@@ -38,12 +38,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 DomainReloadStateRegistry.IsDomainReloadInProgress();
             bool isSnapshotCaptureHolding =
                 HotReloadSnapshotCaptureCoordination.IsHoldingCompileCompletion?.Invoke() ?? false;
+            double compileStartPendingSeconds =
+                CompileStartPendingCoordination.ReadPendingSeconds?.Invoke() ?? 0d;
             GetCompileStatusResponse response = BuildResponse(
                 requestId,
                 isCompiling,
                 isUpdating,
                 isDomainReloadInProgress,
                 isSnapshotCaptureHolding,
+                compileStartPendingSeconds,
                 compileSessionLifecycleService,
                 compileResultSessionRepository,
                 pendingCompileSessionRepository);
@@ -57,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool isUpdating,
             bool isDomainReloadInProgress,
             bool isSnapshotCaptureHolding,
+            double compileStartPendingSeconds,
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
             ICompileResultSessionRepository compileResultSessionRepository,
             IPendingCompileSessionRepository pendingCompileSessionRepository)
@@ -64,10 +68,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(compileSessionLifecycleService != null, "compileSessionLifecycleService must not be null");
             Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
             Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
+            Debug.Assert(compileStartPendingSeconds >= 0d, "compileStartPendingSeconds must not be negative");
 
             // The hot reload snapshot capture must finish before compile returns, or an edit made
             // right after the CLI returns could be captured as the source the compiler read.
-            bool ready = !isCompiling && !isUpdating && !isDomainReloadInProgress && !isSnapshotCaptureHolding;
+            bool isEditorSettled = !isUpdating && !isDomainReloadInProgress && !isSnapshotCaptureHolding;
+            bool ready = !isCompiling && isEditorSettled;
             compileSessionLifecycleService.ClearExpiredPendingCompileRequest(DateTime.UtcNow);
             UnityCliLoopStoredCompileResult storedResult = string.IsNullOrWhiteSpace(requestId)
                 ? UnityCliLoopStoredCompileResult.None()
@@ -81,6 +87,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
+            // A COMPILE_NOT_STARTED abort leaves the compile queued inside Unity, so isCompiling stays
+            // true indefinitely; the CLI must still receive that result instead of waiting it out.
+            // Only that gate is lifted: an asset refresh, domain reload, or snapshot capture in
+            // progress still holds the result back, as it does for every other stored result.
+            if (IsCompileNotStartedResult(result))
+            {
+                ready = isEditorSettled;
+            }
+
             return new GetCompileStatusResponse
             {
                 Ready = ready,
@@ -88,9 +103,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsCompiling = isCompiling,
                 IsUpdating = isUpdating,
                 IsDomainReloadInProgress = isDomainReloadInProgress,
+                CompileStartPendingSeconds = compileStartPendingSeconds,
                 Result = result,
                 Message = CreateMessage(ready, storedResult.HasResult)
             };
+        }
+
+        private static bool IsCompileNotStartedResult(JToken result)
+        {
+            if (result is not JObject resultObject)
+            {
+                return false;
+            }
+
+            JToken errorCode = resultObject["ErrorCode"];
+            if (errorCode == null || errorCode.Type != JTokenType.String)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                errorCode.Value<string>(),
+                CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText,
+                StringComparison.Ordinal);
         }
 
         private static string ReadRequestId(JToken paramsToken)
@@ -123,6 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     is_updating = response.IsUpdating,
                     is_domain_reload_in_progress = response.IsDomainReloadInProgress,
                     is_snapshot_capture_holding = isSnapshotCaptureHolding,
+                    compile_start_pending_seconds = response.CompileStartPendingSeconds,
                     message = response.Message
                 },
                 requestId);

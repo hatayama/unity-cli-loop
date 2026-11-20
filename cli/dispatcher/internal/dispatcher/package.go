@@ -127,15 +127,11 @@ func parsePackageStatusOptions(args []string) error {
 	return nil
 }
 
-// defaultProjectSearchDepth is the child-directory search depth shared by every setup-time
-// command (launch, package, skills), so they all resolve the same project from a repository root.
-const defaultProjectSearchDepth = 3
-
 func resolvePackageProjectRoot(startPath string, explicitProjectPath string) (string, error) {
 	if explicitProjectPath != "" {
 		return project.ResolveExplicitProjectRoot(explicitProjectPath)
 	}
-	return project.FindUnityProjectRootPreferringParents(startPath, defaultProjectSearchDepth)
+	return project.FindUnityProjectRootPreferringParents(startPath, project.DefaultProjectSearchDepth)
 }
 
 func runPackageInstall(

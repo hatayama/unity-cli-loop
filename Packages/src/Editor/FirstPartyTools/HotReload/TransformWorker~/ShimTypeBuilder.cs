@@ -20,6 +20,8 @@ internal sealed class ShimTypeBuilder
     private readonly List<MethodDeclarationSyntax> _methods = new List<MethodDeclarationSyntax>();
     private readonly List<string> _invocationCounterFieldNames = new List<string>();
 
+    public BaseCallStandInPlan BaseCallStandIns { get; } = new BaseCallStandInPlan();
+
     public ShimTypeBuilder(
         string shimTypeName,
         string namespaceName,
@@ -91,6 +93,11 @@ internal sealed class ShimTypeBuilder
         foreach (MethodDeclarationSyntax method in _methods)
         {
             yield return method;
+        }
+
+        foreach (MethodDeclarationSyntax standIn in BaseCallStandIns.EmitMethods())
+        {
+            yield return standIn;
         }
     }
 

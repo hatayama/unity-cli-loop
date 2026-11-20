@@ -280,6 +280,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Failed(methodLabel, patchability.ErrorMessage, filePath));
             }
 
+            string baseCallError = HotReloadBaseCallStandIns.DescribeUnresolvableCallOrNull(
+                shimMethod,
+                matchResult.Method,
+                patchShape);
+            if (baseCallError != null)
+            {
+                return ResolvedEntryOutcome.Failed(
+                    HotReloadMethodOutcome.Failed(methodLabel, baseCallError, filePath));
+            }
+
             return ResolvedEntryOutcome.Succeeded(
                 new ResolvedEntry(
                     entry,

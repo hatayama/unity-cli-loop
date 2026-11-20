@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -24,17 +25,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int missedCallbackStoppedMs = -1;
             int startTimeoutCount = 0;
             int cancellationCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => false,
-                () => Task.CompletedTask,
-                _ => { },
-                _ => startTimeoutCount++,
-                stoppedMs => missedCallbackStoppedMs = stoppedMs,
-                _ => cancellationCount++,
-                () => 0,
-                () => 0d,
-                _ => { });
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                onStartTimeout: _ => startTimeoutCount++,
+                onMissedCompletionCallback: stoppedMs => missedCallbackStoppedMs = stoppedMs,
+                onCancelled: _ => cancellationCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -52,21 +47,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int waitCount = 0;
             int missedCallbackCount = 0;
             int startTimeoutCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 2,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 2,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => startTimeoutCount++,
-                _ => missedCallbackCount++,
-                _ => { },
-                () => 0,
-                () => 0d,
-                _ => { });
+                onStartTimeout: _ => startTimeoutCount++,
+                onMissedCompletionCallback: _ => missedCallbackCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -83,21 +73,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int waitCount = 0;
             int missedCallbackCount = 0;
             int startTimeoutCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 7,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 7,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => startTimeoutCount++,
-                _ => missedCallbackCount++,
-                _ => { },
-                () => 0,
-                () => 0d,
-                _ => { });
+                onStartTimeout: _ => startTimeoutCount++,
+                onMissedCompletionCallback: _ => missedCallbackCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -113,17 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ConstantCompilationState compilationState = new ConstantCompilationState(false);
             int startTimeoutMs = -1;
             int missedCallbackCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => false,
-                () => Task.CompletedTask,
-                _ => { },
-                waitedMs => startTimeoutMs = waitedMs,
-                _ => missedCallbackCount++,
-                _ => { },
-                () => 0,
-                () => 0d,
-                _ => { });
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                onStartTimeout: waitedMs => startTimeoutMs = waitedMs,
+                onMissedCompletionCallback: _ => missedCallbackCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -137,22 +115,152 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies watchdog faults remain observable so the controller can abort the active compile request.
             ConstantCompilationState compilationState = new ConstantCompilationState(false);
             InvalidOperationException expectedException = new InvalidOperationException("poll failed");
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => false,
-                () => Task.FromException(expectedException),
-                _ => { },
-                _ => { },
-                _ => { },
-                _ => { },
-                () => 0,
-                () => 0d,
-                _ => { });
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                waitForPollAsync: () => Task.FromException(expectedException));
 
             InvalidOperationException actualException = Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await watchdog.WatchAsync(CancellationToken.None));
 
             Assert.That(actualException, Is.SameAs(expectedException));
+        }
+
+        /// <summary>
+        /// Verifies isCompiling without compilationStarted reports pending-start progress once per poll.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenEditorReportsCompilingWithoutStartEvent_ReportsPendingProgress()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            List<int> reportedPendingMs = new List<int>();
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 3,
+                waitForPollAsync: () =>
+                {
+                    waitCount++;
+                    return Task.CompletedTask;
+                },
+                hasCompilationStarted: () => false,
+                onCompileStartPending: pendingMs => reportedPendingMs.Add(pendingMs));
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(reportedPendingMs, Is.EqualTo(new int[] { 100, 200, 300 }));
+        }
+
+        /// <summary>
+        /// Verifies a start that stays pending for the full timeout aborts through the pending-timeout callback.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenStartStaysPendingForTimeout_RequestsPendingTimeoutAndStops()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            int pendingTimeoutMs = -1;
+            int startTimeoutCount = 0;
+            int missedCallbackCount = 0;
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                waitForPollAsync: () =>
+                {
+                    waitCount++;
+                    return Task.CompletedTask;
+                },
+                onStartTimeout: _ => startTimeoutCount++,
+                onMissedCompletionCallback: _ => missedCallbackCount++,
+                hasCompilationStarted: () => false,
+                onCompileStartPendingTimeout: pendingMs => pendingTimeoutMs = pendingMs);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(pendingTimeoutMs, Is.EqualTo(UnityCliLoopConstants.COMPILE_START_PENDING_TIMEOUT_MS));
+            Assert.That(
+                waitCount,
+                Is.EqualTo(UnityCliLoopConstants.COMPILE_START_PENDING_TIMEOUT_MS / UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS));
+            Assert.That(startTimeoutCount, Is.EqualTo(0));
+            Assert.That(missedCallbackCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies the compilationStarted event stops pending-start counting while the watch keeps running.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenCompilationStartedEventArrives_StopsCountingPending()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            List<int> reportedPendingMs = new List<int>();
+            int pendingTimeoutCount = 0;
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 5,
+                waitForPollAsync: () =>
+                {
+                    waitCount++;
+                    return Task.CompletedTask;
+                },
+                hasCompilationStarted: () => waitCount >= 2,
+                onCompileStartPending: pendingMs => reportedPendingMs.Add(pendingMs),
+                onCompileStartPendingTimeout: _ => pendingTimeoutCount++);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(reportedPendingMs, Is.EqualTo(new int[] { 100 }));
+            Assert.That(pendingTimeoutCount, Is.EqualTo(0));
+            Assert.That(waitCount, Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// Verifies a request that completes exactly at the pending timeout is not aborted as not started.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenRequestCompletesAtPendingTimeout_DoesNotRequestPendingTimeout()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            int pendingTimeoutCount = 0;
+            int timeoutPolls =
+                UnityCliLoopConstants.COMPILE_START_PENDING_TIMEOUT_MS / UnityCliLoopConstants.COMPILE_START_POLL_INTERVAL_MS;
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= timeoutPolls,
+                waitForPollAsync: () =>
+                {
+                    waitCount++;
+                    return Task.CompletedTask;
+                },
+                hasCompilationStarted: () => false,
+                onCompileStartPendingTimeout: _ => pendingTimeoutCount++);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(pendingTimeoutCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies an Editor that never reports compiling takes the start-timeout path and reports no pending progress.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenEditorIsNotCompiling_DoesNotReportPendingProgress()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(false);
+            int pendingReportCount = 0;
+            int pendingTimeoutCount = 0;
+            int startTimeoutCount = 0;
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                onStartTimeout: _ => startTimeoutCount++,
+                hasCompilationStarted: () => false,
+                onCompileStartPending: _ => pendingReportCount++,
+                onCompileStartPendingTimeout: _ => pendingTimeoutCount++);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(pendingReportCount, Is.EqualTo(0));
+            Assert.That(pendingTimeoutCount, Is.EqualTo(0));
+            Assert.That(startTimeoutCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -249,10 +357,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             double clockSeconds = 0;
             int stallCallCount = 0;
             int stalledMs = -1;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 4,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 4,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     if (waitCount == 1)
@@ -262,13 +370,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => { },
-                _ => { },
-                _ => { },
-                () => 1,
-                () => clockSeconds,
-                ms =>
+                getAssemblyFinishedCount: () => 1,
+                getMonotonicSeconds: () => clockSeconds,
+                onAssemblyProgressStalled: ms =>
                 {
                     stallCallCount++;
                     stalledMs = ms;
@@ -290,22 +394,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int waitCount = 0;
             double clockSeconds = 0;
             int stallCallCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 3,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 3,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     clockSeconds = 300;
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => { },
-                _ => { },
-                _ => { },
-                () => 0,
-                () => clockSeconds,
-                _ => stallCallCount++);
+                getMonotonicSeconds: () => clockSeconds,
+                onAssemblyProgressStalled: _ => stallCallCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -324,10 +423,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             double clockSeconds = 0;
             int stallCallCount = 0;
             int stalledMs = -1;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 6,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 6,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     if (waitCount == 1)
@@ -349,13 +448,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => { },
-                _ => { },
-                _ => { },
-                () => assemblyFinishedCount,
-                () => clockSeconds,
-                ms =>
+                getAssemblyFinishedCount: () => assemblyFinishedCount,
+                getMonotonicSeconds: () => clockSeconds,
+                onAssemblyProgressStalled: ms =>
                 {
                     stallCallCount++;
                     stalledMs = ms;
@@ -380,10 +475,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int missedCallbackCount = 0;
             int startTimeoutCount = 0;
             int cancellationCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 4,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 4,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     if (waitCount == 1)
@@ -393,13 +488,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => startTimeoutCount++,
-                _ => missedCallbackCount++,
-                _ => cancellationCount++,
-                () => 1,
-                () => clockSeconds,
-                _ => stallCallCount++);
+                onStartTimeout: _ => startTimeoutCount++,
+                onMissedCompletionCallback: _ => missedCallbackCount++,
+                onCancelled: _ => cancellationCount++,
+                getAssemblyFinishedCount: () => 1,
+                getMonotonicSeconds: () => clockSeconds,
+                onAssemblyProgressStalled: _ => stallCallCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -421,10 +515,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             double clockSeconds = 0;
             int stallCallCount = 0;
             int missedCallbackCount = 0;
-            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
-                compilationState.IsCompiling,
-                () => waitCount >= 2,
-                () =>
+            CompileLifecycleWatchdog watchdog = CreateWatchdog(
+                isEditorCompiling: compilationState.IsCompiling,
+                isRequestCompleted: () => waitCount >= 2,
+                waitForPollAsync: () =>
                 {
                     waitCount++;
                     if (waitCount == 1)
@@ -434,18 +528,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                     return Task.CompletedTask;
                 },
-                _ => { },
-                _ => { },
-                _ => missedCallbackCount++,
-                _ => { },
-                () => 1,
-                () => clockSeconds,
-                _ => stallCallCount++);
+                onMissedCompletionCallback: _ => missedCallbackCount++,
+                getAssemblyFinishedCount: () => 1,
+                getMonotonicSeconds: () => clockSeconds,
+                onAssemblyProgressStalled: _ => stallCallCount++);
 
             await watchdog.WatchAsync(CancellationToken.None);
 
             Assert.That(stallCallCount, Is.EqualTo(0));
             Assert.That(missedCallbackCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Builds a watchdog whose unused callbacks are no-ops. hasCompilationStarted defaults to true so the
+        /// existing lifecycle tests, which predate pending-start tracking, keep exercising only their own path.
+        /// </summary>
+        private static CompileLifecycleWatchdog CreateWatchdog(
+            Func<bool> isEditorCompiling,
+            Func<bool> isRequestCompleted = null,
+            Func<Task> waitForPollAsync = null,
+            Func<bool> hasCompilationStarted = null,
+            Action<int> onCompileStartedObserved = null,
+            Action<int> onStartTimeout = null,
+            Action<int> onCompileStartPending = null,
+            Action<int> onCompileStartPendingTimeout = null,
+            Action<int> onMissedCompletionCallback = null,
+            Action<string> onCancelled = null,
+            Func<int> getAssemblyFinishedCount = null,
+            Func<double> getMonotonicSeconds = null,
+            Action<int> onAssemblyProgressStalled = null)
+        {
+            return new CompileLifecycleWatchdog(
+                isEditorCompiling,
+                isRequestCompleted ?? (() => false),
+                waitForPollAsync ?? (() => Task.CompletedTask),
+                hasCompilationStarted ?? (() => true),
+                onCompileStartedObserved ?? (_ => { }),
+                onStartTimeout ?? (_ => { }),
+                onCompileStartPending ?? (_ => { }),
+                onCompileStartPendingTimeout ?? (_ => { }),
+                onMissedCompletionCallback ?? (_ => { }),
+                onCancelled ?? (_ => { }),
+                getAssemblyFinishedCount ?? (() => 0),
+                getMonotonicSeconds ?? (() => 0d),
+                onAssemblyProgressStalled ?? (_ => { }));
         }
 
         private sealed class SequenceCompilationState

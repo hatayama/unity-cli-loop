@@ -20,6 +20,7 @@ type user32API struct {
 	attachThreadInput   *windows.LazyProc
 	getWindow           *windows.LazyProc
 	keybdEvent          *windows.LazyProc
+	getAsyncKeyState    *windows.LazyProc
 }
 
 func newUser32API() *user32API {
@@ -32,10 +33,17 @@ func newUser32API() *user32API {
 		attachThreadInput:   dll.NewProc("AttachThreadInput"),
 		getWindow:           dll.NewProc("GetWindow"),
 		keybdEvent:          dll.NewProc("keybd_event"),
+		getAsyncKeyState:    dll.NewProc("GetAsyncKeyState"),
 	}
 }
 
 var user32 = newUser32API()
+
+// GetAsyncKeyState returns the raw 16 bits of a virtual key's SHORT state; see mouseButtonHeld.
+func (api *user32API) GetAsyncKeyState(virtualKey uint16) uint16 {
+	ret, _, _ := api.getAsyncKeyState.Call(uintptr(virtualKey))
+	return uint16(ret)
+}
 
 func (api *user32API) SetForegroundWindow(hwnd windows.HWND) bool {
 	ret, _, _ := api.setForegroundWindow.Call(uintptr(hwnd))

@@ -113,6 +113,11 @@ func openProjectRunnerReleasePullRequestExists(
 
 // openReleasePullRequestExists reports whether the release pull request of one
 // component is open, found by the head branch release-please names after it.
+//
+// It asks the REST API because only that takes the owner along with the branch. gh pr
+// list --head matches the branch name in any repository, so a fork's pull request from a
+// branch of the same name would hold the package release back, and filtering a listing
+// afterwards would let enough of those push the real one out of it.
 func openReleasePullRequestExists(
 	ctx context.Context,
 	runOutput func(context.Context, string, ...string) (string, error),
@@ -120,23 +125,14 @@ func openReleasePullRequestExists(
 	baseBranch string,
 	component string,
 ) (bool, error) {
+	owner, _, _ := strings.Cut(repository, "/")
 	headBranch := "release-please--branches--" + baseBranch + "--components--" + component
-	output, err := runOutput(
-		ctx,
-		"gh",
-		"pr",
-		"list",
-		"--repo",
-		repository,
-		"--state",
-		"open",
-		"--base",
-		baseBranch,
-		"--head",
-		headBranch,
-		"--json",
-		"number",
-	)
+	query := url.Values{
+		"state": {"open"},
+		"base":  {baseBranch},
+		"head":  {owner + ":" + headBranch},
+	}
+	output, err := runOutput(ctx, "gh", "api", "repos/"+repository+"/pulls?"+query.Encode())
 	if err != nil {
 		return false, err
 	}

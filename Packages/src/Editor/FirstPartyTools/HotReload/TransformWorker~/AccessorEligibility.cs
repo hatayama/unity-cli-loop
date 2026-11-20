@@ -38,13 +38,41 @@ internal static class AccessorEligibility
         out WorkerReason rejectReason)
     {
         plan = null;
-        rejectReason = null;
+        bool built = TryBuildEntries(
+            semanticModel,
+            methodSymbol,
+            bodyNode,
+            addedMemberAccess,
+            accessRoots,
+            out AccessorPlan entries,
+            out rejectReason);
 
-        if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
+        // Why only an empty plan may skip the visible host: a body reaching only added members needs
+        // no binder or delegate, so nothing has to name the host. An entry naming the host cannot be
+        // written by the shim, and one naming another type has never been exercised on such a host.
+        // Every other refusal keeps naming the host, because fixing that one alone rarely applies.
+        if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol)
+            && (!built || entries.Entries.Count > 0))
         {
             rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorContainingTypeNotVisible);
             return false;
         }
+
+        plan = entries;
+        return built;
+    }
+
+    private static bool TryBuildEntries(
+        SemanticModel semanticModel,
+        IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        AddedMemberAccessLookup addedMemberAccess,
+        IReadOnlyList<SyntaxNode> accessRoots,
+        out AccessorPlan plan,
+        out WorkerReason rejectReason)
+    {
+        plan = null;
+        rejectReason = null;
 
         if (!AreMethodSignatureTypesVisible(methodSymbol, out rejectReason))
         {
@@ -74,10 +102,10 @@ internal static class AccessorEligibility
             }
         }
 
-        if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode, addedMemberAccess))
+        WorkerReason incrementReject = FindPropertyIncrementRejectReasonOrNull(semanticModel, bodyNode, addedMemberAccess);
+        if (incrementReject != null)
         {
-            rejectReason =
-                WorkerReason.Of(HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
+            rejectReason = incrementReject;
             return false;
         }
 
@@ -254,7 +282,10 @@ internal static class AccessorEligibility
         return true;
     }
 
-    private static bool NeedsPropertyIncrementRewrite(
+    // What: the reason an increment or decrement of an inaccessible property in the body cannot be
+    // rewritten, or null when there is none. Why the struct reason for a struct instance property:
+    // the increment reason suggests '+= 1', which is refused as well for such a property.
+    private static WorkerReason FindPropertyIncrementRejectReasonOrNull(
         SemanticModel semanticModel,
         SyntaxNode bodyNode,
         AddedMemberAccessLookup addedMemberAccess)
@@ -280,11 +311,13 @@ internal static class AccessorEligibility
                     || AccessibilityRules.IsInaccessibleAccessor(
                         AssignmentTargetRules.AccessorCalledByWrite(propertySymbol))))
             {
-                return true;
+                return WorkerReason.Of(AccessibilityRules.NeedsStructInstanceReceiver(propertySymbol)
+                    ? HotReloadWorkerReasonCode.AccessorStructMemberNoShape
+                    : HotReloadWorkerReasonCode.AccessorPropertyIncrementNoShape);
             }
         }
 
-        return false;
+        return null;
     }
 
     private static ExpressionSyntax FindIncrementOrDecrementOperand(SyntaxNode node)

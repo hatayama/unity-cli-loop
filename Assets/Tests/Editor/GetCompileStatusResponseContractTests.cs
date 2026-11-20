@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 IsCompiling = true,
                 IsUpdating = true,
                 IsDomainReloadInProgress = true,
+                CompileStartPendingSeconds = 12.5,
                 Result = compileResultJson,
                 Message = "Compile result is available."
             };

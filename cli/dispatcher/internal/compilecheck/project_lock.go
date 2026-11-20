@@ -8,6 +8,8 @@ import (
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/filelock"
 )
 
 const (
@@ -71,7 +73,7 @@ func acquireProjectLock(ctx context.Context, projectRoot string, timeout time.Du
 	}
 
 	return func() {
-		_ = unlockFile(file)
+		_ = filelock.Unlock(file)
 		_ = file.Close()
 	}, nil
 }
@@ -80,7 +82,7 @@ func acquireProjectLock(ctx context.Context, projectRoot string, timeout time.Du
 func waitForFileLock(ctx context.Context, file *os.File, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		locked, err := tryLockFile(file)
+		locked, err := filelock.TryLock(file)
 		if err != nil {
 			return fmt.Errorf("failed to lock %s: %w", file.Name(), err)
 		}

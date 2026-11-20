@@ -17,6 +17,129 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class AccessibilityRules
 {
+    // What: the method an invocation really calls. A reduced extension call (x.M()) binds to a
+    // ReducedExtension symbol; its static definition is the method the shim would have to reach.
+    internal static IMethodSymbol UnreducedMethod(IMethodSymbol method)
+    {
+        return method.MethodKind == MethodKind.ReducedExtension && method.ReducedFrom != null
+            ? method.ReducedFrom
+            : method;
+    }
+
+    // What: whether an accessor for this inaccessible member would need an instance of a struct
+    // as its receiver. Why such accessors are refused: Harmony cannot build a field ref whose
+    // instance type is a value type, so the shim fails to bind, and a property or method delegate
+    // takes the struct by value, so a write through it lands on a copy and is lost.
+    internal static bool NeedsStructInstanceReceiver(ISymbol member)
+    {
+        return !member.IsStatic
+            && member.ContainingType != null
+            && member.ContainingType.IsValueType;
+    }
+
+    /// <summary>
+    /// What: the symbol a call, method group, member access, object creation, element access, or
+    /// assignment target binds to, or null when nothing is bound. When binding failed because a
+    /// static class is offered twice (the edited source and its compiled copy) and such a compiled
+    /// class is not externally visible, returns one of its methods from that compiled class, the one
+    /// the running code would call. That method shares the containing type of the overload the
+    /// compiler would pick but is not necessarily that overload, so it is only good for deciding
+    /// refusal. Otherwise, when the node is still unbound, returns what binding with accessibility
+    /// enforced gives.
+    /// </summary>
+    /// <remarks>
+    /// Why the accessibility-enforcing binding is asked last: the worker binds with accessibility
+    /// ignored so that private and internal members resolve, which the enforcing binding cannot do.
+    /// But ignoring accessibility also exposes internal types of referenced assemblies, and a DLL
+    /// that carries an internal copy of a BCL type (Harmony carries ReadOnlySpan, Span, Memory and
+    /// more) makes that type name ambiguous in a body. An argument of that type then has an error
+    /// type, the call binds to nothing, and every accessor check passes it by. The enforcing binding
+    /// does not see the internal copy, so it resolves the name to the BCL type and binds the call.
+    /// </remarks>
+    internal static ISymbol BoundSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        SymbolInfo info = semanticModel.GetSymbolInfo(node);
+        if (info.Symbol != null)
+        {
+            return info.Symbol;
+        }
+
+        // Why: the compiled assembly is referenced beside the edited source of the same file, and
+        // extension lookup gathers methods from both copies of a static class, every overload of
+        // each. A public method of an internal class is imported from metadata and is eligible
+        // because the worker binds with accessibility ignored, so a call to it fails as ambiguous.
+        // Treating that as "no symbol" made every access check pass, and the shim called the
+        // method and threw.
+        if (info.CandidateReason == CandidateReason.OverloadResolutionFailure)
+        {
+            IMethodSymbol twin = FindTwinCandidateToRefuseOrNull(
+                semanticModel.Compilation.Assembly,
+                info.CandidateSymbols);
+            if (twin != null)
+            {
+                return twin;
+            }
+        }
+
+        return EnforcingModel(semanticModel).GetSymbolInfo(node).Symbol;
+    }
+
+    /// <summary>
+    /// What: the semantic model of the same tree that binds with accessibility enforced. Asked only
+    /// for a node the accessibility-ignoring binding left unbound; see BoundSymbolOrNull for why.
+    /// </summary>
+    internal static SemanticModel EnforcingModel(SemanticModel semanticModel)
+    {
+        return semanticModel.Compilation.GetSemanticModel(semanticModel.SyntaxTree, ignoreAccessibility: false);
+    }
+
+    // Why per containing type: the candidates are the whole method group, so they include every
+    // overload and every same-named extension of every static class in scope, not only the ones
+    // that tied. A class with a candidate from the edited source and one from another assembly is
+    // a twin class; only twins can make binding fail without a real ambiguity, which Unity's
+    // compiler would reject too, so other classes are ignored. Only public members are imported
+    // from metadata, so a twin call is inaccessible exactly when the compiled class is not
+    // externally visible; when any twin class is hidden, the call is refused (fail closed).
+    // Why the compiled copy's class: the running code calls the compiled class, and one edit may
+    // make the edited class public while the compiled one stays internal.
+    private static IMethodSymbol FindTwinCandidateToRefuseOrNull(
+        IAssemblySymbol editedAssembly,
+        ImmutableArray<ISymbol> candidates)
+    {
+        HashSet<string> editedTypes = new HashSet<string>(StringComparer.Ordinal);
+        Dictionary<string, IMethodSymbol> hiddenCompiledCandidates =
+            new Dictionary<string, IMethodSymbol>(StringComparer.Ordinal);
+        foreach (ISymbol candidate in candidates)
+        {
+            // A method with no containing type (a function pointer signature) has no twin.
+            if (candidate is not IMethodSymbol method
+                || UnreducedMethod(method).ContainingType is not INamedTypeSymbol candidateType)
+            {
+                continue;
+            }
+
+            string typeName = candidateType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, editedAssembly))
+            {
+                editedTypes.Add(typeName);
+            }
+            else if (!IsExternallyVisibleType(candidateType))
+            {
+                hiddenCompiledCandidates[typeName] = method;
+            }
+        }
+
+        foreach (KeyValuePair<string, IMethodSymbol> hidden in hiddenCompiledCandidates)
+        {
+            if (editedTypes.Contains(hidden.Key))
+            {
+                return hidden.Value;
+            }
+        }
+
+        return null;
+    }
+
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
     {
         if (IsNonCrossAssemblySymbol(symbol))

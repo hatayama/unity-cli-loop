@@ -801,7 +801,7 @@ func assertMergePackageReleasePRListCount(t *testing.T, stub *mergePackageReleas
 	t.Helper()
 	listCount := 0
 	for _, commandLine := range stub.commandLog {
-		if strings.HasPrefix(commandLine, "gh pr list ") {
+		if strings.HasPrefix(commandLine, "gh pr list ") || strings.HasPrefix(commandLine, "gh api repos/owner/repository/pulls?") {
 			listCount++
 		}
 	}

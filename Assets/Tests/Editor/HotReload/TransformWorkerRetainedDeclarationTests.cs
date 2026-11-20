@@ -569,6 +569,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an edited getter of an explicit interface property on a retained type stays Skipped
+        /// with the explicit-implementation reason and emits no entry, as its setter does: explicit
+        /// accessors are patched only on compiled types.
+        /// </summary>
+        [Test]
+        public async Task Transform_RetainedDeclarationExplicitPropertyGetterEdited_StaysSkipped()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateWithExplicitGaugeAsync(
+                    "ExplicitPropertyGetter",
+                    WithExplicitGauge(ArtifactBackedSource, "Value"),
+                    new[] { "Twice", "Thrice" },
+                    new[] { "Hidden" });
+            string recordedFingerprint = fixture.RetainedFingerprint;
+            File.WriteAllText(fixture.SourcePath, WithExplicitGauge(ArtifactBackedSource, "Value + 1"));
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { fixture.CreateRecordedArtifact(recordedFingerprint) });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntries(result, "Example.IGauge.get_Gauge"), Is.Empty, DescribeRows(result));
+            Assert.That(
+                FindSkippedCodes(result, "get_Gauge"),
+                Does.Contain(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation),
+                DescribeRows(result));
+        }
+
+        /// <summary>
         /// What: a property getter of a retained type is reported as unchanged in the assembly
         /// serving the type, not patched as a getter of the edited file's own assembly. The
         /// comparison that kept the declaration reported that no accessor body changed, while the
@@ -927,6 +956,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public static int Value = 1;\n",
                 "        public static int Value = 1;\n\n        public int Number => Value;\n",
                 StringComparison.Ordinal);
+        }
+
+        // The same declaration implementing the target assembly's Example.IGauge through an explicit
+        // property whose getter returns getterBody.
+        private static string WithExplicitGauge(string source, string getterBody)
+        {
+            return source
+                .Replace("    public class Retained\n", "    public class Retained : IGauge\n", StringComparison.Ordinal)
+                .Replace(
+                    "        public static int Value = 1;\n",
+                    "        public static int Value = 1;\n\n        int IGauge.Gauge => " + getterBody + ";\n",
+                    StringComparison.Ordinal);
         }
 
         // The same declaration with only the getter body of that property edited, which is the one

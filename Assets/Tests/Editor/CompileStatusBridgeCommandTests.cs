@@ -53,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -79,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -104,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -128,6 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -157,6 +161,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -188,6 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -218,6 +224,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: true,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
@@ -229,6 +236,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopEditorSessionStateTestFactory.GetSinglePendingCompileRequest(
                     _pendingCompileSessionRepository).HasRequest,
                 Is.True);
+        }
+
+        [Test]
+        public void BuildResponse_WhenStoredResultIsCompileNotStarted_IsReadyWhileUnityStillReportsCompiling()
+        {
+            // Verifies a COMPILE_NOT_STARTED abort is released to the CLI even though Unity keeps
+            // isCompiling true for the queued compile; otherwise the CLI would wait until its own timeout.
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":false,\"ErrorCode\":\"" +
+                    CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText + "\"}",
+                completedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 60d,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
+
+            Assert.That(response.Ready, Is.True);
+            Assert.That(response.HasResult, Is.True);
+            Assert.That(response.IsCompiling, Is.True);
+            Assert.That(
+                response.Result["ErrorCode"]?.ToString(),
+                Is.EqualTo(CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText));
+        }
+
+        [Test]
+        public void BuildResponse_WhenStoredResultIsCompileNotStarted_StaysNotReadyWhileEditorIsUpdating()
+        {
+            // Verifies the not-started result lifts only the isCompiling gate: an asset refresh in
+            // progress still holds it back, as it does for every other stored result.
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":false,\"ErrorCode\":\"" +
+                    CompileLifecycleErrorCodes.CompileNotStartedErrorCodeText + "\"}",
+                completedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: true,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 60d,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
+
+            Assert.That(response.Ready, Is.False);
+            Assert.That(response.HasResult, Is.True);
+        }
+
+        [Test]
+        public void BuildResponse_WhenStoredResultHasAnotherErrorCode_StaysNotReadyWhileCompiling()
+        {
+            // Verifies only the not-started code bypasses the readiness gate; other stored results still
+            // wait for Unity to finish compiling and reloading.
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":false,\"ErrorCode\":\"" + ForceCompileUnknownResult.ErrorCodeText + "\"}",
+                completedAtUtc: System.DateTime.UtcNow);
+
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
+
+            Assert.That(response.Ready, Is.False);
+        }
+
+        [Test]
+        public void BuildResponse_PropagatesCompileStartPendingSeconds()
+        {
+            // Verifies the pending-start seconds reach the CLI so it can bring the Editor to the front.
+            GetCompileStatusResponse response = CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 12.5,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository);
+
+            Assert.That(response.CompileStartPendingSeconds, Is.EqualTo(12.5));
+            Assert.That(response.Ready, Is.False);
         }
 
         [Test]
@@ -247,6 +356,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isUpdating: false,
                 isDomainReloadInProgress: false,
                 isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);

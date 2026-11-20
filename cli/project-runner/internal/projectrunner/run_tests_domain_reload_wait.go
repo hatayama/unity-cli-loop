@@ -56,12 +56,15 @@ type runTestsSendFunc func(
 type runTestsWaitDeps struct {
 	send  runTestsSendFunc
 	query runTestsStatusQueryFunc
+	// dialogWatch ends the result wait when its polls go unanswered because a modal dialog holds Unity.
+	dialogWatch dialogWatchDeps
 }
 
 func defaultRunTestsWaitDeps() runTestsWaitDeps {
 	return runTestsWaitDeps{
-		send:  sendWithTransientConnectionRetry,
-		query: queryRunTestsStatusFromUnity,
+		send:        sendWithTransientConnectionRetry,
+		query:       queryRunTestsStatusFromUnity,
+		dialogWatch: defaultDialogWatchDeps(),
 	}
 }
 
@@ -141,8 +144,10 @@ func waitForRunTestsResult(
 	timeout time.Duration,
 	pollInterval time.Duration,
 	query runTestsStatusQueryFunc,
+	dialogs dialogWatchDeps,
 ) (json.RawMessage, bool, error) {
 	deadline := time.Now().Add(timeout)
+	dialogWatch := newDialogBlockWatch(connection, dialogs, dialogWatchInterval, dialogWatchStallThresholdSeconds)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for {
@@ -153,6 +158,10 @@ func waitForRunTestsResult(
 		status, err := query(ctx, connection, requestID)
 		if err == nil && status.HasResult && len(status.Result) > 0 {
 			return status.Result, true, nil
+		}
+		if found := dialogWatch.observePoll(ctx, err == nil); found != nil {
+			// Not safe to retry: the suite goes on in Unity, and a new run would start a second one.
+			return nil, false, startedCommandBlockedByDialog(clicore.RunTestsCommandName, found, dialogs.canPressDialogs, false)
 		}
 
 		select {
@@ -221,7 +230,7 @@ func runRunTestsWithDomainReloadWaitWithDeps(
 		spinner,
 		startedAt,
 		outcome,
-		deps.query,
+		deps,
 	)
 }
 
@@ -246,7 +255,7 @@ func finishRunTestsRecoveredResult(
 	spinner *ui.TerminalSpinner,
 	startedAt time.Time,
 	outcome unityipc.UnitySendOutcome,
-	query runTestsStatusQueryFunc,
+	deps runTestsWaitDeps,
 ) toolExecutionResult {
 	result, completed, waitErr := waitForRunTestsResult(
 		ctx,
@@ -254,7 +263,8 @@ func finishRunTestsRecoveredResult(
 		requestID,
 		timeout,
 		runTestsWaitPollInterval,
-		query,
+		deps.query,
+		deps.dialogWatch,
 	)
 	spinner.Stop()
 	writeDebugTiming(stderr, clicore.RunTestsCommandName, time.Since(startedAt), outcome)

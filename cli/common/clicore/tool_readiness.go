@@ -29,16 +29,31 @@ const executeDynamicCodeReadinessProbe = `return "` + product.DisplayName + ` dy
 type toolReadinessDeps struct {
 	findRunningUnityProcess    func(context.Context, string) (*unityprocess.UnityProcess, error)
 	probeToolReadinessSequence func(context.Context, string) error
-	// now is the clock the Unity exit watch spaces its lookups with; nil uses time.Now.
+	// now is the clock the Unity exit watch and the dialog lookout space their looks with; nil uses
+	// time.Now.
 	now func() time.Time
+	// findDialogs is the caller's look for a dialog that holds the Editor; nil never looks.
+	findDialogs DialogFinder
+	// poll is the time between two probe sequences; zero uses ToolReadinessPoll.
+	poll time.Duration
 }
 
-func WaitForToolReadiness(ctx context.Context, projectRoot string) error {
-	return WaitForToolReadinessWithTimeout(ctx, projectRoot, ToolReadinessTimeout)
+// WaitForToolReadiness waits up to ToolReadinessTimeout for the Editor to answer tool requests. With
+// findDialogs, it stops early with ToolReadinessBlockedByDialogError when a dialog holds the Editor.
+func WaitForToolReadiness(ctx context.Context, projectRoot string, findDialogs DialogFinder) error {
+	return WaitForToolReadinessWithTimeout(ctx, projectRoot, ToolReadinessTimeout, findDialogs)
 }
 
-func WaitForToolReadinessWithTimeout(ctx context.Context, projectRoot string, timeout time.Duration) error {
-	return waitForToolReadinessWithDeps(ctx, projectRoot, timeout, defaultToolReadinessDeps())
+// WaitForToolReadinessWithTimeout is WaitForToolReadiness with its own timeout.
+func WaitForToolReadinessWithTimeout(
+	ctx context.Context,
+	projectRoot string,
+	timeout time.Duration,
+	findDialogs DialogFinder,
+) error {
+	deps := defaultToolReadinessDeps()
+	deps.findDialogs = findDialogs
+	return waitForToolReadinessWithDeps(ctx, projectRoot, timeout, deps)
 }
 
 func defaultToolReadinessDeps() toolReadinessDeps {
@@ -56,7 +71,12 @@ func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeo
 
 	var lastErr error
 	exitWatch := NewUnityExitWatch(projectRoot, resolveProjectEndpointAddress(projectRoot), deps.findRunningUnityProcess, deps.now)
-	ticker := time.NewTicker(ToolReadinessPoll)
+	lookout := NewDialogLookout(deps.findDialogs, deps.now)
+	poll := deps.poll
+	if poll == 0 {
+		poll = ToolReadinessPoll
+	}
+	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
 		if err := deps.probeToolReadinessSequence(timeoutContext, projectRoot); err == nil {
@@ -75,6 +95,10 @@ func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeo
 			// its whole ten minutes for it.
 			if exitErr := exitWatch.Observe(timeoutContext, err); exitErr != nil {
 				return exitErr
+			}
+			// Why after the checks above: each of them ends the wait with a more exact answer.
+			if dialogErr := lookout.Look(timeoutContext, err); dialogErr != nil {
+				return dialogErr
 			}
 			lastErr = err
 		}

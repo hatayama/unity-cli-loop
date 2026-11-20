@@ -19,10 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         UnityCliLoopConsoleLogEntry[] ReadConsoleErrorEntries();
 
         void SubscribeCompilationEvents(
+            Action<object> compilationStarted,
             Action<object> compilationFinished,
             Action<string, CompilerMessage[]> assemblyFinished);
 
         void UnsubscribeCompilationEvents(
+            Action<object> compilationStarted,
             Action<object> compilationFinished,
             Action<string, CompilerMessage[]> assemblyFinished);
 
@@ -61,17 +63,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         public void SubscribeCompilationEvents(
+            Action<object> compilationStarted,
             Action<object> compilationFinished,
             Action<string, CompilerMessage[]> assemblyFinished)
         {
+            CompilationPipeline.compilationStarted += compilationStarted;
             CompilationPipeline.compilationFinished += compilationFinished;
             CompilationPipeline.assemblyCompilationFinished += assemblyFinished;
         }
 
         public void UnsubscribeCompilationEvents(
+            Action<object> compilationStarted,
             Action<object> compilationFinished,
             Action<string, CompilerMessage[]> assemblyFinished)
         {
+            CompilationPipeline.compilationStarted -= compilationStarted;
             CompilationPipeline.compilationFinished -= compilationFinished;
             CompilationPipeline.assemblyCompilationFinished -= assemblyFinished;
         }

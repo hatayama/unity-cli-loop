@@ -16,12 +16,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private ConsoleLogRetriever retriever;
         private int originalMask;
+        private UnityEngine.StackTraceLogType originalErrorStackTraceType;
+        private UnityEngine.StackTraceLogType originalLogStackTraceType;
 
         [SetUp]
         public void SetUp()
         {
             retriever = new ConsoleLogRetriever();
             originalMask = retriever.GetCurrentMask();
+            // Why pin this: uloop run-tests turns log stack traces off by default, and these tests are
+            // about how the retriever splits a log entry that has one.
+            originalErrorStackTraceType = UnityEngine.Application.GetStackTraceLogType(UnityEngine.LogType.Error);
+            UnityEngine.Application.SetStackTraceLogType(UnityEngine.LogType.Error, UnityEngine.StackTraceLogType.ScriptOnly);
+            originalLogStackTraceType = UnityEngine.Application.GetStackTraceLogType(UnityEngine.LogType.Log);
+            UnityEngine.Application.SetStackTraceLogType(UnityEngine.LogType.Log, UnityEngine.StackTraceLogType.ScriptOnly);
         }
 
         [TearDown]
@@ -29,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Always restore mask state after each test
             retriever.SetMask(originalMask);
+            UnityEngine.Application.SetStackTraceLogType(UnityEngine.LogType.Error, originalErrorStackTraceType);
+            UnityEngine.Application.SetStackTraceLogType(UnityEngine.LogType.Log, originalLogStackTraceType);
         }
 
         [Test]
@@ -222,14 +232,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.AreEqual(testMessage, testLog.Message.Trim(), 
                 "Message should contain only the logged message");
             
-            // Stack trace behavior depends on Unity Console settings
-            // Check if stack trace exists and validate accordingly
-            if (!string.IsNullOrEmpty(testLog.StackTrace))
-            {
-                // If stack trace exists, it should contain Debug.Log reference
-                Assert.IsTrue(testLog.StackTrace.Contains("Debug:Log") || testLog.StackTrace.Contains("Debug.Log"), 
-                    "Stack trace should contain Debug.Log reference when present");
-            }
+            Assert.IsTrue(testLog.StackTrace.Contains("Debug:Log") || testLog.StackTrace.Contains("Debug.Log"), 
+                "Stack trace should contain Debug.Log reference");
             
             // Message should not contain stack trace content
             Assert.IsFalse(testLog.Message.Contains("Debug:Log") || testLog.Message.Contains("Debug.Log"), 

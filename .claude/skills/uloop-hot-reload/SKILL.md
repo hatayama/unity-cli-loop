@@ -10,7 +10,7 @@ Replaces method bodies in the running Editor (EditMode or PlayMode) directly fro
 project source files — no domain reload, no attributes, no source markers. Private/internal
 member access, static methods, return values, async methods, and iterators all work within
 the limits below, including private access inside async, iterator, lambda, local-function,
-and LINQ-query bodies. Methods that cannot be patched are reported as `Skipped` or `Failed`;
+and LINQ-query bodies of public types. Methods that cannot be patched are reported as `Skipped` or `Failed`;
 one unpatchable method never aborts the rest of the run.
 `Outcome` says whether the edit is live (`ReplacedByCompile`: a fallback compile succeeded, so
 it is compiled in and no patch is active).
@@ -64,7 +64,7 @@ changed are patched (`UnchangedTotal` counts the rest).
 
 ## Scope in Brief
 
-- Patched: ordinary method bodies and property getters with a body.
+- Patched: ordinary method bodies, and property get/set/init and indexer get/set accessors with a body.
 - Added members: new methods, fields, and supported properties apply as `Added` rows
   (supported field-like events of a class are listed in `AddedFields`),
   visible to edited code of the same reload within the same assembly (pass the declaring
@@ -77,8 +77,8 @@ changed are patched (`UnchangedTotal` counts the rest).
 - Signature changes: a return-type change is `Skipped` unless this or an earlier reload
   patched every live compiled caller, none in another assembly; a rename or parameter change
   applies as an added method and warns about call sites left on the old signature.
-- Constructors, operators, struct methods, compiled setter/init/indexer accessors, and event
-  accessors are `Skipped`; finalizers and interface members are silently not applied.
+- Constructors, finalizers, operators, struct methods, interface methods, and event
+  accessors are `Skipped`.
 - A reload applies each file all-or-nothing: a `Failed` method leaves that file unapplied,
   a `Failed` type leaves every file of its assembly unapplied.
 

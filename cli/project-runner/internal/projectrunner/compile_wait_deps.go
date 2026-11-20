@@ -33,6 +33,16 @@ type compileWaitDeps struct {
 	// findRunningUnityProcess is the Editor process lookup a status wait uses to notice that Unity
 	// exited.
 	findRunningUnityProcess func(context.Context, string) (*unityprocess.UnityProcess, error)
+	// focusUnityProcess brings the Editor to the front when Unity has accepted a compile request
+	// but not started it for compileStartPendingFocusThreshold.
+	focusUnityProcess func(context.Context, int) (unityprocess.RestoreFocusFunc, error)
+	// readHeldMouseButtons reads the OS mouse-button state recorded in a COMPILE_NOT_STARTED result.
+	readHeldMouseButtons func() ([]string, bool)
+	// dialogWatch ends a status wait whose polls go unanswered because a modal dialog holds Unity.
+	dialogWatch dialogWatchDeps
+	// findDialogAfterUnansweredSend looks once for a dialog when the compile request was accepted
+	// but not answered. Nil turns the look off.
+	findDialogAfterUnansweredSend func(context.Context, unityipc.Connection) []statusDialog
 }
 
 // newCompileUnityExitWatch creates the exit watch for one compile status wait, on the wait's clock.
@@ -61,10 +71,24 @@ func compileSendOrDefault(deps compileWaitDeps) compileSendFunc {
 
 func defaultCompileWaitDeps() compileWaitDeps {
 	return compileWaitDeps{
-		queryCompileStatus:      queryCompileStatusFromUnity,
-		attachProbeTimeout:      compileAttachProbeTimeout,
-		attachProbeInterval:     compileAttachProbeInterval,
-		attachWaitPollInterval:  compileWaitPollInterval,
-		findRunningUnityProcess: unityProcessLookup,
+		queryCompileStatus:            queryCompileStatusFromUnity,
+		attachProbeTimeout:            compileAttachProbeTimeout,
+		attachProbeInterval:           compileAttachProbeInterval,
+		attachWaitPollInterval:        compileWaitPollInterval,
+		findRunningUnityProcess:       unityProcessLookup,
+		focusUnityProcess:             unityprocess.FocusUnityProcessWithRestore,
+		readHeldMouseButtons:          unityprocess.HeldMouseButtons,
+		dialogWatch:                   defaultDialogWatchDeps(),
+		findDialogAfterUnansweredSend: findDialogWhileUnanswered,
 	}
+}
+
+func newCompileDialogWatch(connection unityipc.Connection, deps compileWaitDeps) *dialogBlockWatch {
+	return newDialogBlockWatch(connection, deps.dialogWatch, dialogWatchInterval, dialogWatchStallThresholdSeconds)
+}
+
+// compileBlockedByDialog is safe to retry: a new uloop compile reattaches to the running compile
+// instead of starting another.
+func compileBlockedByDialog(dialogs []statusDialog, deps compileWaitDeps) error {
+	return startedCommandBlockedByDialog(clicore.CompileCommandName, dialogs, deps.dialogWatch.canPressDialogs, true)
 }

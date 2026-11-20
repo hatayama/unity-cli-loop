@@ -21,6 +21,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
+	"github.com/hatayama/unity-cli-loop/common/unityprocess"
 )
 
 func TestEnsureCompileRequestIDPreservesSafeValue(t *testing.T) {
@@ -821,7 +822,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 		"Unity keeps compiling and refuses other commands with UNITY_SERVER_BUSY until it finishes. Re-run `uloop compile`: it will reattach to the in-flight compile and wait for its result instead of starting a new one. That result covers the scripts as they were when that compile started, so if scripts changed since then, run `uloop compile` once more after it returns. The result stays retrievable for roughly 18 more minutes.",
 		clierrors.ApiUpdateConsentModalNextAction,
 		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
-		"If repeated waits keep showing is_compiling=true with no progress, the Editor's compile pipeline may be stalled (for example by a modal dialog); restart Unity with 'uloop launch -r' and rerun 'uloop compile'.",
+		"If repeated waits keep showing is_compiling=true with no progress, check for a modal dialog uloop could not report (run `uloop get-dialogs` on macOS or Windows; elsewhere ask the user to look at the Unity window); if there is none, the Editor's compile pipeline may be stalled, so restart Unity with 'uloop launch -r' and rerun 'uloop compile'.",
 	}
 	if len(cliErr.NextActions) != len(expectedActions) {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)
@@ -1057,6 +1058,12 @@ func compileWaitTestDeps(
 		attachWaitPollInterval: 5 * time.Millisecond,
 		// The scripted status answers stand in for a running Editor, whose server a reload takes down.
 		findRunningUnityProcess: runningUnityProcessLookup,
+		// Why stubbed: the lookup above answers with this test process, and a real focus attempt on it
+		// would raise a window on the developer's desktop.
+		focusUnityProcess: func(context.Context, int) (unityprocess.RestoreFocusFunc, error) {
+			return nil, nil
+		},
+		readHeldMouseButtons: func() ([]string, bool) { return nil, false },
 	}
 }
 

@@ -17,6 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void Initialize(Func<string, bool> isToolEnabled)
         {
             DomainReloadDisableScopeRecovery.RestoreForEditorStartup();
+            // Why every domain load: a Domain Reload can end a run before its finally runs, and a run
+            // that survives one is not tracked to its end, so stack traces must not stay off past it.
+            RunTestsLogStackTraceSuppressor.CreateDefault().RestoreIfSaved();
             ExternalSceneChangeTracker.Initialize();
             ControlPlayModeEditorStartup.Initialize();
             PausePointEditorStartup.Initialize();

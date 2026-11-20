@@ -39,8 +39,8 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             .WithBody(SyntaxFactory.Block());
     }
 
-    // Why strip getters only: patched getter edits must not look like outside-body drift.
-    // Setter/init/indexer bodies stay so those still-unapplied edits keep the warning.
+    // Why strip get, set, and init bodies: all three are patched now (a refused one is reported as a
+    // per-accessor Skipped row), so their body edits must not look like outside-body drift.
     public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
     {
         PropertyDeclarationSyntax visited = (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node);
@@ -49,11 +49,7 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             return visited
                 .WithExpressionBody(null)
                 .WithSemicolonToken(default(SyntaxToken))
-                .WithAccessorList(
-                    SyntaxFactory.AccessorList(
-                        SyntaxFactory.SingletonList(
-                            SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
-                                .WithBody(SyntaxFactory.Block()))));
+                .WithAccessorList(EmptyGetterAccessorList());
         }
 
         if (visited.AccessorList == null)
@@ -61,11 +57,51 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             return visited;
         }
 
-        List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
-        foreach (AccessorDeclarationSyntax accessor in visited.AccessorList.Accessors)
+        return visited.WithAccessorList(StripAccessorBodies(visited.AccessorList));
+    }
+
+    // Why strip indexer accessor bodies: they are patched like property accessors, so their body
+    // edits must not look like outside-body drift. The parameter list, element type, and modifiers
+    // stay so those edits still warn.
+    public override SyntaxNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
+    {
+        IndexerDeclarationSyntax visited = (IndexerDeclarationSyntax)base.VisitIndexerDeclaration(node);
+        if (visited.ExpressionBody != null)
         {
-            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
-                && (accessor.Body != null || accessor.ExpressionBody != null))
+            return visited
+                .WithExpressionBody(null)
+                .WithSemicolonToken(default(SyntaxToken))
+                .WithAccessorList(EmptyGetterAccessorList());
+        }
+
+        if (visited.AccessorList == null)
+        {
+            return visited;
+        }
+
+        return visited.WithAccessorList(StripAccessorBodies(visited.AccessorList));
+    }
+
+    // What: the accessor list an expression-bodied property or indexer is compared as: one getter
+    // with an empty block body.
+    private static AccessorListSyntax EmptyGetterAccessorList()
+    {
+        return SyntaxFactory.AccessorList(
+            SyntaxFactory.SingletonList(
+                SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                    .WithBody(SyntaxFactory.Block())));
+    }
+
+    // What: the accessor list with every bodied get, set, and init accessor given an empty block body.
+    private static AccessorListSyntax StripAccessorBodies(AccessorListSyntax accessorList)
+    {
+        List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
+        foreach (AccessorDeclarationSyntax accessor in accessorList.Accessors)
+        {
+            bool isGetSetOrInit = accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.SetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.InitAccessorDeclaration);
+            if (isGetSetOrInit && (accessor.Body != null || accessor.ExpressionBody != null))
             {
                 accessors.Add(
                     accessor
@@ -79,17 +115,31 @@ internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
             }
         }
 
-        return visited.WithAccessorList(
-            SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
+        return SyntaxFactory.AccessorList(SyntaxFactory.List(accessors));
     }
 
-    // Why strip ctor/operator/event-accessor bodies: those members are reported as
+    // Why strip ctor/finalizer/operator/event-accessor bodies: those members are reported as
     // per-member Skipped, so a body-only edit must not also look like outside-body drift.
     // Signature, attributes, and constructor initializers stay so those edits still warn.
     public override SyntaxNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
     {
         ConstructorDeclarationSyntax visited =
             (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node);
+        if (visited.Body == null && visited.ExpressionBody == null)
+        {
+            return visited;
+        }
+
+        return visited
+            .WithExpressionBody(null)
+            .WithSemicolonToken(default(SyntaxToken))
+            .WithBody(SyntaxFactory.Block());
+    }
+
+    public override SyntaxNode VisitDestructorDeclaration(DestructorDeclarationSyntax node)
+    {
+        DestructorDeclarationSyntax visited =
+            (DestructorDeclarationSyntax)base.VisitDestructorDeclaration(node);
         if (visited.Body == null && visited.ExpressionBody == null)
         {
             return visited;

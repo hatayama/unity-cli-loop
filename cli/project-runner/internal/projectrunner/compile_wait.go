@@ -55,17 +55,23 @@ type compileCompletionOptions struct {
 	resendBefore time.Time
 	// serverRestartSeen says the compile send already ended with the connection dropping.
 	serverRestartSeen bool
+	// sendWentUnanswered says Unity accepted the compile request but did not answer it before the
+	// send's response timeout.
+	sendWentUnanswered bool
 }
 
 type compileStatusResponse struct {
-	Success                  bool            `json:"Success"`
-	Ready                    bool            `json:"Ready"`
-	HasResult                bool            `json:"HasResult"`
-	IsCompiling              bool            `json:"IsCompiling"`
-	IsUpdating               bool            `json:"IsUpdating"`
-	IsDomainReloadInProgress bool            `json:"IsDomainReloadInProgress"`
-	Result                   json.RawMessage `json:"Result"`
-	Message                  string          `json:"Message"`
+	Success                  bool `json:"Success"`
+	Ready                    bool `json:"Ready"`
+	HasResult                bool `json:"HasResult"`
+	IsCompiling              bool `json:"IsCompiling"`
+	IsUpdating               bool `json:"IsUpdating"`
+	IsDomainReloadInProgress bool `json:"IsDomainReloadInProgress"`
+	// CompileStartPendingSeconds is how long Unity has reported isCompiling without raising
+	// compilationStarted, counted in Editor main-thread ticks. Zero from a package that predates it.
+	CompileStartPendingSeconds float64         `json:"CompileStartPendingSeconds"`
+	Result                     json.RawMessage `json:"Result"`
+	Message                    string          `json:"Message"`
 }
 
 func shouldWaitForCompileDomainReload(command string, params map[string]any) bool {
@@ -179,7 +185,24 @@ func isSafeCompileRequestID(requestID string) bool {
 	return true
 }
 
+// waitForCompileCompletionWithDeps waits for a fresh compile's result, first looking once for a dialog
+// when the send went unanswered.
 func waitForCompileCompletionWithDeps(
+	ctx context.Context,
+	options compileCompletionOptions,
+	deps compileWaitDeps,
+) (json.RawMessage, bool, *compileStatusResponse, error) {
+	lookStartedAt := time.Now()
+	if err := compileDialogAfterUnansweredSend(ctx, options, deps); err != nil {
+		return nil, false, nil, err
+	}
+	// Why: --timeout-seconds bounds the whole wait, and a look that finds nothing can take seconds.
+	options.timeout -= time.Since(lookStartedAt)
+	return pollCompileCompletion(ctx, options, deps)
+}
+
+// pollCompileCompletion queries the compile status until a result, a stop condition, or the timeout.
+func pollCompileCompletion(
 	ctx context.Context,
 	options compileCompletionOptions,
 	deps compileWaitDeps,
@@ -196,6 +219,9 @@ func waitForCompileCompletionWithDeps(
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
 	missing := compileRequestMissingTracker{serverRestartSeen: options.serverRestartSeen}
 	exitWatch := newCompileUnityExitWatch(options.connection, deps)
+	dialogWatch := newCompileDialogWatch(options.connection, deps)
+	startPendingFocus := newCompileStartPendingFocus(options, deps)
+	defer startPendingFocus.finish()
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -214,7 +240,8 @@ func waitForCompileCompletionWithDeps(
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
 			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 			logCompileStatusPollComplete(options, startedAt, attempts, status)
-			return status.Result, true, nil, nil
+			result := addCliDiagnosticsToNotStartedResult(status.Result, startPendingFocus.outcome(), deps.readHeldMouseButtons)
+			return result, true, nil, nil
 		}
 		if err == nil {
 			lastStatus = status
@@ -229,7 +256,11 @@ func waitForCompileCompletionWithDeps(
 			logCompileWaitUnityExited(options, startedAt, attempts, lastStatus, lastErr)
 			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), exitErr
 		}
+		if dialogs := compileWaitDialogs(ctx, dialogWatch, err); dialogs != nil {
+			return nil, false, lastObservedCompileStatus(lastStatus, observedStatus), compileBlockedByDialog(dialogs, deps)
+		}
 		observeCompileWaitInterim(&interim, deps, status, err)
+		startPendingFocus.observe(ctx, status, err)
 
 		select {
 		case <-ctx.Done():
@@ -328,4 +359,33 @@ func shouldWaitForCompileStatus(err error, outcome unityipc.UnitySendOutcome) bo
 		return true
 	}
 	return outcome.RequestAccepted && clierrors.IsFinalResponseTimeoutError(err)
+}
+
+// compileDialogAfterUnansweredSend looks once for a dialog before the first status query of a wait
+// whose send went unanswered, and returns the same BLOCKED_BY_DIALOG the status wait would.
+// Why: each status query waits up to its own timeout while a dialog holds Unity, so the status wait
+// finds the dialog only after several seconds; the unanswered send already says something holds it.
+func compileDialogAfterUnansweredSend(ctx context.Context, options compileCompletionOptions, deps compileWaitDeps) error {
+	if !options.sendWentUnanswered || deps.findDialogAfterUnansweredSend == nil {
+		return nil
+	}
+	dialogs := deps.findDialogAfterUnansweredSend(ctx, options.connection)
+	if len(dialogs) == 0 {
+		return nil
+	}
+	return compileBlockedByDialog(dialogs, deps)
+}
+
+// compileWaitDialogs returns the dialogs holding Unity after one compile status query, or nil.
+// Why a status query Unity accepted but did not answer looks at once: the query is answered on the
+// main thread, so the main thread stayed still for the whole query timeout. Any other failure, such
+// as the connection a domain reload drops, still waits for the stall threshold, so a reload does not
+// look at Unity's windows.
+func compileWaitDialogs(ctx context.Context, watch *dialogBlockWatch, err error) []statusDialog {
+	if isUnansweredStatusProbe(err) {
+		if dialogs := watch.observeUnansweredProbe(ctx); dialogs != nil {
+			return dialogs
+		}
+	}
+	return watch.observePoll(ctx, err == nil)
 }

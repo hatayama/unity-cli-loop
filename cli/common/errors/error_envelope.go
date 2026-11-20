@@ -19,7 +19,7 @@ const (
 	ErrorCodeUnityStartupTimeout             = "UNITY_STARTUP_TIMEOUT"
 	ErrorCodeUnityProcessExitTimeout         = "UNITY_PROCESS_EXIT_TIMEOUT"
 	errorCodeUnityDisconnectedAfterDispatch  = "UNITY_DISCONNECTED_AFTER_DISPATCH"
-	errorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
+	ErrorCodeUnityDisconnectedAfterAccept    = "UNITY_DISCONNECTED_AFTER_ACCEPT"
 	errorCodeUnityResponseTimeoutAfterAccept = "UNITY_RESPONSE_TIMEOUT_AFTER_ACCEPT"
 	errorCodeUnityEditorUnresponsive         = "UNITY_EDITOR_UNRESPONSIVE"
 	errorCodeUnityRPCError                   = "UNITY_RPC_ERROR"
@@ -48,7 +48,20 @@ const (
 	// ErrorCodeCompileCheckProjectBusy is returned when another compile-check on the same project
 	// kept its lock for longer than this run was willing to wait.
 	ErrorCodeCompileCheckProjectBusy = "COMPILE_CHECK_PROJECT_BUSY"
-	ErrorCodeInternalError           = "INTERNAL_ERROR"
+	// ErrorCodeDialogNotOpen is returned when uloop press-dialog-button finds no modal dialog to press.
+	ErrorCodeDialogNotOpen = "DIALOG_NOT_OPEN"
+	// ErrorCodeDialogButtonNotFound is returned when the frontmost dialog has no button with the given label.
+	ErrorCodeDialogButtonNotFound = "DIALOG_BUTTON_NOT_FOUND"
+	// ErrorCodeDialogNotAnswerable is returned when uloop cannot look at or press the dialog on this system.
+	ErrorCodeDialogNotAnswerable = "DIALOG_NOT_ANSWERABLE"
+	// ErrorCodeDialogCheckFailed is returned when the operating system could not be asked which dialogs are open.
+	ErrorCodeDialogCheckFailed = "DIALOG_CHECK_FAILED"
+	// ErrorCodeDialogAnswerFailed is returned when pressing the button failed or the dialog did not close.
+	ErrorCodeDialogAnswerFailed = "DIALOG_ANSWER_FAILED"
+	// ErrorCodeBlockedByDialog is returned when, while a command waited for the Editor, the Editor
+	// reported that a modal dialog holds it.
+	ErrorCodeBlockedByDialog = "BLOCKED_BY_DIALOG"
+	ErrorCodeInternalError   = "INTERNAL_ERROR"
 
 	ErrorPhaseArgumentParsing = "argument_parsing"
 	ErrorPhaseProjectResolve  = "project_resolution"
@@ -225,7 +238,7 @@ func disconnectedAfterAcceptError(err error, context ErrorContext) CLIError {
 	}
 
 	return CLIError{
-		ErrorCode:   errorCodeUnityDisconnectedAfterAccept,
+		ErrorCode:   ErrorCodeUnityDisconnectedAfterAccept,
 		Phase:       ErrorPhaseResponseWaiting,
 		Message:     "Unity disconnected after accepting the request.",
 		Retryable:   true,

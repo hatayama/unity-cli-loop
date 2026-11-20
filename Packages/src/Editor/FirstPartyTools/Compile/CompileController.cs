@@ -29,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
         private int _assemblyFinishedCount;
         private int _consoleErrorCountAtCompileStart;
+        private readonly CompileStartPendingTracker _startPendingTracker = new();
         private readonly CompileLifecycleRecoveryCoordinator _recoveryCoordinator;
         private ICompilePipelinePort _pipeline = new UnityCompilePipelinePort();
 
@@ -46,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _recoveryCoordinator = new CompileLifecycleRecoveryCoordinator(
                 () => EditorApplication.isCompiling,
                 IsCompileRequestCompleted,
+                () => _startPendingTracker.HasCompilationStarted,
                 () => _currentCompileTask,
                 entries => new AssemblyDefinitionConsoleErrorValidationService().FindErrors(entries),
                 // Why a lambda instead of the method group: the coordinator must read through the
@@ -59,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why not Time.realtimeSinceStartupAsDouble: it freezes while the Editor is paused,
                 // and pause-point compiles run in that state.
                 () => EditorApplication.timeSinceStartup,
+                _startPendingTracker.ReportPending,
                 BuildCompileControllerStateContext,
                 AbortCompileWithResult,
                 AbortCompile);
@@ -205,6 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why before Refresh: the asmdef import errors that abort a compile are logged during
             // AssetDatabase.Refresh, so the boundary must precede it to keep them in the summary.
             _consoleErrorCountAtCompileStart = _pipeline.ReadConsoleErrorEntries().Length;
+            _startPendingTracker.Begin();
             bool eventsRegistered = false;
             bool compileTaskTransferred = false;
 
@@ -235,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // Register events.
-                _pipeline.SubscribeCompilationEvents(HandleCompileFinished, HandleAssemblyFinished);
+                _pipeline.SubscribeCompilationEvents(HandleCompileStarted, HandleCompileFinished, HandleAssemblyFinished);
                 eventsRegistered = true;
 
                 string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
@@ -387,6 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _resultRecordingContext = CompileResultRecordingContext.Disabled();
                     _compileStartedAtUtc = DateTime.MinValue;
                     _pendingPlayModeStopWarning = null;
+                    _startPendingTracker.End();
                     CompileApiUpdaterConsentState.EndCliCompile();
                 }
 
@@ -409,6 +414,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
             _pendingPlayModeStopWarning = null;
+            _startPendingTracker.End();
             CompileApiUpdaterConsentState.EndCliCompile();
             compileTask.TrySetCanceled();
         }
@@ -457,7 +463,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private void UnregisterCompilationEvents()
         {
-            _pipeline.UnsubscribeCompilationEvents(HandleCompileFinished, HandleAssemblyFinished);
+            _pipeline.UnsubscribeCompilationEvents(HandleCompileStarted, HandleCompileFinished, HandleAssemblyFinished);
+        }
+
+        /// <summary>
+        /// Handler for when Unity actually begins compiling. Until this fires, isCompiling alone only
+        /// means the request was accepted, and the watchdog counts the request as pending.
+        /// </summary>
+        private void HandleCompileStarted(object context)
+        {
+            _startPendingTracker.MarkStarted();
+            VibeLogger.LogInfo(
+                "compile_start_callback_received",
+                "Unity compilationStarted callback was received.",
+                new
+                {
+                    elapsed_ms = CompileElapsedMilliseconds()
+                });
         }
 
         /// <summary>
@@ -559,6 +581,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
             _pendingPlayModeStopWarning = null;
+            _startPendingTracker.End();
             CompileApiUpdaterConsentState.EndCliCompile();
         }
 

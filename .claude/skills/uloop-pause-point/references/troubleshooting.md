@@ -1,6 +1,6 @@
 # Pause Point Troubleshooting
 
-Read this when a wait times out, `HitCount` stays `0`, or `enable-pause-point` fails.
+Read this when a wait times out, `HitCount` stays `0`, `enable-pause-point` fails, or a wait stops on a dialog.
 
 ## Targets, Timeouts, Hot Reload
 
@@ -34,6 +34,17 @@ A command that waits for a frame or a physics step cannot finish while the Edito
 2. Release the pause in the Editor (Edit > Play Mode > Pause). Frames resume, so the running command finishes and returns its result.
 
 Avoid the state instead: never start a frame-waiting snippet while a marker is armed or while the Editor is paused — starting it after the hit deadlocks the same way. Take the hit first (`await-pause-point`, or `enable-pause-point --await`) and inspect the capture; when you are done, resume play (`control-play-mode --action Resume` — the gate is free at that point) and only then run the frame-waiting snippet. While the pause holds, run only snippets that do not wait for a frame or a physics step.
+
+## A Dialog During a Wait
+
+A wait (`await-pause-point` or `enable-pause-point --await`) that a modal dialog stops ends with `BLOCKED_BY_DIALOG`, and the marker stays armed (`Details.PausePointId`). A hit the wait reads before giving up is still reported as a hit instead. Answer the dialog as `NextActions` says (see the `uloop-status` skill's dialog reference), then take the last step:
+
+- Message `its --trigger command was not sent` (`Details.CommandNotRun: true`): the wait found the dialog before it sent the trigger, usually because the dialog was already open, so wait again with the same `--trigger` (and `--resume-play` if you gave it). A `--resume-play`-only wait says `--resume-play did not resume PlayMode` instead; wait again with the same `--resume-play`. In either case, when the last step says the marker was not armed, check `uloop pause-point-status` and re-enable the marker first.
+- `Details.CommandNotRun: true` (Message: `its --trigger command was not run`): the trigger never ran, so wait again with the same `--trigger`. If `--resume-play` had resumed PlayMode (`Details.ResumePlayResult.Resumed`), PlayMode keeps playing after the dialog closes; pause it with `uloop control-play-mode --action Pause` first when the wait must start paused, and pass `--resume-play` again.
+- A wait with `--trigger` and no `CommandNotRun`: the trigger had started or may still run once the dialog closes. Check `uloop pause-point-status` first, and wait again without `--trigger` so it is not sent twice.
+- A wait without `--trigger`: check `uloop pause-point-status`, and wait again if the marker is still waiting.
+
+A trigger Unity did not run because its main thread stayed still without a dialog ends the wait with `PAUSE_POINT_TRIGGER_FAILED` instead, the marker still armed: run `uloop status` until it reports Ready, then wait again with the same `--trigger`.
 
 ## Locating Where Control Flow Stops
 

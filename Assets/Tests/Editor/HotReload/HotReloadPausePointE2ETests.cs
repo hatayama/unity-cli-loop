@@ -31,8 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
 
-        // A body the transform worker skips: it calls into the base class.
-        private const string ComputeWithBaseCallStatement = "return base.BaseSeed() + _secret + delta + 100;";
+        // A body the transform worker skips: it calls into the base class inside a lambda. One line,
+        // so the edited copy keeps the line numbers the tests compute from the compiled file.
+        private const string ComputeWithBaseCallStatement =
+            "System.Func<int> viaLambda = () => base.BaseSeed(); return viaLambda() + _secret + delta + 100;";
 
         // Each scenario reloads one copy twice, the way a user reloads the same file again.
         private const string LeftBehindCopyFileName = "E2E_left_behind.cs";
@@ -384,30 +386,286 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a reload that skipped CallsBase with no earlier patch leaves its compiled body
-        /// running, so an unchanged line of it still arms the compiled code.
+        /// What: a reload that skipped CallsBaseInLambda with no earlier patch leaves its compiled
+        /// body running, so an unchanged line of it still arms the compiled code.
         /// </summary>
         [Test]
         public async Task SkipWithoutEarlierPatch_UnchangedLineOfTheSkippedMethod_ArmsTheCompiledBody()
         {
             string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
-            int enableLine = FindLineNumber(onDisk, "return base.BaseSeed() + 1;");
+            int enableLine = FindLineNumber(onDisk, "return viaLambda() + 5;");
             string edited = onDisk.Replace(
-                "return base.BaseSeed() + 1;",
-                "return base.BaseSeed() + 2;",
+                "return viaLambda() + 5;",
+                "return viaLambda() + 6;",
                 StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
             HotReloadOrchestratorResult skipping = await HotReloadFromEditedSourceAsync(
                 edited,
                 "E2E_skip_without_patch.cs",
                 requirePatched: false);
-            FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.CallsBase));
+            FindSkippedLabel(skipping, nameof(HotReloadE2EFixture.CallsBaseInLambda));
 
             PausePointResponse enable = EnableContinuous(enableLine);
 
             Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
             Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).RetargetedToHotReloadPatch, Is.False);
         }
+
+        /// <summary>
+        /// What: with both accessors of a property patched, a pause point on the edited set
+        /// accessor's line resolves to the setter (not the getter) and is hit by an assignment.
+        /// </summary>
+        [Test]
+        public async Task EnablePausePoint_OnPatchedSetterLine_ResolvesToTheSetter()
+        {
+            string editedSource = await PatchBothStoredAccessorsAsync("E2E_setter_line.cs");
+            int setterLine = FindLineNumber(editedSource, StoredEditedSetter);
+
+            SourcePausePointShimResolution resolution = ResolveInSetterFixture(setterLine);
+            Assert.That(resolution.LogicalOwner?.Name, Is.EqualTo("set_Stored"), resolution.ErrorMessage);
+
+            PausePointResponse enable = EnableContinuousInFile(SetterFixtureProjectRelativePath, setterLine);
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+            HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
+            fixture.Stored = 1;
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: with both accessors of a property patched, a pause point on the edited get
+        /// accessor's line resolves to the getter (not the setter) and is hit by a read.
+        /// </summary>
+        [Test]
+        public async Task EnablePausePoint_OnPatchedGetterLine_ResolvesToTheGetter()
+        {
+            string editedSource = await PatchBothStoredAccessorsAsync("E2E_getter_line.cs");
+            int getterLine = FindLineNumber(editedSource, StoredEditedGetter);
+
+            SourcePausePointShimResolution resolution = ResolveInSetterFixture(getterLine);
+            Assert.That(resolution.LogicalOwner?.Name, Is.EqualTo("get_Stored"), resolution.ErrorMessage);
+
+            PausePointResponse enable = EnableContinuousInFile(SetterFixtureProjectRelativePath, getterLine);
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+            HotReloadPropertySetterFixture fixture = new HotReloadPropertySetterFixture();
+            Assert.That(fixture.Stored, Is.EqualTo(1));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: a pause point on the line of a patched indexer getter resolves to get_Item, is
+        /// retargeted to the patch, and is hit by an index read.
+        /// </summary>
+        [Test]
+        public async Task EnablePausePoint_OnPatchedIndexerGetterLine_ResolvesToTheIndexerGetter()
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", IndexerFixtureProjectRelativePath));
+            string onDisk = File.ReadAllText(fixturePath);
+            const string EditedGetter = "get => Stored + i + 1110;";
+            string editedSource = onDisk.Replace("get => Stored + i + 1100;", EditedGetter, StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: the getter must be in the fixture.");
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [fixturePath] = HotReloadTestSourceWriter.WriteEditedSource("E2E_indexer_getter_line.cs", editedSource)
+                });
+            Assert.That(
+                result.Methods.Count(m => m.Kind == HotReloadMethodOutcomeKind.Patched
+                    && m.Method.Contains("HotReloadIndexerSingle.get_Item(")),
+                Is.EqualTo(1),
+                FormatHotReloadOutcomes(result));
+            int getterLine = FindLineNumber(editedSource, EditedGetter);
+
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(IndexerFixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            SourcePausePointShimResolution resolution =
+                SourcePausePointShimResolver.Resolve(lookup, IndexerFixtureProjectRelativePath, getterLine);
+            Assert.That(resolution.LogicalOwner?.Name, Is.EqualTo("get_Item"), resolution.ErrorMessage);
+
+            PausePointResponse enable = EnableContinuousInFile(IndexerFixtureProjectRelativePath, getterLine);
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.GreaterThan(0));
+            Assert.That(new HotReloadIndexerSingle()[1], Is.EqualTo(1111));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        private const string IndexerFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadIndexerAccessorFixture.cs";
+
+        private const string SetterFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadPropertySetterFixtures.cs";
+
+        private const string StoredEditedGetter = "get { return _stored + 1; }";
+        private const string StoredEditedSetter = "set { _stored = value + 1002; }";
+
+        // Hot reloads the setter fixture with both accessors of Stored edited, each on its own line.
+        private static async Task<string> PatchBothStoredAccessorsAsync(string fileName)
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", SetterFixtureProjectRelativePath));
+            string onDisk = File.ReadAllText(fixturePath);
+            const string original = "get { return _stored; }\n            set { _stored = value + 1001; }";
+            Assert.That(onDisk.IndexOf(original, StringComparison.Ordinal), Is.GreaterThanOrEqualTo(0));
+            string editedSource = onDisk.Replace(
+                original,
+                StoredEditedGetter + "\n            " + StoredEditedSetter,
+                StringComparison.Ordinal);
+
+            string directory = Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string editedPath = Path.Combine(directory, fileName);
+            File.WriteAllText(editedPath, editedSource);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            Assert.That(
+                result.Methods.Count(m => m.Kind == HotReloadMethodOutcomeKind.Patched
+                    && (m.Method.Contains(".get_Stored(") || m.Method.Contains(".set_Stored("))),
+                Is.EqualTo(2),
+                FormatHotReloadOutcomes(result));
+            return editedSource;
+        }
+
+        private static SourcePausePointShimResolution ResolveInSetterFixture(int line)
+        {
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(SetterFixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            return SourcePausePointShimResolver.Resolve(lookup, SetterFixtureProjectRelativePath, line);
+        }
+
+        private static PausePointResponse EnableContinuousInFile(string file, int line)
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = file,
+                Line = line,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+        }
+
+        /// <summary>
+        /// What: with two adjacent one-line methods both patched, a pause point on the lower
+        /// method's line resolves to that method and arms its own shim, not the shim of the method
+        /// declared just above it, and is hit when the lower method runs.
+        /// </summary>
+        [Test]
+        public async Task PatchThenEnable_OneLineMethodBelowAnotherPatchedMethod_ArmsItsOwnShim()
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", AdjacentMethodsFixtureProjectRelativePath));
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk
+                .Replace("return 4101;", "return 4111;", StringComparison.Ordinal)
+                .Replace("return 4102;", "return 4112;", StringComparison.Ordinal);
+            int secondLine = FindLineNumber(editedSource, "return 4112;");
+            Assert.That(secondLine, Is.EqualTo(FindLineNumber(editedSource, "return 4111;") + 1), "Precondition: adjacent lines.");
+
+            string directory = Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string editedPath = Path.Combine(directory, "E2E_adjacent_methods.cs");
+            File.WriteAllText(editedPath, editedSource);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            Assert.That(
+                result.Methods.Count(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
+                Is.EqualTo(2),
+                FormatHotReloadOutcomes(result));
+
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(AdjacentMethodsFixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            SourcePausePointShimResolution resolution =
+                SourcePausePointShimResolver.Resolve(lookup, AdjacentMethodsFixtureProjectRelativePath, secondLine);
+            Assert.That(resolution.LogicalOwner?.Name, Is.EqualTo("Second"), resolution.ErrorMessage);
+            Assert.That(resolution.TargetMethod?.Name, Does.Not.Contain("First"), resolution.ErrorMessage);
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = AdjacentMethodsFixtureProjectRelativePath,
+                Line = secondLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+
+            HotReloadPausePointAdjacentMethodsFixture fixture = new HotReloadPausePointAdjacentMethodsFixture();
+            Assert.That(fixture.Second(), Is.EqualTo(4112));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        /// <summary>
+        /// What: with an ordinary method and an explicit interface implementation on adjacent lines,
+        /// both patched, a pause point on the explicit implementation's line arms its own shim, not
+        /// the method declared just above it, and is hit when the call goes through the interface.
+        /// </summary>
+        [Test]
+        public async Task PatchThenEnable_ExplicitImplementationBelowAnotherPatchedMethod_ArmsItsOwnShim()
+        {
+            string fixturePath = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "..", ExplicitFixtureProjectRelativePath));
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk
+                .Replace("return 4201;", "return 4211;", StringComparison.Ordinal)
+                .Replace("return 4202;", "return 4212;", StringComparison.Ordinal);
+            int explicitLine = FindLineNumber(editedSource, "return 4212;");
+            Assert.That(explicitLine, Is.EqualTo(FindLineNumber(editedSource, "return 4211;") + 1), "Precondition: adjacent lines.");
+
+            string directory = Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string editedPath = Path.Combine(directory, "E2E_explicit_adjacent.cs");
+            File.WriteAllText(editedPath, editedSource);
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            Assert.That(
+                result.Methods.Count(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
+                Is.EqualTo(2),
+                FormatHotReloadOutcomes(result));
+
+            HotReloadShimFileLookup lookup =
+                HotReloadPausePointCoordination.HotReloadSide?.GetShimLookupForFile(ExplicitFixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            SourcePausePointShimResolution resolution =
+                SourcePausePointShimResolver.Resolve(lookup, ExplicitFixtureProjectRelativePath, explicitLine);
+            Assert.That(resolution.LogicalOwner?.Name, Does.EndWith("IHotReloadExplicitRunner.Run"), resolution.ErrorMessage);
+            Assert.That(resolution.TargetMethod?.Name, Does.Not.Contain("First"), resolution.ErrorMessage);
+
+            PausePointResponse enable = EnableContinuousInFile(ExplicitFixtureProjectRelativePath, explicitLine);
+            Assert.That(enable.Success, Is.True, enable.ErrorCode + " / " + enable.Message);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.ResolvedLine, Is.EqualTo(explicitLine));
+
+            IHotReloadExplicitRunner runner = new HotReloadPausePointExplicitFixture();
+            Assert.That(runner.Run(), Is.EqualTo(4212));
+            Assert.That(UloopPausePointRegistry.GetStatus(enable.Id).IsHit, Is.True);
+        }
+
+        private const string ExplicitFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadPausePointExplicitFixture.cs";
+
+        private const string AdjacentMethodsFixtureProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadPausePointAdjacentMethodsFixture.cs";
 
         private static PausePointResponse EnableContinuous(int line)
         {
