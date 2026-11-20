@@ -7,15 +7,16 @@ using Microsoft.CodeAnalysis.Operations;
 
 /// <summary>
 /// Finds an Index or Range access, inside a method body, that the worker binds through the implicit
-/// Index or Range support (Length or Count with the int indexer, or Slice) while the compiled type
-/// it reads, declared in a file the run does not pass, also declares a non-public indexer taking
-/// that Index or Range. The compiler prefers such an indexer, so the shim compile calls it.
+/// Index or Range support (Length or Count with the int indexer, or Slice) while a compiled type
+/// the access looks the indexer up on, declared in a file the run does not pass, also declares a
+/// non-public indexer that accepts that Index or Range. The compiler prefers such an indexer, so
+/// the shim compile calls it.
 /// </summary>
 /// <remarks>
 /// Why no binding error points at it: the worker reads the target assembly through its public
 /// surface only, so the non-public indexer is not there and the implicit support binds without an
 /// error. The shim compile references a copy with every member public, binds the indexer instead,
-/// and a closure or state machine of the shim assembly then throws MethodAccessException calling it.
+/// and code of the shim assembly then throws MethodAccessException calling it.
 /// </remarks>
 internal static class UnpassedExplicitIndexerLookup
 {
@@ -34,7 +35,40 @@ internal static class UnpassedExplicitIndexerLookup
         MethodTransformDecision decision,
         IAssemblySymbol targetAssembly)
     {
-        if (targetAssembly == null)
+        foreach (HiddenIndexerAccess access in EnumerateAccesses(semanticModel, bodyNode, targetAssembly))
+        {
+            UnpassedInternalMemberUse use = UnpassedInternalMemberUse.ForImplicitCall(
+                access.Accessor,
+                access.Node,
+                bodyNode,
+                methodDeclarationOrNull,
+                decision,
+                semanticModel);
+            yield return (use, access.Evidence);
+        }
+    }
+
+    /// <summary>
+    /// The accessor the first such access in <paramref name="bodyNode"/> calls, or null when there
+    /// is none. For an added method, which runs in the shim assembly from its first statement, so
+    /// any such access fails wherever it is written.
+    /// </summary>
+    internal static IMethodSymbol FindFirstAccessorOrNull(
+        SemanticModel semanticModel,
+        SyntaxNode bodyNode,
+        IAssemblySymbol targetAssembly)
+    {
+        return EnumerateAccesses(semanticModel, bodyNode, targetAssembly)
+            .Select(access => access.Accessor)
+            .FirstOrDefault();
+    }
+
+    private static IEnumerable<HiddenIndexerAccess> EnumerateAccesses(
+        SemanticModel semanticModel,
+        SyntaxNode bodyNode,
+        IAssemblySymbol targetAssembly)
+    {
+        if (targetAssembly == null || bodyNode == null)
         {
             yield break;
         }
@@ -46,71 +80,97 @@ internal static class UnpassedExplicitIndexerLookup
                 continue;
             }
 
-            string argumentType = UnpassedInternalAccessorLookup.IndexOrRangeArgumentTypeOrNull(semanticModel, node);
-            if (argumentType == null
+            string argumentTypeName = UnpassedInternalAccessorLookup.IndexOrRangeArgumentTypeOrNull(semanticModel, node);
+            if (argumentTypeName == null
                 || semanticModel.GetOperation(node) is not IImplicitIndexerReferenceOperation implicitIndexer
-                || implicitIndexer.Instance?.Type is not INamedTypeSymbol receiver)
+                || implicitIndexer.Instance?.Type == null
+                || implicitIndexer.Argument?.Type == null)
             {
                 continue;
             }
 
-            IMethodSymbol accessor = FindHiddenIndexerAccessorOrNull(
-                receiver,
-                argumentType,
-                (ExpressionSyntax)node,
+            IPropertySymbol indexer = FindHiddenIndexerOrNull(
+                implicitIndexer.Instance.Type,
+                implicitIndexer.Argument.Type,
                 semanticModel,
                 targetAssembly);
+            IMethodSymbol accessor = indexer == null ? null : AccessorCalledOrNull(indexer, (ExpressionSyntax)node);
             if (accessor == null)
             {
                 continue;
             }
 
-            UnpassedInternalMemberUse use = UnpassedInternalMemberUse.ForImplicitCall(
-                accessor,
-                node,
-                bodyNode,
-                methodDeclarationOrNull,
-                decision,
-                semanticModel);
-            yield return (use, DescribeEvidence(argumentType));
+            yield return new HiddenIndexerAccess(node, accessor, DescribeEvidence(indexer, argumentTypeName));
         }
     }
 
-    // Why the first indexer found from the receiver up: the compiler looks the indexer up on the
-    // receiver and its base types, and a type that declares one with the argument's type hides the
-    // implicit support. Why non-public only: a public one is on the surface the worker reads, so
-    // the worker would have bound to it instead of the implicit support.
-    private static IMethodSymbol FindHiddenIndexerAccessorOrNull(
-        INamedTypeSymbol receiver,
-        string argumentType,
-        ExpressionSyntax access,
+    // Why every type the lookup reaches and not only the receiver's: the compiler looks the indexer
+    // up on the receiver's type and its base types, or on the constraint types of a type parameter.
+    // Why any non-public one that accepts the argument: no public one does, or the worker would have
+    // bound it instead of the implicit support, so the shim compile's overload resolution picks
+    // among the non-public ones.
+    private static IPropertySymbol FindHiddenIndexerOrNull(
+        ITypeSymbol receiverType,
+        ITypeSymbol argumentType,
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
-        foreach (INamedTypeSymbol type in UnpassedInternalMemberUse.EnumerateUnpassedCompiledTypes(receiver, semanticModel, targetAssembly))
+        foreach (INamedTypeSymbol lookupType in LookupTypes(receiverType))
         {
-            IPropertySymbol indexer = type.GetMembers(WellKnownMemberNames.Indexer)
-                .OfType<IPropertySymbol>()
-                .FirstOrDefault(property => TakesOnly(property, argumentType));
-            if (indexer == null)
+            INamedTypeSymbol compiled = UnpassedCompiledCopyOrNull(lookupType, semanticModel, targetAssembly);
+            if (compiled == null)
             {
                 continue;
             }
 
-            if (indexer.DeclaredAccessibility == Accessibility.Public)
+            IPropertySymbol indexer = compiled.GetMembers(WellKnownMemberNames.Indexer)
+                .OfType<IPropertySymbol>()
+                .FirstOrDefault(property => property.DeclaredAccessibility != Accessibility.Public
+                    && UnpassedIndexerApplicability.Accepts(property, lookupType, argumentType));
+            if (indexer != null)
             {
-                return null;
+                return indexer;
             }
-
-            return AccessorCalledOrNull(indexer, access);
         }
 
         return null;
     }
 
-    private static bool TakesOnly(IPropertySymbol indexer, string argumentType)
+    private static IEnumerable<INamedTypeSymbol> LookupTypes(ITypeSymbol receiverType)
     {
-        return indexer.Parameters.Length == 1 && indexer.Parameters[0].Type.ToDisplayString() == argumentType;
+        if (receiverType is ITypeParameterSymbol typeParameter)
+        {
+            foreach (ITypeSymbol constraint in typeParameter.ConstraintTypes)
+            {
+                foreach (INamedTypeSymbol type in LookupTypes(constraint))
+                {
+                    yield return type;
+                }
+            }
+
+            yield break;
+        }
+
+        for (INamedTypeSymbol type = receiverType as INamedTypeSymbol; type != null; type = type.BaseType)
+        {
+            yield return type;
+        }
+    }
+
+    // The all-members copy of the type itself, or null when the run declares it or it is not a type
+    // of the target assembly. Why compared by metadata name: the copy lives in another compilation,
+    // so its symbol never equals the worker's.
+    private static INamedTypeSymbol UnpassedCompiledCopyOrNull(
+        INamedTypeSymbol type,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        INamedTypeSymbol compiled = UnpassedInternalMemberUse
+            .EnumerateUnpassedCompiledTypes(type, semanticModel, targetAssembly)
+            .FirstOrDefault();
+        return compiled != null && UnpassedIndexerApplicability.HaveTheSameMetadataName(compiled, type.OriginalDefinition)
+            ? compiled
+            : null;
     }
 
     // Why the getter first: a compound assignment or an increment calls both, and the reason then
@@ -126,11 +186,27 @@ internal static class UnpassedExplicitIndexerLookup
         return writes ? AssignmentTargetRules.AccessorCalledByWrite(indexer) : null;
     }
 
-    private static string DescribeEvidence(string argumentType)
+    private static string DescribeEvidence(IPropertySymbol indexer, string argumentTypeName)
     {
-        Debug.Assert(!string.IsNullOrEmpty(argumentType), "argumentType must not be null or empty.");
-        return argumentType == RangeTypeName
-            ? "the compiled type declares this[System.Range], which the compiler calls instead of Slice"
-            : "the compiled type declares this[System.Index], which the compiler calls instead of the int indexer";
+        Debug.Assert(indexer != null, "indexer must not be null.");
+        string declared = "this[" + string.Join(", ", indexer.Parameters.Select(parameter => parameter.Type.ToDisplayString())) + "]";
+        string replaced = argumentTypeName == RangeTypeName ? "Slice" : "the int indexer";
+        return "the compiled type declares " + declared + ", which the compiler calls instead of " + replaced;
+    }
+
+    private readonly struct HiddenIndexerAccess
+    {
+        internal HiddenIndexerAccess(SyntaxNode node, IMethodSymbol accessor, string evidence)
+        {
+            Node = node;
+            Accessor = accessor;
+            Evidence = evidence;
+        }
+
+        internal SyntaxNode Node { get; }
+
+        internal IMethodSymbol Accessor { get; }
+
+        internal string Evidence { get; }
     }
 }
