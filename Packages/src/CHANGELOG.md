@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.7](https://github.com/hatayama/unity-cli-loop/compare/v3.34.6...v3.34.7) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body whose Index or Range access reaches an internal indexer of a file the reload was not given instead of failing at run time ([#3582](https://github.com/hatayama/unity-cli-loop/issues/3582)) ([67e141d](https://github.com/hatayama/unity-cli-loop/commit/67e141d3d7abed7f18c68b003d26f99694bd9dee))
+
 ## [3.34.6](https://github.com/hatayama/unity-cli-loop/compare/v3.34.5...v3.34.6) (2026-11-20)
 
 
