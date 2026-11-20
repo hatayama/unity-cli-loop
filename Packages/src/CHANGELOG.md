@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.34.6](https://github.com/hatayama/unity-cli-loop/compare/v3.34.5...v3.34.6) (2026-11-20)
+
+
+### Bug Fixes
+
+* Hot reload skips a lambda or async body that uses an internal getter, setter or init accessor of a property in a file the reload was not given instead of failing at run time ([#3579](https://github.com/hatayama/unity-cli-loop/issues/3579)) ([ceed5d5](https://github.com/hatayama/unity-cli-loop/commit/ceed5d5685a6b00999d6b1d12307e6a9ff76bd28))
+
 ## [3.34.5](https://github.com/hatayama/unity-cli-loop/compare/v3.34.4...v3.34.5) (2026-11-19)
 
 
