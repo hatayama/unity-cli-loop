@@ -1,0 +1,273 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+/// <summary>
+/// Finds a use, inside a method body, of an internal accessor of a public or protected property or
+/// indexer declared by a compiled type of the target assembly that the run does not declare. The
+/// member binds in the worker, but the accessor the use calls is not there: a write then reads as
+/// one to a read-only member, and a read as one of a write-only member.
+/// </summary>
+/// <remarks>
+/// Why the worker sees no accessor rather than an inaccessible one: its binding compilation imports a
+/// referenced assembly through the public surface only, which leaves an internal accessor out of an
+/// otherwise public member. The shim compile references a copy with every accessor public, so a body
+/// with such a use compiles there and is reported patched, and then throws MethodAccessException
+/// wherever it runs as ordinary code of the shim assembly.
+/// </remarks>
+internal static class UnpassedInternalAccessorLookup
+{
+    // Why only these and why not the missing-name IDs: a write through a missing setter or init
+    // accessor reports CS0200 and a read through a missing getter reports CS0154. Each is also a
+    // genuine error when no internal accessor explains it, and the shim compile reports that one as
+    // before, so these IDs reach this lookup only and never the missing-name handling.
+    private static readonly HashSet<string> MissingAccessorDiagnosticIds =
+        new HashSet<string>(StringComparer.Ordinal) { "CS0200", "CS0154" };
+
+    /// <summary>Whether <paramref name="error"/> is one a missing accessor of a bound member reports.</summary>
+    internal static bool IsMissingAccessorDiagnostic(Diagnostic error)
+    {
+        return MissingAccessorDiagnosticIds.Contains(error.Id);
+    }
+
+    /// <summary>
+    /// The use <paramref name="error"/> reports, or null when the error does not come from a read or
+    /// write that calls an internal accessor of a public or protected property or indexer of a
+    /// compiled type of the target assembly the run does not declare.
+    /// </summary>
+    internal static UnpassedInternalMemberUse FindOrNull(
+        Diagnostic error,
+        SemanticModel semanticModel,
+        SyntaxNode bodyNode,
+        MethodDeclarationSyntax methodDeclarationOrNull,
+        MethodTransformDecision decision,
+        IAssemblySymbol targetAssembly)
+    {
+        Debug.Assert(error != null, "error must not be null.");
+        if (targetAssembly == null || !IsMissingAccessorDiagnostic(error))
+        {
+            return null;
+        }
+
+        ExpressionSyntax access = FindReportedAccessOrNull(error, bodyNode);
+        if (access == null || BoundPropertyOrNull(semanticModel, access) is not IPropertySymbol bound)
+        {
+            return null;
+        }
+
+        IPropertySymbol compiled = FindCompiledPropertyOrNull(bound, semanticModel, targetAssembly);
+        IMethodSymbol accessor = compiled == null ? null : FindInternalAccessorCalledOrNull(compiled, access);
+        if (accessor == null)
+        {
+            return null;
+        }
+
+        return UnpassedInternalMemberUse.ForAccessorCall(
+            accessor,
+            access,
+            bodyNode,
+            methodDeclarationOrNull,
+            decision,
+            semanticModel);
+    }
+
+    /// <summary>
+    /// The internal getter of a public or protected property or indexer named
+    /// <paramref name="memberName"/> of <paramref name="start"/> or a base type, as the target
+    /// assembly declares it, or null. A call the compiler generates for an Index or Range access
+    /// reads Length, Count or the indexer through it.
+    /// </summary>
+    internal static IMethodSymbol FindInternalGetterOrNull(
+        INamedTypeSymbol start,
+        string memberName,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        foreach (INamedTypeSymbol type in UnpassedInternalMemberUse.EnumerateUnpassedCompiledTypes(start, semanticModel, targetAssembly))
+        {
+            foreach (IPropertySymbol property in type.GetMembers(memberName).OfType<IPropertySymbol>())
+            {
+                if (IsInternalAccessorOfAVisibleMember(property.GetMethod))
+                {
+                    return property.GetMethod;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// "The getter of 'Name'", "The setter of 'Name'" or "The init accessor of 'Name'" when
+    /// <paramref name="method"/> is an internal accessor of a public or protected property or
+    /// indexer, or null for any other method. Name is the member's name, 'this[]' for an indexer.
+    /// </summary>
+    internal static string DescribeInternalAccessorOrNull(IMethodSymbol method)
+    {
+        if (!IsInternalAccessorOfAVisibleMember(method))
+        {
+            return null;
+        }
+
+        string accessor = method.MethodKind == MethodKind.PropertyGet
+            ? "The getter of '"
+            : method.IsInitOnly ? "The init accessor of '" : "The setter of '";
+        return accessor + method.AssociatedSymbol.Name + "'";
+    }
+
+    // Why internal and private protected only: the worker's import shows a protected accessor, and
+    // a private one is an accessor the real compiler rejects outside its type too. Why the member
+    // must be visible: an internal member is missing as a whole, which the missing-name handling
+    // reports with the member's own name.
+    private static bool IsInternalAccessorOfAVisibleMember(IMethodSymbol accessor)
+    {
+        if (accessor?.AssociatedSymbol is not IPropertySymbol property)
+        {
+            return false;
+        }
+
+        return IsHiddenFromThePublicSurface(accessor.DeclaredAccessibility)
+            && !IsHiddenFromThePublicSurface(property.DeclaredAccessibility)
+            && property.DeclaredAccessibility != Accessibility.Private;
+    }
+
+    private static bool IsHiddenFromThePublicSurface(Accessibility accessibility)
+    {
+        return accessibility == Accessibility.Internal || accessibility == Accessibility.ProtectedAndInternal;
+    }
+
+    // The read or write the error is reported on: a member access with its receiver ('value.Name',
+    // 'Type.Name'), an element access ('value[i]'), either form after '?.', or a member named in an
+    // object initializer. Why not a bare name: the shim qualifies a name the worker binds, and this
+    // lookup leaves such a use on today's path rather than guess its receiver.
+    private static ExpressionSyntax FindReportedAccessOrNull(Diagnostic error, SyntaxNode bodyNode)
+    {
+        Location location = error.Location;
+        if (!location.IsInSource
+            || location.SourceTree != bodyNode.SyntaxTree
+            || !bodyNode.Span.Contains(location.SourceSpan))
+        {
+            return null;
+        }
+
+        SyntaxNode reported = bodyNode.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
+        if (reported is SimpleNameSyntax name
+            && (reported.Parent is MemberAccessExpressionSyntax { Name: var accessName } && accessName == name
+                || reported.Parent is MemberBindingExpressionSyntax))
+        {
+            reported = reported.Parent;
+        }
+
+        switch (reported)
+        {
+            case MemberAccessExpressionSyntax memberAccess:
+                return memberAccess;
+            case ElementAccessExpressionSyntax elementAccess:
+                return elementAccess;
+            case MemberBindingExpressionSyntax memberBinding:
+                return memberBinding;
+            case ElementBindingExpressionSyntax elementBinding:
+                return elementBinding;
+            case IdentifierNameSyntax initializedMember when IsObjectInitializerMember(initializedMember):
+                return initializedMember;
+            default:
+                return null;
+        }
+    }
+
+    private static bool IsObjectInitializerMember(IdentifierNameSyntax name)
+    {
+        return name.Parent is AssignmentExpressionSyntax assignment
+            && assignment.Left == name
+            && assignment.Parent is InitializerExpressionSyntax initializer
+            && initializer.IsKind(SyntaxKind.ObjectInitializerExpression);
+    }
+
+    // Why a single candidate counts: a member access the binder rejects for its missing accessor
+    // may come back as a candidate rather than the symbol, and it is still the member the use names.
+    private static ISymbol BoundPropertyOrNull(SemanticModel semanticModel, ExpressionSyntax access)
+    {
+        SymbolInfo info = semanticModel.GetSymbolInfo(access);
+        return info.Symbol ?? (info.CandidateSymbols.Length == 1 ? info.CandidateSymbols[0] : null);
+    }
+
+    // Why names and parameter types and not symbols: the target assembly comes from a separate
+    // compilation that imports every member, so its properties are other symbols than the one this
+    // body binds to. An indexer overload is told apart by its parameter types.
+    private static IPropertySymbol FindCompiledPropertyOrNull(
+        IPropertySymbol bound,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        foreach (INamedTypeSymbol type in UnpassedInternalMemberUse.EnumerateUnpassedCompiledTypes(bound.ContainingType, semanticModel, targetAssembly))
+        {
+            foreach (IPropertySymbol property in type.GetMembers(bound.Name).OfType<IPropertySymbol>())
+            {
+                if (HasTheSameParameterTypes(property, bound))
+                {
+                    return property;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasTheSameParameterTypes(IPropertySymbol compiled, IPropertySymbol bound)
+    {
+        return compiled.Parameters.Length == bound.Parameters.Length
+            && compiled.Parameters.Zip(bound.Parameters, (left, right) => left.Type.ToDisplayString() == right.Type.ToDisplayString())
+                .All(same => same);
+    }
+
+    // Why the getter is checked first: a compound assignment or an increment calls both accessors,
+    // and the reason then names the getter. Why decide by the use: matching any internal accessor
+    // would refuse a read of a member whose setter alone is internal, which the shim runs.
+    private static IMethodSymbol FindInternalAccessorCalledOrNull(IPropertySymbol compiled, ExpressionSyntax access)
+    {
+        (bool reads, bool writes) = AccessorsCalledBy(access);
+        if (reads && IsInternalAccessorOfAVisibleMember(compiled.GetMethod))
+        {
+            return compiled.GetMethod;
+        }
+
+        IMethodSymbol store = AssignmentTargetRules.AccessorCalledByWrite(compiled);
+        return writes && IsInternalAccessorOfAVisibleMember(store) ? store : null;
+    }
+
+    // A simple assignment, an initializer and a deconstruction only store; a compound assignment,
+    // an increment and a decrement read and store; every other use reads.
+    private static (bool Reads, bool Writes) AccessorsCalledBy(ExpressionSyntax access)
+    {
+        AssignmentExpressionSyntax assignment = AssignmentTargetRules.AssignmentTargetedBy(access);
+        if (assignment != null)
+        {
+            return (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression), true);
+        }
+
+        if (IsIncrementedOrDecremented(access))
+        {
+            return (true, true);
+        }
+
+        return AssignmentTargetRules.IsDeconstructionTarget(access) ? (false, true) : (true, false);
+    }
+
+    private static bool IsIncrementedOrDecremented(ExpressionSyntax access)
+    {
+        SyntaxNode operand = access;
+        while (operand.Parent is ParenthesizedExpressionSyntax parenthesized)
+        {
+            operand = parenthesized;
+        }
+
+        return operand.Parent is PrefixUnaryExpressionSyntax prefix
+                && (prefix.IsKind(SyntaxKind.PreIncrementExpression) || prefix.IsKind(SyntaxKind.PreDecrementExpression))
+            || operand.Parent is PostfixUnaryExpressionSyntax postfix
+                && (postfix.IsKind(SyntaxKind.PostIncrementExpression) || postfix.IsKind(SyntaxKind.PostDecrementExpression));
+    }
+}

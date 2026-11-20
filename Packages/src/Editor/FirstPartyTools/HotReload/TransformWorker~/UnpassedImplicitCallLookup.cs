@@ -459,6 +459,16 @@ internal static class UnpassedImplicitCallLookup
             return property.GetMethod;
         }
 
+        // Why a public member's internal getter too: an Index or Range access reads Length, Count or
+        // the indexer through its getter, which the worker's public-only import leaves out.
+        IMethodSymbol internalGetter = outParameterCount == null
+            ? UnpassedInternalAccessorLookup.FindInternalGetterOrNull(namedReceiver, methodName, semanticModel, targetAssembly)
+            : null;
+        if (internalGetter != null)
+        {
+            return internalGetter;
+        }
+
         return FindInternalExtensionOrNull(namedReceiver, methodName, outParameterCount, targetAssembly);
     }
 

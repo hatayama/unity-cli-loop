@@ -71,6 +71,26 @@ internal static class UnresolvedBodyNameGuard
                 return Describe(implicitCall, isPartial, diagnosticText);
             }
 
+            // Why apart from the missing-name IDs: a missing accessor is either an internal accessor
+            // of a compiled member, or a genuine error the shim compile reports as before, never a
+            // part the worker cannot see.
+            if (UnpassedInternalAccessorLookup.IsMissingAccessorDiagnostic(diagnostic))
+            {
+                UnpassedInternalMemberUse accessorCall = UnpassedInternalAccessorLookup.FindOrNull(
+                    diagnostic,
+                    semanticModel,
+                    bodyNode,
+                    methodDeclarationOrNull,
+                    decision,
+                    targetAssembly);
+                if (accessorCall != null && !IsWithinReach(accessorCall, isPartial))
+                {
+                    return Describe(accessorCall, isPartial, diagnosticText);
+                }
+
+                continue;
+            }
+
             if (!UnresolvedNameDiagnosticIds.Contains(diagnostic.Id))
             {
                 continue;
@@ -114,7 +134,7 @@ internal static class UnresolvedBodyNameGuard
             ChooseReasonCode(use, isPartial),
             diagnosticText,
             "'" + use.DeclaringType.Name + "'",
-            "'" + use.MemberName + "'");
+            use.MemberArgument);
     }
 
     // The reason whose last sentence names the change that brings this use within reach. Why only a
