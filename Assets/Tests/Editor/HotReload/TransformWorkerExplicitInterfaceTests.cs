@@ -79,7 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: respelling the interface with global:: in the edit still yields the compiled name,
-        /// which has no global:: prefix.
+        /// which has no global:: prefix, and the respelling is not reported as an edit outside method
+        /// bodies or as a removed member.
         /// </summary>
         [Test]
         public async Task Run_ExplicitImplementationRespelledWithGlobal_EmitsEntryWithCompiledName()
@@ -92,9 +93,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "int global::" + Namespace + ".IHotReloadExplicitRunner.Run() { return 9101; }"));
 
             AssertEntry(result, typeof(HotReloadExplicitRunnerFixture), Namespace + ".IHotReloadExplicitRunner.Run", "Run");
+            AssertNoDriftOrRemovedMember(result);
         }
 
-        /// <summary>What: respelling the interface through a using alias still yields the compiled name.</summary>
+        /// <summary>
+        /// What: an explicit implementation whose edit only respells the interface with global:: is
+        /// reported unchanged under the compiled name, with no entry and no warning, because only the
+        /// spelling of its interface differs from the last compile.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitImplementationOnlyRespelledWithGlobal_IsUnchangedWithoutWarnings()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitGlobalOnlyRespelled.cs",
+                source => ReplaceUniqueFragment(
+                    source,
+                    RunnerBody,
+                    "int global::" + Namespace + ".IHotReloadExplicitRunner.Run() { return 8101; }"));
+
+            AssertNoEntryFor(result, typeof(HotReloadExplicitRunnerFixture));
+            Assert.That(
+                result.Output.unchangedMethods
+                    .Where(row => row.typeMetadataName == typeof(HotReloadExplicitRunnerFixture).FullName)
+                    .Select(row => row.methodName),
+                Is.EqualTo(new[] { Namespace + ".IHotReloadExplicitRunner.Run" }));
+            AssertNoDriftOrRemovedMember(result);
+        }
+
+        /// <summary>
+        /// What: an explicit implementation moved to another interface that declares the same member
+        /// is still reported as a removed member, because the two specifiers name different
+        /// interfaces, not two spellings of one.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitImplementationMovedToAnotherInterface_StillReportsRemovedMember()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitMovedInterface.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(source, RunnerBody, "int IHotReloadExplicitA.Run() { return 8101; }"),
+                    "public class HotReloadExplicitRunnerFixture : IHotReloadExplicitRunner",
+                    "public class HotReloadExplicitRunnerFixture : IHotReloadExplicitA"));
+
+            Assert.That(RemovedMemberLabels(result), Does.Contain("method:Run"));
+        }
+
+        /// <summary>
+        /// What: an explicit indexer and an explicit event whose edits only respell the interface with
+        /// global:: are not reported as edits outside method bodies or as removed members.
+        /// </summary>
+        [TestCase("ExplicitIndexerRespelled.cs", "int ", "IHotReloadExplicitIndexed.this[int index]")]
+        [TestCase("ExplicitEventRespelled.cs", "event Action ", "IHotReloadExplicitNotifier.Changed")]
+        public async Task Run_ExplicitIndexerOrEventOnlyRespelledWithGlobal_ReportsNoWarning(
+            string fileName,
+            string declarationPrefix,
+            string specifiedMember)
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                fileName,
+                source => ReplaceUniqueFragment(
+                    source,
+                    declarationPrefix + specifiedMember,
+                    declarationPrefix + "global::" + Namespace + "." + specifiedMember));
+
+            AssertNoDriftOrRemovedMember(result);
+        }
+
+        /// <summary>
+        /// What: respelling the interface through a using alias still yields the compiled name, and
+        /// the respelled member is not reported as removed or named as an edit outside method bodies.
+        /// The added using directive is such an edit, so the file may still be reported for it.
+        /// </summary>
         [Test]
         public async Task Run_ExplicitImplementationRespelledWithAlias_EmitsEntryWithCompiledName()
         {
@@ -106,6 +175,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "using System; using RunnerAlias = " + Namespace + ".IHotReloadExplicitRunner;"));
 
             AssertEntry(result, typeof(HotReloadExplicitRunnerFixture), Namespace + ".IHotReloadExplicitRunner.Run", "Run");
+            Assert.That(RemovedMemberLabels(result), Is.Empty);
+            Assert.That(
+                result.Output.files.SelectMany(file => file.declarationDriftWarnings ?? Array.Empty<string>()),
+                Has.None.Contains("method: "));
         }
 
         /// <summary>
@@ -381,8 +454,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an explicit property respelled with global:: in the edit still yields a getter entry
-        /// under the compiled name. The known limitation stays visible: the respelled declaration is
-        /// reported as an edit outside method bodies.
+        /// under the compiled name, leaves the unedited setter without an entry, and the respelling
+        /// is not reported as an edit outside method bodies or as a removed member.
         /// </summary>
         [Test]
         public async Task Run_ExplicitPropertyRespelledWithGlobal_EmitsGetterEntryWithCompiledName()
@@ -400,9 +473,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Namespace + ".IHotReloadExplicitValue.get_Value",
                 "get_Value");
             Assert.That(
-                result.Output.files.SelectMany(file => file.declarationDriftWarnings ?? Array.Empty<string>()),
-                Is.Not.Empty,
-                "Known limitation: the respelled specifier changes the syntax key, which the drift check reports.");
+                result.Output.entries.Where(entry => entry.typeMetadataName == typeof(HotReloadExplicitValueFixture).FullName)
+                    .Select(entry => entry.methodName),
+                Has.None.EqualTo(Namespace + ".IHotReloadExplicitValue.set_Value"));
+            AssertNoDriftOrRemovedMember(result);
         }
 
         /// <summary>
@@ -444,7 +518,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: with the Editor's key for an explicit property getter excluded, a global:: respelled
-        /// edit of it emits no entry, because the worker keys the getter by its compiled name too.
+        /// edit of it emits no entry, because the worker keys the getter by its compiled name too, and
+        /// the unedited setter emits none either.
         /// </summary>
         [Test]
         public async Task Run_RespelledExplicitPropertyGetterExcludedByEditorKey_EmitsNoEntry()
@@ -463,14 +538,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "int global::" + Namespace + ".IHotReloadExplicitValue.Value"),
                 new[] { excludedKey });
 
-            // Why only the getter: the respelled specifier also changes the setter's syntax key, so the
-            // unedited setter is re-emitted (the known limitation); only the excluded getter must be absent.
-            Assert.That(
-                result.Output.entries.Any(entry =>
-                    entry.typeMetadataName == typeof(HotReloadExplicitValueFixture).FullName
-                    && entry.methodName == Namespace + ".IHotReloadExplicitValue.get_Value"),
-                Is.False,
-                "The excluded explicit getter must not be emitted.");
+            // Why no entry at all: the getter is excluded, and the setter is unedited once the respelled
+            // specifier pairs with the snapshot.
+            AssertNoEntryFor(result, typeof(HotReloadExplicitValueFixture));
         }
 
         /// <summary>
@@ -573,6 +643,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 Namespace + ".IHotReloadExplicitIndexed.get_Item",
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
+        }
+
+        private static void AssertNoDriftOrRemovedMember(TransformWorkerClientResult result)
+        {
+            Assert.That(
+                result.Output.files.SelectMany(file => file.declarationDriftWarnings ?? Array.Empty<string>()),
+                Is.Empty,
+                "A respelled interface alone is not an edit outside method bodies.");
+            Assert.That(RemovedMemberLabels(result), Is.Empty, "A respelled interface alone removes no member.");
+        }
+
+        private static IEnumerable<string> RemovedMemberLabels(TransformWorkerClientResult result)
+        {
+            return result.Output.files
+                .SelectMany(file => file.removedMembers ?? Array.Empty<TransformWorkerRemovedMemberDto>())
+                .Select(member => member.kind + ":" + member.name);
         }
 
         private static void AssertNoEntryFor(TransformWorkerClientResult result, Type fixtureType)

@@ -20,7 +20,8 @@ internal static class BaselineSnapshotBuilder
     internal static BaselineSnapshotState BuildBaselineSnapshotState(
         string snapshotSource,
         CSharpParseOptions parseOptions,
-        CompilationUnitSyntax plainRoot)
+        CompilationUnitSyntax plainRoot,
+        SemanticModel currentModel)
     {
         // Syntax-key maps for edited-method detection. Distinct from WorkerMethodKeys.BuildMethodKey (Cecil names):
         // same-file old/new comparison only needs syntax keys to stay consistent with each other.
@@ -31,10 +32,14 @@ internal static class BaselineSnapshotBuilder
             return baseline;
         }
 
-        baseline.SnapshotRoot = CSharpSyntaxTree.ParseText(
-                SourceText.From(snapshotSource, Encoding.UTF8),
-                parseOptions)
-            .GetCompilationUnitRoot();
+        // Why align before any map is built: every comparison of the snapshot with the current
+        // source keys and compares explicit implementations by the specifier's spelling.
+        baseline.SnapshotRoot = ExplicitSpecifierSnapshotAligner.Align(
+            CSharpSyntaxTree.ParseText(
+                    SourceText.From(snapshotSource, Encoding.UTF8),
+                    parseOptions)
+                .GetCompilationUnitRoot(),
+            currentModel);
         Dictionary<string, MethodDeclarationSyntax> snapMethods =
             WorkerSyntaxMemberMaps.BuildSyntaxMethodMapOrNull(baseline.SnapshotRoot);
         // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).

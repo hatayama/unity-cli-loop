@@ -343,7 +343,8 @@ internal static class WorkerGroupPipeline
         unit.Baseline = BaselineSnapshotBuilder.BuildBaselineSnapshotState(
             unit.Input.SnapshotSource,
             parseOptions,
-            unit.PlainRoot);
+            unit.PlainRoot,
+            unit.SemanticModel);
 
         List<TypeEmitState> typeEmitStates = TypeEmitPlanner.QueueAllTypeEmitStates(
             unit,

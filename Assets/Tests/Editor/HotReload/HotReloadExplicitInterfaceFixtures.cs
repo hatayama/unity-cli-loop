@@ -62,6 +62,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         int this[int index] { get; }
     }
 
+    /// <summary>Interface with an event.</summary>
+    public interface IHotReloadExplicitNotifier
+    {
+        event Action Changed;
+    }
+
     /// <summary>Generic interface with a read-write property.</summary>
     public interface IHotReloadExplicitBoxValue<T>
     {
@@ -263,6 +269,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             [MethodImpl(MethodImplOptions.NoInlining)]
             get { return index + 8210; }
+        }
+    }
+
+    /// <summary>An explicit event with add and remove accessors.</summary>
+    public class HotReloadExplicitNotifierFixture : IHotReloadExplicitNotifier
+    {
+        private Action _handlers;
+
+        event Action IHotReloadExplicitNotifier.Changed
+        {
+            add { _handlers += value; }
+            remove { _handlers -= value; }
         }
     }
 
