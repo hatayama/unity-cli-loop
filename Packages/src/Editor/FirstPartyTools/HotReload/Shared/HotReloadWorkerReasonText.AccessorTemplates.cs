@@ -201,6 +201,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadWorkerReasonCode.AccessorConditionalAccessNoShape,
                 Plain("inaccessible member access via conditional access has no rewrite shape.", 0));
             templates.Add(
+                HotReloadWorkerReasonCode.AccessorPropertyPatternNoShape,
+                // Why the member access: the accessor rewrite reads an inaccessible member through
+                // one, so the same test written outside the pattern applies.
+                Plain(
+                    "inaccessible member '{0}' named in a property pattern has no accessor rewrite shape; "
+                    + "read it with a member access such as 'value.{0}' instead.",
+                    1));
+            templates.Add(
                 HotReloadWorkerReasonCode.AccessorRefReturningMethodNoShape,
                 Plain("inaccessible methods that return by ref have no accessor rewrite shape.", 0));
             templates.Add(

@@ -237,6 +237,26 @@ internal static class AddedFieldBodyScan
         return false;
     }
 
+    // Why any binding: a pattern link reads the field by name on the matched value, where neither
+    // the store read nor a folded constant can stand.
+    internal static bool BodyNamesAddedFieldInPropertyPattern(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        foreach (ExpressionSyntax expression in bodyNode.DescendantNodesAndSelf().OfType<ExpressionSyntax>())
+        {
+            if (PropertyPatternMemberPath.Contains(expression)
+                && addedFieldCatalog.FindOrNull(
+                    FormatAddedStoreKeyOrNull(semanticModel.GetSymbolInfo(expression).Symbol)) != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static bool BodyHasNonNumericAddedFieldIncrement(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,

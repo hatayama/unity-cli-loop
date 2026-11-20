@@ -40,6 +40,14 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        // Why before the shape branches: a pattern link has no shape any of them could rewrite, so
+        // an inaccessible member it names refuses the plan rather than being registered.
+        if (node is ExpressionSyntax patternLink && PropertyPatternMemberPath.Contains(patternLink))
+        {
+            rejectReason = PropertyPatternMemberPath.UnreachableLinkReasonOrNull(semanticModel, patternLink);
+            return false;
+        }
+
         if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
         {
             return TryRegisterObjectCreation(semanticModel, node, out rejectReason);

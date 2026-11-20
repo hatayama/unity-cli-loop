@@ -28,6 +28,11 @@ internal static class AddedFieldSkipEvaluator
             return unavailable;
         }
 
+        if (AddedFieldBodyScan.BodyNamesAddedFieldInPropertyPattern(bodyNode, semanticModel, addedFieldCatalog))
+        {
+            return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldPropertyPattern);
+        }
+
         if (AddedFieldBodyScan.BodyPassesAddedFieldByRef(bodyNode, semanticModel, addedFieldCatalog))
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.AddedFieldRefOutIn);
