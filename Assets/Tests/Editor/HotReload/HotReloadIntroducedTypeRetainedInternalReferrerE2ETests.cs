@@ -437,6 +437,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Run_AddedMethodCallingInternalMemberOfRetainedType_IsSkippedOnEveryReload(bool passesMemory)
         {
             const string callerExpression = "new RetainedHelper().Read()";
+            if (passesMemory)
+            {
+                // Why: without the internal copy the Memory call binds as any other, and the case
+                // would pass without exercising the binding it is for.
+                HotReloadBclTwinTypePrecondition.AssertReferencedAssemblyCarriesInternalBclTwins();
+            }
+
             string addedMethod = passesMemory ? AddedMethodCallingTheSecretWithMemory : AddedMethodCallingTheSecret;
             await RunInIntroducedTypeDomainAsync(async _ =>
             {
