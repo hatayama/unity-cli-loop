@@ -27,11 +27,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string BareNameAdvice = "Qualify the bare name with 'this.' or the type name, or run 'uloop compile'.";
 
         /// <summary>
-        /// What: a lambda that calls an internal accessor of a public property or indexer of a type
-        /// in a file the run does not pass, or whose range or index the compiler sends to an
-        /// internal Range or Index indexer of such a type, is skipped with the inside-closure
-        /// reason, which names that accessor or indexer, and produces no entry, also when the
-        /// method's own statements make the same call first.
+        /// What: a lambda or local function that calls an internal accessor of a public property or
+        /// indexer of a type in a file the run does not pass, or whose range or index the compiler
+        /// sends to an internal indexer of such a type, is skipped with the inside-closure reason,
+        /// which names that accessor or indexer, and produces no entry. The indexer is found when it
+        /// takes the Index or Range itself, the type parameter of a type constructed with it, or
+        /// object; when the access is conditional; when a base type or the constraint of a type
+        /// parameter declares it; and when the method's own statements make the same call first.
         /// </summary>
         [TestCase("7101", "SetterWriteInLambda", "The setter of 'Length'")]
         [TestCase("7121", "GetterReadInLambda", "The getter of 'Value'")]
@@ -59,6 +61,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7651", "IndexThroughInternalIndexIndexerInLambda", "'this[]'")]
         [TestCase("7671", "IndexWriteThroughInternalIndexIndexerInLambda", "'this[]'")]
         [TestCase("7711", "RangeInOwnStatementsThenInLambda", "'this[]'")]
+        [TestCase("7721", "ConditionalIndexThroughInternalIndexIndexerInLambda", "'this[]'")]
+        [TestCase("7731", "RangeThroughInternalRangeIndexerOfBaseInLambda", "'this[]'")]
+        [TestCase("7741", "IndexThroughInternalGenericKeyIndexerInLambda", "'this[]'")]
+        [TestCase("7751", "IndexThroughInternalObjectKeyIndexerInLambda", "'this[]'")]
+        [TestCase("7761", "RangeThroughConstrainedTypeParameterInLocalFunction", "'this[]'")]
         public async Task LambdaCallingUnpassedInternalAccessor_IsSkippedWithTheInsideClosureReason(
             string token,
             string methodName,
@@ -258,6 +265,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(FindSkipReason(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
             Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
+        }
+
+        /// <summary>
+        /// What: a method added since the last compile whose statements slice or index through an
+        /// internal Range or Index indexer of a type in a file the run does not pass is skipped with
+        /// the added-method reason that names that indexer, because an added method runs in the shim
+        /// assembly even outside a lambda.
+        /// </summary>
+        [TestCase("AddedRangeThroughInternalRangeIndexer", "new HotReloadUnpassedInternalRangeIndexerHolder()[1..3][0]")]
+        [TestCase("AddedIndexThroughInternalIndexIndexer", "new HotReloadUnpassedInternalIndexIndexerHolder()[^1]")]
+        public async Task AddedMethodReachingUnpassedInternalIndexOrRangeIndexer_IsSkipped(string methodName, string expression)
+        {
+            TransformWorkerClientResult result = await RunFixtureWithAddedMethodAsync(methodName, expression);
+
+            string reason = FindSkipReason(result, methodName + "(");
+            Assert.That(reason, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.StartWith("Added methods whose bodies access private/internal members"));
+            Assert.That(reason, Does.Contain("inaccessible method 'this[]' that the compiler calls for an index or range"));
+        }
+
+        /// <summary>
+        /// What: a method added since the last compile whose int argument binds to the public indexer
+        /// beside an internal Index indexer is not skipped, because it calls no internal member.
+        /// </summary>
+        [Test]
+        public async Task AddedMethodIndexingWithIntArgumentBesideInternalIndexIndexer_IsNotSkipped()
+        {
+            const string methodName = "AddedIndexWithIntArgumentBesideInternalIndexIndexer";
+            TransformWorkerClientResult result = await RunFixtureWithAddedMethodAsync(
+                methodName,
+                "new HotReloadUnpassedInternalIndexIndexerHolder()[0]");
+
+            Assert.That(FindSkipReason(result, methodName + "("), Is.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
+        }
+
+        private static Task<TransformWorkerClientResult> RunFixtureWithAddedMethodAsync(string methodName, string expression)
+        {
+            // Why an anchor without a line break: a checkout with CRLF line endings must still find it.
+            const string anchor = "public int SetterWriteInOwnStatements()";
+            string addedMethod = "public int " + methodName + "() { return " + expression + "; } ";
+            return RunEditedFixtureAsync(anchor, addedMethod + anchor);
         }
 
         private static Task<TransformWorkerClientResult> RunEditedFixtureAsync(string token)

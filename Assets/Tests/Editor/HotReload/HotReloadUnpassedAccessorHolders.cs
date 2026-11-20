@@ -263,4 +263,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             set => _items[index] = value * 10;
         }
     }
+
+    /// <summary>
+    /// A base type with a public Length and Slice beside an internal indexer that takes a Range,
+    /// reached through a derived type and through a type parameter constrained to it.
+    /// </summary>
+    public class HotReloadUnpassedInternalRangeIndexerBase
+    {
+        private readonly int[] _items = { 1, 2, 3, 4 };
+
+        public int Length => _items.Length;
+
+        public int[] Slice(int start, int length)
+        {
+            return new[] { start, length };
+        }
+
+        internal int[] this[Range range] => _items[range];
+    }
+
+    /// <summary>
+    /// A derived type with no indexer of its own, so a Range access finds the internal indexer of
+    /// its base.
+    /// </summary>
+    public sealed class HotReloadUnpassedInternalRangeIndexerDerived : HotReloadUnpassedInternalRangeIndexerBase
+    {
+    }
+
+    /// <summary>
+    /// A generic type whose internal indexer takes the type parameter, beside a public Length and
+    /// int indexer, so an Index access through the type constructed with Index calls that indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericKeyIndexerHolder<T>
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[T key] => 99;
+    }
+
+    /// <summary>
+    /// An internal indexer that takes object, beside a public Length and int indexer. An Index
+    /// argument converts to object, so the compiler calls that indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedObjectKeyIndexerHolder
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[object key] => 99;
+    }
 }

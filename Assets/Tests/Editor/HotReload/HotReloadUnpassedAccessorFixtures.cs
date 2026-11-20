@@ -422,6 +422,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return read();
         }
 
+        public int ConditionalIndexThroughInternalIndexIndexerInLambda()
+        {
+            HotReloadUnpassedInternalIndexIndexerHolder holder = new HotReloadUnpassedInternalIndexIndexerHolder();
+            Func<int> read = () => (holder?[^1] ?? 0) + 7721;
+            return read();
+        }
+
+        public int RangeThroughInternalRangeIndexerOfBaseInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedInternalRangeIndexerDerived()[1..3][0] + 7731;
+            return read();
+        }
+
+        public int IndexThroughInternalGenericKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedGenericKeyIndexerHolder<Index>()[^1] + 7741;
+            return read();
+        }
+
+        public int IndexThroughInternalObjectKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedObjectKeyIndexerHolder()[^1] + 7751;
+            return read();
+        }
+
+        public int RangeThroughConstrainedTypeParameterInLocalFunction()
+        {
+            static int Read<T>(T holder) where T : HotReloadUnpassedInternalRangeIndexerBase
+            {
+                return holder[1..3][0] + 7761;
+            }
+
+            return Read(new HotReloadUnpassedInternalRangeIndexerDerived());
+        }
+
         public int SetterWriteInOwnStatements()
         {
             HotReloadUnpassedInternalSetterHolder holder = new HotReloadUnpassedInternalSetterHolder();
