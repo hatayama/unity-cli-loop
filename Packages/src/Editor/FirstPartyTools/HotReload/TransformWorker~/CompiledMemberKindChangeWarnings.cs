@@ -135,7 +135,8 @@ internal static class CompiledMemberKindChangeWarnings
             && !property.IsIndexer
             && property.Parameters.Length == 0
             && !property.IsImplicitlyDeclared
-            && !SourceDeclaresProperty(sourceType, property.Name))
+            && !SourceDeclaresProperty(sourceType, property.Name)
+            && !ExplicitImplementationMatcher.SourceImplementsSameInterfaceMember(sourceType, property))
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
@@ -145,7 +146,8 @@ internal static class CompiledMemberKindChangeWarnings
 
         if (compiledMember is IEventSymbol compiledEvent
             && !compiledEvent.IsImplicitlyDeclared
-            && !SourceDeclaresEvent(sourceType, compiledEvent.Name))
+            && !SourceDeclaresEvent(sourceType, compiledEvent.Name)
+            && !ExplicitImplementationMatcher.SourceImplementsSameInterfaceMember(sourceType, compiledEvent))
         {
             return string.Format(
                 CultureInfo.InvariantCulture,

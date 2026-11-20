@@ -89,10 +89,55 @@ internal static class ExplicitImplementationMatcher
         return null;
     }
 
+    /// <summary>
+    /// Whether <paramref name="sourceType"/> explicitly implements the interface property or event
+    /// that <paramref name="compiledMember"/> explicitly implements.
+    /// </summary>
+    /// <remarks>
+    /// Why: a source implementation respelled with <c>global::</c> is named after the new spelling,
+    /// so looking it up by the compiled name finds nothing.
+    /// </remarks>
+    internal static bool SourceImplementsSameInterfaceMember(INamedTypeSymbol sourceType, ISymbol compiledMember)
+    {
+        ISymbol compiledImplemented = ExplicitlyImplementedPropertyOrEventOrNull(compiledMember);
+        if (compiledImplemented == null)
+        {
+            return false;
+        }
+
+        string compiledInterface = compiledImplemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        foreach (ISymbol sourceMember in sourceType.GetMembers())
+        {
+            ISymbol implemented = ExplicitlyImplementedPropertyOrEventOrNull(sourceMember);
+            if (implemented != null
+                && implemented.Kind == compiledImplemented.Kind
+                && implemented.Name == compiledImplemented.Name
+                && implemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == compiledInterface)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>The name of the interface member a source explicit implementation implements.</summary>
     internal static string ImplementedMemberName(IMethodSymbol sourceMethod)
     {
         return sourceMethod.ExplicitInterfaceImplementations[0].Name;
+    }
+
+    private static ISymbol ExplicitlyImplementedPropertyOrEventOrNull(ISymbol member)
+    {
+        switch (member)
+        {
+            case IPropertySymbol property when property.ExplicitInterfaceImplementations.Length > 0:
+                return property.ExplicitInterfaceImplementations[0];
+            case IEventSymbol eventSymbol when eventSymbol.ExplicitInterfaceImplementations.Length > 0:
+                return eventSymbol.ExplicitInterfaceImplementations[0];
+            default:
+                return null;
+        }
     }
 
     private static bool ImplementsSameMember(IMethodSymbol compiledMethod, IMethodSymbol sourceMember)
