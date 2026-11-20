@@ -238,14 +238,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// internal, a lambda whose range never reads the Length with the internal getter, and a
         /// lambda whose int argument binds to the public indexer beside an internal Index indexer,
         /// and a lambda whose Index access sits beside an internal indexer taking an array of the
-        /// type parameter, which an Index never converts to, stay patch entries, because the shim
-        /// assembly can run every call they make.
+        /// type parameter, or a key whose only conversion from Index, inherited from its base,
+        /// yields the base key, neither of which an Index converts to, stay patch entries, because
+        /// the shim assembly can run every call they make.
         /// </summary>
         [TestCase("7401", "GetterReadOfInternalSetterInLambda")]
         [TestCase("7411", "SetterWriteOfInternalGetterInLambda")]
         [TestCase("7421", "RangeWithoutLengthInLambda")]
         [TestCase("7691", "IndexWithIntArgumentBesideInternalIndexIndexerInLambda")]
         [TestCase("7771", "IndexBesideInternalGenericArrayKeyIndexerInLambda")]
+        [TestCase("7791", "IndexBesideInternalDerivedKeyIndexerInLambda")]
         public async Task LambdaCallingOnlyPublicAccessors_StaysAnEntry(string token, string methodName)
         {
             TransformWorkerClientResult result = await RunEditedFixtureAsync(token);

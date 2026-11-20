@@ -360,4 +360,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         internal int this[HotReloadUnpassedIndexKey key] => 99;
     }
+
+    /// <summary>
+    /// A base key with an implicit conversion from Index, which yields the base key itself.
+    /// </summary>
+    public class HotReloadUnpassedBaseKey
+    {
+        public static implicit operator HotReloadUnpassedBaseKey(Index index)
+        {
+            return new HotReloadUnpassedBaseKey();
+        }
+    }
+
+    /// <summary>
+    /// A derived key with no conversion of its own. The base key's conversion yields a base key,
+    /// which converts to it only explicitly, so an Index does not convert to it.
+    /// </summary>
+    public sealed class HotReloadUnpassedDerivedKey : HotReloadUnpassedBaseKey
+    {
+    }
+
+    /// <summary>
+    /// An internal indexer that takes the derived key, beside a public Length and int indexer, so an
+    /// Index access calls only the public members.
+    /// </summary>
+    public sealed class HotReloadUnpassedDerivedKeyIndexerHolder
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[HotReloadUnpassedDerivedKey key] => 99;
+    }
 }

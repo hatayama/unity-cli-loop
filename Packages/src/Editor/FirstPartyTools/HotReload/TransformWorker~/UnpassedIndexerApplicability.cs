@@ -87,30 +87,30 @@ internal static class UnpassedIndexerApplicability
                 || named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T);
     }
 
-    // Why the type, its nullable form's underlying type and their base types: those are where the
-    // compiler looks for a user-defined conversion to the parameter type. Why the argument's nullable
-    // form too: a conversion from Index? also takes an Index.
+    // Why only conversions the target type itself declares, returning it: a user-defined conversion
+    // converts to or from the type that declares it, so one inherited from a base type yields the
+    // base type, which converts to the parameter type only explicitly. Why the nullable form's
+    // underlying type: a conversion to T also converts to T?, and one to T? only to T?. Why the
+    // argument's nullable form too: a conversion from Index? also takes an Index.
     private static bool DeclaresImplicitConversionFrom(ITypeSymbol parameterType, ITypeSymbol argumentType)
     {
-        ITypeSymbol target = parameterType is INamedTypeSymbol nullable
-            && nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
-                ? nullable.TypeArguments[0]
-                : parameterType;
+        bool isNullable = parameterType is INamedTypeSymbol nullable
+            && nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+        ITypeSymbol target = isNullable ? ((INamedTypeSymbol)parameterType).TypeArguments[0] : parameterType;
+        string targetName = target.ToDisplayString();
         string argumentName = argumentType.ToDisplayString();
-        for (ITypeSymbol type = target; type != null; type = type.BaseType)
-        {
-            bool declares = type.GetMembers(WellKnownMemberNames.ImplicitConversionName)
-                .OfType<IMethodSymbol>()
-                .Any(conversion => conversion.Parameters.Length == 1
-                    && (conversion.Parameters[0].Type.ToDisplayString() == argumentName
-                        || conversion.Parameters[0].Type.ToDisplayString() == argumentName + "?"));
-            if (declares)
-            {
-                return true;
-            }
-        }
+        return target.GetMembers(WellKnownMemberNames.ImplicitConversionName)
+            .OfType<IMethodSymbol>()
+            .Any(conversion => conversion.Parameters.Length == 1
+                && IsTypeOrItsNullableForm(conversion.Parameters[0].Type, argumentName)
+                && (conversion.ReturnType.ToDisplayString() == targetName
+                    || isNullable && conversion.ReturnType.ToDisplayString() == targetName + "?"));
+    }
 
-        return false;
+    private static bool IsTypeOrItsNullableForm(ITypeSymbol type, string name)
+    {
+        string displayed = type.ToDisplayString();
+        return displayed == name || displayed == name + "?";
     }
 
     // A type parameter of the declaring type, or of a type containing it, becomes the matching type
