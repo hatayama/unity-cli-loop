@@ -82,9 +82,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// Public class with internal constructors taking a BCL twin type or its oracle type.
-    /// </summary>
-    /// <summary>
     /// Public class whose public overload takes any value while a private overload takes Memory. Code
     /// outside the class can call only the public one; a shim compiled against a copy with every
     /// member public would pick the private one.
@@ -135,6 +132,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
+    /// <summary>
+    /// Public class with internal constructors taking a BCL twin type or its oracle type.
+    /// </summary>
     public sealed class HotReloadBclTwinBox
     {
         public int Length;
