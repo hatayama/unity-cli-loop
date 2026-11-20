@@ -75,11 +75,19 @@ internal static class UnpassedInternalAccessorLookup
             semanticModel);
     }
 
+    // The members whose getter a construct calls without naming it: an awaiter's IsCompleted, and
+    // the Length, Count and indexer of an Index or Range access. Why not any name: a property named
+    // like a method the construct calls, such as GetAwaiter, is not what the compiler calls, and the
+    // error it raises stays the shim compile's to report.
+    private static readonly HashSet<string> ImplicitlyReadPropertyNames =
+        new HashSet<string>(StringComparer.Ordinal) { "IsCompleted", "Length", "Count", WellKnownMemberNames.Indexer };
+
     /// <summary>
     /// The internal getter of a public or protected property or indexer named
     /// <paramref name="memberName"/> of <paramref name="start"/> or a base type, as the target
-    /// assembly declares it, or null. A call the compiler generates for an Index or Range access
-    /// reads Length, Count or the indexer through it.
+    /// assembly declares it, or null, also for a name the compiler never reads implicitly. An await
+    /// reads an awaiter's IsCompleted through it, and an Index or Range access Length, Count or the
+    /// indexer.
     /// </summary>
     internal static IMethodSymbol FindInternalGetterOrNull(
         INamedTypeSymbol start,
@@ -87,6 +95,11 @@ internal static class UnpassedInternalAccessorLookup
         SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
+        if (!ImplicitlyReadPropertyNames.Contains(memberName))
+        {
+            return null;
+        }
+
         foreach (INamedTypeSymbol type in UnpassedInternalMemberUse.EnumerateUnpassedCompiledTypes(start, semanticModel, targetAssembly))
         {
             foreach (IPropertySymbol property in type.GetMembers(memberName).OfType<IPropertySymbol>())
@@ -197,7 +210,9 @@ internal static class UnpassedInternalAccessorLookup
 
     // Why names and parameter types and not symbols: the target assembly comes from a separate
     // compilation that imports every member, so its properties are other symbols than the one this
-    // body binds to. An indexer overload is told apart by its parameter types.
+    // body binds to. An indexer overload is told apart by its parameter types. Why the bound
+    // member's original definition: the compiled types are generic definitions, so an access through
+    // 'Holder<int>' must be compared as 'Holder<T>.this[T]', not 'this[int]'.
     private static IPropertySymbol FindCompiledPropertyOrNull(
         IPropertySymbol bound,
         SemanticModel semanticModel,
@@ -207,7 +222,7 @@ internal static class UnpassedInternalAccessorLookup
         {
             foreach (IPropertySymbol property in type.GetMembers(bound.Name).OfType<IPropertySymbol>())
             {
-                if (HasTheSameParameterTypes(property, bound))
+                if (HasTheSameParameterTypes(property, bound.OriginalDefinition))
                 {
                     return property;
                 }

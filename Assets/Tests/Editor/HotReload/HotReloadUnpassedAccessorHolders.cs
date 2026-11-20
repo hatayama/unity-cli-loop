@@ -99,6 +99,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// A generic type whose public indexer, keyed by the type parameter, has an internal setter,
+    /// written through a constructed type.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericIndexerInternalSetterHolder<T>
+    {
+        private T _value;
+
+        public T this[T key]
+        {
+            get => _value;
+            internal set => _value = value;
+        }
+    }
+
+    /// <summary>
     /// A public static property whose setter is internal.
     /// </summary>
     public static class HotReloadUnpassedStaticInternalSetterHolder

@@ -202,6 +202,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadUnpassedStaticInternalSetterHolder.Shared;
         }
 
+        public int GenericIndexerSetterWriteInLambda()
+        {
+            Func<int> read = () =>
+            {
+                HotReloadUnpassedGenericIndexerInternalSetterHolder<int> holder = new HotReloadUnpassedGenericIndexerInternalSetterHolder<int>();
+                holder[0] = 7341;
+                return holder[0];
+            };
+            return read();
+        }
+
         public int GetterReadOfInternalSetterInLambda()
         {
             Func<int> read = () => new HotReloadUnpassedInternalSetterHolder().Length + 7401;

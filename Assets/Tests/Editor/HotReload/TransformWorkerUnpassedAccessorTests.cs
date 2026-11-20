@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7281", "IndexFromEndThroughIndexerGetterInLambda", "The getter of 'this[]'")]
         [TestCase("7301", "RangeThroughLengthGetterInLambda", "The getter of 'Length'")]
         [TestCase("7321", "StaticSetterWriteInLambda", "The setter of 'Shared'")]
+        [TestCase("7341", "GenericIndexerSetterWriteInLambda", "The setter of 'this[]'")]
         public async Task LambdaCallingUnpassedInternalAccessor_IsSkippedWithTheInsideClosureReason(
             string token,
             string methodName,
