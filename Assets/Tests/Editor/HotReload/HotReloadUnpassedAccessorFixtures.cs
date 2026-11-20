@@ -465,6 +465,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return read();
         }
 
+        public int IndexThroughInternalGenericConvertedKeyIndexerInLambda()
+        {
+            Func<int> read = () => new HotReloadUnpassedGenericConvertedKeyIndexerHolder<Index>()[^1] + 7801;
+            return read();
+        }
+
         public int RangeThroughConstrainedTypeParameterInLocalFunction()
         {
             static int Read<T>(T holder) where T : HotReloadUnpassedInternalRangeIndexerBase

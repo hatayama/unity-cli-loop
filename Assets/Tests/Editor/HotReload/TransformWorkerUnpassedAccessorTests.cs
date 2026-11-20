@@ -32,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// sends to an internal indexer of such a type, is skipped with the inside-closure reason,
         /// which names that accessor or indexer, and produces no entry. The indexer is found when it
         /// takes the Index or Range itself, the type parameter of a type constructed with it, object,
-        /// or a type with its own implicit conversion from it; when the access is conditional; when a base type or the constraint of a type
+        /// or a type with its own implicit conversion from it, generic ones included; when the
+        /// access is conditional; when a base type or the constraint of a type
         /// parameter declares it; and when the method's own statements make the same call first.
         /// </summary>
         [TestCase("7101", "SetterWriteInLambda", "The setter of 'Length'")]
@@ -66,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("7741", "IndexThroughInternalGenericKeyIndexerInLambda", "'this[]'")]
         [TestCase("7751", "IndexThroughInternalObjectKeyIndexerInLambda", "'this[]'")]
         [TestCase("7781", "IndexThroughInternalConvertedKeyIndexerInLambda", "'this[]'")]
+        [TestCase("7801", "IndexThroughInternalGenericConvertedKeyIndexerInLambda", "'this[]'")]
         [TestCase("7761", "RangeThroughConstrainedTypeParameterInLocalFunction", "'this[]'")]
         public async Task LambdaCallingUnpassedInternalAccessor_IsSkippedWithTheInsideClosureReason(
             string token,

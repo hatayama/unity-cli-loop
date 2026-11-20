@@ -59,7 +59,7 @@ internal static class UnpassedIndexerApplicability
         HashSet<string> acceptedNames)
     {
         ITypeSymbol substituted = SubstituteOrNull(parameterType, constructed);
-        if (substituted == null || DeclaresImplicitConversionFrom(substituted, argumentType))
+        if (substituted == null || DeclaresImplicitConversionFrom(substituted, constructed, argumentType))
         {
             return true;
         }
@@ -91,8 +91,13 @@ internal static class UnpassedIndexerApplicability
     // converts to or from the type that declares it, so one inherited from a base type yields the
     // base type, which converts to the parameter type only explicitly. Why the nullable form's
     // underlying type: a conversion to T also converts to T?, and one to T? only to T?. Why the
-    // argument's nullable form too: a conversion from Index? also takes an Index.
-    private static bool DeclaresImplicitConversionFrom(ITypeSymbol parameterType, ITypeSymbol argumentType)
+    // argument's nullable form too: a conversion from Index? also takes an Index. Why the
+    // conversion's own parameter is substituted as well: a generic key converting from its type
+    // argument takes an Index only once the receiver's type argument is known.
+    private static bool DeclaresImplicitConversionFrom(
+        ITypeSymbol parameterType,
+        INamedTypeSymbol constructed,
+        ITypeSymbol argumentType)
     {
         bool isNullable = parameterType is INamedTypeSymbol nullable
             && nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
@@ -102,9 +107,18 @@ internal static class UnpassedIndexerApplicability
         return target.GetMembers(WellKnownMemberNames.ImplicitConversionName)
             .OfType<IMethodSymbol>()
             .Any(conversion => conversion.Parameters.Length == 1
-                && IsTypeOrItsNullableForm(conversion.Parameters[0].Type, argumentName)
+                && MayConvertFrom(SubstituteOrNull(conversion.Parameters[0].Type, constructed), argumentName)
                 && (conversion.ReturnType.ToDisplayString() == targetName
                     || isNullable && conversion.ReturnType.ToDisplayString() == targetName + "?"));
+    }
+
+    // Why a type still holding a type parameter counts: what it stands for is unknown here, so a
+    // skip rather than a run-time failure follows.
+    private static bool MayConvertFrom(ITypeSymbol conversionSource, string argumentName)
+    {
+        return conversionSource == null
+            || ContainsTypeParameter(conversionSource)
+            || IsTypeOrItsNullableForm(conversionSource, argumentName);
     }
 
     private static bool IsTypeOrItsNullableForm(ITypeSymbol type, string name)

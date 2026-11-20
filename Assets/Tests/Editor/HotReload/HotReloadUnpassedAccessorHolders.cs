@@ -392,4 +392,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         internal int this[HotReloadUnpassedDerivedKey key] => 99;
     }
+
+    /// <summary>
+    /// A generic key that converts implicitly from its type argument.
+    /// </summary>
+    public readonly struct HotReloadUnpassedGenericKey<T>
+    {
+        public HotReloadUnpassedGenericKey(T value)
+        {
+            Value = value;
+        }
+
+        public T Value { get; }
+
+        public static implicit operator HotReloadUnpassedGenericKey<T>(T value)
+        {
+            return new HotReloadUnpassedGenericKey<T>(value);
+        }
+    }
+
+    /// <summary>
+    /// An internal indexer that takes the generic key of the type parameter, beside a public Length
+    /// and int indexer. Constructed with Index, an Index converts to that key, so the compiler calls
+    /// that indexer.
+    /// </summary>
+    public sealed class HotReloadUnpassedGenericConvertedKeyIndexerHolder<T>
+    {
+        public int Length => 4;
+
+        public int this[int index] => index;
+
+        internal int this[HotReloadUnpassedGenericKey<T> key] => 99;
+    }
 }
