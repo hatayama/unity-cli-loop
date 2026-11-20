@@ -82,6 +82,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public class whose public overload takes any value while a private overload takes Memory. Code
+    /// outside the class can call only the public one; a shim compiled against a copy with every
+    /// member public would pick the private one.
+    /// </summary>
+    public static class HotReloadBclTwinOverloads
+    {
+        public static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(Memory<int> memory)
+        {
+            return memory.Length;
+        }
+    }
+
+    /// <summary>
+    /// Public class with a public constructor taking any value and a private one taking Memory, for
+    /// the same reason as HotReloadBclTwinOverloads.
+    /// </summary>
+    public sealed class HotReloadBclTwinOverloadedBox
+    {
+        public HotReloadBclTwinOverloadedBox(object value)
+        {
+            Value = 1;
+        }
+
+        private HotReloadBclTwinOverloadedBox(Memory<int> memory)
+        {
+            Value = memory.Length;
+        }
+
+        public int Value { get; }
+    }
+
+    /// <summary>
+    /// Value type with an instance method taking Memory, held by an added field whose store returns a
+    /// copy, so a call on the field would lose its write.
+    /// </summary>
+    public struct HotReloadBclTwinCounter
+    {
+        public int Total;
+
+        public void Add(Memory<int> values)
+        {
+            Total += values.Length;
+        }
+    }
+
+    /// <summary>
     /// Public class with internal constructors taking a BCL twin type or its oracle type.
     /// </summary>
     public sealed class HotReloadBclTwinBox
@@ -165,6 +216,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private int PrivateSpanLength(ReadOnlySpan<int> span)
         {
             return span.Length;
+        }
+
+        private int PrivateMemoryLength(Memory<int> memory)
+        {
+            return memory.Length;
+        }
+
+        private int PrivateSegmentLength(ArraySegment<int> segment)
+        {
+            return segment.Count;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -451,6 +512,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ClosureCallsInternalParamsMethodWithOneArraySegment()
         {
             Func<int> read = () => HotReloadBclTwinTargets.ParamsSegmentLength(new ArraySegment<int>(_ints)) + 6381;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsPrivateMethodGroupTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = PrivateMemoryLength;
+                return length(new Memory<int>(_ints)) + 6761;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsPrivateMethodGroupTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = PrivateSegmentLength;
+                return length(new ArraySegment<int>(_ints)) + 6771;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsOnlyPrivateMethodGroupTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = PrivateMemoryLength;
+                return length(default) + 6821;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsOnlyPrivateMethodGroupTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = PrivateSegmentLength;
+                return length(default) + 6831;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsInternalStaticMethodGroupTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = HotReloadBclTwinTargets.MemoryLength;
+                return length(new Memory<int>(_ints)) + 6801;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureConvertsInternalStaticMethodGroupTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = HotReloadBclTwinTargets.SegmentLength;
+                return length(new ArraySegment<int>(_ints)) + 6811;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int UsesAddedMemberInOwnStatements()
+        {
+            return 6901;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int UsesAddedMemberInLambda()
+        {
+            Func<int> read = () => 6911;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> UsesAddedMemberInAsync()
+        {
+            await Task.Yield();
+            return 6921;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeclaresDelegateTakingMemory()
+        {
+            Func<int> read = () =>
+            {
+                Func<Memory<int>, int> length = memory => memory.Length;
+                return length(new Memory<int>(_ints)) + 6781;
+            };
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureDeclaresDelegateTakingArraySegment()
+        {
+            Func<int> read = () =>
+            {
+                Func<ArraySegment<int>, int> length = segment => segment.Count;
+                return length(new ArraySegment<int>(_ints)) + 6791;
+            };
             return read();
         }
     }

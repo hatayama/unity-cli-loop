@@ -254,21 +254,23 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        // Why the bound symbol: a method group converted to a delegate type over a BCL type a
+        // referenced assembly also declares internally ('Func<Memory<int>, int> f = M;') binds to
+        // no symbol when accessibility is ignored, and a private method would be let through.
+        ISymbol symbol = AccessibilityRules.BoundSymbolOrNull(semanticModel, name);
+
         // Method-group invocation targets are owned by the invocation branch; delegate-typed
         // field invokes (`_cb()`) register as field reads here.
         if (name.Parent is InvocationExpressionSyntax parentInvocation
-            && parentInvocation.Expression == name)
+            && parentInvocation.Expression == name
+            && symbol is IMethodSymbol)
         {
-            ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
-            if (invocationTarget is IMethodSymbol)
-            {
-                return false;
-            }
+            return false;
         }
 
         return TryRegisterUseOutsideAssignment(
             name,
-            semanticModel.GetSymbolInfo(name).Symbol,
+            symbol,
             plan,
             addedMemberAccess,
             out rejectReason);

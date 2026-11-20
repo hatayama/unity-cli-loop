@@ -136,6 +136,11 @@ internal static class AddedFieldSkipEvaluator
                 return true;
             }
 
+            if (LeavesHiddenCandidateUnbound(semanticModel, node))
+            {
+                return true;
+            }
+
             // Asked before the element's own kind is decided: an element that is itself a creation
             // still reaches the collection through this Add.
             if (HasUnreachableCollectionAdd(node, semanticModel, home))
@@ -156,12 +161,40 @@ internal static class AddedFieldSkipEvaluator
                 continue;
             }
 
+            // Why bound: a call passing a BCL twin type binds to nothing with accessibility ignored,
+            // and a non-public method it calls would be let through.
             if (HasDisallowedInitializerSymbol(
-                semanticModel.GetSymbolInfo(node).Symbol,
+                AccessibilityRules.BoundSymbolOrNull(semanticModel, node),
                 hostType,
                 home,
                 semanticModel,
                 sourceUnit))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Why fail closed: a call or construction passing a BCL type a referenced assembly also declares
+    // internally (Memory<int>) binds to nothing with accessibility ignored, and the enforcing
+    // binding the checks below fall back to sees only the overloads code outside their type can
+    // call. The shim compiles against a copy where every member is public, so a private overload of
+    // the edited assembly among the candidates could win there and throw on the field's first read.
+    // Why only the edited assembly: the shim sees every member public only in that assembly.
+    private static bool LeavesHiddenCandidateUnbound(SemanticModel semanticModel, SyntaxNode node)
+    {
+        SymbolInfo info = semanticModel.GetSymbolInfo(node);
+        if (info.Symbol != null)
+        {
+            return false;
+        }
+
+        foreach (ISymbol candidate in info.CandidateSymbols)
+        {
+            if (SymbolEqualityComparer.Default.Equals(candidate.ContainingAssembly, semanticModel.Compilation.Assembly)
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(candidate))
             {
                 return true;
             }
@@ -184,7 +217,10 @@ internal static class AddedFieldSkipEvaluator
         // surface and binds, so it has to be refused by name. An internal or private one leaves no
         // symbol, and the candidate reported instead can be a public overload the arguments do not
         // fit, while the shim's binding sees the hidden one and would fail on the field's first read.
-        IMethodSymbol constructor = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
+        // Why resolved: 'new Memory<int>(array)' binds to nothing with accessibility ignored,
+        // because a referenced assembly carries an internal copy of Memory<T>; the enforcing
+        // binding resolves the BCL constructor and still leaves a hidden one unbound.
+        IMethodSymbol constructor = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, creation) as IMethodSymbol;
         INamedTypeSymbol constructedType = constructor?.ContainingType;
         if (constructedType == null
             || constructedType.ContainingAssembly == null

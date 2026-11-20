@@ -109,7 +109,9 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
+            // Why resolved: see AddedMethodCallResolver; an unbound call to a skipped added method
+            // would otherwise be let through.
+            ISymbol symbol = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation);
             if (symbol is not IMethodSymbol methodSymbol)
             {
                 continue;
@@ -227,7 +229,9 @@ internal static class AddedCallSiteGuard
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog)
     {
-        if (semanticModel.GetSymbolInfo(expression).Symbol is IMethodSymbol methodSymbol
+        // Why resolved: a method group converted to a delegate over a BCL twin type
+        // ('Func<Memory<int>, int> f = AddedM;') binds to nothing with accessibility ignored.
+        if (AccessibilityRules.ResolvedSymbolOrNull(semanticModel, expression) is IMethodSymbol methodSymbol
             && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
         {
             return methodSymbol;

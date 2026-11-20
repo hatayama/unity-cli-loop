@@ -85,6 +85,18 @@ internal static class AccessibilityRules
     }
 
     /// <summary>
+    /// What: the symbol the node binds to, binding again with accessibility enforced when the
+    /// accessibility-ignoring binding leaves it unbound (see BoundSymbolOrNull for why that
+    /// happens). Unlike BoundSymbolOrNull it never stands a compiled twin in for the call, so the
+    /// result is the member the edited source names, which is what deciding a rewrite needs.
+    /// </summary>
+    internal static ISymbol ResolvedSymbolOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        return semanticModel.GetSymbolInfo(node).Symbol
+            ?? EnforcingModel(semanticModel).GetSymbolInfo(node).Symbol;
+    }
+
+    /// <summary>
     /// What: the semantic model of the same tree that binds with accessibility enforced. Asked only
     /// for a node the accessibility-ignoring binding left unbound; see BoundSymbolOrNull for why.
     /// </summary>
