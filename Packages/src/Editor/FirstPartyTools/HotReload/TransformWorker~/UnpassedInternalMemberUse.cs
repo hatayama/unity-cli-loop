@@ -72,9 +72,11 @@ internal sealed class UnpassedInternalMemberUse
     internal bool MayRunOutsideThePatchedMethod { get; }
 
     /// <summary>
-    /// True when the lookup of a bare name failed (CS0103), such as an inherited member named
-    /// without 'this.'. Not a member name of an object initializer or a property pattern, which has
-    /// no receiver either but is looked up on the type being created or matched.
+    /// True when the use names the member by its bare name, such as an inherited member named
+    /// without 'this.': a failed bare-name lookup (CS0103), or a bare-name use of a property whose
+    /// accessor is internal (CS0200, CS0154). Not a member name of an object or with initializer or
+    /// a property pattern, which has no receiver either but is looked up on the value being created
+    /// or matched.
     /// </summary>
     internal bool IsSimpleNameLookup { get; }
 
