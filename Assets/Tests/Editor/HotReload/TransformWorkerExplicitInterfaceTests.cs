@@ -139,6 +139,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an explicit implementation whose interface a retargeted using alias moves to another
+        /// interface is still reported as a removed member when the edit also respells it, because
+        /// the old spelling is bound where it was written, not where the new one stands.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitImplementationRetargetedByAliasAndRespelled_StillReportsRemovedMember()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitRetargetedInterface.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        source,
+                        "HotReloadExplicitRetargetedInterface = " + Namespace + ".IHotReloadExplicitA;",
+                        "HotReloadExplicitRetargetedInterface = " + Namespace + ".IHotReloadExplicitB;"),
+                    "int HotReloadExplicitRetargetedInterface.Run()",
+                    "int global::" + Namespace + ".IHotReloadExplicitB.Run()"));
+
+            Assert.That(RemovedMemberLabels(result), Does.Contain("method:Run"));
+        }
+
+        /// <summary>
+        /// What: an explicit implementation that a retargeted using alias moves to another overload of
+        /// the same interface is still reported as a removed member when the edit also respells the
+        /// interface, because the old argument type is bound where it was written.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitImplementationMovedToAnotherOverloadAndRespelled_StillReportsRemovedMember()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitRetargetedOverload.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        source,
+                        "HotReloadExplicitRetargetedArgument = " + Namespace + ".HotReloadExplicitArgA;",
+                        "HotReloadExplicitRetargetedArgument = " + Namespace + ".HotReloadExplicitArgB;"),
+                    "int IHotReloadExplicitOverloaded.Take(",
+                    "int global::" + Namespace + ".IHotReloadExplicitOverloaded.Take("));
+
+            Assert.That(RemovedMemberLabels(result), Does.Contain("method:Take"));
+        }
+
+        /// <summary>
+        /// What: an explicit property moved to another interface that declares a property of the same
+        /// name is still reported as a removed compiled property, because the source implements a
+        /// member of another interface.
+        /// </summary>
+        [Test]
+        public async Task Run_ExplicitPropertyMovedToAnotherInterface_ReportsTheCompiledPropertyRemoved()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedFixtureAsync(
+                "ExplicitPropertyMovedInterface.cs",
+                source => ReplaceUniqueFragment(
+                    ReplaceUniqueFragment(
+                        source,
+                        "public class HotReloadExplicitArrowValueFixture : IHotReloadExplicitArrowValue",
+                        "public class HotReloadExplicitArrowValueFixture : IHotReloadExplicitValue"),
+                    "int IHotReloadExplicitArrowValue.Value => 8203;",
+                    "int IHotReloadExplicitValue.Value { get => 8203; set { } }"));
+
+            Assert.That(
+                result.Output.files.SelectMany(file => file.declarationDriftWarnings ?? Array.Empty<string>()),
+                Has.Some.Contains("IHotReloadExplicitArrowValue.Value' was removed"));
+        }
+
+        /// <summary>
         /// What: an explicit indexer and an explicit event whose edits only respell the interface with
         /// global:: are not reported as edits outside method bodies or as removed members.
         /// </summary>
