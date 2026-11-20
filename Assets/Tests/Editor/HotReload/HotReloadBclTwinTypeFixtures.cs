@@ -531,6 +531,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int UsesAddedMemberInOwnStatements()
+        {
+            return 6901;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int UsesAddedMemberInLambda()
+        {
+            Func<int> read = () => 6911;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public async Task<int> UsesAddedMemberInAsync()
+        {
+            await Task.Yield();
+            return 6921;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureDeclaresDelegateTakingMemory()
         {
             Func<int> read = () =>

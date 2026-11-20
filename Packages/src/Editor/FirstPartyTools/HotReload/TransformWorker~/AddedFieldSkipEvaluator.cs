@@ -156,8 +156,10 @@ internal static class AddedFieldSkipEvaluator
                 continue;
             }
 
+            // Why bound: a call passing a BCL twin type binds to nothing with accessibility ignored,
+            // and a non-public method it calls would be let through.
             if (HasDisallowedInitializerSymbol(
-                semanticModel.GetSymbolInfo(node).Symbol,
+                AccessibilityRules.BoundSymbolOrNull(semanticModel, node),
                 hostType,
                 home,
                 semanticModel,
@@ -184,7 +186,10 @@ internal static class AddedFieldSkipEvaluator
         // surface and binds, so it has to be refused by name. An internal or private one leaves no
         // symbol, and the candidate reported instead can be a public overload the arguments do not
         // fit, while the shim's binding sees the hidden one and would fail on the field's first read.
-        IMethodSymbol constructor = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
+        // Why resolved: 'new Memory<int>(array)' binds to nothing with accessibility ignored,
+        // because a referenced assembly carries an internal copy of Memory<T>; the enforcing
+        // binding resolves the BCL constructor and still leaves a hidden one unbound.
+        IMethodSymbol constructor = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, creation) as IMethodSymbol;
         INamedTypeSymbol constructedType = constructor?.ContainingType;
         if (constructedType == null
             || constructedType.ContainingAssembly == null

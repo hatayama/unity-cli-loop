@@ -31,7 +31,10 @@ internal static class AddedMethodCallResolver
         Debug.Assert(semanticModel != null, "semanticModel");
         Debug.Assert(catalog != null, "catalog");
 
-        IMethodSymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        // Why resolved: a call passing a BCL type a referenced assembly also declares internally
+        // (Memory<int>, ReadOnlySpan<int>) binds to nothing with accessibility ignored, and the
+        // call to the added method would reach the shim unrewritten.
+        IMethodSymbol symbol = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation) as IMethodSymbol;
         if (symbol != null)
         {
             if (symbol.MethodKind != MethodKind.Ordinary)
