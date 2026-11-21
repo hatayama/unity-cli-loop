@@ -179,9 +179,11 @@ internal static class HiddenMemberPickGuard
     private static ExpressionSyntax ReceiverExpressionOrNull(SyntaxNode node)
     {
         SyntaxNode callee = node is InvocationExpressionSyntax invocation ? invocation.Expression : node;
-        if (callee is SimpleNameSyntax name && name.Parent is MemberAccessExpressionSyntax nameAccess && nameAccess.Name == name)
+        if (callee is SimpleNameSyntax name
+            && ((name.Parent is MemberAccessExpressionSyntax nameAccess && nameAccess.Name == name)
+                || (name.Parent is MemberBindingExpressionSyntax nameBinding && nameBinding.Name == name)))
         {
-            callee = nameAccess;
+            callee = name.Parent;
         }
 
         switch (callee)
@@ -190,9 +192,28 @@ internal static class HiddenMemberPickGuard
                 return access.Expression;
             case ElementAccessExpressionSyntax elementAccess:
                 return elementAccess.Expression;
+            case MemberBindingExpressionSyntax:
+            case ElementBindingExpressionSyntax:
+                return ConditionalReceiverOrNull(callee);
             default:
                 return null;
         }
+    }
+
+    // Why the nearest conditional access whose tail holds the binding: in 'a?.b?.c' the '.c' binds
+    // to the value of '.b', and '.b', which sits in the inner access's head, binds to 'a'.
+    private static ExpressionSyntax ConditionalReceiverOrNull(SyntaxNode binding)
+    {
+        for (SyntaxNode current = binding.Parent; current != null; current = current.Parent)
+        {
+            if (current is ConditionalAccessExpressionSyntax conditional
+                && conditional.WhenNotNull.Span.Contains(binding.Span))
+            {
+                return conditional.Expression;
+            }
+        }
+
+        return null;
     }
 
     private static bool IsReachableFromTheWholeAssembly(ISymbol symbol)

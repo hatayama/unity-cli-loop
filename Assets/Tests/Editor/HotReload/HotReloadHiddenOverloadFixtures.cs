@@ -85,6 +85,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public class whose public overload takes a delegate returning any value while private generic
+    /// ones take a delegate or a value of a type parameter; the Memory argument leaves the call
+    /// unresolved when every member is public.
+    /// </summary>
+    public static class HotReloadHiddenGenericOverloads
+    {
+        public static int Run(Func<object> producer, object second)
+        {
+            return 1;
+        }
+
+        private static int Run<T>(Func<T> producer, Memory<int> second)
+        {
+            return 2;
+        }
+
+        public static int Take(object first, object second)
+        {
+            return 1;
+        }
+
+        private static int Take<T>(T first, Memory<int> second)
+        {
+            return 2;
+        }
+    }
+
+    /// <summary>
     /// Public class whose indexers return a delegate: a public one taking any key and a private one
     /// taking Memory, so the indexer access is itself the callee of an invocation.
     /// </summary>
@@ -216,6 +244,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return memory.Length;
         }
+
+        public int this[object key] => 1;
+
+        protected int this[Memory<int> key] => key.Length;
     }
 
     /// <summary>

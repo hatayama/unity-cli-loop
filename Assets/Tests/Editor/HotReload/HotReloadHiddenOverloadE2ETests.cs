@@ -91,6 +91,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("ctor-derived-own", "return new HotReloadProtectedConstructorBase(new ArraySegment<int>(new int[2])).Value + 7072;")]
         [TestCase("own", "return HotReloadHiddenConstantOverloads.Pick(1, new Memory<int>(_ints)) + 7002;")]
         [TestCase("own", "return new HotReloadHiddenDelegateIndexed()[new Memory<int>(_ints)](\"text\") + 7002;")]
+        [TestCase("own", "return HotReloadHiddenGenericOverloads.Run(() => 1, new Memory<int>(_ints)) + 7002;")]
+        [TestCase("own", "return HotReloadHiddenGenericOverloads.Take(\"text\", new Memory<int>(_ints)) + 7002;")]
+        [TestCase("derived-own", "HotReloadProtectedOverloadBase other = new HotReloadProtectedOverloadBase(); return other?.Pick(new Memory<int>(new int[2])) + 7052 ?? 0;")]
+        [TestCase("derived-own", "HotReloadProtectedOverloadBase other = new HotReloadProtectedOverloadBase(); return other[new Memory<int>(new int[2])] + 7052;")]
+        [TestCase("derived-own", "HotReloadProtectedOverloadBase other = new HotReloadProtectedOverloadBase(); return other?[new Memory<int>(new int[2])] + 7052 ?? 0;")]
         [TestCase("own", "return HotReloadHiddenNullOverloads.Pick(null) + 7002;")]
         public async Task Run_UseThePatchWouldResolveToAPrivateMember_IsSkippedAndKeepsTheCompiledValue(
             string site,
@@ -153,6 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("derived-lambda", "return this.Pick(new ArraySegment<int>(new int[2])) + 7062;", 7064)]
         [TestCase("derived-own", "return base.Pick(new ArraySegment<int>(new int[2])) + 7052;", 7054)]
         [TestCase("derived-own", "return Pick(new Memory<int>(new int[2])) + 7052;", 7054)]
+        [TestCase("derived-own", "return this[new Memory<int>(new int[2])] + 7052;", 7054)]
         [TestCase("ctor-base-own", "return new HotReloadProtectedConstructorBase(new ArraySegment<int>(new int[2])).Value + 7082;", 7084)]
         [TestCase("lambda", "return HotReloadHiddenOverloads.Pick(\"text\") + 7012;", 7013)]
         [TestCase("own", "return _ints.Length.Choose(\"text\") + 7002;", 7003)]
