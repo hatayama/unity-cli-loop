@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        internal static int AddedMemoryPlus(this Memory<int> memory, int add) { return memory.Length + add + 1000; }\n"
             + "        internal static int AddedRefRead(this ref HotReloadExtensionCallPoint value, int add) { return value.X + add + 1000; }\n"
             + "        internal static int AddedLengthPlus(this string value, int add) { return value.Length + add + 1000; }\n"
+            + "        internal static T AddedDefault<T>(this string value) { return default(T); }\n"
             + "        internal static int AddedSkipped(this int value, int add) { Func<int> f = () => GenericEcho<int>(value, add); return f() + 1000; }\n\n";
 
         private const string NonPublicFixtureFileName = "HotReloadNonPublicClassExtensionCallFixtures.cs";
@@ -86,6 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(method group on a receiver)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "string a = _label; Func<int, int> f = a.AddedLengthPlus; return f(7401);", 7410, "(such as 'b => a.AddedLengthPlus(b)')")
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(method group on a receiver named like a lambda parameter)");
+            yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "Func<int> f = _label.AddedDefault<int>; return f() + 7401;", 7410, "(such as '() => _label.AddedDefault<int>()')")
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic method group on a receiver)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return _value.AddedSkipped(7401);", 7410, "AddedSkipped(int, int)', which this reload skipped")
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(skipped callee on a receiver)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return HotReloadPublicClassInternalExtensions.AddedSkipped(_value, 7401);", 7410, "AddedSkipped(int, int)', which this reload skipped")

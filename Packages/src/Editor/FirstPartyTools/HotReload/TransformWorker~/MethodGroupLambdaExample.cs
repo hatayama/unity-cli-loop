@@ -22,18 +22,21 @@ internal static class MethodGroupLambdaExample
 
     /// <summary>
     /// The same suffix for an extension method named on a receiver ('value.M'), whose lambda calls
-    /// it on that receiver ('a => value.M(a)'), with parameter names the receiver does not use.
+    /// it on that receiver as the group names it ('a => value.M(a)', type arguments included), with
+    /// parameter names the group does not use.
     /// </summary>
     // Why the receiver: the delegate takes only the parameters after it, so a lambda calling the
     // method by name alone ('a => M(a)') would not convert to the delegate the group did.
-    // Why skip the receiver's names: a parameter named like the receiver ('a => a.M(a)') would
+    // Why the group's own text: explicit type arguments ('value.M<int>') may be the only source of
+    // a type parameter, and a call without them would not compile.
+    // Why skip the group's names: a parameter named like the receiver ('a => a.M(a)') would
     // shadow it, and the example would not compile.
-    internal static string BuildSuffixOnReceiver(IMethodSymbol reducedMethod, ExpressionSyntax receiver)
+    internal static string BuildSuffixOnReceiver(IMethodSymbol reducedMethod, MemberAccessExpressionSyntax methodGroup)
     {
-        HashSet<string> receiverNames = new HashSet<string>(
-            receiver.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Select(name => name.Identifier.ValueText),
+        HashSet<string> groupNames = new HashSet<string>(
+            methodGroup.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Select(name => name.Identifier.ValueText),
             StringComparer.Ordinal);
-        return BuildSuffixCalling(reducedMethod, receiver + "." + reducedMethod.Name, receiverNames);
+        return BuildSuffixCalling(reducedMethod, methodGroup.ToString(), groupNames);
     }
 
     private static string BuildSuffixCalling(IMethodSymbol method, string callee, HashSet<string> reservedNames)
