@@ -50,6 +50,14 @@ internal static class MethodTransformDecider
             return MethodTransformDecision.Skip(WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformNoBody));
         }
 
+        // Why before the shape decision: the patch resolves the member differently in its own
+        // statements too, where no accessor rewrite is asked, and a closure would throw for it.
+        WorkerReason hiddenMemberSkip = HiddenMemberPickGuard.DescribeSkipOrNull(semanticModel, bodyNode);
+        if (hiddenMemberSkip != null)
+        {
+            return MethodTransformDecision.Skip(hiddenMemberSkip);
+        }
+
         WorkerReason baseCallSkip = BaseCallRules.EvaluateSkipReason(
             methodDeclaration,
             typeSymbol,
