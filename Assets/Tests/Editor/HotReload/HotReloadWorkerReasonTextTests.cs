@@ -309,11 +309,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember,
-                new[] { "Targets.Pick(ArraySegment<int>)", "Targets.Pick(object)" },
-                "Unity's compiler uses 'Targets.Pick(object)' here, but the patch could use "
-                + "'Targets.Pick(ArraySegment<int>)' instead: the patch is compiled against a copy of the "
-                + "assembly where every member is public, so 'Targets.Pick(ArraySegment<int>)', which this "
-                + "code cannot reach, takes part in choosing the member. Run 'uloop compile'.");
+                new[] { "Targets.Pick(ArraySegment<int>)" },
+                "The patch could use 'Targets.Pick(ArraySegment<int>)' here instead of the member Unity's "
+                + "compiler uses: the patch is compiled against a copy of the assembly where every member is "
+                + "public, so 'Targets.Pick(ArraySegment<int>)', which this code cannot reach, takes part in "
+                + "choosing the member. Run 'uloop compile'.");
             yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 NoArgs,

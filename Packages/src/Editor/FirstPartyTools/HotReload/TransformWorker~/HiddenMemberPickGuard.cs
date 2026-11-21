@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -15,9 +16,8 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 internal static class HiddenMemberPickGuard
 {
     /// <summary>
-    /// What: the skip reason for the first use in the body whose member the patch could resolve to a
-    /// member the code there cannot reach, naming that member and the one Unity's compiler resolves,
-    /// or null when every use resolves alike.
+    /// What: the skip reason for the first use in the body that the patch could resolve to a member
+    /// the code there cannot reach, naming that member, or null when every use resolves alike.
     /// </summary>
     internal static WorkerReason DescribeSkipOrNull(SemanticModel semanticModel, SyntaxNode bodyNode)
     {
@@ -36,13 +36,10 @@ internal static class HiddenMemberPickGuard
             }
 
             enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
-            ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info, out ISymbol resolved);
+            ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info);
             if (hidden != null)
             {
-                return WorkerReason.Of(
-                    HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember,
-                    Display(hidden),
-                    Display(resolved));
+                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember, Display(hidden));
             }
         }
 
@@ -50,45 +47,47 @@ internal static class HiddenMemberPickGuard
     }
 
     // Why two cases: when the binding that ignores accessibility resolves a member, the patch's
-    // compile resolves the same one, so a member the code cannot reach is a different pick from
-    // Unity's. When it resolves nothing (a referenced assembly also declares Memory<T> internally,
-    // so the argument's type is ambiguous there), the patch's pick is unknown, and any candidate the
-    // code cannot reach other than Unity's pick could be it, so the body fails closed.
-    // Why nothing when Unity's binding resolves nothing: the edited source does not compile there,
-    // which other checks report.
+    // compile resolves the same one, and Unity's compiler cannot pick a member the code cannot reach,
+    // so the two differ even when Unity's pick is unknown here. When it resolves nothing (a referenced
+    // assembly also declares Memory<T> internally, or both copies of a static class offer the method),
+    // the patch's pick is unknown, and any candidate the code cannot reach that the arguments may fit,
+    // other than Unity's pick, could be it, so the body fails closed.
+    // Why Unity's pick is still asked for: a member found unreachable that Unity's compiler resolves too
+    // is reachable after all, and comparing keeps such a body patched.
     private static ISymbol FindHiddenPickOrNull(
         SemanticModel semanticModel,
         SemanticModel enforcingModel,
         SyntaxNode node,
-        SymbolInfo info,
-        out ISymbol resolved)
+        SymbolInfo info)
     {
-        resolved = null;
         if (info.Symbol != null)
         {
-            if (!IsHiddenAt(enforcingModel, node, info.Symbol))
+            if (!IsHiddenAt(semanticModel, node, info.Symbol))
             {
                 return null;
             }
 
-            resolved = ResolvedByUnityOrNull(semanticModel, enforcingModel, node);
-            return resolved != null && !IsSameMember(info.Symbol, resolved) ? info.Symbol : null;
+            ISymbol resolved = ResolvedByUnityOrNull(semanticModel, enforcingModel, node);
+            return resolved != null && IsSameMember(info.Symbol, resolved) ? null : info.Symbol;
         }
 
+        ISymbol unityPick = null;
+        bool unityPickAsked = false;
         foreach (ISymbol candidate in info.CandidateSymbols)
         {
-            if (!IsHiddenAt(enforcingModel, node, candidate))
+            if (!IsHiddenAt(semanticModel, node, candidate)
+                || !HiddenCandidateApplicability.MayApply(enforcingModel, node, candidate))
             {
                 continue;
             }
 
-            resolved = resolved ?? ResolvedByUnityOrNull(semanticModel, enforcingModel, node);
-            if (resolved == null)
+            if (!unityPickAsked)
             {
-                return null;
+                unityPick = ResolvedByUnityOrNull(semanticModel, enforcingModel, node);
+                unityPickAsked = true;
             }
 
-            if (!IsSameMember(candidate, resolved))
+            if (unityPick == null || !IsSameMember(candidate, unityPick))
             {
                 return candidate;
             }
@@ -99,7 +98,8 @@ internal static class HiddenMemberPickGuard
 
     // Why the edited copy when the binding fails: the compiled assembly is referenced beside the edited
     // source, so an extension method of a public static class comes from both copies and a call to it
-    // fails here between the two, while Unity's compile has only the edited one.
+    // fails here between the two, while Unity's compile has only the edited one. Null when more than one
+    // edited overload is left, since which of them Unity's compiler picks is not known here.
     private static ISymbol ResolvedByUnityOrNull(
         SemanticModel semanticModel,
         SemanticModel enforcingModel,
@@ -132,16 +132,45 @@ internal static class HiddenMemberPickGuard
         return editedCopy;
     }
 
-    // Why no check that the member is declared in the edited assembly, although only that assembly is
-    // compiled with every member public: the binding imports no private or internal member of another
-    // assembly, so such a member never reaches here.
+    // Why only members of the edited source: this compilation is another assembly than the compiled one
+    // it references, so a member of the compiled assembly that code in it may reach (internal, private
+    // protected) looks unreachable here, and the reachability of such a member cannot be told.
     // Why the declared accessibility first: a member every type of the assembly may reach, a local or a
-    // parameter resolves alike in both compiles, and asking the enforcing binding about it costs a
-    // binder per use.
-    private static bool IsHiddenAt(SemanticModel enforcingModel, SyntaxNode node, ISymbol symbol)
+    // parameter resolves alike in both compiles, and the accessibility check below asks for a binder.
+    // Why the receiver's type: a protected instance member is reachable only through the code's own
+    // type or a type derived from it, so a derived type cannot call it on a value typed as the base.
+    private static bool IsHiddenAt(SemanticModel semanticModel, SyntaxNode node, ISymbol symbol)
     {
-        return !IsReachableFromTheWholeAssembly(symbol)
-            && !enforcingModel.IsAccessible(node.SpanStart, symbol);
+        if (!SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, semanticModel.Compilation.Assembly)
+            || IsReachableFromTheWholeAssembly(symbol))
+        {
+            return false;
+        }
+
+        ISymbol enclosing = semanticModel.GetEnclosingSymbol(node.SpanStart);
+        INamedTypeSymbol enclosingType = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType;
+        if (enclosingType == null)
+        {
+            return false;
+        }
+
+        ISymbol member = symbol is IMethodSymbol method ? AccessibilityRules.UnreducedMethod(method) : symbol;
+        return !semanticModel.Compilation.IsSymbolAccessibleWithin(
+            member,
+            enclosingType,
+            FindReceiverTypeOrNull(semanticModel, node));
+    }
+
+    // Why base needs no exception, though C# lets a derived type reach a protected member through it
+    // and this query is not told so: Unity's compiler resolves the same member there, and the caller
+    // keeps a body whose member both bindings resolve alike.
+    private static ITypeSymbol FindReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        IOperation operation = semanticModel.GetOperation(node);
+        IOperation instance = operation is IInvocationOperation invocation
+            ? invocation.Instance
+            : (operation as IMemberReferenceOperation)?.Instance;
+        return instance?.Type;
     }
 
     private static bool IsReachableFromTheWholeAssembly(ISymbol symbol)

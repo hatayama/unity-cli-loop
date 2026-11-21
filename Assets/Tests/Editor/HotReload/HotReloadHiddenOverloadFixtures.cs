@@ -28,6 +28,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public class whose public overload takes any value while a private one takes a params array of
+    /// Memory, which one Memory argument fits better in its expanded form.
+    /// </summary>
+    public static class HotReloadHiddenParamsOverloads
+    {
+        public static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(params Memory<int>[] memories)
+        {
+            return memories.Length + 10;
+        }
+    }
+
+    /// <summary>
     /// Public class with a public constructor taking any value and private ones taking Memory or
     /// ArraySegment, for the same reason as HotReloadHiddenOverloads.
     /// </summary>
@@ -87,6 +104,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public extension class with two public extension methods taking any value or a string and a
+    /// private one taking ArraySegment, so Unity's compiler chooses between two reachable overloads.
+    /// </summary>
+    public static class HotReloadHiddenOverloadPairExtensions
+    {
+        public static int Prefer(this int value, object other)
+        {
+            return 1;
+        }
+
+        public static int Prefer(this int value, string other)
+        {
+            return 2;
+        }
+
+        private static int Prefer(this int value, ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+    }
+
+    /// <summary>
     /// Base class whose public field a derived class hides with a private one. Code outside the
     /// derived class reads the base field, while a patch that sees every member public would read
     /// the derived one.
@@ -104,6 +143,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 #pragma warning disable CS0414 // Read only through a patch that would wrongly see it.
         private new int Count = 2;
 #pragma warning restore CS0414
+    }
+
+    /// <summary>
+    /// Base class whose public overload takes any value while a protected one takes ArraySegment. A
+    /// derived class may call the protected one on itself but not on a value typed as this base.
+    /// </summary>
+    public class HotReloadProtectedOverloadBase
+    {
+        public int Pick(object value)
+        {
+            return 1;
+        }
+
+        protected int Pick(ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+    }
+
+    /// <summary>
+    /// Derived class whose sites call the base's overloads on itself or on a value typed as the base.
+    /// </summary>
+    public sealed class HotReloadProtectedOverloadDerived : HotReloadProtectedOverloadBase
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int DerivedEditedInOwnStatements()
+        {
+            return 7051;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int DerivedEditedInLambda()
+        {
+            Func<int> read = () => 7061;
+            return read();
+        }
     }
 
     /// <summary>

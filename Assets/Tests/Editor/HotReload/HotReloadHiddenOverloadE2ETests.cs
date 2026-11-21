@@ -52,7 +52,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// overload better than the public one Unity's compiler calls, or that reads a field a private
         /// field hides, is skipped and keeps the compiled value, in its own statements, a lambda and
         /// an async body, whether the argument is a BCL type a referenced assembly also declares
-        /// internally (Memory) or not (ArraySegment).
+        /// internally (Memory) or not (ArraySegment), and also when two public extension overloads leave
+        /// Unity's pick unknown here, or the private overload takes a params array. So is a derived type's call that fits a protected overload of its
+        /// base better, made on a value typed as the base.
         /// </summary>
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new Memory<int>(_ints)) + 7002;")]
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7002;")]
@@ -63,6 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("own", "return _ints.Length.Choose(new Memory<int>(_ints)) + 7002;")]
         [TestCase("own", "return _ints.Length.Choose(new ArraySegment<int>(_ints)) + 7002;")]
         [TestCase("own", "return new HotReloadHiddenFieldDerived().Count + 7002;")]
+        [TestCase("own", "return _ints.Length.Prefer(new ArraySegment<int>(_ints)) + 7002;")]
+        [TestCase("own", "return HotReloadHiddenParamsOverloads.Pick(new Memory<int>(_ints)) + 7002;")]
         [TestCase("lambda", "return HotReloadHiddenOverloads.Pick(new Memory<int>(_ints)) + 7012;")]
         [TestCase("lambda", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7012;")]
         [TestCase("lambda", "return new HotReloadHiddenOverloadBox(new Memory<int>(_ints)).Value + 7012;")]
@@ -72,10 +76,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("lambda", "return _ints.Length.Choose(new Memory<int>(_ints)) + 7012;")]
         [TestCase("lambda", "return _ints.Length.Choose(new ArraySegment<int>(_ints)) + 7012;")]
         [TestCase("lambda", "return new HotReloadHiddenFieldDerived().Count + 7012;")]
+        [TestCase("lambda", "return _ints.Length.Prefer(new ArraySegment<int>(_ints)) + 7012;")]
+        [TestCase("lambda", "return HotReloadHiddenParamsOverloads.Pick(new Memory<int>(_ints)) + 7012;")]
         [TestCase("async", "return HotReloadHiddenOverloads.Pick(new Memory<int>(_ints)) + 7022;")]
         [TestCase("async", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7022;")]
         [TestCase("async", "return new HotReloadHiddenOverloadBox(new ArraySegment<int>(_ints)).Value + 7022;")]
         [TestCase("async", "return new HotReloadHiddenFieldDerived().Count + 7022;")]
+        [TestCase("derived-own", "return new HotReloadProtectedOverloadBase().Pick(new ArraySegment<int>(new int[2])) + 7052;")]
+        [TestCase("derived-lambda", "return new HotReloadProtectedOverloadBase().Pick(new ArraySegment<int>(new int[2])) + 7062;")]
         public async Task Run_UseThePatchWouldResolveToAPrivateMember_IsSkippedAndKeepsTheCompiledValue(
             string site,
             string statements)
@@ -91,29 +99,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: an added field initialized by, or an added method that makes, a call fitting a private
         /// overload better than the public one keeps the body that uses it out of the patch, so the
-        /// compiled value stays.
+        /// compiled value stays. The field is refused by the added-field initializer rule; the method
+        /// is refused for the hidden overload, and the body calling it for calling a skipped method.
         /// </summary>
         [TestCase(
             "return _addedPicked + 7002;",
-            " private int _addedPicked = HotReloadHiddenOverloads.Pick(new ArraySegment<int>(new int[3]));")]
+            " private int _addedPicked = HotReloadHiddenOverloads.Pick(new ArraySegment<int>(new int[3]));",
+            "EditedInOwnStatements",
+            "has an initializer that is not a literal")]
         [TestCase(
             "return AddedPick() + 7002;",
-            " private int AddedPick() { return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)); }")]
+            " private int AddedPick() { return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)); }",
+            "AddedPick",
+            HiddenMemberReasonFragment)]
         public async Task Run_AddedMemberThePatchWouldResolveToAPrivateMember_KeepsTheCompiledValue(
             string statements,
-            string addedMembers)
+            string addedMembers,
+            string refusedMethod,
+            string reasonFragment)
         {
             HotReloadOrchestratorResult result = await RunEditAsync("own", statements, addedMembers);
 
-            HotReloadMethodOutcome row = FindRow(result, MethodFor("own"));
-            Assert.That(row.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
+            HotReloadMethodOutcome refused = FindRow(result, refusedMethod);
+            Assert.That(refused.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
+            Assert.That(refused.Reason, Does.Contain(reasonFragment), FormatOutcomes(result));
+            Assert.That(FindRow(result, MethodFor("own")).Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
             Assert.That(await CallAsync("own"), Is.EqualTo(CompiledValueFor("own")), FormatOutcomes(result));
         }
 
         /// <summary>
         /// What: a body is still patched and returns the edited value when the private overload is one
-        /// the code may call (the host's own, or its outer type's from a nested type), or when the call
-        /// fits only the public overload of a class that also has private ones.
+        /// the code may call (the host's own, its outer type's from a nested type, or its base's
+        /// protected one called on itself or through base), or when the call, an extension call included, fits only
+        /// public overloads of a class that also has private ones.
         /// </summary>
         [TestCase("own", "return Own(new ArraySegment<int>(_ints)) + 7002;", 7004)]
         [TestCase("lambda", "return Own(new ArraySegment<int>(_ints)) + 7012;", 7014)]
@@ -122,7 +140,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("nested-own", "return new HotReloadHiddenOverloadHost().Own(new ArraySegment<int>(new int[2])) + 7032;", 7034)]
         [TestCase("nested-lambda", "return new HotReloadHiddenOverloadHost().Own(new ArraySegment<int>(new int[2])) + 7042;", 7044)]
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(\"text\") + 7002;", 7003)]
+        [TestCase("derived-own", "return Pick(new ArraySegment<int>(new int[2])) + 7052;", 7054)]
+        [TestCase("derived-lambda", "return this.Pick(new ArraySegment<int>(new int[2])) + 7062;", 7064)]
+        [TestCase("derived-own", "return base.Pick(new ArraySegment<int>(new int[2])) + 7052;", 7054)]
         [TestCase("lambda", "return HotReloadHiddenOverloads.Pick(\"text\") + 7012;", 7013)]
+        [TestCase("own", "return _ints.Length.Choose(\"text\") + 7002;", 7003)]
+        [TestCase("lambda", "return _ints.Length.Choose(\"text\") + 7012;", 7013)]
+        [TestCase("own", "return _ints.Length.Prefer(\"text\") + 7002;", 7004)]
+        [TestCase("lambda", "return _ints.Length.Prefer(\"text\") + 7012;", 7014)]
         public async Task Run_UseOfAPrivateMemberTheCodeMayCall_IsPatchedAndReturnsTheEditedValue(
             string site,
             string statements,
@@ -148,6 +173,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return "NestedEditedInOwnStatements";
                 case "nested-lambda":
                     return "NestedEditedInLambda";
+                case "derived-own":
+                    return "DerivedEditedInOwnStatements";
+                case "derived-lambda":
+                    return "DerivedEditedInLambda";
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -163,6 +192,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return 7011;
                 case "async":
                     return 7021;
+                case "derived-own":
+                    return 7051;
+                case "derived-lambda":
+                    return 7061;
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -172,6 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadHiddenOverloadHost host = new HotReloadHiddenOverloadHost();
             HotReloadHiddenOverloadHost.Nested nested = new HotReloadHiddenOverloadHost.Nested();
+            HotReloadProtectedOverloadDerived derived = new HotReloadProtectedOverloadDerived();
             switch (site)
             {
                 case "own":
@@ -184,6 +218,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return nested.NestedEditedInOwnStatements();
                 case "nested-lambda":
                     return nested.NestedEditedInLambda();
+                case "derived-own":
+                    return derived.DerivedEditedInOwnStatements();
+                case "derived-lambda":
+                    return derived.DerivedEditedInLambda();
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -209,8 +247,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 case "nested-own":
                     edited = ReplaceOnce(edited, "return 7031;", statements);
                     break;
-                default:
+                case "nested-lambda":
                     edited = ReplaceOnce(edited, "() => 7041;", "() => { " + statements + " };");
+                    break;
+                case "derived-own":
+                    edited = ReplaceOnce(edited, "return 7051;", statements);
+                    break;
+                default:
+                    edited = ReplaceOnce(edited, "() => 7061;", "() => { " + statements + " };");
                     break;
             }
 
