@@ -45,6 +45,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public class whose public overload takes any value while two private ones take reference types,
+    /// so a null argument is ambiguous between the private ones when every member is public.
+    /// </summary>
+    public static class HotReloadHiddenNullOverloads
+    {
+        public static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(string text)
+        {
+            return 2;
+        }
+
+        private static int Pick(int[] values)
+        {
+            return 3;
+        }
+    }
+
+    /// <summary>
     /// Public class with a public constructor taking any value and private ones taking Memory or
     /// ArraySegment, for the same reason as HotReloadHiddenOverloads.
     /// </summary>
@@ -178,6 +200,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Func<int> read = () => 7061;
             return read();
+        }
+    }
+
+    /// <summary>
+    /// Base class with a public constructor taking any value and a protected one taking ArraySegment.
+    /// Only the class itself may construct an instance through the protected one; a derived class may
+    /// reach it only from a constructor initializer.
+    /// </summary>
+    public class HotReloadProtectedConstructorBase
+    {
+        public HotReloadProtectedConstructorBase(object value)
+        {
+            Value = 1;
+        }
+
+        protected HotReloadProtectedConstructorBase(ArraySegment<int> segment)
+        {
+            Value = segment.Count;
+        }
+
+        public int Value { get; }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int BaseEditedInOwnStatements()
+        {
+            return 7081;
+        }
+    }
+
+    /// <summary>
+    /// Derived class whose site constructs its base.
+    /// </summary>
+    public sealed class HotReloadProtectedConstructorDerived : HotReloadProtectedConstructorBase
+    {
+        public HotReloadProtectedConstructorDerived()
+            : base(0)
+        {
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ConstructorDerivedEditedInOwnStatements()
+        {
+            return 7071;
         }
     }
 

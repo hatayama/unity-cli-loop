@@ -53,8 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// field hides, is skipped and keeps the compiled value, in its own statements, a lambda and
         /// an async body, whether the argument is a BCL type a referenced assembly also declares
         /// internally (Memory) or not (ArraySegment), and also when two public extension overloads leave
-        /// Unity's pick unknown here, or the private overload takes a params array. So is a derived type's call that fits a protected overload of its
-        /// base better, made on a value typed as the base.
+        /// Unity's pick unknown here, or the private overload takes a params array. So is a derived
+        /// type's call that fits a protected overload of its base better, made on a value typed as the
+        /// base, or that constructs its base with arguments a protected constructor fits better. A call
+        /// whose argument has no type (null, where Unity's binding picks the public overload) is skipped
+        /// too, because which candidates it fits is not told.
         /// </summary>
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new Memory<int>(_ints)) + 7002;")]
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7002;")]
@@ -84,6 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("async", "return new HotReloadHiddenFieldDerived().Count + 7022;")]
         [TestCase("derived-own", "return new HotReloadProtectedOverloadBase().Pick(new ArraySegment<int>(new int[2])) + 7052;")]
         [TestCase("derived-lambda", "return new HotReloadProtectedOverloadBase().Pick(new ArraySegment<int>(new int[2])) + 7062;")]
+        [TestCase("ctor-derived-own", "return new HotReloadProtectedConstructorBase(new ArraySegment<int>(new int[2])).Value + 7072;")]
+        [TestCase("own", "return HotReloadHiddenNullOverloads.Pick(null) + 7002;")]
         public async Task Run_UseThePatchWouldResolveToAPrivateMember_IsSkippedAndKeepsTheCompiledValue(
             string site,
             string statements)
@@ -130,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a body is still patched and returns the edited value when the private overload is one
         /// the code may call (the host's own, its outer type's from a nested type, or its base's
-        /// protected one called on itself or through base), or when the call, an extension call included, fits only
+        /// protected one called on itself or through base, or a class's own protected constructor), or
+        /// when the call, an extension call included, fits only
         /// public overloads of a class that also has private ones.
         /// </summary>
         [TestCase("own", "return Own(new ArraySegment<int>(_ints)) + 7002;", 7004)]
@@ -143,6 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("derived-own", "return Pick(new ArraySegment<int>(new int[2])) + 7052;", 7054)]
         [TestCase("derived-lambda", "return this.Pick(new ArraySegment<int>(new int[2])) + 7062;", 7064)]
         [TestCase("derived-own", "return base.Pick(new ArraySegment<int>(new int[2])) + 7052;", 7054)]
+        [TestCase("ctor-base-own", "return new HotReloadProtectedConstructorBase(new ArraySegment<int>(new int[2])).Value + 7082;", 7084)]
         [TestCase("lambda", "return HotReloadHiddenOverloads.Pick(\"text\") + 7012;", 7013)]
         [TestCase("own", "return _ints.Length.Choose(\"text\") + 7002;", 7003)]
         [TestCase("lambda", "return _ints.Length.Choose(\"text\") + 7012;", 7013)]
@@ -177,6 +184,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return "DerivedEditedInOwnStatements";
                 case "derived-lambda":
                     return "DerivedEditedInLambda";
+                case "ctor-derived-own":
+                    return "ConstructorDerivedEditedInOwnStatements";
+                case "ctor-base-own":
+                    return "BaseEditedInOwnStatements";
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -196,6 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return 7051;
                 case "derived-lambda":
                     return 7061;
+                case "ctor-derived-own":
+                    return 7071;
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -222,6 +235,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return derived.DerivedEditedInOwnStatements();
                 case "derived-lambda":
                     return derived.DerivedEditedInLambda();
+                case "ctor-derived-own":
+                    return new HotReloadProtectedConstructorDerived().ConstructorDerivedEditedInOwnStatements();
+                case "ctor-base-own":
+                    return new HotReloadProtectedConstructorBase(0).BaseEditedInOwnStatements();
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -252,6 +269,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     break;
                 case "derived-own":
                     edited = ReplaceOnce(edited, "return 7051;", statements);
+                    break;
+                case "ctor-derived-own":
+                    edited = ReplaceOnce(edited, "return 7071;", statements);
+                    break;
+                case "ctor-base-own":
+                    edited = ReplaceOnce(edited, "return 7081;", statements);
                     break;
                 default:
                     edited = ReplaceOnce(edited, "() => 7061;", "() => { " + statements + " };");

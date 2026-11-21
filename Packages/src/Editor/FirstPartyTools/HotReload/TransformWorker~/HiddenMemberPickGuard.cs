@@ -67,7 +67,7 @@ internal static class HiddenMemberPickGuard
                 return null;
             }
 
-            ISymbol resolved = ResolvedByUnityOrNull(semanticModel, enforcingModel, node);
+            ISymbol resolved = UnityPickOrNull(enforcingModel, node);
             return resolved != null && IsSameMember(info.Symbol, resolved) ? null : info.Symbol;
         }
 
@@ -83,7 +83,7 @@ internal static class HiddenMemberPickGuard
 
             if (!unityPickAsked)
             {
-                unityPick = ResolvedByUnityOrNull(semanticModel, enforcingModel, node);
+                unityPick = UnityPickOrNull(enforcingModel, node);
                 unityPickAsked = true;
             }
 
@@ -96,40 +96,13 @@ internal static class HiddenMemberPickGuard
         return null;
     }
 
-    // Why the edited copy when the binding fails: the compiled assembly is referenced beside the edited
-    // source, so an extension method of a public static class comes from both copies and a call to it
-    // fails here between the two, while Unity's compile has only the edited one. Null when more than one
-    // edited overload is left, since which of them Unity's compiler picks is not known here.
-    private static ISymbol ResolvedByUnityOrNull(
-        SemanticModel semanticModel,
-        SemanticModel enforcingModel,
-        SyntaxNode node)
+    // Why null when the binding fails, rather than a guess among its candidates: which member Unity's
+    // compiler picks is then not known here (an extension method of a public static class comes from
+    // both the edited source and the compiled copy, and the call fails between the two), and the caller
+    // refuses a body whose pick it cannot compare.
+    private static ISymbol UnityPickOrNull(SemanticModel enforcingModel, SyntaxNode node)
     {
-        SymbolInfo info = enforcingModel.GetSymbolInfo(node);
-        if (info.Symbol != null
-            || (info.CandidateReason != CandidateReason.Ambiguous
-                && info.CandidateReason != CandidateReason.OverloadResolutionFailure))
-        {
-            return info.Symbol;
-        }
-
-        ISymbol editedCopy = null;
-        foreach (ISymbol candidate in info.CandidateSymbols)
-        {
-            if (!SymbolEqualityComparer.Default.Equals(candidate.ContainingAssembly, semanticModel.Compilation.Assembly))
-            {
-                continue;
-            }
-
-            if (editedCopy != null)
-            {
-                return null;
-            }
-
-            editedCopy = candidate;
-        }
-
-        return editedCopy;
+        return enforcingModel.GetSymbolInfo(node).Symbol;
     }
 
     // Why only members of the edited source: this compilation is another assembly than the compiled one
@@ -164,8 +137,17 @@ internal static class HiddenMemberPickGuard
     // Why base needs no exception, though C# lets a derived type reach a protected member through it
     // and this query is not told so: Unity's compiler resolves the same member there, and the caller
     // keeps a body whose member both bindings resolve alike.
+    // Why the created type for a construction: C# lets a derived type call a protected constructor of
+    // its base only from a constructor initializer, so 'new Base(...)' there reaches it through Base.
+    // The syntax gives that type even when the call resolves to nothing.
     private static ITypeSymbol FindReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
+        if (node is BaseObjectCreationExpressionSyntax)
+        {
+            ITypeSymbol createdType = semanticModel.GetTypeInfo(node).Type;
+            return createdType == null || createdType.TypeKind == TypeKind.Error ? null : createdType;
+        }
+
         IOperation operation = semanticModel.GetOperation(node);
         IOperation instance = operation is IInvocationOperation invocation
             ? invocation.Instance
