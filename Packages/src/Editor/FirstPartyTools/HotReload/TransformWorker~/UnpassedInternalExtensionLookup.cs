@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 // What: finds the internal extension method of the target assembly that an implicit call on a
 // receiver binds to, which the receiver's own type cannot name because the extension is declared
@@ -10,8 +11,8 @@ internal static class UnpassedInternalExtensionLookup
 {
     /// <summary>
     /// What: the first internal extension method of the target assembly named 'methodName', with
-    /// 'outParameterCount' out parameters when given, whose 'this' parameter takes the receiver;
-    /// null when none does.
+    /// 'outParameterCount' out parameters when given, whose 'this' parameter takes the receiver,
+    /// preferring one whose class the run does not declare; null when none does.
     /// </summary>
     // Why names and not symbols: the target assembly comes from a separate compilation, so its
     // types are other symbols than the receiver the body binds to.
@@ -19,9 +20,11 @@ internal static class UnpassedInternalExtensionLookup
         ITypeSymbol receiver,
         string methodName,
         int? outParameterCount,
+        SemanticModel semanticModel,
         IAssemblySymbol targetAssembly)
     {
         HashSet<string> acceptedThisTypes = AcceptedThisTypeNames(receiver);
+        IMethodSymbol firstOfARunDeclaredClass = null;
         foreach (INamedTypeSymbol type in EnumerateTypes(targetAssembly.GlobalNamespace))
         {
             if (!type.MightContainExtensionMethods)
@@ -31,17 +34,66 @@ internal static class UnpassedInternalExtensionLookup
 
             foreach (IMethodSymbol method in type.GetMembers(methodName).OfType<IMethodSymbol>())
             {
-                if (method.IsExtensionMethod
-                    && UnpassedInternalMemberUse.HasOutParameterCount(method, outParameterCount)
-                    && AcceptsReceiver(method.Parameters[0].Type, receiver, acceptedThisTypes)
-                    && AccessibilityRules.IsInaccessibleFromExternalAssembly(method))
+                if (!method.IsExtensionMethod
+                    || !UnpassedInternalMemberUse.HasOutParameterCount(method, outParameterCount)
+                    || !AcceptsReceiver(method.Parameters[0].Type, receiver, acceptedThisTypes)
+                    || !AccessibilityRules.IsInaccessibleFromExternalAssembly(method))
+                {
+                    continue;
+                }
+
+                // Why a class the run declares comes last: the worker binds its edited source, so
+                // a method missing there is missing from the edit, while its compiled copy still
+                // lists it, and a class the run was not given may declare the method the call
+                // means. Why it is still returned when nothing else matches: the shim compile binds
+                // that compiled copy, so a closure would call it and throw.
+                if (!UnpassedInternalMemberUse.IsDeclaredByTheRun(type, semanticModel))
                 {
                     return method;
                 }
+
+                firstOfARunDeclaredClass ??= method;
             }
         }
 
-        return null;
+        return firstOfARunDeclaredClass;
+    }
+
+    /// <summary>
+    /// What: an internal extension method of the target assembly that the reduced call
+    /// 'receiver.methodName(...)' may run, found as <see cref="FindInternalExtensionOrNull"/> finds
+    /// one; null when the receiver names a type or has no type, or no such extension takes it.
+    /// The lookup reads neither using directives nor overloads, so with several candidates it may
+    /// name another one than the compiler calls.
+    /// </summary>
+    internal static IMethodSymbol FindReducedCallTargetOrNull(
+        ExpressionSyntax receiver,
+        string methodName,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        // Why not a type: 'Type.Name(...)' calls a static member of the type, never an extension.
+        if (receiver == null || semanticModel.GetSymbolInfo(receiver).Symbol is ITypeSymbol)
+        {
+            return null;
+        }
+
+        ITypeSymbol receiverType = semanticModel.GetTypeInfo(receiver).Type;
+        if (receiverType == null)
+        {
+            return null;
+        }
+
+        // Why Nullable<T> is unwrapped after '?.': the call then runs on the underlying value, so
+        // the extension that takes it is the one the compiler calls.
+        if (receiver.Parent is ConditionalAccessExpressionSyntax conditional
+            && conditional.Expression == receiver
+            && receiverType is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)
+        {
+            receiverType = nullable.TypeArguments[0];
+        }
+
+        return FindInternalExtensionOrNull(receiverType, methodName, outParameterCount: null, semanticModel, targetAssembly);
     }
 
     // Why a type parameter is compared by its constraints: `this T` accepts every receiver its

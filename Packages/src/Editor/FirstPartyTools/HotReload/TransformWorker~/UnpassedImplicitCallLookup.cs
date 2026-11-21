@@ -442,7 +442,7 @@ internal static class UnpassedImplicitCallLookup
         // `this T` extension can still take it.
         if (receiver is not INamedTypeSymbol namedReceiver)
         {
-            return UnpassedInternalExtensionLookup.FindInternalExtensionOrNull(receiver, methodName, outParameterCount, targetAssembly);
+            return UnpassedInternalExtensionLookup.FindInternalExtensionOrNull(receiver, methodName, outParameterCount, semanticModel, targetAssembly);
         }
 
         ISymbol member = UnpassedInternalMemberUse.FindInternalMemberOfUnpassedTypeOrNull(
@@ -478,7 +478,7 @@ internal static class UnpassedImplicitCallLookup
             return internalGetter;
         }
 
-        return UnpassedInternalExtensionLookup.FindInternalExtensionOrNull(namedReceiver, methodName, outParameterCount, targetAssembly);
+        return UnpassedInternalExtensionLookup.FindInternalExtensionOrNull(namedReceiver, methodName, outParameterCount, semanticModel, targetAssembly);
     }
 
     private static bool Implements(ITypeSymbol type, string interfaceFullName)
