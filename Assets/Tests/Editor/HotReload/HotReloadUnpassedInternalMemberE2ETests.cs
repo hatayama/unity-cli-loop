@@ -226,6 +226,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the same edits on a partial type, which does not patch these forms in place, are
+        /// either patched and return the edited value, or skipped and keep the compiled behavior.
+        /// They are never reported as patched and then fail when called, and never fail the file.
+        /// </summary>
+        [TestCaseSource(nameof(EditsThatOnlyAPlainTypeRunsInThePatchedMethod))]
+        public async Task Run_PartialTypeBodyUsingInternalMemberInAFormAPartialTypeSkips_IsAppliedAsEditedOrSkipped(string editName)
+        {
+            BodyEdit edit = FindEdit(editName);
+            HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
+
+            await AssertAppliedAsEditedOrSkippedAsync(result, FixtureKind.Partial, edit);
+        }
+
+        /// <summary>
         /// What: an edited getter that uses an internal member of a compiled type the reload was not
         /// given is patched on a plain type and on a partial type, and the property returns the edited
         /// value.
