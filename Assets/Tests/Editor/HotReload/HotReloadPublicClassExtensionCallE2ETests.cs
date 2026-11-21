@@ -31,10 +31,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string AsyncCall = "return _value.TriplePlus(7111);";
 
-        private const string AddedExtensionReducedCallReason =
-            "extension method 'AddedTriple' added in this reload has no rewrite shape when called on a receiver; "
-            + "write the call as 'HotReloadPublicClassInternalExtensions.AddedTriple(receiver, ...)'.";
-
         private HotReloadDomainTestScope _scope;
 
         [SetUp]
@@ -174,11 +170,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an extension method added in the same reload on a receiver is
-        /// Skipped with the reason that names the static form, keeps its compiled value, and the
-        /// rest of the file still applies.
+        /// Patched and returns the added method's value, as the same call in the static form does;
+        /// RevertAll restores the compiled value.
         /// </summary>
         [Test]
-        public async Task Run_ClosureCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        public async Task Run_ClosureCallingAddedExtensionOnReceiver_IsPatchedAndReverts()
         {
             HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
             Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
@@ -187,19 +183,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ClosureCall,
                 "Func<int> read = () => _value.AddedTriple(7101);");
 
-            AssertSkippedWithReason(result, "ClosureCallsInternalExtension", AddedExtensionReducedCallReason);
+            AssertKind(result, "ClosureCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
             AssertNoFailedRow(result);
+            Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(8110));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(host.ClosureCallsInternalExtension(), Is.EqualTo(7110));
-            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
         }
 
         /// <summary>
         /// What: an async method that calls an extension method added in the same reload on a
-        /// receiver is Skipped with the reason that names the static form, keeps its compiled
-        /// value, and the rest of the file still applies.
+        /// receiver is Patched and returns the added method's value, as the same call in the static
+        /// form does; RevertAll restores the compiled value.
         /// </summary>
         [Test]
-        public async Task Run_AsyncMethodCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        public async Task Run_AsyncMethodCallingAddedExtensionOnReceiver_IsPatchedAndReverts()
         {
             HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
             Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
@@ -208,10 +205,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AsyncCall,
                 "return _value.AddedTriple(7111);");
 
-            AssertSkippedWithReason(result, "AsyncCallsInternalExtension", AddedExtensionReducedCallReason);
+            AssertKind(result, "AsyncCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
             AssertNoFailedRow(result);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(8120));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
-            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
         }
 
         /// <summary>
@@ -285,11 +283,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a property getter whose lambda calls an extension method added in the same
-        /// reload on a receiver is Skipped with the reason that names the static form, keeps its
-        /// compiled value, and the rest of the file still applies.
+        /// reload on a receiver is Patched and returns the added method's value; RevertAll
+        /// restores the compiled value.
         /// </summary>
         [Test]
-        public async Task Run_GetterLambdaCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        public async Task Run_GetterLambdaCallingAddedExtensionOnReceiver_IsPatchedAndReverts()
         {
             HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
             Assert.That(host.ClosureGetterValue, Is.EqualTo(7310));
@@ -298,19 +296,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Func<int> read = () => _value.TriplePlus(7301);",
                 "Func<int> read = () => _value.AddedTriple(7301);");
 
-            AssertSkippedWithReason(result, "get_ClosureGetterValue", AddedExtensionReducedCallReason);
+            AssertKind(result, "get_ClosureGetterValue", HotReloadMethodOutcomeKind.Patched);
             AssertNoFailedRow(result);
+            Assert.That(host.ClosureGetterValue, Is.EqualTo(8310));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(host.ClosureGetterValue, Is.EqualTo(7310));
-            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
         }
 
         /// <summary>
         /// What: a property setter whose lambda calls an extension method added in the same
-        /// reload on a receiver is Skipped with the reason that names the static form, keeps its
-        /// compiled behavior, and the rest of the file still applies.
+        /// reload on a receiver is Patched and stores the added method's value; RevertAll restores
+        /// the compiled behavior.
         /// </summary>
         [Test]
-        public async Task Run_SetterLambdaCallingAddedExtensionOnReceiver_IsSkippedAndTheFileApplies()
+        public async Task Run_SetterLambdaCallingAddedExtensionOnReceiver_IsPatchedAndReverts()
         {
             HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
             host.ClosureSetterValue = 3;
@@ -320,11 +319,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Func<int> read = () => value.TriplePlus(7311);",
                 "Func<int> read = () => value.AddedTriple(7311);");
 
-            AssertSkippedWithReason(result, "set_ClosureSetterValue", AddedExtensionReducedCallReason);
+            AssertKind(result, "set_ClosureSetterValue", HotReloadMethodOutcomeKind.Patched);
             AssertNoFailedRow(result);
             host.ClosureSetterValue = 3;
+            Assert.That(host.ClosureSetterValue, Is.EqualTo(8320));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            host.ClosureSetterValue = 3;
             Assert.That(host.ClosureSetterValue, Is.EqualTo(7320));
-            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
         }
 
         /// <summary>

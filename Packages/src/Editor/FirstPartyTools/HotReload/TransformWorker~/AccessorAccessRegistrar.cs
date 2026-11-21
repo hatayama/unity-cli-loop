@@ -442,20 +442,6 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        // Why only the receiver form: its accessor finds no compiled method to bind, because the
-        // compiled class does not hold a method this reload adds, and the shim fails at binding.
-        // A call written in the static form applies (measured in a lambda and an async body).
-        if (invokedMethod.MethodKind == MethodKind.ReducedExtension
-            && addedMemberAccess != null
-            && addedMemberAccess.IsAddedExtensionMethod(methodSymbol))
-        {
-            rejectReason = WorkerReason.Of(
-                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
-                methodSymbol.Name,
-                methodSymbol.ContainingType.Name);
-            return false;
-        }
-
         rejectReason = FindMethodShapeRejectReason(methodSymbol);
         if (rejectReason != null)
         {

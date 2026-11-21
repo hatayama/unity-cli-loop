@@ -68,6 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref receiver)");
             yield return new TestCaseData("StatementCallsInternalExtensionOnStruct", StructStatementCall, "return HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, 7421);", 7426, 8426)
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref static form)");
+            yield return new TestCaseData("ClosureCallsInternalExtension", "Func<int> read = () => _value.TriplePlus(7101);", "Func<int> read = () => new Memory<int>(_ints).AddedMemoryPlus(7101);", 7110, 8103)
+                .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(Memory receiver in a lambda)");
         }
 
         private static IEnumerable<TestCaseData> CallsThatAreSkipped()
@@ -144,6 +146,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return host.StatementCallsInternalExtensionOnStruct();
                 case "StatementCallsInternalExtensionConditionally":
                     return host.StatementCallsInternalExtensionConditionally();
+                case "ClosureCallsInternalExtension":
+                    return host.ClosureCallsInternalExtension();
                 default:
                     Assert.Fail("Unknown host method: " + hostMethod);
                     return 0;

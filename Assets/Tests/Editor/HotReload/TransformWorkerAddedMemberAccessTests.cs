@@ -872,12 +872,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: when one edit changes the return type of an internal extension method of an internal
-        /// class and a lambda that calls it in reduced form, the lambda is skipped as a call to an
-        /// extension method this reload adds, so no accessor finds the compiled method of the old
-        /// return type by name.
+        /// class and a lambda that calls it, the lambda is skipped with the reason the static-form
+        /// call gets whether the call is written on a receiver or in the static form, so no accessor
+        /// finds the compiled method of the old return type by name.
         /// </summary>
-        [Test]
-        public async Task ExtensionCall_ClosureCallingInternalExtensionWhoseReturnTypeChanged_IsSkipped()
+        [TestCase("(int)_value.Twice(4102)")]
+        [TestCase("(int)HotReloadInternalExtensionCallMath.Twice(_value, 4102)")]
+        public async Task ExtensionCall_ClosureCallingInternalExtensionWhoseReturnTypeChanged_IsSkipped(string editedCall)
         {
             TransformWorkerClientResult result = await RunExtensionCallHostCustomEditAsync(onDisk => onDisk
                 .Replace(
@@ -886,13 +887,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     StringComparison.Ordinal)
                 .Replace(
                     "Func<int> read = () => _value.Twice(4101);",
-                    "Func<int> read = () => (int)_value.Twice(4102);",
+                    "Func<int> read = () => " + editedCall + ";",
                     StringComparison.Ordinal));
 
             AssertHasSkip(
                 result,
                 "ClosureReadsPrivateFieldAndCallsInternalExtension(",
-                "extension method 'Twice' added in this reload has no rewrite shape when called on a receiver");
+                "accessor signature type is not visible from an external assembly: "
+                + "global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadInternalExtensionCallMath");
             Assert.That(FindEntry(result, "ClosureReadsPrivateFieldAndCallsInternalExtension"), Is.Null);
         }
 
