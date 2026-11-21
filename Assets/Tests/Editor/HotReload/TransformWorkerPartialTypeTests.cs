@@ -1139,6 +1139,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an internal extension method of a class in a file the reload was not given, called
+        /// with its receiver inside a lambda or in an async or iterator method, is skipped with a
+        /// reason that names the method and its class, on a partial and a plain type, for an internal
+        /// and a public class, and through a conditional access, instead of being patched and then
+        /// throwing MethodAccessException when called.
+        /// </summary>
+        [TestCase("PlainLambda", PlainDerivedFileName, "DerivedValue", PlainDerivedValueBody, "System.Func<int> read = () => 50.Twice(1); return read();", "HotReloadInternalExtensionCallMath", "Twice", MoveTheUseOutAdvice)]
+        [TestCase("PartialLambda", PartialDerivedFileName, "DerivedValue", PartialDerivedValueBody, "System.Func<int> read = () => 50.Twice(1); return read();", "HotReloadInternalExtensionCallMath", "Twice", MoveTheUseOutAdvice)]
+        [TestCase("PlainLambdaOfAPublicClass", PlainDerivedFileName, "DerivedValue", PlainDerivedValueBody, "System.Func<int> read = () => 50.InternalTwice(2); return read();", "HotReloadPublicExtensionCallMath", "InternalTwice", MoveTheUseOutAdvice)]
+        [TestCase("PlainLambdaConditionalAccess", PlainDerivedFileName, "DerivedValue", PlainDerivedValueBody, "string text = \"ab\"; System.Func<int?> read = () => text?.LengthPlus(1); return read() ?? 0;", "HotReloadInternalExtensionCallMath", "LengthPlus", MoveTheUseOutAdvice)]
+        [TestCase("PlainAsync", PlainDerivedFileName, "AsyncValue", "return 50;", "return 50.Twice(1);", "HotReloadInternalExtensionCallMath", "Twice", CompileOnlyAdvice)]
+        [TestCase("PartialIterator", PartialDerivedFileName, "IteratorValues", "yield return _seed;", "yield return _seed.Twice(1);", "HotReloadInternalExtensionCallMath", "Twice", CompileOnlyAdvice)]
+        public async Task Skip_InternalExtensionMethodOfUnpassedClassOutsideThePatchedMethod_NamesTheMethod(
+            string form,
+            string fileName,
+            string methodName,
+            string fragment,
+            string replacement,
+            string className,
+            string extensionName,
+            string expectedEnding)
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(fileName, "UnpassedInternalExtension" + form + ".cs", fragment, replacement)
+            });
+
+            string reason = AssertSkipped(result, methodName);
+            Assert.That(reason, Does.StartWith("'" + extensionName + "' is internal to '" + className + "'"), FormatSkipped(result));
+            Assert.That(reason, Does.EndWith(expectedEnding));
+        }
+
+        /// <summary>
         /// What: an internal member used inside the lambda of a getter that runs through a delegating
         /// shim, because the lambda also reads a private member, ends its reason with the compile
         /// alone, not with the advice to move the use out: the shim runs the whole getter outside the

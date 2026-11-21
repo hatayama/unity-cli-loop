@@ -113,17 +113,27 @@ internal sealed class UnpassedInternalMemberUse
 
         bool hasReceiver = HasReceiver(name);
         INamedTypeSymbol start = hasReceiver ? FindReceiverTypeOrNull(name, semanticModel) : enclosingType;
-        if (start == null)
+        ISymbol member = start == null
+            ? null
+            : FindInternalMemberOfUnpassedTypeOrNull(
+                start,
+                name.Identifier.ValueText,
+                outParameterCount: null,
+                semanticModel,
+                targetAssembly);
+
+        // Why the extensions after the receiver's own members: 'value.Name(...)' calls an extension
+        // only when the receiver's type has no member of that name, and an internal extension
+        // declared in a file the run was not given is missing to the worker in the same way.
+        if (member == null && hasReceiver)
         {
-            return null;
+            member = UnpassedInternalExtensionLookup.FindReducedCallTargetOrNull(
+                FindReceiverOrNull(name),
+                name.Identifier.ValueText,
+                semanticModel,
+                targetAssembly);
         }
 
-        ISymbol member = FindInternalMemberOfUnpassedTypeOrNull(
-            start,
-            name.Identifier.ValueText,
-            outParameterCount: null,
-            semanticModel,
-            targetAssembly);
         if (member == null)
         {
             return null;
@@ -264,11 +274,16 @@ internal sealed class UnpassedInternalMemberUse
         return name.Parent is MemberBindingExpressionSyntax binding && binding.Name == name;
     }
 
-    private static INamedTypeSymbol FindReceiverTypeOrNull(SimpleNameSyntax name, SemanticModel semanticModel)
+    private static ExpressionSyntax FindReceiverOrNull(SimpleNameSyntax name)
     {
-        ExpressionSyntax receiver = name.Parent is MemberAccessExpressionSyntax access
+        return name.Parent is MemberAccessExpressionSyntax access
             ? access.Expression
             : name.FirstAncestorOrSelf<ConditionalAccessExpressionSyntax>()?.Expression;
+    }
+
+    private static INamedTypeSymbol FindReceiverTypeOrNull(SimpleNameSyntax name, SemanticModel semanticModel)
+    {
+        ExpressionSyntax receiver = FindReceiverOrNull(name);
         if (receiver == null)
         {
             return null;
@@ -395,7 +410,7 @@ internal sealed class UnpassedInternalMemberUse
 
     // Why the compilation's own assembly: it holds only the types the run declares from source,
     // while Compilation.GetTypeByMetadataName would also find every referenced type.
-    private static bool IsDeclaredByTheRun(INamedTypeSymbol type, SemanticModel semanticModel)
+    internal static bool IsDeclaredByTheRun(INamedTypeSymbol type, SemanticModel semanticModel)
     {
         return semanticModel.Compilation.Assembly.GetTypeByMetadataName(ConstDriftCollector.ToReflectionMetadataName(type)) != null;
     }

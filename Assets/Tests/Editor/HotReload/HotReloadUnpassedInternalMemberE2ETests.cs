@@ -81,6 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalFieldInsideNameof";
             yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateField";
             yield return "InternalInstanceMethodOfAnInternalResult";
+            yield return "InternalExtensionMethodOfAnInternalClass";
+            yield return "InternalExtensionMethodOfAPublicClass";
         }
 
         // Edits whose body runs as IL copied into the patched method.
@@ -117,6 +119,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateFieldInGetter";
             yield return "InternalStaticMethodNextToOwnEventRaise";
             yield return "InternalFieldReadIntoAVarCapturedByALambda";
+            yield return "InternalExtensionMethodInLambda";
+            yield return "InternalExtensionMethodOfAPublicClassInLambda";
+            yield return "InternalExtensionMethodInAsyncMethod";
         }
 
         // Edits whose body runs as IL copied into the patched method but uses an internal member in a
@@ -400,6 +405,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         102);
                 case "InheritedInternalMethodBySimpleName":
                     return BodyEdit.OfDerivedValue("return InternalInstanceValue() + 100;", 102);
+                case "InternalExtensionMethodOfAnInternalClass":
+                    return BodyEdit.OfDerivedValue("return 50.Twice(1);", 101);
+                case "InternalExtensionMethodOfAPublicClass":
+                    return BodyEdit.OfDerivedValue("return 50.InternalTwice(2);", 102);
+                case "InternalExtensionMethodInLambda":
+                    return new BodyEdit(ClosureValue, "() => 30", "() => 50.Twice(1)", 101);
+                case "InternalExtensionMethodOfAPublicClassInLambda":
+                    return new BodyEdit(ClosureValue, "() => 30", "() => 50.InternalTwice(2)", 102);
+                case "InternalExtensionMethodInAsyncMethod":
+                    return new BodyEdit(AsyncValue, "return 50;", "return 50.Twice(1);", 101);
                 case "InternalStaticMethodInLambda":
                     return new BodyEdit(ClosureValue, "() => 30", "() => HotReloadInternalMemberHost.InternalStaticValue() + 100", 101);
                 case "InternalInstanceMethodInLambda":

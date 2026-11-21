@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 // What: finds the internal extension method of the target assembly that an implicit call on a
 // receiver binds to, which the receiver's own type cannot name because the extension is declared
@@ -42,6 +43,41 @@ internal static class UnpassedInternalExtensionLookup
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// What: the internal extension method of the target assembly that the reduced call
+    /// 'receiver.methodName(...)' runs, when its class is declared in a file the run was not given;
+    /// null when the receiver names a type or 'base', its type is unknown, or no such extension
+    /// takes it.
+    /// </summary>
+    internal static IMethodSymbol FindReducedCallTargetOrNull(
+        ExpressionSyntax receiver,
+        string methodName,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        // Why not a type or 'base': 'Type.Name(...)' calls a static member of the type and
+        // 'base.Name(...)' a member of the base type, and neither is an extension call.
+        if (receiver == null
+            || receiver is BaseExpressionSyntax
+            || semanticModel.GetSymbolInfo(receiver).Symbol is ITypeSymbol)
+        {
+            return null;
+        }
+
+        ITypeSymbol receiverType = semanticModel.GetTypeInfo(receiver).Type;
+        if (receiverType == null || receiverType.TypeKind == TypeKind.Error || receiverType.TypeKind == TypeKind.Dynamic)
+        {
+            return null;
+        }
+
+        // Why not a class the run declares: the worker binds its edited source, so a name missing
+        // there is missing from the edit, and the compiled copy would still list it.
+        IMethodSymbol method = FindInternalExtensionOrNull(receiverType, methodName, outParameterCount: null, targetAssembly);
+        return method == null || UnpassedInternalMemberUse.IsDeclaredByTheRun(method.ContainingType, semanticModel)
+            ? null
+            : method;
     }
 
     // Why a type parameter is compared by its constraints: `this T` accepts every receiver its
