@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.35.2](https://github.com/hatayama/unity-cli-loop/compare/v3.35.1...v3.35.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* Hot reload skips a body the patch would bind to a private member instead of the one Unity's compiler uses ([#3605](https://github.com/hatayama/unity-cli-loop/issues/3605)) ([78ef19a](https://github.com/hatayama/unity-cli-loop/commit/78ef19ac867b81e3b00603994235267bd1bc2511))
+
 ## [3.35.1](https://github.com/hatayama/unity-cli-loop/compare/v3.35.0...v3.35.1) (2026-11-21)
 
 
