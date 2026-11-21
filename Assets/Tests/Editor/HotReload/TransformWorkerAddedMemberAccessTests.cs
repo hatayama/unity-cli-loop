@@ -831,12 +831,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExtensionCall_ClosureCallingInternalExtensionOfClassMadePublicInSameEdit_BindsTheClassByName()
         {
-            TransformWorkerClientResult result = await RunExtensionCallHostCustomEditAsync(onDisk => onDisk
-                .Replace(
-                    "    internal static class HotReloadInternalExtensionCallMath",
-                    "    public static class HotReloadInternalExtensionCallMath",
-                    StringComparison.Ordinal)
-                .Replace("4101", "4102", StringComparison.Ordinal));
+            TransformWorkerClientResult result = await RunExtensionCallHostCustomEditAsync(onDisk =>
+            {
+                string edited = onDisk
+                    .Replace(
+                        "    internal static class HotReloadInternalExtensionCallMath",
+                        "    public static class HotReloadInternalExtensionCallMath",
+                        StringComparison.Ordinal)
+                    .Replace("4101", "4102", StringComparison.Ordinal);
+                Assert.That(edited, Does.Contain("    public static class HotReloadInternalExtensionCallMath"));
+                Assert.That(edited, Does.Contain("4102"));
+                return edited;
+            });
 
             AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsInternalExtension");
             AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");

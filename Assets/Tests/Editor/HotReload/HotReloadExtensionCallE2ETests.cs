@@ -117,11 +117,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
             Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5110));
 
-            HotReloadOrchestratorResult result = await RunEditAsync(onDisk => onDisk
-                .Replace(
-                    "    internal static class HotReloadInternalClassExtensionCallMath",
-                    "    public static class HotReloadInternalClassExtensionCallMath")
-                .Replace("5101", "5102"));
+            HotReloadOrchestratorResult result = await RunEditAsync(onDisk =>
+            {
+                string edited = onDisk
+                    .Replace(
+                        "    internal static class HotReloadInternalClassExtensionCallMath",
+                        "    public static class HotReloadInternalClassExtensionCallMath")
+                    .Replace("5101", "5102");
+                Assert.That(edited, Does.Contain("    public static class HotReloadInternalClassExtensionCallMath"));
+                Assert.That(edited, Does.Contain("5102"));
+                return edited;
+            });
 
             AssertKind(result, "ClosureCallsPublicExtensionOfInternalClass", HotReloadMethodOutcomeKind.Patched);
             Assert.That(host.ClosureCallsPublicExtensionOfInternalClass(), Is.EqualTo(5111));
@@ -138,11 +144,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
             Assert.That(host.ClosureReadsPrivateFieldAndCallsInternalExtension(), Is.EqualTo(4107));
 
-            HotReloadOrchestratorResult result = await RunEditAsync(onDisk => onDisk
-                .Replace(
-                    "    internal static class HotReloadInternalExtensionCallMath",
-                    "    public static class HotReloadInternalExtensionCallMath")
-                .Replace("4101", "4102"));
+            HotReloadOrchestratorResult result = await RunEditAsync(onDisk =>
+            {
+                string edited = onDisk
+                    .Replace(
+                        "    internal static class HotReloadInternalExtensionCallMath",
+                        "    public static class HotReloadInternalExtensionCallMath")
+                    .Replace("4101", "4102");
+                Assert.That(edited, Does.Contain("    public static class HotReloadInternalExtensionCallMath"));
+                Assert.That(edited, Does.Contain("4102"));
+                return edited;
+            });
 
             AssertNoFailedRow(result);
             AssertKind(result, "ClosureReadsPrivateFieldAndCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);

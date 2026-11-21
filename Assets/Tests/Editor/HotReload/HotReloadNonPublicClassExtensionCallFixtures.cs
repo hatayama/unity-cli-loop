@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event;
+
 using static io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadNonPublicClassExtensions;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -265,10 +267,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _recorded.Count + 6291;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureCallsKeywordNamespaceExtension()
+        {
+            Func<int> read = () => _value.KeywordNamespaceTriple(6311);
+            return read();
+        }
+
         private int RecordTraceArgument(int add)
         {
             _traceArguments++;
             return add;
+        }
+    }
+}
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
+{
+    /// <summary>
+    /// Internal static class in a namespace named with a keyword, so the lookup of the class by name
+    /// must use its metadata name (event), not the escaped display (@event).
+    /// </summary>
+    internal static class HotReloadKeywordNamespaceExtensions
+    {
+        internal static int KeywordNamespaceTriple(this int value, int add)
+        {
+            return value * 3 + add;
         }
     }
 }

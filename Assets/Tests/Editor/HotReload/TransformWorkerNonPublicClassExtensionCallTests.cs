@@ -46,7 +46,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda or async body that calls an extension method of a non-public static class
-        /// (reduced form, static form, chained, or a public method of the class) becomes an entry
+        /// (reduced form, static form, chained, a public method of the class, or a class in a
+        /// namespace named with a keyword) becomes an entry
         /// whose shim calls the accessor with the receiver first, and whose accessor finds the class
         /// by its name in the edited assembly.
         /// </summary>
@@ -55,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("6121", "ClosureCallsNonPublicClassExtensionInStaticForm", @"__M_NonPublicTriple\w*\(__F__value\(__uloopInstance\), 6122\)", "HotReloadNonPublicClassExtensions")]
         [TestCase("6131", "ClosureChainsNonPublicClassExtensions", @"__M_NonPublicPlusOne\w*\(__M_NonPublicTriple\w*\(__F__value\(__uloopInstance\), 6132\), 1\)", "HotReloadNonPublicClassExtensions")]
         [TestCase("6141", "ClosureCallsPublicExtensionOfNonPublicClass", @"__M_NonPublicDouble\w*\(__F__value\(__uloopInstance\), 6142\)", "HotReloadNonPublicClassExtensions")]
+        [TestCase("6311", "ClosureCallsKeywordNamespaceExtension", @"__M_KeywordNamespaceTriple\w*\(__F__value\(__uloopInstance\), 6312\)", "event.HotReloadKeywordNamespaceExtensions")]
         [TestCase("6291", "ClosureRecordsThroughPublicExtensionOfNonPublicClass", @"__M_NonPublicRecord\w*\(__F__value\(__uloopInstance\), ", "HotReloadNonPublicClassExtensions")]
         public async Task NonPublicClassExtensionCall_IsAnEntryBindingTheClassByName(
             string token,

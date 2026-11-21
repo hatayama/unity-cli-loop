@@ -157,8 +157,19 @@ internal static class ExtensionClassNameBind
         return ConstDriftCollector.ToReflectionMetadataName(method.ContainingType) + ", " + targetAssembly.Identity.Name;
     }
 
+    // Why only a class of the patch target: a class of another assembly can share its metadata name
+    // with an unrelated class of the target, and the accessor would bind that one. A class from the
+    // edited source belongs to the target, as does one the worker reads from the target's metadata.
     private static INamedTypeSymbol CompiledClassOrNull(IMethodSymbol method, IAssemblySymbol targetAssembly)
     {
-        return targetAssembly?.GetTypeByMetadataName(ConstDriftCollector.ToReflectionMetadataName(method.ContainingType));
+        INamedTypeSymbol containingType = method.ContainingType;
+        if (targetAssembly == null
+            || (containingType.DeclaringSyntaxReferences.IsEmpty
+                && containingType.ContainingAssembly?.Identity.Name != targetAssembly.Identity.Name))
+        {
+            return null;
+        }
+
+        return targetAssembly.GetTypeByMetadataName(ConstDriftCollector.ToReflectionMetadataName(containingType));
     }
 }

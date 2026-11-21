@@ -198,6 +198,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(3.NonPublicClosureOverOwnClass(1), Is.EqualTo(6318));
         }
 
+        /// <summary>
+        /// What: a lambda that calls an extension method of an internal static class in a namespace
+        /// named with a keyword is Patched and returns the edited value, because the accessor looks
+        /// the class up by its metadata name.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingExtensionInKeywordNamedNamespace_IsPatched()
+        {
+            HotReloadNonPublicClassExtensionCallHost host = new HotReloadNonPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsKeywordNamespaceExtension(), Is.EqualTo(6320));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("6311", "6312");
+
+            AssertKind(result, "ClosureCallsKeywordNamespaceExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureCallsKeywordNamespaceExtension(), Is.EqualTo(6321));
+        }
+
         private static Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(
             string originalToken,
             string editedToken)
