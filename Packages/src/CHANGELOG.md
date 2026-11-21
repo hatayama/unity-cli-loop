@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.35.1](https://github.com/hatayama/unity-cli-loop/compare/v3.35.0...v3.35.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* Hot reload skips lambda and async calls to an internal extension method of a file the reload was not given ([#3601](https://github.com/hatayama/unity-cli-loop/issues/3601)) ([a54c382](https://github.com/hatayama/unity-cli-loop/commit/a54c38233bb0c2b04f951139841ca9ed8f5c5ddc))
+
 ## [3.35.0](https://github.com/hatayama/unity-cli-loop/compare/v3.34.11...v3.35.0) (2026-11-21)
 
 
