@@ -110,10 +110,22 @@ internal sealed class AccessorEntry
         };
     }
 
-    public bool TryGetVisibilityFailure(out WorkerReason reason)
+    /// <summary>
+    /// What: the reason the accessor cannot name a type of its signature, or false when it can.
+    /// <paramref name="targetAssembly"/> is the compiled patch target read with every member
+    /// visible, or null when the run could not read it.
+    /// </summary>
+    public bool TryGetVisibilityFailure(IAssemblySymbol targetAssembly, out WorkerReason reason)
     {
+        bool bindsClassByName = BindsDeclaringClassByName(targetAssembly)
+            && ExtensionClassNameBind.IsCompiledIn(MethodSymbol, targetAssembly);
         foreach (ITypeSymbol typeSymbol in EnumerateSignatureTypes())
         {
+            if (bindsClassByName && SymbolEqualityComparer.Default.Equals(typeSymbol, MethodSymbol.ContainingType))
+            {
+                continue;
+            }
+
             if (!AccessibilityRules.IsExternallyVisibleType(typeSymbol))
             {
                 reason = WorkerReason.Of(
@@ -127,9 +139,15 @@ internal sealed class AccessorEntry
         return false;
     }
 
+    private bool BindsDeclaringClassByName(IAssemblySymbol targetAssembly)
+    {
+        return Kind == AccessorKind.MethodDelegate && ExtensionClassNameBind.FindsClassByName(MethodSymbol, targetAssembly);
+    }
+
     public IEnumerable<ITypeSymbol> EnumerateSignatureTypes()
     {
-        // Bind statements always emit typeof(ContainingType), including for static members.
+        // Bind statements name ContainingType, including for static members; only an extension
+        // method of a non-public class names it as a string, which TryGetVisibilityFailure allows.
         switch (Kind)
         {
             case AccessorKind.FieldRef:
@@ -175,20 +193,28 @@ internal sealed class AccessorEntry
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
     }
 
-    public StatementSyntax EmitBindStatement()
+    /// <summary>
+    /// What: the statement that binds this accessor. <paramref name="targetAssembly"/> is the
+    /// compiled patch target read with every member visible, which an extension method of a
+    /// non-public class is looked up in; it may be null only when no entry needs that lookup.
+    /// </summary>
+    public StatementSyntax EmitBindStatement(IAssemblySymbol targetAssembly)
     {
         string statement = Kind switch
         {
             AccessorKind.FieldRef => BuildFieldRefBindStatement(),
             AccessorKind.MethodDelegate => BuildMethodDelegateBindStatement(
                 MethodSymbol.Name,
-                MethodSymbol),
+                MethodSymbol,
+                BuildDeclaringTypeExpression(targetAssembly)),
             AccessorKind.PropertyGetter => BuildMethodDelegateBindStatement(
                 PropertySymbol.GetMethod.Name,
-                PropertySymbol.GetMethod),
+                PropertySymbol.GetMethod,
+                "typeof(" + TypeDisplay(PropertySymbol.ContainingType) + ")"),
             AccessorKind.PropertySetter => BuildMethodDelegateBindStatement(
                 PropertySymbol.SetMethod.Name,
-                PropertySymbol.SetMethod),
+                PropertySymbol.SetMethod,
+                "typeof(" + TypeDisplay(PropertySymbol.ContainingType) + ")"),
             AccessorKind.EventBackingFieldRef => BuildBackingFieldRefBindStatement(
                 EventSymbol.ContainingType,
                 EventSymbol.Type,
@@ -198,6 +224,20 @@ internal sealed class AccessorEntry
         };
 
         return SyntaxFactory.ParseStatement(statement);
+    }
+
+    // Why by name for a non-public class: reflection reaches a non-public type whatever access
+    // checks the runtime applies to the shim's own IL. Under the Editor's Mono, typeof of a
+    // top-level internal class binds as well (measured), but the name lookup does not rely on that.
+    private string BuildDeclaringTypeExpression(IAssemblySymbol targetAssembly)
+    {
+        if (!BindsDeclaringClassByName(targetAssembly))
+        {
+            return "typeof(" + TypeDisplay(MethodSymbol.ContainingType) + ")";
+        }
+
+        string assemblyQualifiedName = ExtensionClassNameBind.AssemblyQualifiedClassName(MethodSymbol, targetAssembly);
+        return "global::System.Type.GetType(\"" + EscapeStringLiteral(assemblyQualifiedName) + "\", true)";
     }
 
     private string BuildDelegateTypeDisplayString()
@@ -293,9 +333,11 @@ internal sealed class AccessorEntry
             + EscapeStringLiteral(fieldName) + "\");";
     }
 
-    private string BuildMethodDelegateBindStatement(string metadataName, IMethodSymbol methodSymbol)
+    private string BuildMethodDelegateBindStatement(
+        string metadataName,
+        IMethodSymbol methodSymbol,
+        string declaringTypeExpression)
     {
-        string declaringType = TypeDisplay(methodSymbol.ContainingType);
         string delegateType = BuildFuncOrActionType(methodSymbol);
         List<ITypeSymbol> delegateParameterTypes = EnumerateDelegateParameterTypes(methodSymbol);
         // AccessTools.Method matches metadata parameters only; the instance receiver is not one.
@@ -312,8 +354,8 @@ internal sealed class AccessorEntry
         // DynamicMethod parameters, so Func<Host,T> becomes T(Host,T) and bind fails.
         string delegateArgs = BuildTypeArrayLiteral(delegateParameterTypes);
         return DelegateFieldName + " = global::HarmonyLib.AccessTools.MethodDelegate<"
-            + delegateType + ">(global::HarmonyLib.AccessTools.Method(typeof("
-            + declaringType + "), \"" + EscapeStringLiteral(metadataName) + "\", "
+            + delegateType + ">(global::HarmonyLib.AccessTools.Method("
+            + declaringTypeExpression + ", \"" + EscapeStringLiteral(metadataName) + "\", "
             + typeArray + "), null, " + virtualCallLiteral + ", " + delegateArgs + ");";
     }
 

@@ -26,9 +26,11 @@ internal sealed class ShimTypeBuilder
         string shimTypeName,
         string namespaceName,
         List<UsingDirectiveSyntax> usings,
-        string sourceProjectRelativePath)
+        string sourceProjectRelativePath,
+        IAssemblySymbol targetAssembly)
     {
         ShimTypeName = shimTypeName;
+        TargetAssembly = targetAssembly;
         NamespaceName = namespaceName ?? string.Empty;
         Usings = usings ?? new List<UsingDirectiveSyntax>();
         SourceProjectRelativePath = sourceProjectRelativePath;
@@ -42,6 +44,10 @@ internal sealed class ShimTypeBuilder
     public string SourceProjectRelativePath { get; }
 
     public string NamespaceName { get; }
+
+    // The compiled patch target read with every member visible, or null when the run could not read
+    // it. The bind of an extension method of a non-public class looks its class up in it by name.
+    public IAssemblySymbol TargetAssembly { get; }
 
     public List<UsingDirectiveSyntax> Usings { get; }
 
@@ -106,7 +112,7 @@ internal sealed class ShimTypeBuilder
         List<StatementSyntax> statements = new List<StatementSyntax>();
         foreach (AccessorEntry accessor in AccessorPlan.Entries)
         {
-            statements.Add(accessor.EmitBindStatement());
+            statements.Add(accessor.EmitBindStatement(TargetAssembly));
         }
 
         return SyntaxFactory.MethodDeclaration(

@@ -395,7 +395,8 @@ internal static class OrdinaryMethodQueue
                 typeState.CompiledType,
                 typeState.AddedMemberAccess,
                 typeState.AddedEvents,
-                typeState.SourceUnit.PartialTypeParts);
+                typeState.SourceUnit.PartialTypeParts,
+                typeState.TargetAssembly);
         if (isAddedMethod && decision.SkipReason == null)
         {
             decision = MethodTransformDecider.DecideAddedMethodAccessors(

@@ -135,7 +135,8 @@ internal static class PropertySetterEmitter
             sourceProjectRelativePath,
             shimTypes,
             shimNames,
-            assemblyGlobalUsings);
+            assemblyGlobalUsings,
+            typeState.TargetAssembly);
         ShimTypeBuilder shimType = typeState.CurrentShimType;
         string shimMethodName = shimNames.NextShimMethodName(PropertyGetterEmitter.ShimBaseName(setterSymbol));
         MethodDeclarationSyntax rewrittenMethod = RewritePropertySetterBody(

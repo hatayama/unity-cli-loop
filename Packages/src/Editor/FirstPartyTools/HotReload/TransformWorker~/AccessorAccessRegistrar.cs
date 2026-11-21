@@ -482,6 +482,12 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
+        rejectReason = ExtensionClassNameBind.FindRejectReasonOrNull(semanticModel, invocation, methodSymbol);
+        if (rejectReason != null)
+        {
+            return false;
+        }
+
         plan.GetOrAddMethod(methodSymbol);
         return true;
     }
