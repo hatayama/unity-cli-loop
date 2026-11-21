@@ -140,6 +140,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Methods and accessors that need an unsafe context (pointers, function pointers, fixed "
                     + "statements, or unsafe blocks) are skipped; the patch is compiled without unsafe code.",
                     0).EndingWith(CompileCallToAction));
+            // Why the member is named with its parameter list: overloads differ only there, and it is
+            // the one the patch could use that the reader has to find.
+            templates.Add(
+                HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember,
+                Plain(
+                    "The patch could use '{0}' here instead of the member Unity's compiler uses: the patch "
+                    + "is compiled against a copy of the assembly where every member is public, so '{0}', "
+                    + "which this code cannot reach, takes part in choosing the member.",
+                    1).EndingWith(CompileCallToAction));
             templates.Add(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 Plain(

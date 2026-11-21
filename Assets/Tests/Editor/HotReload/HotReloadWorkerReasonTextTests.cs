@@ -308,6 +308,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "statements, or unsafe blocks) are skipped; the patch is compiled without unsafe code. "
                 + "Run 'uloop compile'.");
             yield return Case(
+                HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember,
+                new[] { "Targets.Pick(ArraySegment<int>)" },
+                "The patch could use 'Targets.Pick(ArraySegment<int>)' here instead of the member Unity's "
+                + "compiler uses: the patch is compiled against a copy of the assembly where every member is "
+                + "public, so 'Targets.Pick(ArraySegment<int>)', which this code cannot reach, takes part in "
+                + "choosing the member. Run 'uloop compile'.");
+            yield return Case(
                 HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation,
                 NoArgs,
                 "Explicit interface implementations the compiled assembly does not hold yet, and accessors "
