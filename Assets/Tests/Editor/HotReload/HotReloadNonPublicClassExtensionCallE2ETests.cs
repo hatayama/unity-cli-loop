@@ -20,6 +20,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string FixtureFileName = "HotReloadNonPublicClassExtensionCallFixtures.cs";
 
+        private const string OwnClassAddedMethodAnchor =
+            "        internal static int NonPublicClosureOverOwnClass(this int value, int add)";
+
+        private const string OwnClassAddedMethodSource =
+            "        internal static int NonPublicAddedFive(int value)\n"
+            + "        {\n"
+            + "            return value * 5;\n"
+            + "        }\n\n";
+
         private const string AddedExtensionAnchor = "        internal static int NonPublicPlusOne(this int value, int add)";
 
         private const string AddedExtensionSource =
@@ -150,6 +159,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertKind(result, "ClosureCallsNonPublicClassExtensionInStaticForm", HotReloadMethodOutcomeKind.Patched);
             Assert.That(host.ClosureCallsNonPublicClassExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls a public void extension method of a non-public static class,
+        /// which binds ambiguously against both copies of the class, is Patched and the edited body
+        /// runs the call through the accessor.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingPublicVoidExtensionOfNonPublicClass_IsPatched()
+        {
+            HotReloadNonPublicClassExtensionCallHost host = new HotReloadNonPublicClassExtensionCallHost();
+            Assert.That(host.ClosureRecordsThroughPublicExtensionOfNonPublicClass(), Is.EqualTo(6292));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync("6291", "6292");
+
+            AssertKind(result, "ClosureRecordsThroughPublicExtensionOfNonPublicClass", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureRecordsThroughPublicExtensionOfNonPublicClass(), Is.EqualTo(6294));
+        }
+
+        /// <summary>
+        /// What: a lambda inside a non-public static class that calls, in the static form, a method
+        /// this reload adds to that class is Patched and returns what the added method computes.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureInNonPublicClassCallingItsAddedMethodInStaticForm_IsPatched()
+        {
+            Assert.That(3.NonPublicClosureOverOwnClass(1), Is.EqualTo(6305));
+
+            HotReloadOrchestratorResult result = await RunEditAsync(
+                onDisk => onDisk
+                    .Replace(OwnClassAddedMethodAnchor, OwnClassAddedMethodSource + OwnClassAddedMethodAnchor)
+                    .Replace(
+                        "() => value + add + 6301",
+                        "() => HotReloadNonPublicClassExtensions.NonPublicAddedFive(value) + add + 6302"));
+
+            AssertKind(result, "NonPublicClosureOverOwnClass", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(3.NonPublicClosureOverOwnClass(1), Is.EqualTo(6318));
         }
 
         private static Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(

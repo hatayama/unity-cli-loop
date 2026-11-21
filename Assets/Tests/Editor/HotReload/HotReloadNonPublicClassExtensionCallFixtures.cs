@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -23,8 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
     /// <summary>
     /// Internal static class whose extension methods the host below calls, declared in the same
-    /// file as the host. An accessor delegate cannot name the class, so a lambda or async body that
-    /// calls one needs an accessor bound to the class by name.
+    /// file as the host. A lambda or async body that calls one needs an accessor, which finds the
+    /// class by name because the class is not public.
     /// </summary>
     internal static class HotReloadNonPublicClassExtensions
     {
@@ -85,6 +86,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return add + 2;
         }
+
+        // A public void method, so a test edit can make it [Conditional] while the compiled copy
+        // still is not.
+        public static void NonPublicRecord(this int value, List<int> sink)
+        {
+            sink.Add(value);
+        }
+
+        // A lambda inside the internal class itself, so a test edit can call a method it adds to
+        // its own class in the static form.
+        internal static int NonPublicClosureOverOwnClass(this int value, int add)
+        {
+            Func<int> read = () => value + add + 6301;
+            return read();
+        }
     }
 
     /// <summary>
@@ -106,6 +122,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private HotReloadNonPublicMarked _marked = new HotReloadNonPublicMarked();
 
         private IHotReloadNonPublicMarker _marker = new HotReloadNonPublicMarked();
+
+        private readonly List<int> _recorded = new List<int>();
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ClosureCallsNonPublicClassExtension()
@@ -237,6 +255,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             Func<int> read = () => _marker.NonPublicMarkerRead(6281);
             return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ClosureRecordsThroughPublicExtensionOfNonPublicClass()
+        {
+            Action record = () => _value.NonPublicRecord(_recorded);
+            record();
+            return _recorded.Count + 6291;
         }
 
         private int RecordTraceArgument(int add)

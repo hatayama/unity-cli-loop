@@ -147,7 +147,7 @@ internal static class IndexerAccessorEmitter
             shimTypes,
             shimNames,
             assemblyGlobalUsings,
-            typeState.TargetAssembly?.Identity.Name);
+            typeState.TargetAssembly);
         ShimTypeBuilder shimType = typeState.CurrentShimType;
         string shimMethodName = shimNames.NextShimMethodName(accessorSymbol.Name);
         MethodDeclarationSyntax rewrittenMethod = RewriteAccessorBody(

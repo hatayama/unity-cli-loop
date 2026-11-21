@@ -102,9 +102,10 @@ internal static class AccessorEligibility
         }
 
         // Why after registration: a class named only by a static-form call stays out of the shim only
-        // when the call is rewritten, which is what registering it means. A call outside the roots,
-        // such as a statement beside the closures of a transplanted body, is not registered, and its
-        // class name would reach a shim that compiles against the publicized copy and fails at run.
+        // when the call is rewritten, by an accessor or by the added-method rewrite, which is what
+        // registering it means. A call outside the roots, such as a statement beside the closures of
+        // a transplanted body, is not registered, so it would keep calling the non-public class as
+        // written, and it stays refused.
         foreach (ClassNamedByCall classNamedByCall in classesNamedByCalls)
         {
             if (!registeredCalls.Contains(classNamedByCall.Call))
@@ -165,10 +166,28 @@ internal static class AccessorEligibility
             {
                 return false;
             }
+            else if (node is InvocationExpressionSyntax invocation
+                && CallsAnAddedMethodOfTheEditedType(semanticModel, invocation, addedMemberAccess))
+            {
+                registeredCalls.Add(node);
+            }
         }
 
         rejectReason = null;
         return true;
+    }
+
+    // Why a call the registrar declines can count as rewritten: a call to a method this reload adds
+    // to the edited type takes no accessor because the added-method rewrite replaces it with a call
+    // to the shim, so the class name it is written with does not reach the shim either.
+    private static bool CallsAnAddedMethodOfTheEditedType(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax invocation,
+        AddedMemberAccessLookup addedMemberAccess)
+    {
+        return addedMemberAccess != null
+            && AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation) is IMethodSymbol method
+            && addedMemberAccess.IsAddedMethod(AccessibilityRules.UnreducedMethod(method));
     }
 
     private static bool AreMethodSignatureTypesVisible(IMethodSymbol methodSymbol, out WorkerReason rejectReason)

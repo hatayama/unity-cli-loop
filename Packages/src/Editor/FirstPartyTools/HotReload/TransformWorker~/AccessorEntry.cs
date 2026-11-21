@@ -117,7 +117,7 @@ internal sealed class AccessorEntry
     /// </summary>
     public bool TryGetVisibilityFailure(IAssemblySymbol targetAssembly, out WorkerReason reason)
     {
-        bool bindsClassByName = BindsDeclaringClassByName()
+        bool bindsClassByName = BindsDeclaringClassByName(targetAssembly)
             && ExtensionClassNameBind.IsCompiledIn(MethodSymbol, targetAssembly);
         foreach (ITypeSymbol typeSymbol in EnumerateSignatureTypes())
         {
@@ -139,9 +139,9 @@ internal sealed class AccessorEntry
         return false;
     }
 
-    private bool BindsDeclaringClassByName()
+    private bool BindsDeclaringClassByName(IAssemblySymbol targetAssembly)
     {
-        return Kind == AccessorKind.MethodDelegate && ExtensionClassNameBind.AppliesTo(MethodSymbol);
+        return Kind == AccessorKind.MethodDelegate && ExtensionClassNameBind.FindsClassByName(MethodSymbol, targetAssembly);
     }
 
     public IEnumerable<ITypeSymbol> EnumerateSignatureTypes()
@@ -194,11 +194,11 @@ internal sealed class AccessorEntry
     }
 
     /// <summary>
-    /// What: the statement that binds this accessor. <paramref name="targetAssemblyName"/> is the
-    /// simple name of the compiled patch target, which an extension method of a non-public class
-    /// is looked up in; it may be null only when no entry needs that lookup.
+    /// What: the statement that binds this accessor. <paramref name="targetAssembly"/> is the
+    /// compiled patch target read with every member visible, which an extension method of a
+    /// non-public class is looked up in; it may be null only when no entry needs that lookup.
     /// </summary>
-    public StatementSyntax EmitBindStatement(string targetAssemblyName)
+    public StatementSyntax EmitBindStatement(IAssemblySymbol targetAssembly)
     {
         string statement = Kind switch
         {
@@ -206,7 +206,7 @@ internal sealed class AccessorEntry
             AccessorKind.MethodDelegate => BuildMethodDelegateBindStatement(
                 MethodSymbol.Name,
                 MethodSymbol,
-                BuildDeclaringTypeExpression(targetAssemblyName)),
+                BuildDeclaringTypeExpression(targetAssembly)),
             AccessorKind.PropertyGetter => BuildMethodDelegateBindStatement(
                 PropertySymbol.GetMethod.Name,
                 PropertySymbol.GetMethod,
@@ -226,17 +226,17 @@ internal sealed class AccessorEntry
         return SyntaxFactory.ParseStatement(statement);
     }
 
-    // Why by name for a non-public class: typeof would compile against the publicized copy the
-    // shim references and then fail the access check when __BindAccessors runs. The lookup by name
-    // goes through reflection, which reaches a non-public type.
-    private string BuildDeclaringTypeExpression(string targetAssemblyName)
+    // Why by name for a non-public class: reflection reaches a non-public type whatever access
+    // checks the runtime applies to the shim's own IL. Under the Editor's Mono, typeof of a
+    // top-level internal class binds as well (measured), but the name lookup does not rely on that.
+    private string BuildDeclaringTypeExpression(IAssemblySymbol targetAssembly)
     {
-        if (!BindsDeclaringClassByName())
+        if (!BindsDeclaringClassByName(targetAssembly))
         {
             return "typeof(" + TypeDisplay(MethodSymbol.ContainingType) + ")";
         }
 
-        string assemblyQualifiedName = ExtensionClassNameBind.AssemblyQualifiedClassName(MethodSymbol, targetAssemblyName);
+        string assemblyQualifiedName = ExtensionClassNameBind.AssemblyQualifiedClassName(MethodSymbol, targetAssembly);
         return "global::System.Type.GetType(\"" + EscapeStringLiteral(assemblyQualifiedName) + "\", true)";
     }
 

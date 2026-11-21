@@ -558,7 +558,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a lambda that reads a private field and calls, in reduced form (x.M()), an
         /// internal extension method of an internal class is an entry whose accessor finds the
-        /// class by name, because a shim cannot name the class.
+        /// class by name, because the class is not public.
         /// </summary>
         [Test]
         public async Task ExtensionCall_ClosureReadingPrivateFieldAndCallingInternalExtension_BindsTheClassByName()
@@ -820,6 +820,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             AssertAddedAndNotSkipped(result, "AddedCallsInternalExtension");
+            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+        }
+
+        /// <summary>
+        /// What: when the same edit makes an internal class public and changes a lambda that calls an
+        /// internal extension method of it, the accessor still finds the class by name, because the
+        /// running code calls the compiled class, which is still internal.
+        /// </summary>
+        [Test]
+        public async Task ExtensionCall_ClosureCallingInternalExtensionOfClassMadePublicInSameEdit_BindsTheClassByName()
+        {
+            TransformWorkerClientResult result = await RunExtensionCallHostCustomEditAsync(onDisk => onDisk
+                .Replace(
+                    "    internal static class HotReloadInternalExtensionCallMath",
+                    "    public static class HotReloadInternalExtensionCallMath",
+                    StringComparison.Ordinal)
+                .Replace("4101", "4102", StringComparison.Ordinal));
+
+            AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsInternalExtension");
             AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 

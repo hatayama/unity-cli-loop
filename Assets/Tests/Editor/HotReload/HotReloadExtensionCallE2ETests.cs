@@ -128,6 +128,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when one edit makes an internal class public and changes a lambda that calls an
+        /// internal extension method of it, the lambda is Patched and calls the compiled class, which
+        /// is still internal while the Editor runs.
+        /// </summary>
+        [Test]
+        public async Task Run_ClosureCallingInternalExtensionOfClassMadePublicInSameEdit_IsPatched()
+        {
+            HotReloadExtensionCallHost host = new HotReloadExtensionCallHost();
+            Assert.That(host.ClosureReadsPrivateFieldAndCallsInternalExtension(), Is.EqualTo(4107));
+
+            HotReloadOrchestratorResult result = await RunEditAsync(onDisk => onDisk
+                .Replace(
+                    "    internal static class HotReloadInternalExtensionCallMath",
+                    "    public static class HotReloadInternalExtensionCallMath")
+                .Replace("4101", "4102"));
+
+            AssertNoFailedRow(result);
+            AssertKind(result, "ClosureReadsPrivateFieldAndCallsInternalExtension", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ClosureReadsPrivateFieldAndCallsInternalExtension(), Is.EqualTo(4108));
+        }
+
+        /// <summary>
         /// What: a method added in this reload that calls an internal extension method of an
         /// internal class in reduced form runs through the accessor: the compiled method edited to
         /// call it returns what the added method computes.
