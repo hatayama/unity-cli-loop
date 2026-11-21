@@ -179,7 +179,7 @@ internal static class AddedCallSiteGuard
             : HotReloadWorkerReasonCode.AddedMethodMethodGroupReference;
         string example = groupMethod.MethodKind == MethodKind.ReducedExtension
             && methodGroup is MemberAccessExpressionSyntax receiverAccess
-                ? MethodGroupLambdaExample.BuildSuffixOnReceiver(groupMethod, receiverAccess.Expression.ToString())
+                ? MethodGroupLambdaExample.BuildSuffixOnReceiver(groupMethod, receiverAccess.Expression)
                 : MethodGroupLambdaExample.BuildSuffix(groupMethod);
         return WorkerReason.Of(code, groupMethod.Name, example);
     }

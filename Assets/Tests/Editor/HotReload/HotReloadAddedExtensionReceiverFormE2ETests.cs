@@ -72,6 +72,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref receiver)");
             yield return new TestCaseData("StatementCallsInternalExtensionOnStruct", StructStatementCall, "return HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, 7421);", 7426, 8426)
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref static form)");
+            yield return new TestCaseData("StatementCallsInternalExtensionConditionally", "return _label?.NullableLengthPlus(7431) ?? 0;", "return _label == null ? 0 : HotReloadPublicClassInternalExtensions.AddedLengthPlus(_label, 7431);", 7434, 8434)
+                .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(null check and static form instead of conditional access)");
             yield return new TestCaseData("ClosureCallsInternalExtension", "Func<int> read = () => _value.TriplePlus(7101);", "Func<int> read = () => new Memory<int>(_ints).AddedMemoryPlus(7101);", 7110, 8103)
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(Memory receiver in a lambda)");
         }
@@ -82,6 +84,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(conditional receiver)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "Func<int, int> f = _label.AddedLengthPlus; return f(7401);", 7410, "(such as 'a => _label.AddedLengthPlus(a)')")
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(method group on a receiver)");
+            yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "string a = _label; Func<int, int> f = a.AddedLengthPlus; return f(7401);", 7410, "(such as 'b => a.AddedLengthPlus(b)')")
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(method group on a receiver named like a lambda parameter)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return _value.AddedSkipped(7401);", 7410, "AddedSkipped(int, int)', which this reload skipped")
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(skipped callee on a receiver)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return HotReloadPublicClassInternalExtensions.AddedSkipped(_value, 7401);", 7410, "AddedSkipped(int, int)', which this reload skipped")
@@ -117,7 +121,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a call on a receiver to an extension method the same reload adds that the rewrite
         /// cannot express (a conditional receiver, a method group, a callee the reload skips) is
         /// Skipped with the reason for that shape rather than failing the file, keeps its compiled
-        /// value, and the rest of the file still applies.
+        /// value, and the rest of the file still applies. A method group's example lambda calls
+        /// the method on the receiver with parameter names the receiver does not use.
         /// </summary>
         [TestCaseSource(nameof(CallsThatAreSkipped))]
         public async Task Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(
