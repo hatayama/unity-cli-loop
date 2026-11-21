@@ -309,7 +309,15 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         if (!isStaticCall)
         {
             ExpressionSyntax receiver = ExtractReceiver(node.Expression);
-            arguments.Add(SyntaxFactory.Argument(VisitReceiver(receiver)));
+            ArgumentSyntax receiverArgument = SyntaxFactory.Argument(VisitReceiver(receiver));
+            // Why ref: a receiver-form call to a 'this ref' extension method passes its receiver by
+            // reference, which the static form has to spell out.
+            if (IsReceiverPassedByRef(node))
+            {
+                receiverArgument = receiverArgument.WithRefKindKeyword(SyntaxFactory.Token(SyntaxKind.RefKeyword));
+            }
+
+            arguments.Add(receiverArgument);
         }
 
         foreach (ArgumentSyntax argument in node.ArgumentList.Arguments)
@@ -321,6 +329,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
                 shimAccess,
                 SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)))
             .WithTriviaFrom(node);
+    }
+
+    private bool IsReceiverPassedByRef(InvocationExpressionSyntax node)
+    {
+        IMethodSymbol invoked = AccessibilityRules.ResolvedSymbolOrNull(_semanticModel, node) as IMethodSymbol;
+        if (invoked == null || invoked.MethodKind != MethodKind.ReducedExtension)
+        {
+            return false;
+        }
+
+        IMethodSymbol staticForm = AddedMethodCallResolver.StaticFormOf(invoked);
+        return staticForm.Parameters.Length > 0 && staticForm.Parameters[0].RefKind == RefKind.Ref;
     }
 
     private static string BuildAddedMethodKey(IMethodSymbol methodSymbol)

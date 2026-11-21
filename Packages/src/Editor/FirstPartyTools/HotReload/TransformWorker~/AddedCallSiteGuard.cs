@@ -112,11 +112,14 @@ internal static class AddedCallSiteGuard
             // Why resolved: see AddedMethodCallResolver; an unbound call to a skipped added method
             // would otherwise be let through.
             ISymbol symbol = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation);
-            if (symbol is not IMethodSymbol methodSymbol)
+            if (symbol is not IMethodSymbol resolvedMethod)
             {
                 continue;
             }
 
+            // Why the static form: a call to an added extension method written on a receiver is
+            // keyed, like the method itself, by its declaration with the receiver as a parameter.
+            IMethodSymbol methodSymbol = AddedMethodCallResolver.StaticFormOf(resolvedMethod);
             string calledKey = WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol);
             // Why the receiver spine (not a WhenNotNull ancestor walk): other?.Inner.AddedPing()
             // and other?.Get().AddedPing() walk left to a MemberBinding. An ancestor walk also
@@ -174,7 +177,11 @@ internal static class AddedCallSiteGuard
         HotReloadWorkerReasonCode code = handlerAssignmentKind == SyntaxKind.AddAssignmentExpression
             ? HotReloadWorkerReasonCode.AddedMethodMethodGroupSubscription
             : HotReloadWorkerReasonCode.AddedMethodMethodGroupReference;
-        return WorkerReason.Of(code, groupMethod.Name, MethodGroupLambdaExample.BuildSuffix(groupMethod));
+        string example = groupMethod.MethodKind == MethodKind.ReducedExtension
+            && methodGroup is MemberAccessExpressionSyntax receiverAccess
+                ? MethodGroupLambdaExample.BuildSuffixOnReceiver(groupMethod, receiverAccess)
+                : MethodGroupLambdaExample.BuildSuffix(groupMethod);
+        return WorkerReason.Of(code, groupMethod.Name, example);
     }
 
     /// <summary>
@@ -231,13 +238,18 @@ internal static class AddedCallSiteGuard
     {
         // Why resolved: a method group converted to a delegate over a BCL twin type
         // ('Func<Memory<int>, int> f = AddedM;') binds to nothing with accessibility ignored.
-        if (AccessibilityRules.ResolvedSymbolOrNull(semanticModel, expression) is IMethodSymbol methodSymbol
-            && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
+        if (AccessibilityRules.ResolvedSymbolOrNull(semanticModel, expression) is not IMethodSymbol resolvedMethod)
         {
-            return methodSymbol;
+            return null;
         }
 
-        return null;
+        // Why the static form for the key: an added extension method named on a receiver
+        // ('value.AddedM') is keyed by its declaration, as for a call. The group's own form is
+        // returned, since the reason's example lambda takes the parameters the delegate takes.
+        IMethodSymbol staticForm = AddedMethodCallResolver.StaticFormOf(resolvedMethod);
+        return addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(staticForm))
+            ? resolvedMethod
+            : null;
     }
 
     internal static bool IsInvocationCalleeName(IdentifierNameSyntax name)

@@ -733,10 +733,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 NoArgs,
                 "inaccessible extension method used as a method group (not called) has no accessor rewrite shape.");
             yield return Case(
-                HotReloadWorkerReasonCode.AccessorAddedExtensionReducedCallNoShape,
-                new[] { "AddedTriple", "Extensions" },
-                "extension method 'AddedTriple' added in this reload has no rewrite shape when called on a receiver; write the call as 'Extensions.AddedTriple(receiver, ...)'.");
-            yield return Case(
                 HotReloadWorkerReasonCode.AccessorGenericMethodNotRewritten,
                 NoArgs,
                 "inaccessible generic method calls are not rewritten.");
