@@ -30,6 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        internal static int AddedLengthPlus(this string value, int add) { return value.Length + add + 1000; }\n"
             + "        internal static int AddedSkipped(this int value, int add) { Func<int> f = () => GenericEcho<int>(value, add); return f() + 1000; }\n\n";
 
+        private const string NonPublicFixtureFileName = "HotReloadNonPublicClassExtensionCallFixtures.cs";
+
+        private const string NonPublicAddedExtensionAnchor = "        internal static int NonPublicPlusOne(this int value, int add)";
+
         private const string StatementCall = "return _value.TriplePlus(7401);";
 
         private const string StructStatementCall = "return _point.PointRead(7421);";
@@ -136,6 +140,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
         }
 
+        /// <summary>
+        /// What: when one edit changes the return type of an extension method of a public class and
+        /// calls it from a lambda and from a method's own statements, both callers are Skipped with
+        /// the signature-change reason and keep their compiled values, in the receiver form as in
+        /// the static form, with no Failed row.
+        /// </summary>
+        [TestCase("(int)_point.PointRead(7192)", "(int)_point.PointRead(7422)")]
+        [TestCase("(int)HotReloadPublicClassInternalExtensions.PointRead(_point, 7192)", "(int)HotReloadPublicClassInternalExtensions.PointRead(_point, 7422)")]
+        public async Task Run_CallsToExtensionWhoseReturnTypeChanged_AreSkippedLikeTheStaticForm(string lambdaCall, string statementCall)
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsInternalExtensionOnStructByValue(), Is.EqualTo(7196));
+            Assert.That(host.StatementCallsInternalExtensionOnStruct(), Is.EqualTo(7426));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync(
+                FixtureFileName,
+                "internal static int PointRead(this HotReloadExtensionCallPoint value, int add)",
+                "internal static long PointRead(this HotReloadExtensionCallPoint value, int add)",
+                "Func<int> read = () => _point.PointRead(7191);",
+                "Func<int> read = () => " + lambdaCall + ";",
+                StructStatementCall,
+                "return " + statementCall + ";");
+
+            AssertNoFailedRow(result);
+            foreach (string hostMethod in new[] { "ClosureCallsInternalExtensionOnStructByValue", "StatementCallsInternalExtensionOnStruct" })
+            {
+                HotReloadMethodOutcome outcome = FindOutcome(result, hostMethod);
+                Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), hostMethod);
+                Assert.That(outcome.Reason, Does.Contain("signature change was not applied"), hostMethod);
+            }
+
+            Assert.That(host.ClosureCallsInternalExtensionOnStructByValue(), Is.EqualTo(7196));
+            Assert.That(host.StatementCallsInternalExtensionOnStruct(), Is.EqualTo(7426));
+        }
+
+        /// <summary>
+        /// What: a lambda and an async method that call an extension method the same reload adds to
+        /// an internal static class are Patched and return the added method's value, in the receiver
+        /// form as in the static form; RevertAll restores the compiled values.
+        /// </summary>
+        [TestCase("_value.NonPublicAddedTriple(6101)", "_value.NonPublicAddedTriple(6111)")]
+        [TestCase("HotReloadNonPublicClassExtensions.NonPublicAddedTriple(_value, 6101)", "HotReloadNonPublicClassExtensions.NonPublicAddedTriple(_value, 6111)")]
+        public async Task Run_CallsToExtensionAddedToAnInternalClass_ArePatchedLikeTheStaticFormAndRevert(string lambdaCall, string asyncCall)
+        {
+            HotReloadNonPublicClassExtensionCallHost host = new HotReloadNonPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsNonPublicClassExtension(), Is.EqualTo(6110));
+            Assert.That(await host.AsyncCallsNonPublicClassExtension(), Is.EqualTo(6120));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync(
+                NonPublicFixtureFileName,
+                NonPublicAddedExtensionAnchor,
+                "        internal static int NonPublicAddedTriple(this int value, int add) { return value * 3 + add + 1000; }\n\n"
+                + NonPublicAddedExtensionAnchor,
+                "Func<int> read = () => _value.NonPublicTriple(6101);",
+                "Func<int> read = () => " + lambdaCall + ";",
+                "return _value.NonPublicTriple(6111);",
+                "return " + asyncCall + ";");
+
+            AssertNoFailedRow(result);
+            Assert.That(FindOutcome(result, "ClosureCallsNonPublicClassExtension").Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+            Assert.That(FindOutcome(result, "AsyncCallsNonPublicClassExtension").Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+            Assert.That(host.ClosureCallsNonPublicClassExtension(), Is.EqualTo(7110));
+            Assert.That(await host.AsyncCallsNonPublicClassExtension(), Is.EqualTo(7120));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(host.ClosureCallsNonPublicClassExtension(), Is.EqualTo(6110));
+            Assert.That(await host.AsyncCallsNonPublicClassExtension(), Is.EqualTo(6120));
+        }
+
         private static int Read(HotReloadPublicClassExtensionCallHost host, string hostMethod)
         {
             switch (hostMethod)
@@ -154,17 +226,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
-        private static async Task<HotReloadOrchestratorResult> RunWithAddedExtensionsAsync(string originalCall, string editedCall)
+        // Why 7121: every test also edits a call outside the method under test, so a Skipped row
+        // can show that the rest of the file still applies.
+        private static Task<HotReloadOrchestratorResult> RunWithAddedExtensionsAsync(string originalCall, string editedCall)
+        {
+            return RunEditedFixtureAsync(
+                FixtureFileName,
+                AddedExtensionAnchor,
+                AddedExtensions + AddedExtensionAnchor,
+                originalCall,
+                editedCall,
+                "7121",
+                "7122");
+        }
+
+        // Why pairs of strings and not a dictionary: the replacements run in order, and each must
+        // find its text in the fixture, so a typo fails the precondition instead of editing nothing.
+        private static async Task<HotReloadOrchestratorResult> RunEditedFixtureAsync(string fixtureFileName, params string[] replacements)
         {
             string fixturePath = Path.GetFullPath(
-                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName));
-            string onDisk = File.ReadAllText(fixturePath);
-            Assert.That(onDisk.Contains(AddedExtensionAnchor), "Precondition: the anchor must be in the fixture.");
-            Assert.That(onDisk.Contains(originalCall), "Precondition: the call must be in the fixture.");
-            string edited = onDisk
-                .Replace(AddedExtensionAnchor, AddedExtensions + AddedExtensionAnchor)
-                .Replace(originalCall, editedCall)
-                .Replace("7121", "7122");
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fixtureFileName));
+            string edited = File.ReadAllText(fixturePath);
+            for (int index = 0; index < replacements.Length; index += 2)
+            {
+                Assert.That(edited.Contains(replacements[index]), "Precondition: the fixture must contain " + replacements[index]);
+                edited = edited.Replace(replacements[index], replacements[index + 1]);
+            }
+
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource(
                 "AddedExtensionReceiverFormE2E" + System.Math.Abs(edited.GetHashCode()) + ".cs",
                 edited);
