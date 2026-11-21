@@ -8,8 +8,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 /// What: a rough answer to whether the arguments of a call, construction or indexer access could
 /// fit a candidate member, for a use the binding resolved to nothing. Its candidates are then every
 /// member of the name, and one an argument cannot convert to can never be what the patch calls.
-/// Anything it cannot tell (a named, ref or untyped argument, a params parameter, an argument count
-/// that differs from the parameter count) counts as fitting, so a caller that refuses fitting
+/// Anything it cannot tell (a named, ref or error-typed argument, a params parameter, an argument
+/// count that differs from the parameter count) counts as fitting, so a caller that refuses fitting
 /// candidates fails closed.
 /// </summary>
 internal static class HiddenCandidateApplicability
@@ -27,13 +27,13 @@ internal static class HiddenCandidateApplicability
             return true;
         }
 
-        List<ITypeSymbol> argumentTypes = ArgumentTypesOrNull(enforcingModel, argumentList);
-        if (argumentTypes == null)
+        List<ExpressionSyntax> arguments = ArgumentExpressionsOrNull(argumentList);
+        if (arguments == null)
         {
             return true;
         }
 
-        int comparedCount = System.Math.Min(argumentTypes.Count, parameters.Length);
+        int comparedCount = System.Math.Min(arguments.Count, parameters.Length);
         for (int index = 0; index < comparedCount; index++)
         {
             // Why a params parameter ends the check: one argument may be its element, which does not
@@ -44,10 +44,16 @@ internal static class HiddenCandidateApplicability
                 return true;
             }
 
-            ITypeSymbol argumentType = argumentTypes[index];
-            if (argumentType != null
-                && argumentType.TypeKind != TypeKind.Error
-                && !enforcingModel.Compilation.ClassifyCommonConversion(argumentType, parameter.Type).IsImplicit)
+            // Why the expression rather than its type: a constant converts to a narrower integral type,
+            // null to any reference type, and a lambda to a delegate type, none of which the type says.
+            ExpressionSyntax argument = arguments[index];
+            ITypeSymbol argumentType = enforcingModel.GetTypeInfo(argument).Type;
+            if (argumentType != null && argumentType.TypeKind == TypeKind.Error)
+            {
+                continue;
+            }
+
+            if (!enforcingModel.ClassifyConversion(argument, parameter.Type).IsImplicit)
             {
                 return false;
             }
@@ -75,15 +81,21 @@ internal static class HiddenCandidateApplicability
 
     // Why the parent invocation for a name or member access: every node of 'value.Name(...)' reports
     // the same candidates, and only the invocation holds the arguments.
+    // Why not for other callees: an indexer access or a call that returns a delegate is invoked by
+    // its parent, but its own candidates take the arguments it holds itself.
     private static BaseArgumentListSyntax FindArgumentListOrNull(SyntaxNode node)
     {
         SyntaxNode callee = node;
-        if (callee is SimpleNameSyntax name && name.Parent is MemberAccessExpressionSyntax nameAccess && nameAccess.Name == name)
+        if (callee is SimpleNameSyntax name
+            && ((name.Parent is MemberAccessExpressionSyntax nameAccess && nameAccess.Name == name)
+                || (name.Parent is MemberBindingExpressionSyntax nameBinding && nameBinding.Name == name)))
         {
-            callee = nameAccess;
+            callee = name.Parent;
         }
 
-        if (callee.Parent is InvocationExpressionSyntax parentInvocation && parentInvocation.Expression == callee)
+        if ((callee is SimpleNameSyntax || callee is MemberAccessExpressionSyntax || callee is MemberBindingExpressionSyntax)
+            && callee.Parent is InvocationExpressionSyntax parentInvocation
+            && parentInvocation.Expression == callee)
         {
             return parentInvocation.ArgumentList;
         }
@@ -101,11 +113,12 @@ internal static class HiddenCandidateApplicability
         }
     }
 
-    // Why the enforcing binding: with accessibility ignored, an argument of a BCL type a referenced
-    // assembly also declares internally (Memory<T>) has no type, while Unity's binding gives it one.
-    private static List<ITypeSymbol> ArgumentTypesOrNull(SemanticModel enforcingModel, BaseArgumentListSyntax argumentList)
+    // Why the caller classifies with the enforcing binding: with accessibility ignored, an argument of
+    // a BCL type a referenced assembly also declares internally (Memory<T>) has no type, while Unity's
+    // binding gives it one.
+    private static List<ExpressionSyntax> ArgumentExpressionsOrNull(BaseArgumentListSyntax argumentList)
     {
-        List<ITypeSymbol> types = new List<ITypeSymbol>();
+        List<ExpressionSyntax> expressions = new List<ExpressionSyntax>();
         foreach (ArgumentSyntax argument in argumentList.Arguments)
         {
             if (argument.NameColon != null || !argument.RefKindKeyword.IsKind(SyntaxKind.None))
@@ -113,9 +126,9 @@ internal static class HiddenCandidateApplicability
                 return null;
             }
 
-            types.Add(enforcingModel.GetTypeInfo(argument.Expression).Type);
+            expressions.Add(argument.Expression);
         }
 
-        return types;
+        return expressions;
     }
 }

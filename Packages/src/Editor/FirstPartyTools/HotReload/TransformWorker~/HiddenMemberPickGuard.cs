@@ -149,10 +149,50 @@ internal static class HiddenMemberPickGuard
         }
 
         IOperation operation = semanticModel.GetOperation(node);
-        IOperation instance = operation is IInvocationOperation invocation
-            ? invocation.Instance
-            : (operation as IMemberReferenceOperation)?.Instance;
-        return instance?.Type;
+        if (operation is IInvocationOperation invocation)
+        {
+            return invocation.Instance?.Type;
+        }
+
+        if (operation is IMemberReferenceOperation reference)
+        {
+            return reference.Instance?.Type;
+        }
+
+        return UnresolvedReceiverTypeOrNull(semanticModel, node);
+    }
+
+    // Why from the syntax: a call the binding resolves to nothing has no operation that carries its
+    // receiver.
+    private static ITypeSymbol UnresolvedReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
+    {
+        ExpressionSyntax receiver = ReceiverExpressionOrNull(node);
+        if (receiver == null)
+        {
+            return null;
+        }
+
+        ITypeSymbol receiverType = semanticModel.GetTypeInfo(receiver).Type;
+        return receiverType == null || receiverType.TypeKind == TypeKind.Error ? null : receiverType;
+    }
+
+    private static ExpressionSyntax ReceiverExpressionOrNull(SyntaxNode node)
+    {
+        SyntaxNode callee = node is InvocationExpressionSyntax invocation ? invocation.Expression : node;
+        if (callee is SimpleNameSyntax name && name.Parent is MemberAccessExpressionSyntax nameAccess && nameAccess.Name == name)
+        {
+            callee = nameAccess;
+        }
+
+        switch (callee)
+        {
+            case MemberAccessExpressionSyntax access:
+                return access.Expression;
+            case ElementAccessExpressionSyntax elementAccess:
+                return elementAccess.Expression;
+            default:
+                return null;
+        }
     }
 
     private static bool IsReachableFromTheWholeAssembly(ISymbol symbol)

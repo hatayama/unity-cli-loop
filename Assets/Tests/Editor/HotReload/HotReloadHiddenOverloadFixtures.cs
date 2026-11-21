@@ -67,6 +67,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Public class whose public overload takes any two values while a private one takes a byte and a
+    /// Memory: an int constant fits the byte only through a constant conversion, and the Memory
+    /// argument leaves the call unresolved when every member is public.
+    /// </summary>
+    public static class HotReloadHiddenConstantOverloads
+    {
+        public static int Pick(object first, object second)
+        {
+            return 1;
+        }
+
+        private static int Pick(byte first, Memory<int> second)
+        {
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Public class whose indexers return a delegate: a public one taking any key and a private one
+    /// taking Memory, so the indexer access is itself the callee of an invocation.
+    /// </summary>
+    public sealed class HotReloadHiddenDelegateIndexed
+    {
+        public Func<string, int> this[object key] => text => 1;
+
+        private Func<string, int> this[Memory<int> key] => text => 2;
+    }
+
+    /// <summary>
     /// Public class with a public constructor taking any value and private ones taking Memory or
     /// ArraySegment, for the same reason as HotReloadHiddenOverloads.
     /// </summary>
@@ -181,6 +210,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         protected int Pick(ArraySegment<int> segment)
         {
             return segment.Count;
+        }
+
+        protected int Pick(Memory<int> memory)
+        {
+            return memory.Length;
         }
     }
 
