@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.35.3](https://github.com/hatayama/unity-cli-loop/compare/v3.35.2...v3.35.3) (2026-11-21)
+
+
+### Bug Fixes
+
+* Hot reload applies calls to an added extension method written on a receiver like the static form ([#3609](https://github.com/hatayama/unity-cli-loop/issues/3609)) ([b756efb](https://github.com/hatayama/unity-cli-loop/commit/b756efb458b94e6d00ec4a53b1730db6cd2ba4f7))
+
 ## [3.35.2](https://github.com/hatayama/unity-cli-loop/compare/v3.35.1...v3.35.2) (2026-11-21)
 
 
