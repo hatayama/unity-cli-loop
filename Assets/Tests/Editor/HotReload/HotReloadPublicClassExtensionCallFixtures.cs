@@ -346,6 +346,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return read();
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int StatementCallsInternalExtension()
+        {
+            return _value.TriplePlus(7401);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int StatementCallsInternalExtensionOnStruct()
+        {
+            return _point.PointRead(7421);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int StatementCallsInternalExtensionConditionally()
+        {
+            return _label?.NullableLengthPlus(7431) ?? 0;
+        }
+
         private int NextReceiver()
         {
             _order += "r";

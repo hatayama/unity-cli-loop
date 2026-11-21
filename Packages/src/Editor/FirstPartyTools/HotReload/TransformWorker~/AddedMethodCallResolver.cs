@@ -37,13 +37,16 @@ internal static class AddedMethodCallResolver
         IMethodSymbol symbol = AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation) as IMethodSymbol;
         if (symbol != null)
         {
-            if (symbol.MethodKind != MethodKind.Ordinary)
+            IMethodSymbol staticForm = StaticFormOf(symbol);
+            if (staticForm.MethodKind != MethodKind.Ordinary)
             {
                 return null;
             }
 
-            AddedMethodBinding bound = catalog.FindOrNull(WorkerMethodKeys.BuildMethodKeyFromSymbol(symbol));
-            isStaticCall = symbol.IsStatic;
+            AddedMethodBinding bound = catalog.FindOrNull(WorkerMethodKeys.BuildMethodKeyFromSymbol(staticForm));
+            // Why not static for a receiver-form call: the receiver is the extension method's first
+            // argument, which the static form spells out and the receiver form does not.
+            isStaticCall = staticForm.IsStatic && symbol.MethodKind != MethodKind.ReducedExtension;
             return bound;
         }
 
@@ -84,5 +87,20 @@ internal static class AddedMethodCallResolver
 
         isStaticCall = binding.IsStatic;
         return binding;
+    }
+
+    /// <summary>
+    /// The method a call written on a receiver ('value.Extension(a)') makes, in the form the same call
+    /// written in the static form ('Extensions.Extension(value, a)') binds to, type arguments included;
+    /// any other method as it is.
+    /// </summary>
+    internal static IMethodSymbol StaticFormOf(IMethodSymbol method)
+    {
+        if (method.MethodKind != MethodKind.ReducedExtension)
+        {
+            return method;
+        }
+
+        return method.GetConstructedReducedFrom() ?? method.ReducedFrom;
     }
 }

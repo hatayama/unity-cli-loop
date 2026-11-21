@@ -14,6 +14,22 @@ internal static class MethodGroupLambdaExample
     // and an example that does not compile misleads more than no example.
     internal static string BuildSuffix(IMethodSymbol method)
     {
+        return BuildSuffixCalling(method, method.Name);
+    }
+
+    /// <summary>
+    /// The same suffix for an extension method named on a receiver ('value.M'), whose lambda calls
+    /// it on that receiver ('a => value.M(a)').
+    /// </summary>
+    // Why the receiver: the delegate takes only the parameters after it, so a lambda calling the
+    // method by name alone ('a => M(a)') would not convert to the delegate the group did.
+    internal static string BuildSuffixOnReceiver(IMethodSymbol reducedMethod, string receiverText)
+    {
+        return BuildSuffixCalling(reducedMethod, receiverText + "." + reducedMethod.Name);
+    }
+
+    private static string BuildSuffixCalling(IMethodSymbol method, string callee)
+    {
         foreach (IParameterSymbol parameter in method.Parameters)
         {
             if (parameter.RefKind != RefKind.None)
@@ -22,7 +38,7 @@ internal static class MethodGroupLambdaExample
             }
         }
 
-        return " (such as '" + BuildLambda(method.Name, method.Parameters.Length) + "')";
+        return " (such as '" + BuildLambda(callee, method.Parameters.Length) + "')";
     }
 
     private static string BuildLambda(string methodName, int parameterCount)
