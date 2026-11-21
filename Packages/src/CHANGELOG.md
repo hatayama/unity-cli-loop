@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.35.0](https://github.com/hatayama/unity-cli-loop/compare/v3.34.11...v3.35.0) (2026-11-21)
+
+
+### Features
+
+* Hot reload applies lambda and async calls to extension methods of an internal static class ([#3597](https://github.com/hatayama/unity-cli-loop/issues/3597)) ([6f1ec11](https://github.com/hatayama/unity-cli-loop/commit/6f1ec1133d4ab4451050f469607b83170639e9fc))
+
 ## [3.34.11](https://github.com/hatayama/unity-cli-loop/compare/v3.34.10...v3.34.11) (2026-11-20)
 
 
