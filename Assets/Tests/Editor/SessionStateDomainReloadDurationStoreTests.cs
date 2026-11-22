@@ -31,15 +31,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void SaveThenLoad_WithAReloadInProgress_KeepsEveryField()
         {
-            // Verifies a measured reload's start written before the reload is read back intact after it.
+            // Verifies a measured reload's start written before the reload is read back intact after it, together
+            // with the finished reloads, a measured one and one without a duration.
             DomainReloadDurationState saved = new DomainReloadDurationState(
                 pendingStartUtcTicks: 638000000000000000L,
                 pendingIsMeasured: true,
                 measuredReloadCount: 12,
                 baselineSeconds: 1.25d,
                 slowStreak: 4,
-                lastReloadStartedAtUtcTicks: 637999999990000000L,
-                lastReloadSeconds: 2.75d);
+                recentReloads: new[]
+                {
+                    new DomainReloadRecord(637999999990000000L, 2.75d, 1.25d, 4),
+                    new DomainReloadRecord(637999999995000000L, null, null, 0)
+                });
 
             _store.Save(saved);
             DomainReloadDurationState loaded = _store.Load();
@@ -49,30 +53,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(loaded.MeasuredReloadCount, Is.EqualTo(12));
             Assert.That(loaded.BaselineSeconds, Is.EqualTo(1.25d));
             Assert.That(loaded.SlowStreak, Is.EqualTo(4));
-            Assert.That(loaded.LastReloadStartedAtUtcTicks, Is.EqualTo(saved.LastReloadStartedAtUtcTicks));
-            Assert.That(loaded.LastReloadSeconds, Is.EqualTo(2.75d));
+            Assert.That(loaded.RecentReloads, Has.Length.EqualTo(2));
+            Assert.That(loaded.RecentReloads[0].StartedAtUtcTicks, Is.EqualTo(637999999990000000L));
+            Assert.That(loaded.RecentReloads[0].Seconds, Is.EqualTo(2.75d));
+            Assert.That(loaded.RecentReloads[0].BaselineSeconds, Is.EqualTo(1.25d));
+            Assert.That(loaded.RecentReloads[0].SlowStreak, Is.EqualTo(4));
+            Assert.That(loaded.RecentReloads[1].StartedAtUtcTicks, Is.EqualTo(637999999995000000L));
+            Assert.That(loaded.RecentReloads[1].Seconds.HasValue, Is.False);
         }
 
         [Test]
-        public void SaveThenLoad_AfterAnUnmeasuredReload_KeepsTheMissingDuration()
+        public void SaveThenLoad_WithoutAReloadInProgress_KeepsTheMissingStart()
         {
-            // Verifies a latest reload without a duration is not read back as a measured one.
+            // Verifies no reload in progress is not read back as a measured one.
             DomainReloadDurationState saved = new DomainReloadDurationState(
                 pendingStartUtcTicks: null,
                 pendingIsMeasured: false,
                 measuredReloadCount: 3,
                 baselineSeconds: 1d,
                 slowStreak: 0,
-                lastReloadStartedAtUtcTicks: 637999999990000000L,
-                lastReloadSeconds: null);
+                recentReloads: System.Array.Empty<DomainReloadRecord>());
 
             _store.Save(saved);
             DomainReloadDurationState loaded = _store.Load();
 
             Assert.That(loaded.PendingStartUtcTicks.HasValue, Is.False);
             Assert.That(loaded.PendingIsMeasured, Is.False);
-            Assert.That(loaded.LastReloadStartedAtUtcTicks, Is.EqualTo(saved.LastReloadStartedAtUtcTicks));
-            Assert.That(loaded.LastReloadSeconds.HasValue, Is.False);
+            Assert.That(loaded.RecentReloads, Is.Empty);
         }
     }
 }

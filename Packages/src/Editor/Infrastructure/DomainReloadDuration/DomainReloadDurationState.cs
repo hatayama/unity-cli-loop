@@ -6,7 +6,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
     /// The domain reload measurements of one Editor session: the reload in progress, the fastest reload so far,
-    /// how many measured reloads in a row have been slow, and the latest reload.
+    /// how many measured reloads in a row have been slow, and the recent finished reloads, oldest first.
     /// </summary>
     internal sealed class DomainReloadDurationState
     {
@@ -16,8 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             measuredReloadCount: 0,
             baselineSeconds: null,
             slowStreak: 0,
-            lastReloadStartedAtUtcTicks: null,
-            lastReloadSeconds: null);
+            recentReloads: Array.Empty<DomainReloadRecord>());
 
         [JsonConstructor]
         public DomainReloadDurationState(
@@ -26,8 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             int measuredReloadCount,
             double? baselineSeconds,
             int slowStreak,
-            long? lastReloadStartedAtUtcTicks,
-            double? lastReloadSeconds)
+            DomainReloadRecord[] recentReloads)
         {
             if (measuredReloadCount < 0)
             {
@@ -49,18 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new ArgumentException("A slow streak needs the baseline it was measured against.");
             }
 
-            if (lastReloadSeconds.HasValue && !lastReloadStartedAtUtcTicks.HasValue)
-            {
-                throw new ArgumentException("The latest reload's duration needs its start.");
-            }
-
             PendingStartUtcTicks = pendingStartUtcTicks;
             PendingIsMeasured = pendingIsMeasured;
             MeasuredReloadCount = measuredReloadCount;
             BaselineSeconds = baselineSeconds;
             SlowStreak = slowStreak;
-            LastReloadStartedAtUtcTicks = lastReloadStartedAtUtcTicks;
-            LastReloadSeconds = lastReloadSeconds;
+            RecentReloads = recentReloads ?? Array.Empty<DomainReloadRecord>();
         }
 
         /// <summary>
@@ -86,14 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public int SlowStreak { get; }
 
         /// <summary>
-        /// When the latest reload started, measured or not. Null before the first reload of the session.
+        /// The finished reloads, measured or not, still within the retention window, oldest first.
         /// </summary>
-        public long? LastReloadStartedAtUtcTicks { get; }
-
-        /// <summary>
-        /// How long the latest reload took. Null when it was not measured.
-        /// </summary>
-        public double? LastReloadSeconds { get; }
+        public DomainReloadRecord[] RecentReloads { get; }
 
         internal DomainReloadDurationState WithPendingStart(long pendingStartUtcTicks, bool pendingIsMeasured)
         {
@@ -103,8 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 MeasuredReloadCount,
                 BaselineSeconds,
                 SlowStreak,
-                LastReloadStartedAtUtcTicks,
-                LastReloadSeconds);
+                RecentReloads);
         }
     }
 }

@@ -45,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "compile_test_request",
                     forceRecompile: false,
                     response,
+                    isFollowedByReload: false,
                     "compile_test_request");
 
                 UnityCliLoopStoredCompileResult storedResult =
@@ -107,6 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "compile_test_request",
                     forceRecompile: false,
                     firstResponse,
+                    isFollowedByReload: false,
                     "compile_test_request");
                 string firstJson =
                     compileResultSessionRepository.GetCompileResult("compile_test_request").ResultJson;
@@ -117,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "compile_test_request",
                     forceRecompile: false,
                     secondResponse,
+                    isFollowedByReload: false,
                     "compile_test_request");
                 string secondJson =
                     compileResultSessionRepository.GetCompileResult("compile_test_request").ResultJson;

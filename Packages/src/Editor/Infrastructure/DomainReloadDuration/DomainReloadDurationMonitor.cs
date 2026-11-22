@@ -1,16 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Infrastructure
 {
     /// <summary>
     /// Measures the domain reloads of this Editor session and records in a compile result how long the reload
-    /// after that compile took. Once reloads have stayed at twice their fastest duration for a while, the result
+    /// that compile caused took. Once reloads have stayed at twice their fastest duration for a while, the result
     /// also recommends restarting the Editor, because that slowdown grows with the reload count and only a restart
     /// resets it.
     /// </summary>
@@ -24,6 +26,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // row, while the slowdown this looks for only grows, so a long run costs a few reloads of delay and keeps
         // a passing slowdown from recommending a restart.
         internal const int RequiredSlowStreak = 10;
+
+        // Why the compile result lifetime: a result is read at most that long after it was stored, and the reload
+        // it reports starts right after it was stored, so older reloads are never looked up.
+        private static readonly TimeSpan RecentReloadRetention =
+            UnityCliLoopCompileSessionLifecycleService.CompileResultLifetime;
 
         private const string DomainReloadSecondsKey = "DomainReloadSeconds";
         private const string WarningKey = "Warning";
@@ -53,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             // Why Play Mode reloads are recorded but not measured: entering Play Mode or recompiling during Play
             // also backs up and restores the play state, so their cost would skew the baseline. They are still
-            // recorded so that a compile result never reports an earlier reload in their place.
+            // recorded so that a compile whose reload ran in Play Mode reports that reload, not a later one.
             bool isMeasured = !_isInPlayMode();
             _store.Save(_store.Load().WithPendingStart(utcNow.Ticks, isMeasured));
         }
@@ -73,14 +80,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             long startedAtUtcTicks = state.PendingStartUtcTicks.Value;
             double seconds = (utcNow.Ticks - startedAtUtcTicks) / (double)TimeSpan.TicksPerSecond;
+            DomainReloadRecord[] recentReloads = KeepRecentReloads(state.RecentReloads, utcNow);
             // Why a negative span counts as not measured: the system clock moved back during the reload.
             if (!state.PendingIsMeasured || seconds < 0d)
             {
-                _store.Save(AddUnmeasuredReload(state, startedAtUtcTicks));
+                _store.Save(AddUnmeasuredReload(state, startedAtUtcTicks, recentReloads));
                 return;
             }
 
-            DomainReloadDurationState measured = AddMeasuredReload(state, startedAtUtcTicks, seconds);
+            DomainReloadDurationState measured = AddMeasuredReload(state, startedAtUtcTicks, seconds, recentReloads);
             _store.Save(measured);
             VibeLogger.LogInfo(
                 "domain_reload_duration_measured",
@@ -95,49 +103,43 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Settles which reload <paramref name="compileResult"/> reports. Sets DomainReloadSeconds to the latest
-        /// reload's duration when that reload started at or after <paramref name="reloadStartedNotBeforeUtcTicks"/>,
-        /// and to null when no reload did or the latest one was not measured. When the latest reloads have stayed
-        /// slow, also appends a restart recommendation to Warning and NextActions.
-        /// Returns false, changing nothing, when the result already has DomainReloadSeconds.
+        /// Settles <paramref name="compileResult"/> on the first reload that started at or after
+        /// <paramref name="startedNotBeforeUtcTicks"/> and has finished: DomainReloadSeconds becomes its duration,
+        /// or null when it was not measured. When the reloads up to that one had stayed slow, also appends a
+        /// restart recommendation to Warning and NextActions. Changes nothing when the result already has
+        /// DomainReloadSeconds or no such reload has finished yet.
         /// </summary>
-        internal bool AttributeReloadTo(JObject compileResult, long reloadStartedNotBeforeUtcTicks)
+        internal ReloadAttributionOutcome AttributeFirstReloadSince(
+            JObject compileResult,
+            long startedNotBeforeUtcTicks)
         {
             UnityEngine.Debug.Assert(compileResult != null, "compileResult must not be null");
 
             if (compileResult.ContainsKey(DomainReloadSecondsKey))
             {
-                return false;
+                return ReloadAttributionOutcome.AlreadySettled;
             }
 
-            DomainReloadDurationState state = _store.Load();
-            bool latestReloadQualifies = state.LastReloadStartedAtUtcTicks.HasValue &&
-                state.LastReloadStartedAtUtcTicks.Value >= reloadStartedNotBeforeUtcTicks &&
-                state.LastReloadSeconds.HasValue;
-            if (!latestReloadQualifies)
+            DomainReloadRecord reload = FindFirstReloadSince(_store.Load().RecentReloads, startedNotBeforeUtcTicks);
+            if (reload == null)
+            {
+                return ReloadAttributionOutcome.NoReloadYet;
+            }
+
+            if (!reload.Seconds.HasValue)
             {
                 compileResult[DomainReloadSecondsKey] = JValue.CreateNull();
-                return true;
+                return ReloadAttributionOutcome.Settled;
             }
 
-            double seconds = state.LastReloadSeconds.Value;
+            double seconds = reload.Seconds.Value;
             compileResult[DomainReloadSecondsKey] = Math.Round(seconds, 2);
-            if (state.SlowStreak >= RequiredSlowStreak)
+            if (reload.SlowStreak >= RequiredSlowStreak)
             {
-                AppendRestartAdvice(compileResult, seconds, state.BaselineSeconds.Value);
+                AppendRestartAdvice(compileResult, seconds, reload.BaselineSeconds.Value);
             }
 
-            return true;
-        }
-
-        /// <summary>
-        /// Whether a reload, measured or not, started at or after <paramref name="utcTicks"/> and has finished. Only a
-        /// finished reload becomes the latest reload; one still in progress is kept apart until it ends.
-        /// </summary>
-        internal bool HasReloadStartedSince(long utcTicks)
-        {
-            DomainReloadDurationState state = _store.Load();
-            return state.LastReloadStartedAtUtcTicks.HasValue && state.LastReloadStartedAtUtcTicks.Value >= utcTicks;
+            return ReloadAttributionOutcome.Settled;
         }
 
         /// <summary>
@@ -157,9 +159,48 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return true;
         }
 
+        private static DomainReloadRecord FindFirstReloadSince(
+            DomainReloadRecord[] recentReloads,
+            long startedNotBeforeUtcTicks)
+        {
+            foreach (DomainReloadRecord reload in recentReloads)
+            {
+                if (reload.StartedAtUtcTicks >= startedNotBeforeUtcTicks)
+                {
+                    return reload;
+                }
+            }
+
+            return null;
+        }
+
+        private static DomainReloadRecord[] KeepRecentReloads(DomainReloadRecord[] recentReloads, DateTime utcNow)
+        {
+            long oldestKeptUtcTicks = utcNow.Ticks - RecentReloadRetention.Ticks;
+            List<DomainReloadRecord> kept = new List<DomainReloadRecord>();
+            foreach (DomainReloadRecord reload in recentReloads)
+            {
+                if (reload.StartedAtUtcTicks >= oldestKeptUtcTicks)
+                {
+                    kept.Add(reload);
+                }
+            }
+
+            return kept.ToArray();
+        }
+
+        private static DomainReloadRecord[] Append(DomainReloadRecord[] recentReloads, DomainReloadRecord reload)
+        {
+            DomainReloadRecord[] appended = new DomainReloadRecord[recentReloads.Length + 1];
+            Array.Copy(recentReloads, appended, recentReloads.Length);
+            appended[recentReloads.Length] = reload;
+            return appended;
+        }
+
         private static DomainReloadDurationState AddUnmeasuredReload(
             DomainReloadDurationState state,
-            long startedAtUtcTicks)
+            long startedAtUtcTicks,
+            DomainReloadRecord[] recentReloads)
         {
             // The baseline and the slow streak stay as they were: agents often enter Play Mode between compiles,
             // and resetting the streak there would keep the recommendation from ever appearing.
@@ -169,14 +210,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 state.MeasuredReloadCount,
                 state.BaselineSeconds,
                 state.SlowStreak,
-                startedAtUtcTicks,
-                lastReloadSeconds: null);
+                Append(recentReloads, new DomainReloadRecord(startedAtUtcTicks, null, null, 0)));
         }
 
         private static DomainReloadDurationState AddMeasuredReload(
             DomainReloadDurationState state,
             long startedAtUtcTicks,
-            double seconds)
+            double seconds,
+            DomainReloadRecord[] recentReloads)
         {
             int measuredReloadCount = state.MeasuredReloadCount + 1;
             double? baselineSeconds = state.BaselineSeconds;
@@ -201,8 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 measuredReloadCount,
                 baselineSeconds,
                 slowStreak,
-                startedAtUtcTicks,
-                seconds);
+                Append(recentReloads, new DomainReloadRecord(startedAtUtcTicks, seconds, baselineSeconds, slowStreak)));
         }
 
         private static void AppendRestartAdvice(JObject compileResult, double seconds, double baselineSeconds)

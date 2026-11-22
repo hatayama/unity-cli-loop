@@ -56,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "compile_test_request",
                     forceRecompile: false,
                     result,
+                    isFollowedByReload: false,
                     "compile_test_request");
 
                 UnityCliLoopStoredCompileResult storedResult =

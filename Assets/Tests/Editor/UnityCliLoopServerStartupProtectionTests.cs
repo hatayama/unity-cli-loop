@@ -140,7 +140,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             DomainReloadDurationState state = _reloadDurationStore.Load();
             Assert.That(state.PendingStartUtcTicks.HasValue, Is.False);
-            Assert.That(state.LastReloadSeconds, Is.GreaterThan(0d));
+            Assert.That(state.RecentReloads, Has.Length.EqualTo(1));
+            Assert.That(state.RecentReloads[0].Seconds, Is.GreaterThan(0d));
             Task recoveryTask = service.RecoveryTask;
             if (recoveryTask != null)
             {

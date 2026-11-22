@@ -13,13 +13,15 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string requestId,
             bool forceRecompile,
             string resultJson,
-            long completedAtUtcTicks)
+            long completedAtUtcTicks,
+            bool isFollowedByReload)
         {
             HasResult = hasResult;
             RequestId = requestId;
             ForceRecompile = forceRecompile;
             ResultJson = resultJson;
             CompletedAtUtcTicks = completedAtUtcTicks;
+            IsFollowedByReload = isFollowedByReload;
         }
 
         public bool HasResult { get; }
@@ -28,16 +30,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public string ResultJson { get; }
         public long CompletedAtUtcTicks { get; }
 
+        /// <summary>
+        /// Whether Unity reloads the domain after this result was stored because of this compile: the compile
+        /// ran and had no errors. False for a compile that was skipped, stopped, or failed.
+        /// </summary>
+        public bool IsFollowedByReload { get; }
+
         public static UnityCliLoopStoredCompileResult None()
         {
-            return new UnityCliLoopStoredCompileResult(false, "", false, "", 0);
+            return new UnityCliLoopStoredCompileResult(false, "", false, "", 0, false);
         }
 
         public static UnityCliLoopStoredCompileResult Create(
             string requestId,
             bool forceRecompile,
             string resultJson,
-            long completedAtUtcTicks)
+            long completedAtUtcTicks,
+            bool isFollowedByReload)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(!string.IsNullOrWhiteSpace(resultJson), "resultJson must not be null or whitespace");
@@ -58,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 requestId,
                 forceRecompile,
                 resultJson,
-                completedAtUtcTicks);
+                completedAtUtcTicks,
+                isFollowedByReload);
         }
 
         public bool IsExpiredAt(DateTime utcNow, TimeSpan lifetime)

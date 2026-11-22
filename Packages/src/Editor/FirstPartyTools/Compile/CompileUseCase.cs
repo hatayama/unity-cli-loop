@@ -302,6 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 request.RequestId,
                 request.ForceRecompile,
                 response,
+                isFollowedByReload: false,
                 correlationId);
             return response;
         }

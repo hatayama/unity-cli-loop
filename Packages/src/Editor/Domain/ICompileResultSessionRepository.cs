@@ -11,7 +11,8 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             string requestId,
             bool forceRecompile,
             string resultJson,
-            DateTime completedAtUtc);
+            DateTime completedAtUtc,
+            bool isFollowedByReload);
 
         UnityCliLoopStoredCompileResult GetCompileResult(string requestId);
         UnityCliLoopStoredCompileResult GetStoredCompileResult();

@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     {
         // Why a versioned key: a package update reloads the domain mid-session, and new code must not read
         // measurements an older layout wrote.
-        private const string StateKey = UnityCliLoopEditorSessionStateStorage.KeyPrefix + "domainReloadDuration.v1";
+        private const string StateKey = UnityCliLoopEditorSessionStateStorage.KeyPrefix + "domainReloadDuration.v2";
 
         public DomainReloadDurationState Load()
         {

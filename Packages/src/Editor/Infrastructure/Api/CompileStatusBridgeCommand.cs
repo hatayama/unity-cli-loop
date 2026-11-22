@@ -110,7 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     storedResult.RequestId,
                     storedResult.ForceRecompile,
                     resultObject.ToString(Formatting.None),
-                    new DateTime(storedResult.CompletedAtUtcTicks, DateTimeKind.Utc));
+                    new DateTime(storedResult.CompletedAtUtcTicks, DateTimeKind.Utc),
+                    storedResult.IsFollowedByReload);
             }
 
             return new GetCompileStatusResponse
@@ -191,24 +192,29 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool ready,
             DomainReloadDurationMonitor reloadDurationMonitor)
         {
-            // Why errors and not Success: a compile with errors reloads nothing, so a reload after it has another
-            // cause, while a forced recompile reports Success false even when it compiled and reloaded.
-            JToken errorCount = result["ErrorCount"];
-            if (errorCount?.Type == JTokenType.Integer && errorCount.Value<int>() > 0)
+            if (!storedResult.IsFollowedByReload)
             {
+                // Why: this compile was skipped, stopped, or had errors, so a reload after it has another cause.
                 return reloadDurationMonitor.AttributeNoReloadTo(result);
             }
 
-            // Why from the result's time: the compile stores its result before Unity starts the reload it causes.
-            // Why not only when ready: a timed-out CLI collects the result even while the Editor is busy with
-            // other work, and by then this compile's reload has been recorded.
-            long completedAtUtcTicks = storedResult.CompletedAtUtcTicks;
-            if (ready || reloadDurationMonitor.HasReloadStartedSince(completedAtUtcTicks))
+            // Why the first reload since the result: the compile stores its result just before Unity starts the
+            // reload it causes, so any later reload has another cause, however late the result is read.
+            ReloadAttributionOutcome outcome =
+                reloadDurationMonitor.AttributeFirstReloadSince(result, storedResult.CompletedAtUtcTicks);
+            if (outcome != ReloadAttributionOutcome.NoReloadYet)
             {
-                return reloadDurationMonitor.AttributeReloadTo(result, completedAtUtcTicks);
+                return outcome == ReloadAttributionOutcome.Settled;
             }
 
-            // The reload this compile causes has not started yet, so this read reports none and a later read
+            if (ready)
+            {
+                // Why: the Editor settled without the reload this compile should have caused, so a later reload
+                // has another cause.
+                return reloadDurationMonitor.AttributeNoReloadTo(result);
+            }
+
+            // The reload this compile causes has not finished yet, so this read reports none and a later read
             // settles it.
             reloadDurationMonitor.AttributeNoReloadTo(result);
             return false;
@@ -242,15 +248,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JObject recoveredResult = CreateRecoveredCompileResult(pendingRequest);
-            // Why the latest reload at any time: this result is created after the reload the pending request
-            // observed, so its own time would exclude that reload. The before-reload handler records every
-            // reload's start, Play Mode ones included, so the latest recorded reload is that one or a later one.
-            reloadDurationMonitor.AttributeReloadTo(recoveredResult, DateTime.MinValue.Ticks);
+            // Why from when the request was marked: this result is created after the reload the request observed,
+            // so its own time would exclude that reload, and the first reload since the request is that one.
+            long markedAtUtcTicks = pendingRequest.ExpiresAtUtcTicks -
+                UnityCliLoopCompileSessionLifecycleService.CompileResultLifetime.Ticks;
+            if (reloadDurationMonitor.AttributeFirstReloadSince(recoveredResult, markedAtUtcTicks) ==
+                ReloadAttributionOutcome.NoReloadYet)
+            {
+                reloadDurationMonitor.AttributeNoReloadTo(recoveredResult);
+            }
+
             compileResultSessionRepository.StoreCompileResult(
                 requestId,
                 pendingRequest.ForceRecompile,
                 recoveredResult.ToString(Formatting.None),
-                DateTime.UtcNow);
+                DateTime.UtcNow,
+                isFollowedByReload: true);
             pendingCompileSessionRepository.ClearPendingCompileRequestIfMatches(requestId);
             return compileResultSessionRepository.GetCompileResult(requestId);
         }

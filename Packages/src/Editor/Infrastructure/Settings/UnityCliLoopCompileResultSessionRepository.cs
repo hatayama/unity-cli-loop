@@ -26,12 +26,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string CompileResultForceRecompileKeySuffix = ".forceRecompile";
         private const string CompileResultJsonKeySuffix = ".json";
         private const string CompileResultCompletedAtUtcTicksKeySuffix = ".completedAtUtcTicks";
+        private const string CompileResultFollowedByReloadKeySuffix = ".followedByReload";
 
         public void StoreCompileResult(
             string requestId,
             bool forceRecompile,
             string resultJson,
-            DateTime completedAtUtc)
+            DateTime completedAtUtc,
+            bool isFollowedByReload)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(!string.IsNullOrWhiteSpace(resultJson), "resultJson must not be null or whitespace");
@@ -42,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetCompileResultForceRecompile(requestId, forceRecompile);
             SetCompileResultJson(requestId, resultJson);
             SetCompileResultCompletedAtUtcTicks(requestId, completedAtUtc.Ticks.ToString());
+            SetCompileResultFollowedByReload(requestId, isFollowedByReload);
         }
 
         public UnityCliLoopStoredCompileResult GetCompileResult(string requestId)
@@ -71,11 +74,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return UnityCliLoopStoredCompileResult.None();
             }
 
+            // Why a missing flag reads as false: a result stored before the flag existed then reports no reload,
+            // which is never a wrong duration.
             return UnityCliLoopStoredCompileResult.Create(
                 requestId,
                 GetCompileResultForceRecompile(requestId),
                 resultJson,
-                completedAtUtcTicks);
+                completedAtUtcTicks,
+                GetCompileResultFollowedByReload(requestId));
         }
 
         public UnityCliLoopStoredCompileResult GetStoredCompileResult()
@@ -230,6 +236,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CreateCompileResultKey(requestId, CompileResultForceRecompileKeySuffix));
         }
 
+        private static void SetCompileResultFollowedByReload(string requestId, bool isFollowedByReload)
+        {
+            UnityCliLoopEditorSessionStateStorage.SetBool(
+                CreateCompileResultKey(requestId, CompileResultFollowedByReloadKeySuffix),
+                isFollowedByReload);
+        }
+
+        private static bool GetCompileResultFollowedByReload(string requestId)
+        {
+            return UnityCliLoopEditorSessionStateStorage.GetBool(
+                CreateCompileResultKey(requestId, CompileResultFollowedByReloadKeySuffix));
+        }
+
         private static string GetCompileResultJson(string requestId)
         {
             return UnityCliLoopEditorSessionStateStorage.GetString(
@@ -260,6 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             SetCompileResultForceRecompile(requestId, false);
             SetCompileResultJson(requestId, "");
             SetCompileResultCompletedAtUtcTicks(requestId, "");
+            SetCompileResultFollowedByReload(requestId, false);
         }
 
         private static bool ContainsCompileResult(
@@ -322,13 +342,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 requestId,
                 forceRecompile,
                 resultJson,
-                new DateTime(completedAtUtcTicks, DateTimeKind.Utc));
+                new DateTime(completedAtUtcTicks, DateTimeKind.Utc),
+                isFollowedByReload: false);
             ClearLegacyCompileResult();
             return UnityCliLoopStoredCompileResult.Create(
                 requestId,
                 forceRecompile,
                 resultJson,
-                completedAtUtcTicks);
+                completedAtUtcTicks,
+                isFollowedByReload: false);
         }
 
         private static void ClearLegacyCompileResult()
