@@ -35,8 +35,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="request">Compile request with force and delayed-result settings.</param>
         /// <param name="playModeStopWarning">Optional Warning to carry onto the shaped response when compile was requested during Play Mode.</param>
+        /// <param name="reloadDiscardsState">True when the request started with state that only a domain reload discards, so the compile must reload even when no script changed.</param>
         /// <returns>Compilation result</returns>
-        public async Task<CompileResult> ExecuteCompilationAsync(CompileSchema request, string playModeStopWarning, CancellationToken ct)
+        public async Task<CompileResult> ExecuteCompilationAsync(
+            CompileSchema request,
+            string playModeStopWarning,
+            bool reloadDiscardsState,
+            CancellationToken ct)
         {
             if (request == null)
             {
@@ -48,7 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _pendingCompileSessionRepository);
             compileController.SetResultRecordingContext(CompileResultRecordingContext.Create(request));
             compileController.SetExternalSceneChangePolicy(request.ReloadExternalSceneChanges);
-            return await compileController.TryCompileAsync(request.ForceRecompile, playModeStopWarning, ct).ConfigureAwait(false);
+            return await compileController.TryCompileAsync(
+                request.ForceRecompile,
+                playModeStopWarning,
+                reloadDiscardsState,
+                ct).ConfigureAwait(false);
         }
     }
 }

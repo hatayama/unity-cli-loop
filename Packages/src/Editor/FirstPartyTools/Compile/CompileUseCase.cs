@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly UnityCliLoopCompileSessionLifecycleService _compileSessionLifecycleService;
         private readonly ICompileResultSessionRepository _compileResultSessionRepository;
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
-        private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
+        private Func<CompileSchema, string, bool, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
         private Func<ValidationResult> _validateCompilationState;
         private Func<PreparationResult> _determinePreparationAction;
         private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActivePersistedPausePointCount, int ActiveHotReloadChangeCount)>
@@ -52,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Replaces compilation execution for tests that must not start Unity's real compilation pipeline.
         /// </summary>
-        internal void SetCompilationExecutionForTesting(Func<CompileSchema, string, CancellationToken, Task<CompileResult>> executeCompilationAsync)
+        internal void SetCompilationExecutionForTesting(
+            Func<CompileSchema, string, bool, CancellationToken, Task<CompileResult>> executeCompilationAsync)
         {
             Debug.Assert(executeCompilationAsync != null, "executeCompilationAsync must not be null");
             _executeCompilationAsync = executeCompilationAsync ??
@@ -195,6 +196,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 activePausePointCountAtRequestStart,
                 activePersistedPausePointCountAtRequestStart,
                 activeHotReloadChangeCountAtRequestStart);
+            // Why from the request-start inputs: they are what the Warning above tells the caller the
+            // compile discards, so a compile that found no script change must still reload for them.
+            bool reloadDiscardsState = wasPlayingAtRequestStart
+                || activePausePointCountAtRequestStart > 0
+                || activePersistedPausePointCountAtRequestStart > 0
+                || activeHotReloadChangeCountAtRequestStart > 0;
 
             // 2. Compilation state validation
             ValidationResult validation = _validateCompilationState();
@@ -221,7 +228,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // 3. Compilation execution
             ct.ThrowIfCancellationRequested();
-            CompileResult result = await _executeCompilationAsync(request, playModeStopWarning, ct).ConfigureAwait(false);
+            CompileResult result = await _executeCompilationAsync(
+                request,
+                playModeStopWarning,
+                reloadDiscardsState,
+                ct).ConfigureAwait(false);
             // Why: CreateResponse may query TypeCache for missing-reference NextActions, and
             // TypeCache is a Unity Editor API that must run on the main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -429,14 +440,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return $"compile_{unixTimeMilliseconds}_{correlationId}";
         }
 
-        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(CompileSchema request, string playModeStopWarning, CancellationToken ct)
+        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(
+            CompileSchema request,
+            string playModeStopWarning,
+            bool reloadDiscardsState,
+            CancellationToken ct)
         {
             Debug.Assert(request != null, "request must not be null");
 
             CompilationExecutionService executionService = new(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
-            return executionService.ExecuteCompilationAsync(request, playModeStopWarning, ct);
+            return executionService.ExecuteCompilationAsync(request, playModeStopWarning, reloadDiscardsState, ct);
         }
     }
 }

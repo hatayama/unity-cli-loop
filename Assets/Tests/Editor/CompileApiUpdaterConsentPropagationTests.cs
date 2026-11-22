@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileResultSessionRepository,
                     pendingCompileSessionRepository);
                 useCase.SetCompilationStateValidationForTesting(() => ValidationResult.Success());
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     ct.ThrowIfCancellationRequested();
                     return Task.FromResult(executionResult);

@@ -16,6 +16,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         AssemblyDefinitionConsoleErrorResult FindCurrentAssemblyDefinitionErrors();
 
+        /// <summary>
+        /// Whether Unity has a script compilation requested or running. Read right after
+        /// <see cref="RefreshAssets"/>, true means the refresh found a change that needs a compile:
+        /// a script, an Assembly Definition, or a define.
+        /// </summary>
+        bool IsScriptCompilationPending();
+
+        /// <summary>
+        /// Whether the last script compilation ended with errors, so its errors are only reported
+        /// again by compiling.
+        /// </summary>
+        bool DidLastScriptCompilationFail();
+
         UnityCliLoopConsoleLogEntry[] ReadConsoleErrorEntries();
 
         void SubscribeCompilationEvents(
@@ -50,6 +63,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
             return assemblyDefinitionValidationService.FindCurrentErrors();
+        }
+
+        public bool IsScriptCompilationPending()
+        {
+            // Why isCompiling: it is also true while a compilation is only requested, which is the
+            // state a refresh that found script changes leaves behind before Unity starts compiling.
+            return EditorApplication.isCompiling;
+        }
+
+        public bool DidLastScriptCompilationFail()
+        {
+            return EditorUtility.scriptCompilationFailed;
         }
 
         /// <summary>

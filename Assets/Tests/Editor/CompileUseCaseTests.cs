@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileSessionLifecycleService,
                     compileResultSessionRepository,
                     pendingCompileSessionRepository);
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     ct.ThrowIfCancellationRequested();
                     CompileResultSessionRecorder.RecordCompileResult(
@@ -74,6 +74,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopStoredCompileResult storedResult =
                     compileResultSessionRepository.GetCompileResult("compile_test_request");
                 Assert.That(storedResult.ResultJson, Does.Contain("\"ProjectRoot\":"));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
+        /// What: the compile is told a domain reload discards state exactly when the request started
+        /// with something only a reload discards — Play Mode, an enabled pause point (persisted ones
+        /// included, since they are dropped and re-armed), or an active hot-reload change — so a
+        /// compile with no script changes still reloads in those cases.
+        /// </summary>
+        [TestCase(false, 0, 0, 0, false, TestName = "{m}_NothingToDiscard")]
+        [TestCase(true, 0, 0, 0, true, TestName = "{m}_PlayModeWasActive")]
+        [TestCase(false, 1, 0, 0, true, TestName = "{m}_PausePointEnabled")]
+        [TestCase(false, 1, 1, 0, true, TestName = "{m}_PersistedPausePointEnabled")]
+        [TestCase(false, 0, 0, 1, true, TestName = "{m}_HotReloadChangeActive")]
+        public async Task CompileAsync_PassesWhetherADomainReloadDiscardsStateToTheCompile(
+            bool wasPlayingAtRequestStart,
+            int activePausePointCount,
+            int activePersistedPausePointCount,
+            int activeHotReloadChangeCount,
+            bool expectedReloadDiscardsState)
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetPlayModeStopWarningInputsForTesting(
+                    wasPlayingAtRequestStart,
+                    activePausePointCount,
+                    activePersistedPausePointCount,
+                    activeHotReloadChangeCount);
+                useCase.SetCompilationStateValidationForTesting(() => ValidationResult.Success());
+                bool? receivedReloadDiscardsState = null;
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
+                {
+                    receivedReloadDiscardsState = reloadDiscardsState;
+                    return Task.FromResult(CreateSuccessfulCompileResult());
+                });
+
+                await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = false,
+                        RequestId = "compile_reload_discards_state",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                Assert.That(receivedReloadDiscardsState, Is.EqualTo(expectedReloadDiscardsState));
             }
             finally
             {
@@ -110,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
                         CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     throw new InvalidOperationException("validation failure must not start compilation");
                 });
@@ -164,7 +232,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileResultSessionRepository,
                     pendingCompileSessionRepository);
                 useCase.SetPlayModePreparationForTesting(() => PreparationResult.CannotProceed(refusalMessage));
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     throw new InvalidOperationException("a refused preparation must not start compilation");
                 });
@@ -228,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
                         CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     throw new InvalidOperationException("validation failure must not start compilation");
                 });
@@ -293,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
                         CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     throw new InvalidOperationException("validation failure must not start compilation");
                 });
@@ -358,7 +426,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
                         CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     throw new InvalidOperationException("validation failure must not start compilation");
                 });
@@ -431,7 +499,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     activePersistedPausePointCount: 0,
                     activeHotReloadChangeCount: 2);
                 string capturedPlayModeStopWarning = null;
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     capturedPlayModeStopWarning = playModeStopWarning;
                     ct.ThrowIfCancellationRequested();
@@ -488,7 +556,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
                         CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
-                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, reloadDiscardsState, ct) =>
                 {
                     throw new InvalidOperationException("validation failure must not start compilation");
                 });

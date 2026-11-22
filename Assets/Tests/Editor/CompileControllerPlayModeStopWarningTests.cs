@@ -54,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await controller.TryCompileAsync(
                     forceRecompile: false,
                     expectedWarning,
+                    reloadDiscardsState: false,
                     CancellationToken.None);
 
                 UnityCliLoopStoredCompileResult storedResult =

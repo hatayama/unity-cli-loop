@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 CompileResult result = await compileController.TryCompileAsync(
                     forceRecompile: false,
                     playModeStopWarning: null,
+                    reloadDiscardsState: false,
                     ct: CancellationToken.None);
                 CompilerMessage[] err = result.Errors;
                 CompilerMessage[] warning = result.Warnings;
@@ -73,6 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 CompileResult result = await compileController.TryCompileAsync(
                     forceRecompile: true,
                     playModeStopWarning: null,
+                    reloadDiscardsState: false,
                     ct: CancellationToken.None);
                 CompilerMessage[] err = result.Errors;
                 CompilerMessage[] warning = result.Warnings;

@@ -153,14 +153,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="forceRecompile">Whether to force a recompile.</param>
         /// <param name="playModeStopWarning">Optional Warning to carry onto the shaped response when compile was requested during Play Mode.</param>
+        /// <param name="reloadDiscardsState">True when the caller holds state that only a domain reload
+        /// discards (a Play session, pause point patches, hot-reload changes), so the compile must reload
+        /// even when no script changed.</param>
         /// <param name="ct">Cancellation token for the compile execution.</param>
-        /// <returns>The compilation result.</returns>
+        /// <returns>The compilation result. When no script changed since a successful compile, nothing is
+        /// forced, and <paramref name="reloadDiscardsState"/> is false, a successful result returned
+        /// without compiling, so the domain is not reloaded.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
         /// <remarks>
         /// Callers must validate editor compilation state before invoking compile execution;
         /// the production pipeline does this in CompileUseCase.
         /// </remarks>
-        public async Task<CompileResult> TryCompileAsync(bool forceRecompile, string playModeStopWarning, CancellationToken ct)
+        public async Task<CompileResult> TryCompileAsync(
+            bool forceRecompile,
+            string playModeStopWarning,
+            bool reloadDiscardsState,
+            CancellationToken ct)
         {
             if (_isCompiling)
             {
@@ -238,6 +247,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return result;
                 }
 
+                if (IsUpToDate(forceRecompile, reloadDiscardsState))
+                {
+                    // Why skip: requesting a compilation with nothing to compile still makes Unity
+                    // reload the domain, and each reload makes the next one slower over an Editor session.
+                    CompileResult upToDateResult = CompileResultFactory.CreateUpToDateResult();
+                    VibeLogger.LogInfo(
+                        "compile_skipped_up_to_date",
+                        upToDateResult.Message,
+                        new
+                        {
+                            elapsed_ms = CompileElapsedMilliseconds()
+                        });
+                    CompleteCompileWithoutRequest(upToDateResult);
+                    return upToDateResult;
+                }
+
                 // Register events.
                 _pipeline.SubscribeCompilationEvents(HandleCompileStarted, HandleCompileFinished, HandleAssemblyFinished);
                 eventsRegistered = true;
@@ -260,6 +285,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ClearUntransferredCompileState(compileTask, eventsRegistered);
                 }
             }
+        }
+
+        /// <summary>
+        /// Whether the compile can end without asking Unity to compile. Must be read after the asset
+        /// refresh, because the refresh is what queues a compilation for changed scripts.
+        /// </summary>
+        private bool IsUpToDate(bool forceRecompile, bool reloadDiscardsState)
+        {
+            if (forceRecompile || reloadDiscardsState)
+            {
+                return false;
+            }
+
+            return !_pipeline.IsScriptCompilationPending() && !_pipeline.DidLastScriptCompilationFail();
         }
 
         private bool IsCompileRequestCompleted()
