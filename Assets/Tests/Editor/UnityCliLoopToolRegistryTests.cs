@@ -593,6 +593,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new UnityCliLoopExecutionRouter(toolRegistrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker(), ToolCatalogCachePublisher.CreateForEditor());
         }
 
+        /// <summary>
+        /// Verifies the tool list the tools cache is written from drops development-only tools, as a plain
+        /// get-tool-details request does, but keeps internal tools, which the background write drops itself.
+        /// </summary>
+        [Test]
+        public void CreateCatalogSnapshotIncludingInternal_DropsDevelopmentOnlyTools_AndKeepsInternalTools()
+        {
+            IUnityCliLoopTool[] tools =
+            {
+                new NamedRegistrationTool("snapshot-public-tool"),
+                new NamedRegistrationTool("snapshot-internal-tool"),
+                new DevelopmentOnlyCatalogTestTool()
+            };
+            UnityCliLoopToolRegistrarService registrarService = new UnityCliLoopToolRegistrarService(
+                new FixedInternalToolNameProvider("snapshot-internal-tool"),
+                new AlwaysEnabledToolSettingsPort(),
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
+                () => tools);
+
+            string[] toolNames = GetToolDetailsBridgeCommand.CreateCatalogSnapshotIncludingInternal(registrarService)
+                .Select(tool => tool.Name)
+                .ToArray();
+
+            Assert.That(toolNames, Does.Contain("snapshot-public-tool"));
+            Assert.That(toolNames, Does.Contain("snapshot-internal-tool"));
+            Assert.That(toolNames, Does.Not.Contain(DevelopmentOnlyCatalogTestToolName));
+        }
+
+        /// <summary>
+        /// Internal tool name provider that reports a fixed set of names for any project root.
+        /// </summary>
+        private sealed class FixedInternalToolNameProvider : IInternalToolNameProvider
+        {
+            private readonly string[] _toolNames;
+
+            public FixedInternalToolNameProvider(params string[] toolNames)
+            {
+                _toolNames = toolNames;
+            }
+
+            public HashSet<string> GetInternalToolNames(string projectRoot)
+            {
+                return new HashSet<string>(_toolNames, StringComparer.Ordinal);
+            }
+        }
+
         private static UnityCliLoopExecutionRouter CreateExecutionRouterWithDevelopmentOnlyTool()
         {
             UnityCliLoopToolRegistrarService toolRegistrarService =
