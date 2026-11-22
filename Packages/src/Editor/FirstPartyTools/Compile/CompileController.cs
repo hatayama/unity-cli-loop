@@ -212,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
                 CompileResult result =
                     CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
-                RecordCompileResultIfNeeded(result, playModeStopWarning);
+                RecordCompileResultIfNeeded(result, playModeStopWarning, isFollowedByReload: false);
                 return result;
             }
 
@@ -369,7 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ["is_indeterminate"] = result.IsIndeterminate
                 }));
 
-            CompleteCompileRequest(result, unregisterEvents: true);
+            CompleteCompileRequest(result, unregisterEvents: true, isFollowedByReload: false);
         }
 
         /// <summary>
@@ -377,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private void CompleteCompileWithoutRequest(CompileResult result)
         {
-            CompleteCompileRequest(result, unregisterEvents: false);
+            CompleteCompileRequest(result, unregisterEvents: false, isFollowedByReload: false);
         }
 
         private void AbortCompile(string reason)
@@ -407,13 +407,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message: reason
             );
 
-            CompleteCompileRequest(result, unregisterEvents: true);
+            CompleteCompileRequest(result, unregisterEvents: true, isFollowedByReload: false);
         }
 
         /// <summary>
         /// Completes the active compile task while guaranteeing controller state cleanup.
         /// </summary>
-        private void CompleteCompileRequest(CompileResult result, bool unregisterEvents)
+        private void CompleteCompileRequest(CompileResult result, bool unregisterEvents, bool isFollowedByReload)
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
@@ -422,7 +422,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
             {
-                RecordCompileResultIfNeeded(resultToComplete, _pendingPlayModeStopWarning);
+                RecordCompileResultIfNeeded(resultToComplete, _pendingPlayModeStopWarning, isFollowedByReload);
 
                 if (unregisterEvents)
                 {
@@ -478,7 +478,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
             _currentCompileTask = new TaskCompletionSource<CompileResult>();
-            CompleteCompileRequest(result, unregisterEvents: false);
+            CompleteCompileRequest(result, unregisterEvents: false, isFollowedByReload: false);
         }
 
         /// <summary>
@@ -491,7 +491,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ClearUntransferredCompileState(compileTask, eventsRegistered: false);
         }
 
-        private void RecordCompileResultIfNeeded(CompileResult result, string playModeStopWarning)
+        private void RecordCompileResultIfNeeded(
+            CompileResult result,
+            string playModeStopWarning,
+            bool isFollowedByReload)
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
@@ -506,6 +509,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _resultRecordingContext.RequestId,
                 _resultRecordingContext.ForceRecompile,
                 result,
+                isFollowedByReload,
                 _resultRecordingContext.RequestId,
                 playModeStopWarning);
         }
@@ -550,7 +554,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             CompileResult result = CompileResultFactory.CreateCompileResult(_compileMessages.ToArray(), _isForceCompile);
             LogCompileFinishCallbackReceived(result);
-            CompleteCompileRequest(result, unregisterEvents: true);
+            // Why only without errors: Unity reloads the domain after a compile it ran, even one with nothing
+            // to compile, unless the compile has errors.
+            CompleteCompileRequest(result, unregisterEvents: true, isFollowedByReload: result.ErrorCount == 0);
         }
 
         private void LogCompileFinishCallbackReceived(CompileResult result)

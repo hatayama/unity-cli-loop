@@ -1,6 +1,6 @@
 ---
 name: uloop-launch
-description: "Launch or restart Unity Editor. Use only when Unity is not running or stays frozen after retries — not as a health check after a failed command; it brings the Unity window to the foreground as a side effect."
+description: "Launch or restart Unity Editor. Use only when Unity is not running, stays frozen after retries, or a compile result recommends a restart — not as a health check after a failed command; it brings the Unity window to the foreground as a side effect."
 ---
 
 # uloop launch
@@ -55,7 +55,9 @@ The final JSON payload includes:
 A single failed, cancelled, or busy command (e.g. right after a domain reload) is not a reason
 to launch — retry the command instead. Running launch while the Editor is up brings the Unity
 window to the foreground, which disrupts the user. Reach for launch only when Unity is not
-running, or still does not respond after retries.
+running, still does not respond after retries, or a `uloop compile` result's `Warning` recommends
+`uloop launch -r` because domain reloads have slowed down. That restart discards unsaved scene
+changes, so ask the user before running it.
 
 ## Notes
 

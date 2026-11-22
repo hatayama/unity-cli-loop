@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
         private UnityCliLoopCompileSessionLifecycleService _sessionStateService;
         private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
+        private InMemoryDomainReloadDurationStore _reloadDurationStore;
 
         [SetUp]
         public void SetUp()
@@ -24,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateCompileSessionLifecycleService();
             _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+            _reloadDurationStore = new InMemoryDomainReloadDurationStore();
         }
 
         [TearDown]
@@ -99,6 +101,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             );
         }
 
+        [Test]
+        public void OnBeforeAssemblyReload_RecordsTheReloadStart()
+        {
+            // Tests that the before-reload hook starts measuring the domain reload outside Play Mode.
+            UnityCliLoopServerControllerService service = CreateControllerService();
+
+            service.OnBeforeAssemblyReload();
+
+            DomainReloadDurationState state = _reloadDurationStore.Load();
+            Assert.That(state.PendingStartUtcTicks.HasValue, Is.True);
+            Assert.That(state.PendingIsMeasured, Is.True);
+        }
+
+        [Test]
+        public void OnBeforeAssemblyReload_WhenStoppingTheServerThrows_StillRecordsTheReloadStart()
+        {
+            // Tests that a failed server stop, after which Unity still reloads, does not leave the reload unrecorded.
+            UnityCliLoopServerControllerService service = CreateControllerService();
+            service.RegisterRecoveredServer(new ThrowingStopServerInstance());
+
+            Assert.Throws<System.InvalidOperationException>(() => service.OnBeforeAssemblyReload());
+
+            Assert.That(_reloadDurationStore.Load().PendingStartUtcTicks.HasValue, Is.True);
+        }
+
+        [Test]
+        public async Task OnAfterAssemblyReload_FinishesTheReloadStartedBeforeIt()
+        {
+            // Tests that the after-reload hook records the reload's duration before the recovery it schedules runs.
+            // A manual stop keeps that recovery from starting a server.
+            _sessionFlagsRepository.MarkServerManuallyStopped();
+            new DomainReloadDurationMonitor(_reloadDurationStore, () => false)
+                .RecordReloadStarted(System.DateTime.UtcNow.AddSeconds(-1));
+            UnityCliLoopServerControllerService service = CreateControllerService();
+
+            service.OnAfterAssemblyReload();
+
+            DomainReloadDurationState state = _reloadDurationStore.Load();
+            Assert.That(state.PendingStartUtcTicks.HasValue, Is.False);
+            Assert.That(state.RecentReloads, Has.Length.EqualTo(1));
+            Assert.That(state.RecentReloads[0].Seconds, Is.GreaterThan(0d));
+            Task recoveryTask = service.RecoveryTask;
+            if (recoveryTask != null)
+            {
+                await recoveryTask;
+                Assert.That(recoveryTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            }
+        }
+
         private UnityCliLoopServerControllerService CreateControllerService(
             TestDomainReloadLifecycle domainReloadLifecycle = null,
             UnityCliLoopServerStartupProtectionService startupProtectionService = null)
@@ -142,7 +193,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
                 recoveryTrackingService,
-                domainReloadLifecycle ?? new TestDomainReloadLifecycle());
+                domainReloadLifecycle ?? new TestDomainReloadLifecycle(),
+                new DomainReloadDurationMonitor(_reloadDurationStore, () => false));
         }
 
         /// <summary>
@@ -177,6 +229,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public IUnityCliLoopServerInstance Create()
             {
                 return new TestServerInstance();
+            }
+        }
+
+        /// <summary>
+        /// Test support type for a running server whose stop fails.
+        /// </summary>
+        private sealed class ThrowingStopServerInstance : IUnityCliLoopServerInstance
+        {
+            public bool IsRunning => true;
+
+            public string Endpoint => "test";
+
+            public void StartServer()
+            {
+            }
+
+            public void StopServer()
+            {
+                throw new System.InvalidOperationException("Stopping the test server failed.");
+            }
+
+            public void Dispose()
+            {
             }
         }
 

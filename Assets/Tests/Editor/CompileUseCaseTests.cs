@@ -60,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         compileRequest.RequestId,
                         compileRequest.ForceRecompile,
                         executionResult,
+                        isFollowedByReload: false,
                         compileRequest.RequestId);
                     return Task.FromResult(executionResult);
                 });
@@ -509,6 +510,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         compileRequest.RequestId,
                         compileRequest.ForceRecompile,
                         executionResult,
+                        isFollowedByReload: false,
                         compileRequest.RequestId);
                     return Task.FromResult(executionResult);
                 });
@@ -619,10 +621,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 string requestId,
                 bool forceRecompile,
                 string resultJson,
-                DateTime completedAtUtc)
+                DateTime completedAtUtc,
+                bool isFollowedByReload)
             {
                 StoreCount++;
-                _inner.StoreCompileResult(requestId, forceRecompile, resultJson, completedAtUtc);
+                _inner.StoreCompileResult(requestId, forceRecompile, resultJson, completedAtUtc, isFollowedByReload);
             }
 
             public UnityCliLoopStoredCompileResult GetCompileResult(string requestId)
@@ -707,7 +710,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 string requestId,
                 bool forceRecompile,
                 string resultJson,
-                DateTime completedAtUtc) => throw Touched();
+                DateTime completedAtUtc,
+                bool isFollowedByReload) => throw Touched();
             public UnityCliLoopStoredCompileResult GetCompileResult(string requestId) => throw Touched();
             public UnityCliLoopStoredCompileResult GetStoredCompileResult() => throw Touched();
             public UnityCliLoopStoredCompileResult[] GetStoredCompileResults() => throw Touched();

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -444,6 +445,108 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken.None));
 
             Assert.That(pipeline.RefreshCountsWhenConsentDeclineInstalled, Is.EqualTo(new[] { 0 }));
+        }
+
+        /// <summary>
+        /// What: a compile that Unity ran without errors stores that a domain reload follows its result.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhenPipelineFinishesWithoutErrors_StoresThatAReloadFollows()
+        {
+            FakeCompilePipelinePort pipeline = new() { CompleteOnRequest = true };
+
+            bool isFollowedByReload = await CompileAndReadIsFollowedByReload(
+                pipeline,
+                "compile_followed_by_reload_clean",
+                forceRecompile: false);
+
+            Assert.That(isFollowedByReload, Is.True);
+        }
+
+        /// <summary>
+        /// What: a forced recompile that Unity ran stores that a domain reload follows, although its result is
+        /// indeterminate.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhenForcedAndPipelineFinishes_StoresThatAReloadFollows()
+        {
+            FakeCompilePipelinePort pipeline = new() { CompleteOnRequest = true };
+
+            bool isFollowedByReload = await CompileAndReadIsFollowedByReload(
+                pipeline,
+                "compile_followed_by_reload_forced",
+                forceRecompile: true);
+
+            Assert.That(isFollowedByReload, Is.True);
+        }
+
+        /// <summary>
+        /// What: a compile with errors stores that no domain reload follows, because Unity does not reload then.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhenPipelineFinishesWithErrors_StoresThatNoReloadFollows()
+        {
+            FakeCompilePipelinePort pipeline = new()
+            {
+                CompleteOnRequest = true,
+                ReportedMessages = new[] { CreateMessage(CompilerMessageType.Error, "sample error") }
+            };
+
+            bool isFollowedByReload = await CompileAndReadIsFollowedByReload(
+                pipeline,
+                "compile_followed_by_reload_errors",
+                forceRecompile: false);
+
+            Assert.That(isFollowedByReload, Is.False);
+        }
+
+        /// <summary>
+        /// What: a compile skipped because nothing changed stores that no domain reload follows.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhenNothingChanged_StoresThatNoReloadFollows()
+        {
+            FakeCompilePipelinePort pipeline = new()
+            {
+                CompleteOnRequest = true,
+                ScriptCompilationPending = false,
+                LastScriptCompilationFailed = false
+            };
+
+            bool isFollowedByReload = await CompileAndReadIsFollowedByReload(
+                pipeline,
+                "compile_followed_by_reload_up_to_date",
+                forceRecompile: false);
+
+            Assert.That(isFollowedByReload, Is.False);
+        }
+
+        private static async Task<bool> CompileAndReadIsFollowedByReload(
+            FakeCompilePipelinePort pipeline,
+            string requestId,
+            bool forceRecompile)
+        {
+            using CompileController controller = CreateController(pipeline);
+            controller.SetResultRecordingContext(
+                CompileResultRecordingContext.Create(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = true,
+                        RequestId = requestId,
+                        ForceRecompile = forceRecompile
+                    }));
+
+            await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
+                forceRecompile,
+                playModeStopWarning: null,
+                reloadDiscardsState: false,
+                CancellationToken.None));
+
+            UnityCliLoopStoredCompileResult storedResult = UnityCliLoopEditorSessionStateTestFactory
+                .CreateCompileResultSessionRepository()
+                .GetCompileResult(requestId);
+            Assert.That(storedResult.HasResult, Is.True);
+            return storedResult.IsFollowedByReload;
         }
 
         private static CompileController CreateController(FakeCompilePipelinePort pipeline)

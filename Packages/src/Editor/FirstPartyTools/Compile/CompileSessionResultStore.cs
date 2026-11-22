@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string requestId,
             bool forceRecompile,
             CompileResponse result,
+            bool isFollowedByReload,
             string correlationId)
         {
             Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
@@ -42,7 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 requestId,
                 forceRecompile,
                 resultJson,
-                DateTime.UtcNow);
+                DateTime.UtcNow,
+                isFollowedByReload);
             bool pendingRequestCleared =
                 pendingCompileRepository.ClearPendingCompileRequestIfMatches(requestId);
             VibeLogger.LogInfo(
@@ -52,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     request_id = requestId,
                     force_recompile = forceRecompile,
+                    is_followed_by_reload = isFollowedByReload,
                     success = result.Success,
                     error_count = result.ErrorCount,
                     warning_count = result.WarningCount,

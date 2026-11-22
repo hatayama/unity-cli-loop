@@ -138,7 +138,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileResult.RequestId,
                     compileResult.ForceRecompile,
                     compileResult.ResultJson,
-                    new System.DateTime(compileResult.CompletedAtUtcTicks, System.DateTimeKind.Utc));
+                    new System.DateTime(compileResult.CompletedAtUtcTicks, System.DateTimeKind.Utc),
+                    compileResult.IsFollowedByReload);
             }
 
             pendingCompileSessionRepository.ClearPendingCompileRequest();

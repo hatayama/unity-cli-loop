@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string requestId,
             bool forceRecompile,
             CompileResult result,
+            bool isFollowedByReload,
             string correlationId,
             string playModeStopWarning = null)
         {
@@ -31,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 requestId,
                 forceRecompile,
                 response,
+                isFollowedByReload,
                 correlationId);
         }
 
@@ -40,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string requestId,
             bool forceRecompile,
             CompileResponse response,
+            bool isFollowedByReload,
             string correlationId)
         {
             Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
@@ -53,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 requestId,
                 forceRecompile,
                 response,
+                isFollowedByReload,
                 correlationId);
             return response;
         }

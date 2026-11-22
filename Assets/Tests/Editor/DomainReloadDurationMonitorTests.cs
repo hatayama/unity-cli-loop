@@ -1,0 +1,330 @@
+using System;
+
+using Newtonsoft.Json.Linq;
+using NUnit.Framework;
+
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
+{
+    /// <summary>
+    /// Tests how domain reload durations are measured and when a compile result recommends restarting the Editor.
+    /// </summary>
+    [TestFixture]
+    public sealed class DomainReloadDurationMonitorTests
+    {
+        private const string DomainReloadSecondsKey = "DomainReloadSeconds";
+        private const string WarningKey = "Warning";
+        private const string NextActionsKey = "NextActions";
+        private const string RestartCommand = "uloop launch -r";
+
+        private DomainReloadDurationMonitor _monitor;
+        private InMemoryDomainReloadDurationStore _store;
+        private DateTime _now;
+        private bool _isInPlayMode;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _isInPlayMode = false;
+            _store = new InMemoryDomainReloadDurationStore();
+            _monitor = new DomainReloadDurationMonitor(_store, () => _isInPlayMode);
+            _now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenNoReloadWasRecorded_ChangesNothing()
+        {
+            // Verifies the Editor's initial domain load, which has no reload start, is never reported.
+            _monitor.RecordReloadFinished(_now);
+            JObject result = new JObject();
+
+            ReloadAttributionOutcome outcome = _monitor.AttributeFirstReloadSince(result, _now.AddSeconds(-1).Ticks);
+
+            Assert.That(outcome, Is.EqualTo(ReloadAttributionOutcome.NoReloadYet));
+            Assert.That(result.ContainsKey(DomainReloadSecondsKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_AfterAReloadThatStartedAfterTheResult_SetsItsSeconds()
+        {
+            // Verifies a compile whose result was stored before its reload reports that reload's duration.
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 1.5d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[DomainReloadSecondsKey]?.Value<double>(), Is.EqualTo(1.5d));
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+            Assert.That(result.ContainsKey(NextActionsKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenEveryReloadStartedBeforeTheResult_ChangesNothing()
+        {
+            // Verifies an earlier slow reload gives neither a stale duration nor a stale restart warning.
+            RecordReloads(3, 1d);
+            RecordReloads(10, 2d);
+            JObject result = new JObject();
+
+            ReloadAttributionOutcome outcome = _monitor.AttributeFirstReloadSince(result, _now.Ticks);
+
+            Assert.That(outcome, Is.EqualTo(ReloadAttributionOutcome.NoReloadYet));
+            Assert.That(result.ContainsKey(DomainReloadSecondsKey), Is.False);
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenTwoReloadsFollowTheResult_ReportsTheFirstAsItWas()
+        {
+            // Verifies the first reload after the result is reported with the advice as of that reload, so a later
+            // reload neither replaces its duration nor adds advice it did not have.
+            RecordReloads(3, 1d);
+            RecordReloads(8, 2d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2.5d);
+            RecordReloads(1, 2d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[DomainReloadSecondsKey]?.Value<double>(), Is.EqualTo(2.5d));
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenTheFirstReloadReachedTheStreak_KeepsItsAdviceAfterAFasterReload()
+        {
+            // Verifies advice earned by the reported reload stays even when a later reload broke the slow run.
+            RecordReloads(3, 1d);
+            RecordReloads(9, 2d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2d);
+            RecordReloads(1, 1d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[WarningKey]?.Value<string>(), Does.Contain(RestartCommand));
+        }
+
+        [Test]
+        public void RecordReloadFinished_DropsReloadsOlderThanTheCompileResultLifetime()
+        {
+            // Verifies the kept reloads stay bounded: one that started longer ago than a result can be read is
+            // dropped when the next reload finishes.
+            RecordReloads(1, 1d);
+            _now = _now.AddMinutes(21);
+            RecordReloads(1, 1d);
+
+            DomainReloadRecord[] recentReloads = _store.Load().RecentReloads;
+
+            Assert.That(recentReloads, Has.Length.EqualTo(1));
+            Assert.That(recentReloads[0].StartedAtUtcTicks, Is.EqualTo(_now.AddSeconds(-1).Ticks));
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_AfterNineSlowReloadsInARow_DoesNotRecommendRestarting()
+        {
+            // Verifies nine reloads at twice the baseline are not yet enough to recommend a restart.
+            RecordReloads(3, 1d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(9, 2d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[DomainReloadSecondsKey]?.Value<double>(), Is.EqualTo(2d));
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+            Assert.That(result.ContainsKey(NextActionsKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_AfterTenSlowReloadsInARow_RecommendsRestarting()
+        {
+            // Verifies the tenth reload in a row at twice the baseline recommends restarting with uloop launch -r.
+            RecordReloads(3, 1d);
+            RecordReloads(9, 2d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[WarningKey]?.Value<string>(), Does.Contain(RestartCommand));
+            Assert.That(result[WarningKey]?.Value<string>(), Does.Contain("unsaved"));
+            Assert.That(result[NextActionsKey]?.ToObject<string[]>(), Has.Some.Contains(RestartCommand));
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenAReloadBelowTwiceTheBaselineBreaksTheRun_DoesNotRecommendRestarting()
+        {
+            // Verifies one reload under twice the baseline restarts the count of slow reloads in a row.
+            RecordReloads(3, 1d);
+            RecordReloads(9, 2d);
+            RecordReloads(1, 1.9d);
+            RecordReloads(8, 2d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenTheFirstTwoReloadsWereFast_DoesNotUseThemAsTheBaseline()
+        {
+            // Verifies the first two reloads after the Editor starts, which can be unusually fast, set no baseline.
+            RecordReloads(2, 0.4d);
+            RecordReloads(11, 1d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 1d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenAFasterReloadArrives_MeasuresLaterReloadsAgainstIt()
+        {
+            // Verifies the baseline drops to the fastest reload, so 1.7s counts as slow against a 0.8s reload.
+            RecordReloads(3, 1d);
+            RecordReloads(5, 2d);
+            RecordReloads(1, 0.8d);
+            RecordReloads(9, 1.7d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 1.7d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[WarningKey]?.Value<string>(), Does.Contain(RestartCommand));
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenTheReloadRanInPlayMode_SetsNullSecondsInsteadOfAnotherReload()
+        {
+            // Verifies a Play Mode reload is not measured, and neither an earlier slow reload nor a later measured
+            // one stands in for it.
+            RecordReloads(3, 1d);
+            RecordReloads(10, 2d);
+            DateTime resultCompletedAt = _now;
+            _isInPlayMode = true;
+            RecordReloads(1, 3d);
+            _isInPlayMode = false;
+            RecordReloads(1, 2d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[DomainReloadSecondsKey]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenAPlayModeReloadInterruptsTheSlowRun_StillRecommendsRestarting()
+        {
+            // Verifies a Play Mode reload between compiles leaves the baseline and the slow streak as they were.
+            RecordReloads(3, 1d);
+            RecordReloads(9, 2d);
+            _isInPlayMode = true;
+            RecordReloads(1, 0.5d);
+            _isInPlayMode = false;
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2d);
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[WarningKey]?.Value<string>(), Does.Contain(RestartCommand));
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenAReloadStartedButAPlayModeReloadFollowed_DoesNotMeasureFromTheOlderStart()
+        {
+            // Verifies a reload start that never finished is replaced by the next start instead of being measured.
+            DateTime resultCompletedAt = _now.AddSeconds(-1);
+            _monitor.RecordReloadStarted(_now);
+            _isInPlayMode = true;
+            _monitor.RecordReloadStarted(_now.AddSeconds(2));
+            _monitor.RecordReloadFinished(_now.AddSeconds(5));
+
+            JObject result = AttributeReloadToResultCompletedAt(resultCompletedAt);
+
+            Assert.That(result[DomainReloadSecondsKey]?.Type, Is.EqualTo(JTokenType.Null));
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenTheResultAlreadyHasAWarningAndNextActions_AppendsToThem()
+        {
+            // Verifies the restart advice keeps the Play Mode warning and the corrective steps already in the result.
+            RecordReloads(3, 1d);
+            RecordReloads(9, 2d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2d);
+            JObject result = new JObject
+            {
+                [WarningKey] = "Play Mode was stopped.",
+                [NextActionsKey] = new JArray("Run get-logs.")
+            };
+
+            _monitor.AttributeFirstReloadSince(result, resultCompletedAt.Ticks);
+
+            Assert.That(result[WarningKey]?.Value<string>(), Does.StartWith("Play Mode was stopped. "));
+            Assert.That(result[WarningKey]?.Value<string>(), Does.Contain(RestartCommand));
+            string[] nextActions = result[NextActionsKey]?.ToObject<string[]>();
+            Assert.That(nextActions, Has.Length.EqualTo(2));
+            Assert.That(nextActions[0], Is.EqualTo("Run get-logs."));
+            Assert.That(nextActions[1], Does.Contain(RestartCommand));
+        }
+
+        [Test]
+        public void AttributeFirstReloadSince_WhenTheResultAlreadyReportsAReload_LeavesItUnchanged()
+        {
+            // Verifies a result whose reload is settled is not given a second duration or warning.
+            RecordReloads(3, 1d);
+            RecordReloads(9, 2d);
+            DateTime resultCompletedAt = _now;
+            RecordReloads(1, 2d);
+            JObject result = new JObject { [DomainReloadSecondsKey] = 3d };
+
+            ReloadAttributionOutcome outcome = _monitor.AttributeFirstReloadSince(result, resultCompletedAt.Ticks);
+
+            Assert.That(outcome, Is.EqualTo(ReloadAttributionOutcome.AlreadySettled));
+            Assert.That(result[DomainReloadSecondsKey]?.Value<double>(), Is.EqualTo(3d));
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+        }
+
+        [Test]
+        public void AttributeNoReloadTo_AfterSlowReloads_SetsNullSecondsWithoutAdvice()
+        {
+            // Verifies a compile that cannot have reloaded reports no reload even when reloads have been slow.
+            DateTime resultCompletedAt = _now;
+            RecordReloads(3, 1d);
+            RecordReloads(10, 2d);
+            JObject result = new JObject { ["Success"] = false };
+
+            bool changed = _monitor.AttributeNoReloadTo(result);
+
+            Assert.That(changed, Is.True);
+            Assert.That(result[DomainReloadSecondsKey]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(result.ContainsKey(WarningKey), Is.False);
+            Assert.That(
+                _monitor.AttributeFirstReloadSince(result, resultCompletedAt.Ticks),
+                Is.EqualTo(ReloadAttributionOutcome.AlreadySettled));
+        }
+
+        private void RecordReloads(int count, double seconds)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                _now = _now.AddSeconds(1);
+                _monitor.RecordReloadStarted(_now);
+                _now = _now.AddSeconds(seconds);
+                _monitor.RecordReloadFinished(_now);
+            }
+        }
+
+        private JObject AttributeReloadToResultCompletedAt(DateTime resultCompletedAt)
+        {
+            JObject result = new JObject { ["Success"] = true };
+            _monitor.AttributeFirstReloadSince(result, resultCompletedAt.Ticks);
+            return result;
+        }
+    }
+}

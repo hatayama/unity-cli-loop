@@ -82,6 +82,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetCompileResult_KeepsWhetherAReloadFollowsTheResult()
+        {
+            // Verifies the flag that a domain reload follows the result survives service recreation, and that
+            // storing the result again without it clears it.
+            DateTime completedAtUtc = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_followed_by_reload",
+                forceRecompile: false,
+                resultJson: "{\"Success\":true}",
+                completedAtUtc: completedAtUtc,
+                isFollowedByReload: true);
+            UnityCliLoopCompileResultSessionRepository recreatedRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            bool followedAfterFirstStore =
+                recreatedRepository.GetCompileResult("compile_followed_by_reload").IsFollowedByReload;
+
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_followed_by_reload",
+                forceRecompile: false,
+                resultJson: "{\"Success\":true}",
+                completedAtUtc: completedAtUtc,
+                isFollowedByReload: false);
+
+            Assert.That(followedAfterFirstStore, Is.True);
+            Assert.That(
+                recreatedRepository.GetCompileResult("compile_followed_by_reload").IsFollowedByReload,
+                Is.False);
+        }
+
+        [Test]
         public void GetCompileResult_WhenRequestIdMatches_ReturnsStoredJson()
         {
             // Verifies compile results survive service recreation and are keyed by request id.
@@ -90,7 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_test_request",
                 forceRecompile: true,
                 resultJson: "{\"Success\":null}",
-                completedAtUtc: completedAtUtc);
+                completedAtUtc: completedAtUtc,
+                isFollowedByReload: false);
 
             UnityCliLoopCompileResultSessionRepository recreatedRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
@@ -112,7 +143,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_old_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
-                completedAtUtc: DateTime.UtcNow);
+                completedAtUtc: DateTime.UtcNow,
+                isFollowedByReload: false);
 
             UnityCliLoopStoredCompileResult storedResult =
                 _compileResultSessionRepository.GetCompileResult("compile_new_request");
@@ -128,12 +160,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_first_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
-                completedAtUtc: DateTime.UtcNow);
+                completedAtUtc: DateTime.UtcNow,
+                isFollowedByReload: false);
             _compileResultSessionRepository.StoreCompileResult(
                 "compile_second_request",
                 forceRecompile: true,
                 resultJson: "{\"Success\":null}",
-                completedAtUtc: DateTime.UtcNow);
+                completedAtUtc: DateTime.UtcNow,
+                isFollowedByReload: false);
 
             UnityCliLoopStoredCompileResult firstResult =
                 _compileResultSessionRepository.GetCompileResult("compile_first_request");
@@ -340,7 +374,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
-                completedAtUtc: completedAt);
+                completedAtUtc: completedAt,
+                isFollowedByReload: false);
 
             bool cleared = _compileSessionLifecycleService.ClearExpiredCompileResult(nowJustUnderLifetime);
 
@@ -358,7 +393,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
-                completedAtUtc: completedAt);
+                completedAtUtc: completedAt,
+                isFollowedByReload: false);
 
             bool cleared = _compileSessionLifecycleService.ClearExpiredCompileResult(nowJustOverLifetime);
 
@@ -391,7 +427,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "compile_test_request",
                 forceRecompile: false,
                 resultJson: "{\"Success\":true}",
-                completedAtUtc: DateTime.UtcNow);
+                completedAtUtc: DateTime.UtcNow,
+                isFollowedByReload: false);
 
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
 

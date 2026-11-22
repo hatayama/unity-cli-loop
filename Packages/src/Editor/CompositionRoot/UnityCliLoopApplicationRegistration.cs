@@ -118,7 +118,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 serverReadinessService,
                 startupProtectionService,
                 recoveryTrackingService,
-                firstPartyServerLifecycle);
+                firstPartyServerLifecycle,
+                DomainReloadDurationMonitor.CreateForEditor());
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
             controllerService.InitializeForEditorStartup();
             // Why off the main thread: the skill scan and JSON serialization behind the cache ran inside

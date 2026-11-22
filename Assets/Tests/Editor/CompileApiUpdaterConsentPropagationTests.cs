@@ -53,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "compile_consent_delayed",
                     forceRecompile: false,
                     result,
+                    isFollowedByReload: false,
                     "compile_consent_delayed");
                 UnityCliLoopStoredCompileResult storedResult =
                     compileResultSessionRepository.GetCompileResult("compile_consent_delayed");

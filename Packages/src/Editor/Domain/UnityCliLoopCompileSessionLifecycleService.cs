@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         // Why 20m: Go compileWaitTimeout is 10m; TTL must stay longer (wait ≤ TTL) so a
         // timed-out client can still retrieve the result by retrying uloop compile for
         // about 10 more minutes. Why not keep 32m: shrink session-state leak window.
-        private static readonly TimeSpan CompileResultLifetime = TimeSpan.FromMinutes(20);
+        public static readonly TimeSpan CompileResultLifetime = TimeSpan.FromMinutes(20);
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly ICompileResultSessionRepository _compileResultSessionRepository;
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;

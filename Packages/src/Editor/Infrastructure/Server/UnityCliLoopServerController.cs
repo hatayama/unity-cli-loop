@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerStartupProtectionService _startupProtectionService;
         private readonly UnityCliLoopServerRecoveryTrackingService _recoveryTrackingService;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
+        private readonly DomainReloadDurationMonitor _reloadDurationMonitor;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly UnityCliLoopServerRecoveryExecutor _recoveryExecutor;
 
@@ -51,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerReadinessService readinessService,
             UnityCliLoopServerStartupProtectionService startupProtectionService,
             UnityCliLoopServerRecoveryTrackingService recoveryTrackingService,
-            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle)
+            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
+            DomainReloadDurationMonitor reloadDurationMonitor)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
@@ -80,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
             _recoveryTrackingService = recoveryTrackingService ?? throw new ArgumentNullException(nameof(recoveryTrackingService));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
+            _reloadDurationMonitor = reloadDurationMonitor ?? throw new ArgumentNullException(nameof(reloadDurationMonitor));
 
             _recoveryExecutor = new UnityCliLoopServerRecoveryExecutor(
                 serverInstanceFactory,
@@ -268,24 +271,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         internal void OnBeforeAssemblyReload()
         {
-            _startupProtectionService.ClearStartupProtection();
-            _domainReloadLifecycle.PrepareForDomainReload();
-
-            ServiceResult<string> result = _domainReloadRecoveryUseCase.ExecuteBeforeDomainReload(_bridgeServer);
-            
-            // Clear instance if server shutdown succeeded
-            if (result.Success)
+            try
             {
-                _bridgeServer = null;
-            }
+                _startupProtectionService.ClearStartupProtection();
+                _domainReloadLifecycle.PrepareForDomainReload();
 
+                ServiceResult<string> result = _domainReloadRecoveryUseCase.ExecuteBeforeDomainReload(_bridgeServer);
+
+                // Clear instance if server shutdown succeeded
+                if (result.Success)
+                {
+                    _bridgeServer = null;
+                }
+            }
+            finally
+            {
+                // Why in finally: Unity reloads even when stopping the server throws, and a compile result must
+                // not report an earlier reload for this one. Why after the stop: a measuring failure must not
+                // skip it, and the stop takes about the same time on every reload.
+                _reloadDurationMonitor.RecordReloadStarted(DateTime.UtcNow);
+            }
         }
 
         /// <summary>
         /// Processing after assembly reload.
         /// </summary>
-        private void OnAfterAssemblyReload()
+        internal void OnAfterAssemblyReload()
         {
+            // Why before recovery: recovery restarts the server on this tick, and that time varies with the IPC
+            // endpoint, so measuring after it would blur the reload duration.
+            _reloadDurationMonitor.RecordReloadFinished(DateTime.UtcNow);
             _recoveryTrackingService.ScheduleTrackedRecovery(() => ExecuteAfterDomainReloadRecoveryAsync(CancellationToken.None));
         }
 
