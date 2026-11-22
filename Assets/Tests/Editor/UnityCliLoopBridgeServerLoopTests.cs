@@ -354,7 +354,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => Array.Empty<IUnityCliLoopTool>());
             return new UnityCliLoopBridgeServer(
                 new NoOpDomainReloadDetectionService(),
-                new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker())),
+                new JsonRpcRequestProcessor(new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker(), ToolCatalogCachePublisher.CreateForEditor())),
                 new UnityCliLoopBridgeHeartbeatService(),
                 new UnityCliLoopBridgeClientDisconnectMonitor(),
                 createListener,

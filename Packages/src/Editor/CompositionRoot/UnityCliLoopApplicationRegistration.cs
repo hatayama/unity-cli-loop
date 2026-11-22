@@ -77,11 +77,13 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             EditorExecutionActivity executionActivity = EditorExecutionActivity.CreateForEditor();
             EditorDialogTracker dialogTracker = new();
             new EditorDialogEventsSubscriber(dialogTracker).Subscribe();
+            ToolCatalogCachePublisher toolCatalogCachePublisher = ToolCatalogCachePublisher.CreateForEditor();
             UnityCliLoopBridgeServerInstanceFactory serverFactory = new(
                 domainReloadDetectionService,
                 toolRegistrarService,
                 executionActivity,
-                dialogTracker);
+                dialogTracker,
+                toolCatalogCachePublisher);
             UnityCliLoopServerLifecycleRegistryService lifecycleRegistry = new();
             lifecycleRegistry.RegisterSource(serverFactory);
             UnityCliLoopServerStartupService serverStartupService = new(
@@ -119,7 +121,10 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 firstPartyServerLifecycle);
             UnityCliLoopServerApplicationService applicationService = new(controllerService);
             controllerService.InitializeForEditorStartup();
-            ToolCatalogCachePublisher.Publish(toolRegistrarService);
+            // Why off the main thread: the skill scan and JSON serialization behind the cache ran inside
+            // every domain reload, including the ones no CLI command asked for. Commands of this domain
+            // wait for the write instead, through the publisher the server factory holds.
+            toolCatalogCachePublisher.StartPublish(toolRegistrarService);
 
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,

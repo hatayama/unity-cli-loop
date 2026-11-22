@@ -23,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new NoOpDomainReloadDetectionService(),
                 CreateRegistrarService(),
                 new EditorExecutionActivity(new InertProcessActivityApi()),
-                new EditorDialogTracker());
+                new EditorDialogTracker(),
+                ToolCatalogCachePublisher.CreateForEditor());
 
             IUnityCliLoopServerInstance first = factory.Create();
             IUnityCliLoopServerInstance second = factory.Create();

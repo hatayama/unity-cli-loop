@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: true, isPaused: false);
             UnityCliLoopEditorStateSnapshot.SetCompileStateForTesting(isCompiling: false, isUpdating: true);
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 1.5, Array.Empty<EditorDialogInfo>(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 1.5, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.IsBusy, Is.False);
             Assert.That(response.RunningToolName, Is.Null);
@@ -48,6 +48,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: while the domain's tools cache is still being written, the answer reports no Editor state,
+        /// so the CLI treats the Editor as starting instead of ready and does not read a stale cache.
+        /// </summary>
+        [Test]
+        public void Execute_WhileTheToolsCacheIsBeingWritten_ReportsNoEditorState()
+        {
+            UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
+            UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
+            UnityCliLoopEditorStateSnapshot.SetCompileStateForTesting(isCompiling: false, isUpdating: false);
+
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(
+                registrar,
+                0,
+                Array.Empty<EditorDialogInfo>(),
+                TestEditorProcessId,
+                toolCatalogCachePublished: false);
+
+            Assert.That(response.HasEditorState, Is.False);
+        }
+
+        /// <summary>
         /// What: a held slot reports busy with the holder's name, elapsed seconds, and phase name.
         /// </summary>
         [Test]
@@ -59,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ToolExecutionLease runningLease = session.TryEnter("run-tests").Lease;
             timestamp += 4 * Stopwatch.Frequency;
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.IsBusy, Is.True);
             Assert.That(response.RunningToolName, Is.EqualTo("run-tests"));
@@ -78,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
             UnityCliLoopEditorStateSnapshot.ClearForTesting();
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.HasEditorState, Is.False);
         }
@@ -94,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.ClearForTesting();
             UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.HasEditorState, Is.False);
         }
@@ -110,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorStateSnapshot.ClearForTesting();
             UnityCliLoopEditorStateSnapshot.SetCompileStateForTesting(isCompiling: false, isUpdating: false);
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.HasEditorState, Is.False);
         }
@@ -121,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Execute_WhenRegistrarIsNull_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(null, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId));
+            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(null, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true));
         }
 
         /// <summary>
@@ -134,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             EditorDialogTracker tracker = new EditorDialogTracker();
             tracker.RecordShown(1, "Save scene?", "Your changes will be lost.", new[] { "Save", "Cancel" });
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 6, tracker.GetOpenDialogs(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 6, tracker.GetOpenDialogs(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.OpenDialogs, Has.Length.EqualTo(1));
             Assert.That(response.OpenDialogs[0].Title, Is.EqualTo("Save scene?"));
@@ -150,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
 
-            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(registrar, 0, null, TestEditorProcessId));
+            Assert.Throws<ArgumentNullException>(() => EditorStatusBridgeCommand.Execute(registrar, 0, null, TestEditorProcessId, toolCatalogCachePublished: true));
         }
 
         /// <summary>
@@ -162,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
 
-            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId);
+            GetEditorStatusResponse response = EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), TestEditorProcessId, toolCatalogCachePublished: true);
 
             Assert.That(response.ProcessId, Is.EqualTo(TestEditorProcessId));
         }
@@ -175,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             UnityCliLoopToolRegistrarService registrar = CreateRegistrar(new ToolExecutionSession());
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => EditorStatusBridgeCommand.Execute(registrar, 0, Array.Empty<EditorDialogInfo>(), 0, toolCatalogCachePublished: true));
         }
 
         private const int TestEditorProcessId = 4242;

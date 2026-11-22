@@ -590,7 +590,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             UnityCliLoopToolRegistrarService toolRegistrarService =
                 UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
-            return new UnityCliLoopExecutionRouter(toolRegistrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker());
+            return new UnityCliLoopExecutionRouter(toolRegistrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker(), ToolCatalogCachePublisher.CreateForEditor());
         }
 
         private static UnityCliLoopExecutionRouter CreateExecutionRouterWithDevelopmentOnlyTool()
@@ -598,7 +598,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopToolRegistrarService toolRegistrarService =
                 UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
             toolRegistrarService.RegisterCustomTool(new DevelopmentOnlyCatalogTestTool());
-            return new UnityCliLoopExecutionRouter(toolRegistrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker());
+            return new UnityCliLoopExecutionRouter(toolRegistrarService, new EditorExecutionActivity(new InertProcessActivityApi()), new EditorDialogTracker(), ToolCatalogCachePublisher.CreateForEditor());
         }
 
         [Test]

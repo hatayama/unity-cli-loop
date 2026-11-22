@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -54,6 +55,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(api.BeginCount, Is.EqualTo(1));
             Assert.That(api.EndedTokens.Count, Is.EqualTo(1));
             Assert.That(api.LiveCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a tool does not start until the domain's tools cache write ends, while the editor status
+        /// answer does not wait for it, because the CLI reads that cache from disk for its next command.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Tool_WaitsForTheToolsCacheWrite_WhileEditorStatusDoesNot()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            PendingTool tool = new PendingTool(api);
+            TaskCompletionSource<bool> backgroundWrite = new TaskCompletionSource<bool>();
+            ToolCatalogCachePublisher publisher = new ToolCatalogCachePublisher(_ => backgroundWrite.Task);
+            publisher.StartWrite(Array.Empty<ToolInfo>(), () => new HashSet<string>(), "unused-tools.json");
+            UnityCliLoopExecutionRouter router = CreateRouterWaitingFor(
+                publisher,
+                api,
+                new EditorDialogTracker(),
+                tool);
+
+            Task<UnityCliLoopToolResponse> run = router.ExecuteAsync(
+                PendingTool.Name,
+                new JObject(),
+                CancellationToken.None);
+            try
+            {
+                UnityCliLoopToolResponse status = await router.ExecuteAsync(
+                    UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                    new JObject(),
+                    CancellationToken.None);
+
+                Assert.That(status, Is.InstanceOf<GetEditorStatusResponse>());
+                Assert.That(run.IsCompleted, Is.False);
+                Assert.That(tool.LiveCountWhileRunning, Is.Null);
+            }
+            finally
+            {
+                // Why in finally: a failed assertion must not leave the gate or the tool pending.
+                backgroundWrite.SetResult(true);
+                tool.Complete(new ActivityTestResponse());
+            }
+
+            UnityCliLoopToolResponse response = await run;
+
+            Assert.That(response, Is.InstanceOf<ActivityTestResponse>());
+            Assert.That(tool.LiveCountWhileRunning, Is.Not.Null);
         }
 
         /// <summary>
@@ -232,7 +279,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopExecutionRouter router = new UnityCliLoopExecutionRouter(
                 registrarService,
                 new EditorExecutionActivity(new RecordingProcessActivityApi()),
-                new EditorDialogTracker());
+                new EditorDialogTracker(),
+                ToolCatalogCachePublisher.CreateForEditor());
 
             await router.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
@@ -259,7 +307,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopExecutionRouter router = new UnityCliLoopExecutionRouter(
                 registrarService,
                 new EditorExecutionActivity(new RecordingProcessActivityApi()),
-                new EditorDialogTracker());
+                new EditorDialogTracker(),
+                ToolCatalogCachePublisher.CreateForEditor());
 
             UnityCliLoopToolResponse response = await router.ExecuteAsync(
                 UnityCliLoopConstants.COMMAND_NAME_REPORT_BLOCKING_DIALOG,
@@ -295,12 +344,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             EditorDialogTracker dialogTracker,
             params IUnityCliLoopTool[] tools)
         {
+            return CreateRouterWaitingFor(
+                ToolCatalogCachePublisher.CreateForEditor(),
+                api,
+                dialogTracker,
+                tools);
+        }
+
+        private static UnityCliLoopExecutionRouter CreateRouterWaitingFor(
+            ToolCatalogCachePublisher toolCatalogCachePublisher,
+            RecordingProcessActivityApi api,
+            EditorDialogTracker dialogTracker,
+            params IUnityCliLoopTool[] tools)
+        {
             UnityCliLoopToolRegistrarService registrarService = new UnityCliLoopToolRegistrarService(
                 new EmptyInternalToolNameProvider(),
                 new AlwaysEnabledToolSettingsPort(),
                 new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort()),
                 () => tools);
-            return new UnityCliLoopExecutionRouter(registrarService, new EditorExecutionActivity(api), dialogTracker);
+            return new UnityCliLoopExecutionRouter(
+                registrarService,
+                new EditorExecutionActivity(api),
+                dialogTracker,
+                toolCatalogCachePublisher);
         }
 
         /// <summary>
