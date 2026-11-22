@@ -131,6 +131,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
+        /// Whether a reload, measured or not, started at or after <paramref name="utcTicks"/>. A recorded reload has
+        /// always finished by the time the Editor can answer, because its start is recorded after the server stops.
+        /// </summary>
+        internal bool HasReloadStartedSince(long utcTicks)
+        {
+            DomainReloadDurationState state = _store.Load();
+            return state.LastReloadStartedAtUtcTicks.HasValue && state.LastReloadStartedAtUtcTicks.Value >= utcTicks;
+        }
+
+        /// <summary>
         /// Settles a compile result that caused no reload by setting DomainReloadSeconds to null.
         /// Returns false, changing nothing, when the result already has DomainReloadSeconds.
         /// </summary>

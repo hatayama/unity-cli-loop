@@ -395,7 +395,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies a compile result stored before its domain reload reports how long that reload took.
             System.DateTime completedAt = System.DateTime.UtcNow;
-            StoreResult("{\"Success\":true}", completedAt);
+            StoreResult("{\"Success\":true,\"ErrorCount\":0}", completedAt);
             RecordReload(completedAt.AddMilliseconds(10), 1.5d);
 
             GetCompileStatusResponse response = BuildIdleResponse();
@@ -417,11 +417,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildResponse_WhenTheCompileFailed_ReportsNoReloadEvenAfterALaterReload()
+        public void BuildResponse_WhenReadyWithoutAReload_KeepsReportingNoReloadAfterALaterReload()
         {
-            // Verifies a failed compile, which reloads nothing, does not take a later reload with another cause.
+            // Verifies a ready read with no reload after the result settles null, so a later reload with another
+            // cause is not given to this compile.
+            System.DateTime completedAt = System.DateTime.UtcNow.AddSeconds(-30);
+            StoreResult("{\"Success\":true}", completedAt);
+
+            GetCompileStatusResponse firstResponse = BuildIdleResponse();
+            RecordReload(completedAt.AddSeconds(10), 2d);
+            GetCompileStatusResponse secondResponse = BuildIdleResponse();
+
+            Assert.That(firstResponse.Result["DomainReloadSeconds"]?.Type, Is.EqualTo(JTokenType.Null));
+            Assert.That(secondResponse.Result["DomainReloadSeconds"]?.Type, Is.EqualTo(JTokenType.Null));
+        }
+
+        [Test]
+        public void BuildResponse_WhenTheCompileHasErrors_ReportsNoReloadEvenAfterALaterReload()
+        {
+            // Verifies a compile with errors, which reloads nothing, does not take a later reload with another cause.
             System.DateTime completedAt = System.DateTime.UtcNow;
-            StoreResult("{\"Success\":false}", completedAt);
+            StoreResult("{\"Success\":false,\"ErrorCount\":1}", completedAt);
             RecordReload(completedAt.AddSeconds(1), 2d);
 
             GetCompileStatusResponse response = BuildIdleResponse();
@@ -450,31 +466,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void BuildResponse_WhilePollingDuringTheReload_DoesNotSettleTheReload()
+        public void BuildResponse_WhenTheForcedCompileResultIsUnknown_AddsTheReloadSeconds()
         {
-            // Verifies a poll before the reload ends neither reports nor stores a reload, so the ready read still
-            // reports the reload that then finishes.
+            // Verifies a forced recompile, whose result is stored as unknown even when it compiled and reloaded,
+            // still reports the reload it caused.
+            System.DateTime completedAt = System.DateTime.UtcNow;
+            StoreResult(
+                "{\"Success\":false,\"ErrorCount\":null,\"ErrorCode\":\"COMPILE_RESULT_UNKNOWN\"}",
+                completedAt);
+            RecordReload(completedAt.AddMilliseconds(10), 1.5d);
+
+            GetCompileStatusResponse response = BuildIdleResponse();
+
+            Assert.That(response.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(1.5d));
+        }
+
+        [Test]
+        public void BuildResponse_BeforeTheReloadStarts_ReportsNullWithoutSettling()
+        {
+            // Verifies a poll after the compile stored its result but before its reload reports null without storing
+            // it, so the ready read after the reload still reports that reload.
             System.DateTime completedAt = System.DateTime.UtcNow.AddSeconds(-30);
             StoreResult("{\"Success\":true}", completedAt);
-            _reloadDurationMonitor.RecordReloadStarted(completedAt.AddSeconds(1));
 
-            GetCompileStatusResponse pollDuringReload = CompileStatusBridgeCommand.BuildResponse(
-                "compile_test_request",
-                isCompiling: false,
-                isUpdating: false,
-                isDomainReloadInProgress: true,
-                isSnapshotCaptureHolding: false,
-                compileStartPendingSeconds: 0d,
-                _compileSessionLifecycleService,
-                _compileResultSessionRepository,
-                _pendingCompileSessionRepository,
-                _reloadDurationMonitor);
-            _reloadDurationMonitor.RecordReloadFinished(completedAt.AddSeconds(3));
+            GetCompileStatusResponse pollBeforeReload = BuildResponseWhileCompiling();
+            RecordReload(completedAt.AddSeconds(1), 2d);
             GetCompileStatusResponse readyResponse = BuildIdleResponse();
 
-            Assert.That(pollDuringReload.Ready, Is.False);
-            Assert.That(pollDuringReload.Result["DomainReloadSeconds"], Is.Null);
+            Assert.That(pollBeforeReload.Ready, Is.False);
+            Assert.That(pollBeforeReload.Result["DomainReloadSeconds"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(readyResponse.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(2d));
+        }
+
+        [Test]
+        public void BuildResponse_WhenNotReadyAfterTheReload_SettlesTheReload()
+        {
+            // Verifies a read while the Editor is busy with other work after this compile's reload, as when a
+            // timed-out CLI collects the result, reports and stores that reload.
+            System.DateTime completedAt = System.DateTime.UtcNow.AddSeconds(-30);
+            StoreResult("{\"Success\":true}", completedAt);
+            RecordReload(completedAt.AddSeconds(1), 1.5d);
+
+            GetCompileStatusResponse busyResponse = BuildResponseWhileCompiling();
+            RecordReload(completedAt.AddSeconds(10), 4d);
+            GetCompileStatusResponse readyResponse = BuildIdleResponse();
+
+            Assert.That(busyResponse.Ready, Is.False);
+            Assert.That(busyResponse.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(1.5d));
+            Assert.That(readyResponse.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(1.5d));
         }
 
         [Test]
@@ -517,6 +556,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Result["DomainReloadSeconds"]?.Type, Is.EqualTo(JTokenType.Null));
             Assert.That(response.Result["Warning"], Is.Null);
+        }
+
+        private GetCompileStatusResponse BuildResponseWhileCompiling()
+        {
+            return CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: true,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
         }
 
         private void StoreResult(string resultJson, System.DateTime completedAt)

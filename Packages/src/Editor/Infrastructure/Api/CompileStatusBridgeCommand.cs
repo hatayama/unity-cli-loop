@@ -100,9 +100,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ready = isEditorSettled;
             }
 
-            // Why only once ready: a poll while Unity still reloads would settle on no reload before it ends.
-            if (ready && result is JObject resultObject &&
-                SettleReloadAttribution(resultObject, storedResult, reloadDurationMonitor))
+            if (result is JObject resultObject &&
+                SettleReloadAttribution(resultObject, storedResult, ready, reloadDurationMonitor))
             {
                 // Why store it back: the result outlives this read (a timed-out CLI collects it later), and a
                 // later read must report the same reload, not whichever one ran last. The original completion
@@ -182,21 +181,37 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 requestId);
         }
 
+        /// <summary>
+        /// Sets which reload the result reports. Returns true when that is settled for good and the result must be
+        /// stored back; false when it was settled before, or when this read reports null only for now.
+        /// </summary>
         private static bool SettleReloadAttribution(
             JObject result,
             UnityCliLoopStoredCompileResult storedResult,
+            bool ready,
             DomainReloadDurationMonitor reloadDurationMonitor)
         {
-            JToken success = result["Success"];
-            bool compileSucceeded = success?.Type == JTokenType.Boolean && success.Value<bool>();
-            if (!compileSucceeded)
+            // Why errors and not Success: a compile with errors reloads nothing, so a reload after it has another
+            // cause, while a forced recompile reports Success false even when it compiled and reloaded.
+            JToken errorCount = result["ErrorCount"];
+            if (errorCount?.Type == JTokenType.Integer && errorCount.Value<int>() > 0)
             {
-                // Why: a compile that failed reloads nothing, so a reload after it has another cause.
                 return reloadDurationMonitor.AttributeNoReloadTo(result);
             }
 
             // Why from the result's time: the compile stores its result before Unity starts the reload it causes.
-            return reloadDurationMonitor.AttributeReloadTo(result, storedResult.CompletedAtUtcTicks);
+            // Why not only when ready: a timed-out CLI collects the result even while the Editor is busy with
+            // other work, and by then this compile's reload has been recorded.
+            long completedAtUtcTicks = storedResult.CompletedAtUtcTicks;
+            if (ready || reloadDurationMonitor.HasReloadStartedSince(completedAtUtcTicks))
+            {
+                return reloadDurationMonitor.AttributeReloadTo(result, completedAtUtcTicks);
+            }
+
+            // The reload this compile causes has not started yet, so this read reports none and a later read
+            // settles it.
+            reloadDurationMonitor.AttributeNoReloadTo(result);
+            return false;
         }
 
         private static UnityCliLoopStoredCompileResult RecoverPendingCompileResult(
