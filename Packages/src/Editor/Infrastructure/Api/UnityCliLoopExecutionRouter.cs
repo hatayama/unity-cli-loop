@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // reads that file from disk for its next command. Answering this command first could leave
             // that next command reading the previous domain's catalog, without a tool the reload added.
             // Why not for the status, cancel, and dialog-report answers above: they must answer at once.
-            await _toolCatalogCachePublisher.WhenPublished;
+            await WaitForToolCatalogCacheAsync(ct);
 
             // Why hold an activity for the length of the request: macOS throttles an Editor that is not
             // frontmost, and a request that arrives while it is throttled is served several times slower.
@@ -113,6 +113,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return await ExecuteCommandOrToolAsync(methodName, paramsToken, ct, cancellableByUser);
             }
+        }
+
+        // Why a request-local wait instead of awaiting the shared write task: a request canceled while
+        // the cache is still being written must end now, and canceling the shared task would release
+        // every other request before the write ends.
+        private async Task WaitForToolCatalogCacheAsync(CancellationToken ct)
+        {
+            Task whenPublished = _toolCatalogCachePublisher.WhenPublished;
+            if (whenPublished.IsCompleted)
+            {
+                return;
+            }
+
+            TaskCompletionSource<bool> canceled = new TaskCompletionSource<bool>();
+            using (ct.Register(() => canceled.TrySetResult(true)))
+            {
+                await Task.WhenAny(whenPublished, canceled.Task);
+            }
+
+            ct.ThrowIfCancellationRequested();
         }
 
         /// <summary>

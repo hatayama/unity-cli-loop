@@ -18,6 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class UnityCliLoopExecutionRouterActivityTests
     {
+        [TearDown]
+        public void TearDown()
+        {
+            UnityCliLoopEditorStateSnapshot.ClearForTesting();
+        }
+
         /// <summary>
         /// Verifies the activity stays held while a tool's task is still pending, and ends only once the
         /// tool completes, so an asynchronous command is covered for its whole length.
@@ -59,7 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         /// <summary>
         /// Verifies a tool does not start until the domain's tools cache write ends, while the editor status
-        /// answer does not wait for it, because the CLI reads that cache from disk for its next command.
+        /// answer does not wait for it and reports no Editor state until the write ends, because the CLI
+        /// reads that cache from disk for its next command.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_Tool_WaitsForTheToolsCacheWrite_WhileEditorStatusDoesNot()
@@ -74,6 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 api,
                 new EditorDialogTracker(),
                 tool);
+            UnityCliLoopEditorStateSnapshot.SetPlayStateForTesting(isPlaying: false, isPaused: false);
+            UnityCliLoopEditorStateSnapshot.SetCompileStateForTesting(isCompiling: false, isUpdating: false);
 
             Task<UnityCliLoopToolResponse> run = router.ExecuteAsync(
                 PendingTool.Name,
@@ -81,12 +90,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CancellationToken.None);
             try
             {
-                UnityCliLoopToolResponse status = await router.ExecuteAsync(
+                Task<UnityCliLoopToolResponse> statusWhileWriting = router.ExecuteAsync(
                     UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
                     new JObject(),
                     CancellationToken.None);
 
-                Assert.That(status, Is.InstanceOf<GetEditorStatusResponse>());
+                // Why check completion before awaiting: a status answer that waited for the write would
+                // otherwise hang here, before the finally below can release the write.
+                Assert.That(statusWhileWriting.IsCompleted, Is.True);
+                GetEditorStatusResponse status = await statusWhileWriting as GetEditorStatusResponse;
+                Assert.That(status, Is.Not.Null);
+                Assert.That(status.HasEditorState, Is.False);
                 Assert.That(run.IsCompleted, Is.False);
                 Assert.That(tool.LiveCountWhileRunning, Is.Null);
             }
@@ -98,9 +112,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             UnityCliLoopToolResponse response = await run;
+            GetEditorStatusResponse statusAfterWrite = await router.ExecuteAsync(
+                UnityCliLoopConstants.COMMAND_NAME_GET_EDITOR_STATUS,
+                new JObject(),
+                CancellationToken.None) as GetEditorStatusResponse;
 
             Assert.That(response, Is.InstanceOf<ActivityTestResponse>());
             Assert.That(tool.LiveCountWhileRunning, Is.Not.Null);
+            Assert.That(statusAfterWrite.HasEditorState, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies a tool request canceled while the tools cache is still being written ends at once as
+        /// canceled, without starting the tool, instead of staying pending until the write ends.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Tool_WhenCanceledWhileWaitingForTheToolsCacheWrite_EndsWithoutWaiting()
+        {
+            RecordingProcessActivityApi api = new RecordingProcessActivityApi();
+            PendingTool tool = new PendingTool(api);
+            TaskCompletionSource<bool> backgroundWrite = new TaskCompletionSource<bool>();
+            ToolCatalogCachePublisher publisher = new ToolCatalogCachePublisher(_ => backgroundWrite.Task);
+            publisher.StartWrite(Array.Empty<ToolInfo>(), () => new HashSet<string>(), "unused-tools.json");
+            UnityCliLoopExecutionRouter router = CreateRouterWaitingFor(
+                publisher,
+                api,
+                new EditorDialogTracker(),
+                tool);
+            CancellationTokenSource cancellation = new CancellationTokenSource();
+
+            Task<UnityCliLoopToolResponse> run = router.ExecuteAsync(
+                PendingTool.Name,
+                new JObject(),
+                cancellation.Token);
+            bool endedBeforeTheWrite;
+            try
+            {
+                cancellation.Cancel();
+                // Why yield once: the router resumes through the main-thread queue, so its cancellation
+                // runs before this test resumes.
+                await Task.Yield();
+                endedBeforeTheWrite = run.IsCompleted;
+            }
+            finally
+            {
+                // Why in finally: a router that ignored the cancellation must not stay pending forever.
+                backgroundWrite.SetResult(true);
+                tool.Complete(new ActivityTestResponse());
+                cancellation.Dispose();
+            }
+
+            Assert.That(endedBeforeTheWrite, Is.True);
+            Assert.That(run.IsCanceled, Is.True);
+            Assert.That(tool.LiveCountWhileRunning, Is.Null);
         }
 
         /// <summary>
