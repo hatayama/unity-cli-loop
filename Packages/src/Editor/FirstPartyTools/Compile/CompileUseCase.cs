@@ -198,10 +198,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 activeHotReloadChangeCountAtRequestStart);
             // Why from the request-start inputs: they are what the Warning above tells the caller the
             // compile discards, so a compile that found no script change must still reload for them.
-            bool reloadDiscardsState = wasPlayingAtRequestStart
-                || activePausePointCountAtRequestStart > 0
-                || activePersistedPausePointCountAtRequestStart > 0
-                || activeHotReloadChangeCountAtRequestStart > 0;
+            bool reloadDiscardsState = CompileReloadDiscardState.Evaluate(
+                wasPlayingAtRequestStart,
+                activePausePointCountAtRequestStart,
+                activeHotReloadChangeCountAtRequestStart);
 
             // 2. Compilation state validation
             ValidationResult validation = _validateCompilationState();

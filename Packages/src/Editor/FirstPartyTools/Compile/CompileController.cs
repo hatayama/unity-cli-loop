@@ -93,6 +93,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<CompilerMessage> CompileMessages => _compileMessages.AsReadOnly();
 
         /// <summary>
+        /// Reads, from the current Editor, whether a domain reload would discard state: Play Mode, an
+        /// enabled pause point, or an active hot-reload change. Pass it as the reloadDiscardsState of
+        /// <see cref="TryCompileAsync"/> when there is no state captured at request start.
+        /// </summary>
+        public static bool ReadLiveReloadDiscardsState()
+        {
+            return CompileReloadDiscardState.ReadLive();
+        }
+
+        /// <summary>
         /// Sets delayed compile result storage for the active CLI request.
         /// </summary>
         internal void SetResultRecordingContext(CompileResultRecordingContext resultRecordingContext)
