@@ -131,8 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Whether a reload, measured or not, started at or after <paramref name="utcTicks"/>. A recorded reload has
-        /// always finished by the time the Editor can answer, because its start is recorded after the server stops.
+        /// Whether a reload, measured or not, started at or after <paramref name="utcTicks"/> and has finished. Only a
+        /// finished reload becomes the latest reload; one still in progress is kept apart until it ends.
         /// </summary>
         internal bool HasReloadStartedSince(long utcTicks)
         {
@@ -141,8 +141,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Settles a compile result that caused no reload by setting DomainReloadSeconds to null.
-        /// Returns false, changing nothing, when the result already has DomainReloadSeconds.
+        /// Sets DomainReloadSeconds to null, for a compile result that caused no reload or whose reload has not
+        /// started yet. Returns false, changing nothing, when the result already has DomainReloadSeconds.
         /// </summary>
         internal bool AttributeNoReloadTo(JObject compileResult)
         {
