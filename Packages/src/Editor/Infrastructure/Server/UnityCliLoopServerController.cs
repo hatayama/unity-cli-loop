@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// <summary>
         /// Processing after assembly reload.
         /// </summary>
-        private void OnAfterAssemblyReload()
+        internal void OnAfterAssemblyReload()
         {
             // Why before recovery: recovery restarts the server on this tick, and that time varies with the IPC
             // endpoint, so measuring after it would blur the reload duration.

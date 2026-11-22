@@ -126,6 +126,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_reloadDurationStore.Load().PendingStartUtcTicks.HasValue, Is.True);
         }
 
+        [Test]
+        public async Task OnAfterAssemblyReload_FinishesTheReloadStartedBeforeIt()
+        {
+            // Tests that the after-reload hook records the reload's duration before the recovery it schedules runs.
+            // A manual stop keeps that recovery from starting a server.
+            _sessionFlagsRepository.MarkServerManuallyStopped();
+            new DomainReloadDurationMonitor(_reloadDurationStore, () => false)
+                .RecordReloadStarted(System.DateTime.UtcNow.AddSeconds(-1));
+            UnityCliLoopServerControllerService service = CreateControllerService();
+
+            service.OnAfterAssemblyReload();
+
+            DomainReloadDurationState state = _reloadDurationStore.Load();
+            Assert.That(state.PendingStartUtcTicks.HasValue, Is.False);
+            Assert.That(state.LastReloadSeconds, Is.GreaterThan(0d));
+            Task recoveryTask = service.RecoveryTask;
+            if (recoveryTask != null)
+            {
+                await recoveryTask;
+                Assert.That(recoveryTask.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            }
+        }
+
         private UnityCliLoopServerControllerService CreateControllerService(
             TestDomainReloadLifecycle domainReloadLifecycle = null,
             UnityCliLoopServerStartupProtectionService startupProtectionService = null)
