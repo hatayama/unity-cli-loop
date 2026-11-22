@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.35.4](https://github.com/hatayama/unity-cli-loop/compare/v3.35.3...v3.35.4) (2026-11-22)
+
+
+### Bug Fixes
+
+* Compile skips the domain reload when no script changed ([#3611](https://github.com/hatayama/unity-cli-loop/issues/3611)) ([ea46977](https://github.com/hatayama/unity-cli-loop/commit/ea4697702e48e9aba87178736392893f073c6e52))
+
 ## [3.35.3](https://github.com/hatayama/unity-cli-loop/compare/v3.35.2...v3.35.3) (2026-11-21)
 
 
