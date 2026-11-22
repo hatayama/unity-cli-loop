@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public async Task WhenPublished_WhenTheWriteFails_LogsTheFailureAndOpensWithoutFaulting()
         {
             ToolCatalogCachePublisher publisher = new ToolCatalogCachePublisher(RunInline);
-            string cachePath = Path.Combine(_temporaryRoot, ".uloop", "tools.json");
+            string cachePath = WritePreviousCache("{\"Tools\":[]}");
             LogAssert.Expect(LogType.Exception, new Regex("skill scan failed"));
 
             publisher.StartWrite(
@@ -115,7 +115,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await publisher.WhenPublished;
 
             Assert.That(publisher.WhenPublished.Status, Is.EqualTo(TaskStatus.RanToCompletion));
-            Assert.That(File.Exists(cachePath), Is.False);
+            Assert.That(File.ReadAllText(cachePath), Is.EqualTo("{\"Tools\":[]}"));
+        }
+
+        /// <summary>
+        /// What: a changed catalog replaces the previous cache and leaves no temporary file behind, which is
+        /// the path every reload after the first one takes.
+        /// </summary>
+        [Test]
+        public async Task StartWrite_WhenACacheExists_ReplacesItAndLeavesNoTemporaryFile()
+        {
+            ToolCatalogCachePublisher publisher = new ToolCatalogCachePublisher(RunInline);
+            string cachePath = WritePreviousCache("{\"Tools\":[]}");
+
+            publisher.StartWrite(CreateTools("public-tool"), () => new HashSet<string>(), cachePath);
+            await publisher.WhenPublished;
+
+            Assert.That(File.ReadAllText(cachePath), Does.Contain("\"public-tool\""));
+            Assert.That(Directory.GetFiles(Path.GetDirectoryName(cachePath)), Is.EqualTo(new[] { cachePath }));
+        }
+
+        /// <summary>
+        /// What: a catalog equal to the cache does not rewrite the file, so reloads that change no tool leave
+        /// the cache untouched.
+        /// </summary>
+        [Test]
+        public async Task StartWrite_WhenTheCatalogIsUnchanged_DoesNotRewriteTheCache()
+        {
+            ToolCatalogCachePublisher publisher = new ToolCatalogCachePublisher(RunInline);
+            string cachePath = Path.Combine(_temporaryRoot, ".uloop", "tools.json");
+            publisher.StartWrite(CreateTools("public-tool"), () => new HashSet<string>(), cachePath);
+            await publisher.WhenPublished;
+            DateTime backdated = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            File.SetLastWriteTimeUtc(cachePath, backdated);
+
+            publisher.StartWrite(CreateTools("public-tool"), () => new HashSet<string>(), cachePath);
+            await publisher.WhenPublished;
+
+            Assert.That(File.GetLastWriteTimeUtc(cachePath), Is.EqualTo(backdated));
         }
 
         // Why inline: EditMode tests must not start thread-pool work, so the background step runs on
@@ -131,6 +168,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 return Task.FromException(exception);
             }
+        }
+
+        private string WritePreviousCache(string content)
+        {
+            string cachePath = Path.Combine(_temporaryRoot, ".uloop", "tools.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+            File.WriteAllText(cachePath, content);
+            return cachePath;
         }
 
         private static ToolInfo[] CreateTools(params string[] toolNames)

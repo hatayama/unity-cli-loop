@@ -123,16 +123,25 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // this domain while the write runs, and a write cut short in place would leave a truncated
             // cache the CLI cannot parse.
             string temporaryPath = cachePath + TemporaryFileSuffix;
-            File.WriteAllText(temporaryPath, json, new UTF8Encoding(false));
+            UTF8Encoding encoding = new UTF8Encoding(false);
+            File.WriteAllText(temporaryPath, json, encoding);
             try
             {
                 MoveIntoPlace(temporaryPath, cachePath);
             }
-            catch
+            catch (Exception exception) when (IsFileAccessFailure(exception))
             {
                 DeleteTemporaryFileQuietly(temporaryPath);
-                throw;
+                // Why fall back to writing in place: on Windows the move fails while another process holds
+                // the cache open, such as the CLI reading it or Defender scanning it. Writing in place
+                // still succeeds there, so the cache does not stay stale for the whole domain.
+                File.WriteAllText(cachePath, json, encoding);
             }
+        }
+
+        private static bool IsFileAccessFailure(Exception exception)
+        {
+            return exception is IOException || exception is UnauthorizedAccessException;
         }
 
         // Why two branches: File.Replace needs an existing destination, and the overwriting
@@ -154,14 +163,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 File.Delete(temporaryPath);
             }
-            catch (IOException)
+            catch (Exception exception) when (IsFileAccessFailure(exception))
             {
-                // Why ignore: the move already failed and is being reported; a leftover temporary file is
-                // overwritten by the next write.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Why ignore: same as above.
+                // Why ignore: a leftover temporary file is overwritten by the next write.
             }
         }
     }
