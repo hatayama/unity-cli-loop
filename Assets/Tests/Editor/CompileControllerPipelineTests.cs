@@ -50,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task<CompileResult> pendingCompile = controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None);
 
             Assert.That(CompileStartPendingCoordination.ReadPendingSeconds, Is.Not.Null);
@@ -72,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task<CompileResult> pendingCompile = controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None);
 
             controller.Cleanup();
@@ -108,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None));
 
             Assert.That(result.Success, Is.True);
@@ -138,6 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                 forceRecompile: true,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None));
 
             Assert.That(result.IsIndeterminate, Is.True);
@@ -167,6 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None));
 
             Assert.That(result.Success, Is.False);
@@ -176,6 +181,112 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(pipeline.WatchdogStartCount, Is.EqualTo(0));
             Assert.That(controller.IsCompiling, Is.False);
             Assert.That(CompileApiUpdaterConsentState.IsCliCompileInFlight, Is.False);
+        }
+
+        /// <summary>
+        /// What: when the asset refresh leaves no compilation pending, the last compile succeeded, and
+        /// the caller has no state for a domain reload to discard, compile returns a successful result
+        /// without requesting a compilation, so Unity does not reload the domain, and the controller
+        /// returns to idle.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhenNothingChangedSinceASuccessfulCompile_ReturnsSuccessWithoutRequestingCompile()
+        {
+            // Why CompleteOnRequest: if the skip regresses, the request still finishes and the
+            // assertions fail instead of the test hanging on a compile that never ends.
+            FakeCompilePipelinePort pipeline = new()
+            {
+                CompleteOnRequest = true,
+                ScriptCompilationPending = false,
+                LastScriptCompilationFailed = false
+            };
+            using CompileController controller = CreateController(pipeline);
+            List<string> startedMessages = new();
+            controller.OnCompileStarted += startedMessages.Add;
+
+            CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
+                forceRecompile: false,
+                playModeStopWarning: null,
+                reloadDiscardsState: false,
+                CancellationToken.None));
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.IsIndeterminate, Is.False);
+            Assert.That(result.ErrorCount, Is.EqualTo(0));
+            Assert.That(result.WarningCount, Is.EqualTo(0));
+            Assert.That(result.Message, Does.Contain("domain reload"));
+            Assert.That(pipeline.RefreshCount, Is.EqualTo(1));
+            Assert.That(pipeline.RequestedCleanBuildCache, Is.Empty);
+            Assert.That(pipeline.SubscribeCount, Is.EqualTo(0));
+            Assert.That(pipeline.WatchdogStartCount, Is.EqualTo(0));
+            Assert.That(startedMessages, Is.Empty);
+            Assert.That(controller.IsCompiling, Is.False);
+            Assert.That(CompileApiUpdaterConsentState.IsCliCompileInFlight, Is.False);
+        }
+
+        /// <summary>
+        /// What: each condition that still needs Unity to compile, on its own, makes compile request a
+        /// compilation: a compilation the asset refresh left pending, a last compile that failed (its
+        /// errors must be reported again), a forced recompile, and caller state that only a domain
+        /// reload discards (Play session, pause point patches, hot-reload changes).
+        /// </summary>
+        [TestCase(true, false, false, false, false, TestName = "{m}_PendingAfterRefresh")]
+        [TestCase(false, true, false, false, false, TestName = "{m}_LastCompileFailed")]
+        [TestCase(false, false, true, false, true, TestName = "{m}_ForcedRecompile")]
+        [TestCase(false, false, false, true, false, TestName = "{m}_ReloadDiscardsState")]
+        public async Task TryCompileAsync_WhenAConditionStillNeedsUnityToCompile_RequestsCompilation(
+            bool pendingAfterRefresh,
+            bool lastCompileFailed,
+            bool forceRecompile,
+            bool reloadDiscardsState,
+            bool expectedCleanBuildCache)
+        {
+            FakeCompilePipelinePort pipeline = new()
+            {
+                CompleteOnRequest = true,
+                ScriptCompilationPending = pendingAfterRefresh,
+                LastScriptCompilationFailed = lastCompileFailed
+            };
+            using CompileController controller = CreateController(pipeline);
+
+            await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
+                forceRecompile: forceRecompile,
+                playModeStopWarning: null,
+                reloadDiscardsState: reloadDiscardsState,
+                CancellationToken.None));
+
+            Assert.That(pipeline.RequestedCleanBuildCache, Is.EqualTo(new[] { expectedCleanBuildCache }));
+            Assert.That(pipeline.SubscribeCount, Is.EqualTo(1));
+            Assert.That(pipeline.WatchdogStartCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: Assembly Definition errors take precedence over the up-to-date skip, so compile reports
+        /// them as a failure even when no compilation is pending.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_WhenAssemblyDefinitionErrorsExistAndNothingIsPending_ReturnsTheFailure()
+        {
+            FakeCompilePipelinePort pipeline = new()
+            {
+                CompleteOnRequest = true,
+                ScriptCompilationPending = false,
+                AssemblyDefinitionErrors = new AssemblyDefinitionConsoleErrorResult(new[]
+                {
+                    new AssemblyDefinitionConsoleError("broken asmdef", "Assets/Broken.asmdef", 1)
+                })
+            };
+            using CompileController controller = CreateController(pipeline);
+
+            CompileResult result = await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
+                forceRecompile: false,
+                playModeStopWarning: null,
+                reloadDiscardsState: false,
+                CancellationToken.None));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorCount, Is.EqualTo(1));
+            Assert.That(pipeline.RequestedCleanBuildCache, Is.Empty);
         }
 
         /// <summary>
@@ -191,10 +302,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task<CompileResult> firstCompile = controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None);
             Task<CompileResult> secondCompile = controller.TryCompileAsync(
                 forceRecompile: true,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None);
 
             // Why before completing: if the second call started its own compile, the first request
@@ -229,6 +342,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
                     forceRecompile: false,
                     playModeStopWarning: null,
+                    reloadDiscardsState: false,
                     CancellationToken.None));
                 Assert.Fail("TryCompileAsync should rethrow the request failure.");
             }
@@ -255,6 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task<CompileResult> pendingCompile = controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None);
 
             controller.Cleanup();
@@ -285,6 +400,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Task<CompileResult> pendingCompile = controller.TryCompileAsync(
                 forceRecompile: false,
                 playModeStopWarning: null,
+                reloadDiscardsState: false,
                 CancellationToken.None);
 
             try
@@ -348,6 +464,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public AssemblyDefinitionConsoleErrorResult AssemblyDefinitionErrors { get; set; } =
                 new(Array.Empty<AssemblyDefinitionConsoleError>());
             public Exception RequestException { get; set; }
+            // Why true by default: most tests model "scripts changed", the case where compile must
+            // request a compilation; the up-to-date tests turn it off explicitly.
+            public bool ScriptCompilationPending { get; set; } = true;
+            public bool LastScriptCompilationFailed { get; set; }
             public int RefreshCount { get; private set; }
             public int SubscribeCount { get; private set; }
             public int UnsubscribeCount { get; private set; }
@@ -363,6 +483,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public AssemblyDefinitionConsoleErrorResult FindCurrentAssemblyDefinitionErrors()
             {
                 return AssemblyDefinitionErrors;
+            }
+
+            public bool IsScriptCompilationPending()
+            {
+                return ScriptCompilationPending;
+            }
+
+            public bool DidLastScriptCompilationFail()
+            {
+                return LastScriptCompilationFailed;
             }
 
             public UnityCliLoopConsoleLogEntry[] ReadConsoleErrorEntries()

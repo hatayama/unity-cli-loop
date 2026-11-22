@@ -188,6 +188,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Creates the result used when the asset refresh found nothing to compile and the last compile
+        /// succeeded, so compile returns without asking Unity to compile or reload the domain.
+        /// </summary>
+        internal static CompileResult CreateUpToDateResult()
+        {
+            return new CompileResult(
+                success: true,
+                errorCount: 0,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: Array.Empty<CompilerMessage>(),
+                errors: Array.Empty<CompilerMessage>(),
+                warnings: Array.Empty<CompilerMessage>(),
+                message: "No scripts changed since the last successful compile, so Unity did not compile "
+                    + "and the domain reload was skipped. Pass --force-recompile to rebuild anyway."
+            );
+        }
+
+        /// <summary>
         /// Creates a failed compile result from Assembly Definition and Assembly Reference Console errors.
         /// </summary>
         internal static CompileResult CreateAssemblyDefinitionFailureResult(

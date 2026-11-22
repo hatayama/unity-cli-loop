@@ -135,7 +135,11 @@ namespace io.github.hatayama.UnityCliLoop.Dev
                 return;
             }
 
-            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile, playModeStopWarning: null, CancellationToken.None);
+            CompileResult result = await _compileController.TryCompileAsync(
+                _forceRecompile,
+                playModeStopWarning: null,
+                reloadDiscardsState: CompileController.ReadLiveReloadDiscardsState(),
+                CancellationToken.None);
             if (ShouldRunExecuteDynamicCodeReadinessAfterCompile(result))
             {
                 _isPostCompileReadinessRunning = true;
