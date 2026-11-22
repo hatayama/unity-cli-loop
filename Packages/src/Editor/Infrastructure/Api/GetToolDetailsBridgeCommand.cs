@@ -22,8 +22,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             bool includeDevelopmentOnly = ReadIncludeDevelopmentOnly(paramsToken);
 
             UnityCliLoopToolRegistry registry = toolRegistrarService.GetRegistry();
-            ToolInfo[] allTools = registry.GetRegisteredTools();
+            return CreateResponse(registry.GetRegisteredTools(), includeDevelopmentOnly);
+        }
 
+        /// <summary>
+        /// Builds the catalog the tools cache file stores: the tools Execute returns without
+        /// IncludeDevelopmentOnly, plus internal ones. The CLI drops internal tools whenever it
+        /// reads that file, so leaving them in spares every domain reload the skill file scan.
+        /// </summary>
+        public static GetToolDetailsResponse CreateCatalogCacheResponse(
+            UnityCliLoopToolRegistrarService toolRegistrarService)
+        {
+            UnityCliLoopToolRegistry registry = toolRegistrarService.GetRegistry();
+            return CreateResponse(registry.GetRegisteredToolsIncludingInternal(), includeDevelopmentOnly: false);
+        }
+
+        private static GetToolDetailsResponse CreateResponse(ToolInfo[] allTools, bool includeDevelopmentOnly)
+        {
             ToolInfo[] filteredTools = allTools;
             if (!includeDevelopmentOnly)
             {

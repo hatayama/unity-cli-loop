@@ -15,14 +15,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class ToolCatalogCachePublisher
     {
         /// <summary>
-        /// Writes get-tool-details JSON to the project tools cache when the catalog content changed.
+        /// Writes the tool catalog to the project tools cache when its content changed. Internal tools
+        /// stay in the file; the CLI drops them whenever it reads it.
         /// </summary>
         public static void Publish(UnityCliLoopToolRegistrarService toolRegistrarService)
         {
             Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
 
-            GetToolDetailsResponse response = GetToolDetailsBridgeCommand.Execute(null, toolRegistrarService);
-            // Why reuse JsonRpcResponseSerializer: tools.json must match the IPC result bytes that uloop sync writes.
+            GetToolDetailsResponse response = GetToolDetailsBridgeCommand.CreateCatalogCacheResponse(toolRegistrarService);
+            // Why reuse JsonRpcResponseSerializer: the CLI reads tools.json with one decoder whether
+            // uloop sync wrote the IPC result there or this publisher did.
             string json = JsonConvert.SerializeObject(
                 response,
                 Formatting.None,

@@ -768,12 +768,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registry.GetToolType("missing-tool"), Is.Null);
         }
 
+        /// <summary>
+        /// What: GetRegisteredToolsIncludingInternal keeps a tool whose skill marks it internal and
+        /// never asks for the internal tool names, so the catalog cache write skips the skill scan.
+        /// </summary>
+        [Test]
+        public void GetRegisteredToolsIncludingInternal_KeepsInternalToolsWithoutReadingInternalNames()
+        {
+            CountingInternalToolNameProvider internalToolNameProvider = new("internal-tool");
+            UnityCliLoopToolRegistry registry = new(
+                new AlwaysEnabledToolSettingsPort(),
+                internalToolNameProvider,
+                toolDiscovery: null);
+            registry.RegisterTool(new NamedRegistrationTool("internal-tool"));
+            registry.RegisterTool(new NamedRegistrationTool("public-tool"));
+
+            string[] toolNames = registry.GetRegisteredToolsIncludingInternal()
+                .Select(tool => tool.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+
+            Assert.That(toolNames, Is.EqualTo(new[] { "internal-tool", "public-tool" }));
+            Assert.That(internalToolNameProvider.CallCount, Is.EqualTo(0));
+        }
+
         private static UnityCliLoopToolRegistry CreateManualRegistry()
         {
             return new UnityCliLoopToolRegistry(
                 new AlwaysEnabledToolSettingsPort(),
                 internalToolNameProvider: null,
                 toolDiscovery: null);
+        }
+
+        private sealed class CountingInternalToolNameProvider : IInternalToolNameProvider
+        {
+            private readonly string _internalToolName;
+
+            public CountingInternalToolNameProvider(string internalToolName)
+            {
+                _internalToolName = internalToolName;
+            }
+
+            public int CallCount { get; private set; }
+
+            public HashSet<string> GetInternalToolNames(string projectRoot)
+            {
+                CallCount++;
+                return new HashSet<string>(StringComparer.Ordinal) { _internalToolName };
+            }
         }
 
         private sealed class NamedRegistrationTool : IUnityCliLoopTool
