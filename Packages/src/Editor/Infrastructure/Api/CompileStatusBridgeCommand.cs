@@ -49,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 compileStartPendingSeconds,
                 compileSessionLifecycleService,
                 compileResultSessionRepository,
-                pendingCompileSessionRepository);
+                pendingCompileSessionRepository,
+                DomainReloadDurationMonitor.CreateForEditor());
             LogCompileStatusQueryReceived(requestId, response, isSnapshotCaptureHolding);
             return response;
         }
@@ -63,11 +64,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             double compileStartPendingSeconds,
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
             ICompileResultSessionRepository compileResultSessionRepository,
-            IPendingCompileSessionRepository pendingCompileSessionRepository)
+            IPendingCompileSessionRepository pendingCompileSessionRepository,
+            DomainReloadDurationMonitor reloadDurationMonitor)
         {
             Debug.Assert(compileSessionLifecycleService != null, "compileSessionLifecycleService must not be null");
             Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
             Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
+            Debug.Assert(reloadDurationMonitor != null, "reloadDurationMonitor must not be null");
             Debug.Assert(compileStartPendingSeconds >= 0d, "compileStartPendingSeconds must not be negative");
 
             // The hot reload snapshot capture must finish before compile returns, or an edit made
@@ -83,10 +86,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 storedResult = RecoverPendingCompileResult(
                     requestId,
                     compileResultSessionRepository,
-                    pendingCompileSessionRepository);
+                    pendingCompileSessionRepository,
+                    reloadDurationMonitor);
             }
 
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
+            if (result is JObject resultObject)
+            {
+                // Why at read time: the compile stores its result before Unity starts the reload it causes.
+                reloadDurationMonitor.AddLatestReloadTo(resultObject, storedResult.CompletedAtUtcTicks);
+            }
             // A COMPILE_NOT_STARTED abort leaves the compile queued inside Unity, so isCompiling stays
             // true indefinitely; the CLI must still receive that result instead of waiting it out.
             // Only that gate is lifted: an asset refresh, domain reload, or snapshot capture in
@@ -167,10 +176,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private static UnityCliLoopStoredCompileResult RecoverPendingCompileResult(
             string requestId,
             ICompileResultSessionRepository compileResultSessionRepository,
-            IPendingCompileSessionRepository pendingCompileSessionRepository)
+            IPendingCompileSessionRepository pendingCompileSessionRepository,
+            DomainReloadDurationMonitor reloadDurationMonitor)
         {
             Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
             Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
+            Debug.Assert(reloadDurationMonitor != null, "reloadDurationMonitor must not be null");
 
             if (string.IsNullOrWhiteSpace(requestId))
             {
@@ -190,6 +201,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JObject recoveredResult = CreateRecoveredCompileResult(pendingRequest);
+            // Why from the earliest time: this result is created after the reload the pending request observed,
+            // so the result's own time would exclude that reload.
+            reloadDurationMonitor.AddLatestReloadTo(recoveredResult, DateTime.MinValue.Ticks);
             compileResultSessionRepository.StoreCompileResult(
                 requestId,
                 pendingRequest.ForceRecompile,

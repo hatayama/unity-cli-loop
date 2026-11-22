@@ -142,7 +142,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 readinessService,
                 startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
                 recoveryTrackingService,
-                domainReloadLifecycle ?? new TestDomainReloadLifecycle());
+                domainReloadLifecycle ?? new TestDomainReloadLifecycle(),
+                new DomainReloadDurationMonitor(new InMemoryDomainReloadDurationStore()));
         }
 
         /// <summary>

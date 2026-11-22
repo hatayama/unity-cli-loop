@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private UnityCliLoopCompileResultSessionRepository _compileResultSessionRepository;
         private UnityCliLoopPendingCompileSessionRepository _pendingCompileSessionRepository;
         private UnityCliLoopEditorSessionStateSnapshot _originalSnapshot;
+        private DomainReloadDurationMonitor _reloadDurationMonitor;
 
         [SetUp]
         public void SetUp()
@@ -27,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
             _pendingCompileSessionRepository =
                 UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            _reloadDurationMonitor = new DomainReloadDurationMonitor(new InMemoryDomainReloadDurationStore());
             _originalSnapshot = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
         }
@@ -56,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -83,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.True);
@@ -109,7 +113,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.False);
@@ -134,7 +139,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.False);
@@ -164,7 +170,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -196,7 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.False);
@@ -227,7 +235,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.False);
@@ -259,7 +268,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 60d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -290,7 +300,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 60d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.False);
             Assert.That(response.HasResult, Is.True);
@@ -316,7 +327,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.False);
         }
@@ -334,7 +346,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 12.5,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.CompileStartPendingSeconds, Is.EqualTo(12.5));
             Assert.That(response.Ready, Is.False);
@@ -359,7 +372,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compileStartPendingSeconds: 0d,
                 _compileSessionLifecycleService,
                 _compileResultSessionRepository,
-                _pendingCompileSessionRepository);
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
 
             Assert.That(response.Ready, Is.True);
             Assert.That(response.HasResult, Is.True);
@@ -372,5 +386,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Result["NextActions"]?.Type, Is.EqualTo(JTokenType.Array));
         }
 
+        [Test]
+        public void BuildResponse_WhenAReloadStartedAfterTheStoredResult_AddsTheReloadSeconds()
+        {
+            // Verifies a compile result stored before its domain reload reports how long that reload took.
+            System.DateTime completedAt = System.DateTime.UtcNow;
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":true}",
+                completedAtUtc: completedAt);
+            _reloadDurationMonitor.RecordReloadStarted(completedAt.AddMilliseconds(10), entersPlayMode: false);
+            _reloadDurationMonitor.RecordReloadFinished(completedAt.AddMilliseconds(1510));
+
+            GetCompileStatusResponse response = BuildIdleResponse();
+
+            Assert.That(response.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(1.5d));
+        }
+
+        [Test]
+        public void BuildResponse_WhenNoReloadFollowedTheStoredResult_AddsNoReloadSeconds()
+        {
+            // Verifies a compile that caused no domain reload does not report an earlier reload.
+            System.DateTime completedAt = System.DateTime.UtcNow;
+            _reloadDurationMonitor.RecordReloadStarted(completedAt.AddSeconds(-3), entersPlayMode: false);
+            _reloadDurationMonitor.RecordReloadFinished(completedAt.AddSeconds(-1));
+            _compileResultSessionRepository.StoreCompileResult(
+                "compile_test_request",
+                forceRecompile: false,
+                resultJson: "{\"Success\":true}",
+                completedAtUtc: completedAt);
+
+            GetCompileStatusResponse response = BuildIdleResponse();
+
+            Assert.That(response.Result["DomainReloadSeconds"], Is.Null);
+        }
+
+        [Test]
+        public void BuildResponse_WhenRecoveringAResultAfterAReload_AddsTheReloadSeconds()
+        {
+            // Verifies the result recovered after a reload, which is created after that reload, still reports it.
+            System.DateTime markedAt = System.DateTime.UtcNow.AddSeconds(-10);
+            _compileSessionLifecycleService.MarkPendingCompileRequest(
+                "compile_test_request",
+                forceRecompile: false,
+                markedAtUtc: markedAt);
+            _pendingCompileSessionRepository.MarkPendingCompileRequestReloadObserved();
+            _reloadDurationMonitor.RecordReloadStarted(markedAt.AddSeconds(1), entersPlayMode: false);
+            _reloadDurationMonitor.RecordReloadFinished(markedAt.AddSeconds(3));
+
+            GetCompileStatusResponse response = BuildIdleResponse();
+            GetCompileStatusResponse secondResponse = BuildIdleResponse();
+
+            Assert.That(response.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(2d));
+            Assert.That(secondResponse.Result["DomainReloadSeconds"]?.Value<double>(), Is.EqualTo(2d));
+        }
+
+        private GetCompileStatusResponse BuildIdleResponse()
+        {
+            return CompileStatusBridgeCommand.BuildResponse(
+                "compile_test_request",
+                isCompiling: false,
+                isUpdating: false,
+                isDomainReloadInProgress: false,
+                isSnapshotCaptureHolding: false,
+                compileStartPendingSeconds: 0d,
+                _compileSessionLifecycleService,
+                _compileResultSessionRepository,
+                _pendingCompileSessionRepository,
+                _reloadDurationMonitor);
+        }
     }
 }

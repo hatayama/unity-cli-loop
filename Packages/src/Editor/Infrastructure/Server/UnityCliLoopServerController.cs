@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopServerStartupProtectionService _startupProtectionService;
         private readonly UnityCliLoopServerRecoveryTrackingService _recoveryTrackingService;
         private readonly IUnityCliLoopServerDomainReloadLifecycle _domainReloadLifecycle;
+        private readonly DomainReloadDurationMonitor _reloadDurationMonitor;
         private IUnityCliLoopServerInstance _bridgeServer;
         private readonly UnityCliLoopServerRecoveryExecutor _recoveryExecutor;
 
@@ -51,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopServerReadinessService readinessService,
             UnityCliLoopServerStartupProtectionService startupProtectionService,
             UnityCliLoopServerRecoveryTrackingService recoveryTrackingService,
-            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle)
+            IUnityCliLoopServerDomainReloadLifecycle domainReloadLifecycle,
+            DomainReloadDurationMonitor reloadDurationMonitor)
         {
             System.Diagnostics.Debug.Assert(serverInstanceFactory != null, "serverInstanceFactory must not be null");
             System.Diagnostics.Debug.Assert(serverLifecycleRegistry != null, "serverLifecycleRegistry must not be null");
@@ -80,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             _startupProtectionService = startupProtectionService ?? throw new ArgumentNullException(nameof(startupProtectionService));
             _recoveryTrackingService = recoveryTrackingService ?? throw new ArgumentNullException(nameof(recoveryTrackingService));
             _domainReloadLifecycle = domainReloadLifecycle ?? throw new ArgumentNullException(nameof(domainReloadLifecycle));
+            _reloadDurationMonitor = reloadDurationMonitor ?? throw new ArgumentNullException(nameof(reloadDurationMonitor));
 
             _recoveryExecutor = new UnityCliLoopServerRecoveryExecutor(
                 serverInstanceFactory,
@@ -279,6 +282,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 _bridgeServer = null;
             }
 
+            // Why after the server stops: that step must run even if measuring fails, and it takes about the same
+            // time on every reload, so leaving it out does not change how reloads compare.
+            _reloadDurationMonitor.RecordReloadStarted(DateTime.UtcNow, EditorApplication.isPlayingOrWillChangePlaymode);
         }
 
         /// <summary>
@@ -286,6 +292,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         private void OnAfterAssemblyReload()
         {
+            // Why before recovery: recovery restarts the server on this tick, and that time varies with the IPC
+            // endpoint, so measuring after it would blur the reload duration.
+            _reloadDurationMonitor.RecordReloadFinished(DateTime.UtcNow);
             _recoveryTrackingService.ScheduleTrackedRecovery(() => ExecuteAfterDomainReloadRecoveryAsync(CancellationToken.None));
         }
 
