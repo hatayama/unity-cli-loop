@@ -16,7 +16,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class SkillSourceRootEnumerator
     {
         private const string EditorDirName = "Editor";
-        private const string CliOnlyToolsDirName = "CliOnlyTools~";
 
         private sealed class SkillSourceDefinition
         {
@@ -45,15 +44,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty");
 
+            return CollectInternalSkillToolNames(SkillSourceScanContext.CaptureForProject(projectRoot));
+        }
+
+        /// <summary>
+        /// Finds the tools whose skill marks them internal. Reads only the file system, so it may run on
+        /// any thread once <paramref name="context"/> was captured on the main thread.
+        /// </summary>
+        internal static HashSet<string> CollectInternalSkillToolNames(SkillSourceScanContext context)
+        {
+            Debug.Assert(context != null, "context must not be null");
+
             HashSet<string> toolNames = new(StringComparer.Ordinal);
-            foreach (string searchRoot in EnumerateSkillSourceRoots(projectRoot))
+            foreach (string searchRoot in EnumerateSkillSourceRoots(context))
             {
                 if (!Directory.Exists(searchRoot))
                 {
                     continue;
                 }
 
-                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot))
+                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot, context))
                 {
                     string skillDirectory = Path.GetDirectoryName(skillFilePath);
                     if (skillDirectory == null)
@@ -112,15 +122,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static Dictionary<string, SkillSourceDefinition> GetSkillSources(string projectRoot)
         {
+            SkillSourceScanContext context = SkillSourceScanContext.CaptureForProject(projectRoot);
             Dictionary<string, SkillSourceDefinition> sources = new(StringComparer.Ordinal);
-            foreach (string searchRoot in EnumerateSkillSourceRoots(projectRoot))
+            foreach (string searchRoot in EnumerateSkillSourceRoots(context))
             {
                 if (!Directory.Exists(searchRoot))
                 {
                     continue;
                 }
 
-                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot))
+                foreach (string skillFilePath in EnumerateSourceSkillFiles(searchRoot, context))
                 {
                     string skillDirectory = Path.GetDirectoryName(skillFilePath);
                     if (skillDirectory == null)
@@ -154,9 +165,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return sources;
         }
 
-        private static IEnumerable<string> EnumerateSourceSkillFiles(string searchRoot)
+        private static IEnumerable<string> EnumerateSourceSkillFiles(string searchRoot, SkillSourceScanContext context)
         {
-            if (IsCliOnlySkillSourceRoot(searchRoot))
+            if (HaveSamePathIdentityAtPlatform(searchRoot, context.CliOnlySkillSourceRoot, context.Platform))
             {
                 return Directory.EnumerateFiles(searchRoot, SkillInstallLayout.SkillFileName, SearchOption.AllDirectories);
             }
@@ -165,12 +176,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Directory.EnumerateFiles(editorFolder, SkillInstallLayout.SkillFileName, SearchOption.AllDirectories));
         }
 
-        private static IEnumerable<string> EnumerateSkillSourceRoots(string projectRoot)
+        private static IEnumerable<string> EnumerateSkillSourceRoots(SkillSourceScanContext context)
         {
+            string projectRoot = context.ProjectRoot;
             List<string> orderedRoots = new();
             HashSet<string> seenRoots = new(StringComparer.Ordinal);
 
-            AddSkillSourceRoot(orderedRoots, seenRoots, GetCliOnlySkillSourceRoot(projectRoot));
+            if (context.SearchesCliOnlySkillSourceRoot)
+            {
+                AddSkillSourceRoot(orderedRoots, seenRoots, context.CliOnlySkillSourceRoot);
+            }
             AddSkillSourceRoot(orderedRoots, seenRoots, Path.Combine(projectRoot, "Assets"));
             foreach (string packageRoot in EnumerateDirectProjectPackageRoots(projectRoot))
             {
@@ -210,31 +225,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             orderedRoots.Add(normalizedRoot);
-        }
-
-        private static string GetCliOnlySkillSourceRoot(string projectRoot)
-        {
-            string currentProjectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            if (!HaveSamePathIdentityAtPlatform(
-                projectRoot,
-                currentProjectRoot,
-                UnityEngine.Application.platform))
-            {
-                return null;
-            }
-
-            return Path.Combine(
-                UnityCliLoopConstants.PackageResolvedPath,
-                EditorDirName,
-                CliOnlyToolsDirName);
-        }
-
-        private static bool IsCliOnlySkillSourceRoot(string searchRoot)
-        {
-            return HaveSamePathIdentityAtPlatform(
-                searchRoot,
-                GetCliOnlySkillSourceRoot(UnityCliLoopPathResolver.GetProjectRoot()),
-                UnityEngine.Application.platform);
         }
 
         internal static bool HaveSamePathIdentityAtPlatform(

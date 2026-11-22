@@ -349,6 +349,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(internalToolNames, Does.Not.Contain("public-skill"));
         }
 
+        /// <summary>
+        /// What: the internal skill scan reads the CLI-only skill root from a context captured beforehand
+        /// instead of from the Editor, so the tools cache can run the scan off the main thread.
+        /// </summary>
+        [Test]
+        public void CollectInternalSkillToolNames_ReadsTheCliOnlySkillRootFromTheCapturedContext()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(
+                temporaryRoot,
+                "uloop-internal-skill",
+                "InternalTool",
+                "reference.md",
+                "internal-reference",
+                isInternal: true);
+            string cliOnlySkillSourceRoot = CreateTemporaryProjectRoot();
+            WriteSkillFile(
+                Path.Combine(cliOnlySkillSourceRoot, "CliOnlyTool", "Skill"),
+                "---\nname: uloop-cli-only-skill\ninternal: true\n---\n");
+            SkillSourceScanContext context = new SkillSourceScanContext(
+                temporaryRoot,
+                cliOnlySkillSourceRoot,
+                searchesCliOnlySkillSourceRoot: true,
+                UnityEngine.Application.platform);
+
+            HashSet<string> internalToolNames = SkillSourceRootEnumerator.CollectInternalSkillToolNames(context);
+
+            Assert.That(internalToolNames, Does.Contain("internal-skill"));
+            Assert.That(internalToolNames, Does.Contain("cli-only-skill"));
+        }
+
         // Tests that user-facing tool catalogs omit tools backed by internal skills.
         [Test]
         public void GetToolSettingsCatalogForProjectRoot_WhenSkillIsInternal_HidesToolFromUserFacingLists()
