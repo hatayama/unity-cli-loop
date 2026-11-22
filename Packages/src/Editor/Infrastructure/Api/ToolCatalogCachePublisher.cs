@@ -135,6 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // Why fall back to writing in place: on Windows the move fails while another process holds
                 // the cache open, such as the CLI reading it or Defender scanning it. Writing in place
                 // still succeeds there, so the cache does not stay stale for the whole domain.
+                // Unlike the move, this write is not atomic: a reload that cuts it short leaves a truncated
+                // cache, which the CLI ignores until the next domain rewrites it. Every write took that risk
+                // before the move was added.
                 File.WriteAllText(cachePath, json, encoding);
             }
         }
