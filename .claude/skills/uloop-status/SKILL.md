@@ -22,7 +22,7 @@ The states are checked in this order, and the first one that matches is reported
 |-------|---------|-----------|
 | `BlockedByDialog` | A modal dialog is open and Unity's main thread waits for it; how it is found and how to answer it are in Notes | 1 |
 | `Busy` | Unity answered, and a uloop command is running and holds the command slot | 1 |
-| `Starting` | Unity answered but has not recorded its play and compile state yet | 1 |
+| `Starting` | Unity answered but has not recorded its Editor state or tool list yet | 1 |
 | `MainThreadBlocked` | Unity answered, but its main thread has not run for 5 seconds or more, even when asked again after being woken | 1 |
 | `Compiling` | Unity answered and is compiling scripts | 1 |
 | `ImportingAssets` | Unity answered and is importing assets | 1 |
