@@ -18,7 +18,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             UnityCliLoopToolRegistrarService toolRegistrarService,
             double secondsSinceLastMainThreadTick,
             EditorDialogInfo[] openDialogs,
-            int editorProcessId)
+            int editorProcessId,
+            bool toolCatalogCachePublished)
         {
             if (toolRegistrarService == null)
             {
@@ -46,7 +47,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 RunningToolName = executionStatus.RunningToolName,
                 RunningToolElapsedSeconds = executionStatus.RunningToolElapsedSeconds,
                 RunningToolPhase = executionStatus.RunningToolPhase,
-                HasEditorState = playState.HasValue && compileState.HasValue,
+                // Why the tools cache counts as Editor state: the CLI reads that file for its next
+                // command, so until this domain has written it the Editor is still starting, and a
+                // "Ready" answer here would send that command against the previous domain's catalog.
+                HasEditorState = toolCatalogCachePublished && playState.HasValue && compileState.HasValue,
                 IsPlaying = playState.IsPlaying,
                 IsPaused = playState.IsPaused,
                 IsCompiling = compileState.IsCompiling,

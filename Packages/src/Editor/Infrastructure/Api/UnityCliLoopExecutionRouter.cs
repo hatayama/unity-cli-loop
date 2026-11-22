@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private readonly UnityCliLoopToolRegistrarService _toolRegistrarService;
         private readonly EditorExecutionActivity _executionActivity;
         private readonly EditorDialogTracker _dialogTracker;
+        private readonly ToolCatalogCachePublisher _toolCatalogCachePublisher;
         // Why read here: the router is built once when the server starts, and get-editor-status must
         // stay cheap because it answers while the main thread is blocked.
         private readonly int _editorProcessId;
@@ -30,11 +31,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal UnityCliLoopExecutionRouter(
             UnityCliLoopToolRegistrarService toolRegistrarService,
             EditorExecutionActivity executionActivity,
-            EditorDialogTracker dialogTracker)
+            EditorDialogTracker dialogTracker,
+            ToolCatalogCachePublisher toolCatalogCachePublisher)
         {
             System.Diagnostics.Debug.Assert(toolRegistrarService != null, "toolRegistrarService must not be null");
             System.Diagnostics.Debug.Assert(executionActivity != null, "executionActivity must not be null");
             System.Diagnostics.Debug.Assert(dialogTracker != null, "dialogTracker must not be null");
+            System.Diagnostics.Debug.Assert(toolCatalogCachePublisher != null, "toolCatalogCachePublisher must not be null");
 
             _toolRegistrarService = toolRegistrarService
                 ?? throw new ArgumentNullException(nameof(toolRegistrarService));
@@ -42,6 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 ?? throw new ArgumentNullException(nameof(executionActivity));
             _dialogTracker = dialogTracker
                 ?? throw new ArgumentNullException(nameof(dialogTracker));
+            _toolCatalogCachePublisher = toolCatalogCachePublisher
+                ?? throw new ArgumentNullException(nameof(toolCatalogCachePublisher));
             using (System.Diagnostics.Process editorProcess = System.Diagnostics.Process.GetCurrentProcess())
             {
                 _editorProcessId = editorProcess.Id;
@@ -74,7 +79,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     _toolRegistrarService,
                     EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
                     _dialogTracker.GetOpenDialogs(),
-                    _editorProcessId);
+                    _editorProcessId,
+                    _toolCatalogCachePublisher.WhenPublished.IsCompleted);
             }
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_CANCEL_RUNNING_TOOL)
@@ -93,6 +99,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 return ReportBlockingDialogBridgeCommand.Execute(_toolRegistrarService, paramsToken);
             }
 
+            // Why wait: after a domain reload the tools cache is written off the main thread, and the CLI
+            // reads that file from disk for its next command. Answering this command first could leave
+            // that next command reading the previous domain's catalog, without a tool the reload added.
+            // Why not for the status, cancel, and dialog-report answers above: they must answer at once.
+            await WaitForToolCatalogCacheAsync(ct);
+
             // Why hold an activity for the length of the request: macOS throttles an Editor that is not
             // frontmost, and a request that arrives while it is throttled is served several times slower.
             // Why not around the status, cancel, and dialog-report answers above: those paths must stay free of anything
@@ -101,6 +113,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 return await ExecuteCommandOrToolAsync(methodName, paramsToken, ct, cancellableByUser);
             }
+        }
+
+        // Why a request-local wait instead of awaiting the shared write task: a request canceled while
+        // the cache is still being written must end now, and canceling the shared task would release
+        // every other request before the write ends.
+        private async Task WaitForToolCatalogCacheAsync(CancellationToken ct)
+        {
+            Task whenPublished = _toolCatalogCachePublisher.WhenPublished;
+            if (whenPublished.IsCompleted)
+            {
+                return;
+            }
+
+            TaskCompletionSource<bool> canceled = new TaskCompletionSource<bool>();
+            using (ct.Register(() => canceled.TrySetResult(true)))
+            {
+                await Task.WhenAny(whenPublished, canceled.Task);
+            }
+
+            ct.ThrowIfCancellationRequested();
         }
 
         /// <summary>

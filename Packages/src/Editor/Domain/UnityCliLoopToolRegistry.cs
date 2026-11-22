@@ -80,9 +80,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return GetRegisteredToolsForProjectRoot(UnityCliLoopPathResolver.GetProjectRoot());
         }
 
+        /// <summary>
+        /// Lists the same tools as <see cref="GetRegisteredTools"/> plus those whose skill marks them
+        /// internal, without the skill file scan that finds them, for a caller that drops internal tools
+        /// itself later.
+        /// </summary>
+        public ToolInfo[] GetRegisteredToolsIncludingInternal()
+        {
+            return SelectExposedTools(new HashSet<string>(StringComparer.Ordinal));
+        }
+
         internal ToolInfo[] GetRegisteredToolsForProjectRoot(string projectRoot)
         {
-            HashSet<string> internalToolNames = _internalToolNameProvider.GetInternalToolNames(projectRoot);
+            return SelectExposedTools(_internalToolNameProvider.GetInternalToolNames(projectRoot));
+        }
+
+        private ToolInfo[] SelectExposedTools(HashSet<string> internalToolNames)
+        {
             return _tools.Values
                 .Where(tool => ToolExecutionAvailability.ShouldExposeInRegisteredTools(
                     tool.ToolName,

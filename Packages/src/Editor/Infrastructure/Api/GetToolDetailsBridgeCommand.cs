@@ -23,19 +23,28 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             UnityCliLoopToolRegistry registry = toolRegistrarService.GetRegistry();
             ToolInfo[] allTools = registry.GetRegisteredTools();
-
-            ToolInfo[] filteredTools = allTools;
-            if (!includeDevelopmentOnly)
-            {
-                filteredTools = allTools
-                    .Where(tool => !tool.DisplayDevelopmentOnly)
-                    .ToArray();
-            }
-
             return new GetToolDetailsResponse
             {
-                Tools = filteredTools
+                Tools = includeDevelopmentOnly ? allTools : ExcludeDevelopmentOnly(allTools)
             };
+        }
+
+        /// <summary>
+        /// Lists the tools a get-tool-details request without IncludeDevelopmentOnly returns, before
+        /// internal tools are dropped, so the caller can drop those later off the main thread.
+        /// </summary>
+        public static ToolInfo[] CreateCatalogSnapshotIncludingInternal(
+            UnityCliLoopToolRegistrarService toolRegistrarService)
+        {
+            UnityCliLoopToolRegistry registry = toolRegistrarService.GetRegistry();
+            return ExcludeDevelopmentOnly(registry.GetRegisteredToolsIncludingInternal());
+        }
+
+        private static ToolInfo[] ExcludeDevelopmentOnly(ToolInfo[] tools)
+        {
+            return tools
+                .Where(tool => !tool.DisplayDevelopmentOnly)
+                .ToArray();
         }
 
         private static bool ReadIncludeDevelopmentOnly(JToken paramsToken)
