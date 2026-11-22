@@ -672,7 +672,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 effectiveStartupProtectionService,
                 recoveryTrackingService,
                 new TestDomainReloadLifecycle(),
-                new DomainReloadDurationMonitor(new InMemoryDomainReloadDurationStore()));
+                new DomainReloadDurationMonitor(new InMemoryDomainReloadDurationStore(), () => false));
         }
 
         private UnityCliLoopServerRecoveryTrackingService CreateRecoveryTrackingService(

@@ -271,20 +271,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         /// </summary>
         internal void OnBeforeAssemblyReload()
         {
-            _startupProtectionService.ClearStartupProtection();
-            _domainReloadLifecycle.PrepareForDomainReload();
-
-            ServiceResult<string> result = _domainReloadRecoveryUseCase.ExecuteBeforeDomainReload(_bridgeServer);
-            
-            // Clear instance if server shutdown succeeded
-            if (result.Success)
+            try
             {
-                _bridgeServer = null;
-            }
+                _startupProtectionService.ClearStartupProtection();
+                _domainReloadLifecycle.PrepareForDomainReload();
 
-            // Why after the server stops: that step must run even if measuring fails, and it takes about the same
-            // time on every reload, so leaving it out does not change how reloads compare.
-            _reloadDurationMonitor.RecordReloadStarted(DateTime.UtcNow, EditorApplication.isPlayingOrWillChangePlaymode);
+                ServiceResult<string> result = _domainReloadRecoveryUseCase.ExecuteBeforeDomainReload(_bridgeServer);
+
+                // Clear instance if server shutdown succeeded
+                if (result.Success)
+                {
+                    _bridgeServer = null;
+                }
+            }
+            finally
+            {
+                // Why in finally: Unity reloads even when stopping the server throws, and a compile result must
+                // not report an earlier reload for this one. Why after the stop: a measuring failure must not
+                // skip it, and the stop takes about the same time on every reload.
+                _reloadDurationMonitor.RecordReloadStarted(DateTime.UtcNow);
+            }
         }
 
         /// <summary>

@@ -91,11 +91,6 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JToken result = storedResult.HasResult ? JToken.Parse(storedResult.ResultJson) : null;
-            if (result is JObject resultObject)
-            {
-                // Why at read time: the compile stores its result before Unity starts the reload it causes.
-                reloadDurationMonitor.AddLatestReloadTo(resultObject, storedResult.CompletedAtUtcTicks);
-            }
             // A COMPILE_NOT_STARTED abort leaves the compile queued inside Unity, so isCompiling stays
             // true indefinitely; the CLI must still receive that result instead of waiting it out.
             // Only that gate is lifted: an asset refresh, domain reload, or snapshot capture in
@@ -103,6 +98,20 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (IsCompileNotStartedResult(result))
             {
                 ready = isEditorSettled;
+            }
+
+            // Why only once ready: a poll while Unity still reloads would settle on no reload before it ends.
+            if (ready && result is JObject resultObject &&
+                SettleReloadAttribution(resultObject, storedResult, reloadDurationMonitor))
+            {
+                // Why store it back: the result outlives this read (a timed-out CLI collects it later), and a
+                // later read must report the same reload, not whichever one ran last. The original completion
+                // time keeps the result's expiry where it was.
+                compileResultSessionRepository.StoreCompileResult(
+                    storedResult.RequestId,
+                    storedResult.ForceRecompile,
+                    resultObject.ToString(Formatting.None),
+                    new DateTime(storedResult.CompletedAtUtcTicks, DateTimeKind.Utc));
             }
 
             return new GetCompileStatusResponse
@@ -173,6 +182,23 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 requestId);
         }
 
+        private static bool SettleReloadAttribution(
+            JObject result,
+            UnityCliLoopStoredCompileResult storedResult,
+            DomainReloadDurationMonitor reloadDurationMonitor)
+        {
+            JToken success = result["Success"];
+            bool compileSucceeded = success?.Type == JTokenType.Boolean && success.Value<bool>();
+            if (!compileSucceeded)
+            {
+                // Why: a compile that failed reloads nothing, so a reload after it has another cause.
+                return reloadDurationMonitor.AttributeNoReloadTo(result);
+            }
+
+            // Why from the result's time: the compile stores its result before Unity starts the reload it causes.
+            return reloadDurationMonitor.AttributeReloadTo(result, storedResult.CompletedAtUtcTicks);
+        }
+
         private static UnityCliLoopStoredCompileResult RecoverPendingCompileResult(
             string requestId,
             ICompileResultSessionRepository compileResultSessionRepository,
@@ -201,9 +227,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             JObject recoveredResult = CreateRecoveredCompileResult(pendingRequest);
-            // Why from the earliest time: this result is created after the reload the pending request observed,
-            // so the result's own time would exclude that reload.
-            reloadDurationMonitor.AddLatestReloadTo(recoveredResult, DateTime.MinValue.Ticks);
+            // Why the latest reload at any time: this result is created after the reload the pending request
+            // observed, so its own time would exclude that reload. The before-reload handler records every
+            // reload's start, Play Mode ones included, so the latest recorded reload is that one or a later one.
+            reloadDurationMonitor.AttributeReloadTo(recoveredResult, DateTime.MinValue.Ticks);
             compileResultSessionRepository.StoreCompileResult(
                 requestId,
                 pendingRequest.ForceRecompile,
