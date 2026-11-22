@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.35.5](https://github.com/hatayama/unity-cli-loop/compare/v3.35.4...v3.35.5) (2026-11-22)
+
+
+### Performance Improvements
+
+* Domain reloads no longer install the Script Updating Consent patch ([#3613](https://github.com/hatayama/unity-cli-loop/issues/3613)) ([c3ff48c](https://github.com/hatayama/unity-cli-loop/commit/c3ff48c6b2bddbbc0a7d45c93b1471ccc3abfa94))
+
 ## [3.35.4](https://github.com/hatayama/unity-cli-loop/compare/v3.35.3...v3.35.4) (2026-11-22)
 
 
