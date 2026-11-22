@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.36.0](https://github.com/hatayama/unity-cli-loop/compare/v3.35.5...v3.36.0) (2026-11-22)
+
+
+### Features
+
+* Compile reports the domain reload time and recommends a restart once reloads slow down ([#3619](https://github.com/hatayama/unity-cli-loop/issues/3619)) ([5f78f6a](https://github.com/hatayama/unity-cli-loop/commit/5f78f6aaff85c35ca455e47ee590b03d93f02a44))
+
+
+### Performance Improvements
+
+* Domain reloads write the tools cache off the main thread ([#3616](https://github.com/hatayama/unity-cli-loop/issues/3616)) ([79273f9](https://github.com/hatayama/unity-cli-loop/commit/79273f990dd5730e974d035f9ec4b7d3687170d3))
+
 ## [3.35.5](https://github.com/hatayama/unity-cli-loop/compare/v3.35.4...v3.35.5) (2026-11-22)
 
 
