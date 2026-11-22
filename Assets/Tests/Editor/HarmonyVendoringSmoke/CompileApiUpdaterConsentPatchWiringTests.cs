@@ -27,11 +27,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: EditorUtility.DisplayDialogComplex has the compile consent prefix after startup.
+        /// What: EditorUtility.DisplayDialogComplex has exactly one compile consent prefix once the
+        /// production pipeline installed the decline, however many compiles installed it.
         /// </summary>
         [Test]
-        public void DisplayDialogComplex_AfterStartup_HasCompileConsentPrefix()
+        public void DisplayDialogComplex_AfterTheConsentDeclineIsInstalled_HasOneCompileConsentPrefix()
         {
+            UnityCompilePipelinePort pipeline = new();
+            pipeline.InstallApiUpdaterConsentDecline();
+            pipeline.InstallApiUpdaterConsentDecline();
+
             MethodInfo original = typeof(EditorUtility).GetMethod(
                 nameof(EditorUtility.DisplayDialogComplex),
                 BindingFlags.Public | BindingFlags.Static,
