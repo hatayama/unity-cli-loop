@@ -427,6 +427,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: TryCompileAsync installs the Script Updating Consent decline once, before it
+        /// refreshes assets, because the refresh can itself start the compile that asks for consent.
+        /// </summary>
+        [Test]
+        public async Task TryCompileAsync_InstallsTheConsentDeclineBeforeRefreshingAssets()
+        {
+            FakeCompilePipelinePort pipeline = new() { CompleteOnRequest = true };
+            using CompileController controller = CreateController(pipeline);
+
+            await UncanceledAwaits.AwaitValueAsync(controller.TryCompileAsync(
+                forceRecompile: false,
+                playModeStopWarning: null,
+                reloadDiscardsState: false,
+                CancellationToken.None));
+
+            Assert.That(pipeline.RefreshCountsWhenConsentDeclineInstalled, Is.EqualTo(new[] { 0 }));
+        }
+
         private static CompileController CreateController(FakeCompilePipelinePort pipeline)
         {
             CompileController controller = new(
@@ -474,6 +493,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public int MismatchedUnsubscribeCount { get; private set; }
             public int WatchdogStartCount { get; private set; }
             public List<bool> RequestedCleanBuildCache { get; } = new();
+            public List<int> RefreshCountsWhenConsentDeclineInstalled { get; } = new();
+
+            public void InstallApiUpdaterConsentDecline()
+            {
+                RefreshCountsWhenConsentDeclineInstalled.Add(RefreshCount);
+            }
 
             public void RefreshAssets()
             {

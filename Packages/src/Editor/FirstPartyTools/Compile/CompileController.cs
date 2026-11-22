@@ -234,8 +234,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             try
             {
                 // Why before Refresh: AssetDatabase.Refresh() can start a script compile itself,
-                // and that compile can raise Script Updating Consent. Begin must be set first
-                // or the prefix lets the modal through on the typical "edit then uloop compile" path.
+                // and that compile can raise Script Updating Consent. The decline must be installed
+                // and Begin set first or the modal gets through on the typical "edit then uloop compile"
+                // path. Why install here and not at Editor startup: the Harmony patch costs a domain
+                // reload about 150 ms, which every reload paid even when no CLI compile followed.
+                _pipeline.InstallApiUpdaterConsentDecline();
                 CompileApiUpdaterConsentState.BeginCliCompile();
                 _pipeline.RefreshAssets();
 

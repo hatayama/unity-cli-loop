@@ -12,6 +12,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal interface ICompilePipelinePort
     {
+        /// <summary>
+        /// Makes Unity's Script Updating Consent dialog decline itself while a CLI compile is in
+        /// flight. Safe to call on every compile; only the first call in a domain does the work.
+        /// </summary>
+        void InstallApiUpdaterConsentDecline();
+
         void RefreshAssets();
 
         AssemblyDefinitionConsoleErrorResult FindCurrentAssemblyDefinitionErrors();
@@ -54,6 +60,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class UnityCompilePipelinePort : ICompilePipelinePort
     {
+        public void InstallApiUpdaterConsentDecline()
+        {
+            CompileApiUpdaterConsentPatcher.Install();
+        }
+
         public void RefreshAssets()
         {
             AssetDatabase.Refresh();

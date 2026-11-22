@@ -8,7 +8,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static void Initialize()
         {
-            CompileApiUpdaterConsentPatcher.Install();
             ExternalSceneChangeCoordination.ResolveBeforeRefresh =
                 reloadExternalSceneChanges =>
                     ExternalSceneChangeTracker.ResolveForCompile(reloadExternalSceneChanges);

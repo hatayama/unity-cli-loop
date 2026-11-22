@@ -64,9 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             try
             {
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
-                // failures cannot be pre-validated, and an escaping exception during Editor
-                // startup would disable the whole composition-root bootstrap. Log and fail
-                // open so CLI compile still runs and the dialog appears as before.
+                // failures cannot be pre-validated, and an escaping exception here would fail
+                // the CLI compile that installs the patch. Log and fail open so the compile
+                // still runs and the dialog appears as before.
                 HarmonyInstance.Patch(original, prefix: new HarmonyMethod(prefix));
             }
             catch (Exception exception)
