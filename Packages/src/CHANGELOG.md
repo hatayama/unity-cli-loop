@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.5](https://github.com/hatayama/unity-cli-loop/compare/v3.36.4...v3.36.5) (2026-11-23)
+
+
+### Bug Fixes
+
+* Hot reload skips a body the patch would bind to a private overload of a type the reload was not given ([#3622](https://github.com/hatayama/unity-cli-loop/issues/3622)) ([8ad6bdf](https://github.com/hatayama/unity-cli-loop/commit/8ad6bdf8f24a703097e846b84b281c08231e96c0))
+
 ## [3.36.4](https://github.com/hatayama/unity-cli-loop/compare/v3.36.3...v3.36.4) (2026-11-23)
 
 
