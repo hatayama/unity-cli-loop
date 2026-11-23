@@ -14,7 +14,9 @@ internal static class PatchBindingPickComparison
     /// <summary>
     /// What: the member the patch could use at <paramref name="node"/> in place of Unity's pick,
     /// which the code there cannot reach, or null when the two agree or the patch's member is
-    /// reachable.
+    /// reachable. Unity's pick is unknown when the worker's binding resolves nothing, as for an
+    /// internal member of a compiled type, which it does not import; any member the patch picks
+    /// then counts as different.
     /// </summary>
     internal static ISymbol FindHiddenPickOrNull(
         SemanticModel enforcingModel,
@@ -23,7 +25,13 @@ internal static class PatchBindingPickComparison
         IAssemblySymbol targetAssembly)
     {
         ISymbol unityPick = enforcingModel.GetSymbolInfo(node).Symbol;
-        if (!IsMember(unityPick))
+        if (unityPick != null && !IsMember(unityPick))
+        {
+            return null;
+        }
+
+        SymbolInfo patchInfo = patchModel.GetSymbolInfo(node);
+        if (unityPick == null && !IsMember(patchInfo.Symbol) && !HasMemberCandidate(patchInfo))
         {
             return null;
         }
@@ -36,7 +44,6 @@ internal static class PatchBindingPickComparison
         }
 
         PatchUse use = new PatchUse(patchModel, node, targetAssembly, unityPick, enclosingType, ReceiverTypeOrNull(patchModel, node));
-        SymbolInfo patchInfo = patchModel.GetSymbolInfo(node);
         ISymbol patchPick = patchInfo.Symbol;
         if (patchPick == null)
         {
@@ -51,6 +58,19 @@ internal static class PatchBindingPickComparison
         return RunDeclaredParameterFitOrNull(patchPick, use);
     }
 
+    private static bool HasMemberCandidate(SymbolInfo info)
+    {
+        foreach (ISymbol candidate in info.CandidateSymbols)
+        {
+            if (IsMember(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsMember(ISymbol symbol)
     {
         return symbol != null
@@ -61,11 +81,16 @@ internal static class PatchBindingPickComparison
     // Why only a candidate other than Unity's pick: with every member imported, a member of a type
     // the run declares also comes from the compiled copy, and the two copies of one extension
     // method leave the binding ambiguous without any other member taking part.
+    // Why only one that may apply: a candidate the arguments cannot fit is never what the patch
+    // calls, whatever made the binding fail.
     private static ISymbol FirstHiddenCandidateOrNull(ImmutableArray<ISymbol> candidates, PatchUse use)
     {
         foreach (ISymbol candidate in candidates)
         {
-            if (!IsSameMember(candidate, use.UnityPick) && !IsReachable(candidate, use))
+            if (IsMember(candidate)
+                && !IsSameMember(candidate, use.UnityPick)
+                && !IsReachable(candidate, use)
+                && MayApply(candidate, use, null))
             {
                 return candidate;
             }
@@ -101,11 +126,21 @@ internal static class PatchBindingPickComparison
 
     // Why the this parameter is dropped for an unreduced extension method in a call written on a
     // receiver: the argument list leaves the receiver out.
+    // Why a member without parameters may apply: a field, property or event of the name hides the
+    // member Unity's compiler resolves.
     private static bool MayApply(ISymbol member, PatchUse use, ISymbol patchPick)
     {
-        ImmutableArray<IParameterSymbol> parameters = member is IMethodSymbol method
-            ? method.Parameters
-            : ((IPropertySymbol)member).Parameters;
+        ImmutableArray<IParameterSymbol> parameters = member switch
+        {
+            IMethodSymbol method => method.Parameters,
+            IPropertySymbol { IsIndexer: true } indexer => indexer.Parameters,
+            _ => default
+        };
+        if (parameters.IsDefault)
+        {
+            return true;
+        }
+
         int skipped = patchPick is IMethodSymbol { MethodKind: MethodKind.ReducedExtension }
             && member is IMethodSymbol { MethodKind: MethodKind.Ordinary, IsExtensionMethod: true }
             ? 1
@@ -155,8 +190,15 @@ internal static class PatchBindingPickComparison
     // Why by documentation comment id of the unreduced original definition: the two bindings come
     // from different compilations, whose symbols never equal, and may report one extension method
     // reduced and unreduced, or one generic member constructed apart.
+    // Why an unknown pick is never the same: a member the patch picks cannot be shown to be the one
+    // Unity's compiler calls.
     private static bool IsSameMember(ISymbol first, ISymbol second)
     {
+        if (first == null || second == null)
+        {
+            return false;
+        }
+
         return Definition(first).GetDocumentationCommentId() == Definition(second).GetDocumentationCommentId();
     }
 

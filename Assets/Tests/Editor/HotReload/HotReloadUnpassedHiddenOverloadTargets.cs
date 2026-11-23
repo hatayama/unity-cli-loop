@@ -211,4 +211,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 2;
         }
     }
+
+    /// <summary>
+    /// Public generic class with a nested type, so a parameter can name the edited host only through
+    /// the nested type's containing type.
+    /// </summary>
+    public sealed class HotReloadUnpassedEnvelope<T>
+    {
+        /// <summary>
+        /// Public type nested in the generic class.
+        /// </summary>
+        public sealed class Item
+        {
+        }
+    }
+
+    /// <summary>
+    /// Public class whose public overload takes any value while a private one takes a type nested in
+    /// a generic class constructed with the edited host.
+    /// </summary>
+    public static class HotReloadUnpassedEnvelopeOverloads
+    {
+        public static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(HotReloadUnpassedEnvelope<HotReloadUnpassedHiddenOverloadHost>.Item item)
+        {
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Public class whose overload taking any value is internal, which the worker's binding does not
+    /// import, while a private one takes an ArraySegment.
+    /// </summary>
+    public static class HotReloadUnpassedInternalPickOverloads
+    {
+        internal static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+    }
 }

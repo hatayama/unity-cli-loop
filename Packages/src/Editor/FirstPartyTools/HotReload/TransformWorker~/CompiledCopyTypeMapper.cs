@@ -38,8 +38,9 @@ internal static class CompiledCopyTypeMapper
     }
 
     /// <summary>
-    /// What: whether a parameter of <paramref name="member"/> names, in itself, an array element
-    /// or a type argument, a type of the target assembly that the run declares from source.
+    /// What: whether a parameter of <paramref name="member"/> names, in itself, an array element,
+    /// a type argument or a containing type, a type of the target assembly that the run declares
+    /// from source.
     /// </summary>
     internal static bool HasParameterTypeTheRunDeclares(
         ISymbol member,
@@ -86,7 +87,10 @@ internal static class CompiledCopyTypeMapper
                     }
                 }
 
-                return false;
+                // Why the containing type too: a type nested in a generic type carries the
+                // containing type's type arguments there, not in its own.
+                return named.ContainingType != null
+                    && MentionsTypeTheRunDeclares(named.ContainingType, compilation, targetAssembly);
             default:
                 return false;
         }

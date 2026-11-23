@@ -35,15 +35,14 @@ internal static class HiddenMemberPickGuard
                 continue;
             }
 
+            // Why a use the worker binds to nothing still goes to the patch's binding: an internal
+            // member of a compiled type is not imported here, so a call whose only reachable
+            // overload is internal binds to nothing, while the patch sees every overload.
             SymbolInfo info = semanticModel.GetSymbolInfo(node);
-            if (info.Symbol == null && info.CandidateSymbols.IsEmpty)
-            {
-                continue;
-            }
-
+            bool boundHere = info.Symbol != null || !info.CandidateSymbols.IsEmpty;
             enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
             patchModel = patchModel ?? patchBinding.ModelFor(semanticModel.SyntaxTree);
-            ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info)
+            ISymbol hidden = (boundHere ? FindHiddenPickOrNull(semanticModel, enforcingModel, node, info) : null)
                 ?? PatchBindingPickComparison.FindHiddenPickOrNull(enforcingModel, patchModel, node, targetAssembly);
             if (hidden != null)
             {

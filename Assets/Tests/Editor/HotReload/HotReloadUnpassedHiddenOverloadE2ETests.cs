@@ -54,8 +54,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// call written on a receiver whose type has a private instance method that fits better than
         /// the public extension method; a call that a private extension method of another class in
         /// scope fits better; a nested type's call by bare name that a private overload of its outer
-        /// type's base fits better; and those forms where the private member takes a type the reload
-        /// is given, which the worker compiles from source.
+        /// type's base fits better; those forms where the private member takes a type the reload is
+        /// given, which the worker compiles from source, also through a type nested in a generic type
+        /// constructed with it; and a call whose reachable overload is internal, which the worker's
+        /// binding does not see.
         /// </summary>
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;")]
         [TestCase("own", "return new HotReloadHiddenOverloadBox(new ArraySegment<int>(_ints)).Value + 7102;")]
@@ -91,6 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("own", "return HotReloadUnpassedHostTwinExtensions.HostTwin(_ints.Length, this) + 7102;")]
         [TestCase("own", "return _ints.Length.HostTwin(this) + 7102;")]
         [TestCase("nested-own", "return Pick(new HotReloadUnpassedHiddenOverloadHost()) + 7162;")]
+        [TestCase("own", "return HotReloadUnpassedEnvelopeOverloads.Pick(new HotReloadUnpassedEnvelope<HotReloadUnpassedHiddenOverloadHost>.Item()) + 7102;")]
+        [TestCase("own", "return HotReloadUnpassedInternalPickOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;")]
+        [TestCase("lambda", "return HotReloadUnpassedInternalPickOverloads.Pick(new ArraySegment<int>(_ints)) + 7112;")]
         public async Task Run_UseOfAnUnpassedTypeThePatchWouldResolveToAPrivateMember_IsSkippedAndKeepsTheCompiledValue(
             string site,
             string statements)
@@ -108,8 +113,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// edited value when no private overload of the same name can apply to the call: one takes
         /// more parameters than the call has arguments, or an argument (a string, also on an
         /// extension call written on its receiver) converts to none of their parameter types, a
-        /// nested type and a constructed List included; or a named argument matches only the public
-        /// overload's parameter name. So is a derived type's call of its base's protected overload on
+        /// nested type and a constructed List included, also when the overload Unity's compiler calls
+        /// is internal; or a named argument matches only the public overload's parameter name. So is a derived type's call of its base's protected overload on
         /// itself, which Unity's compiler resolves too.
         /// </summary>
         [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;", 7103)]
@@ -120,6 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("derived-own", "return Pick(new ArraySegment<int>(new int[2])) + 7152;", 7154)]
         [TestCase("derived-own", "return this.Pick(new Memory<int>(new int[2])) + 7152;", 7154)]
         [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(value: new ArraySegment<int>(_ints)) + 7102;", 7103)]
+        [TestCase("own", "return HotReloadUnpassedInternalPickOverloads.Pick(\"text\") + 7102;", 7103)]
         public async Task Run_UseOfAnUnpassedTypeWhosePrivateMemberCannotApply_IsPatchedAndReturnsTheEditedValue(
             string site,
             string statements,
