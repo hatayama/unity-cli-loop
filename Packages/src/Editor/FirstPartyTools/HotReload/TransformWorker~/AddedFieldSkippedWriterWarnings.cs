@@ -76,7 +76,8 @@ internal static class AddedFieldSkippedWriterWarnings
             new HashSet<SyntaxNode>(
                 allTypeEmitStates.SelectMany(state => state.QueuedMethods).Select(queued => queued.MethodDeclaration)),
             addedPropertyCatalog,
-            BuildCompiledTypeBySourceType(allTypeEmitStates));
+            BuildCompiledTypeBySourceType(allTypeEmitStates),
+            unit.ExplicitImplementations);
         foreach (WorkerSourceUnit scannedUnit in transformUnits)
         {
             RecordUses(scannedUnit, candidates, classifier);

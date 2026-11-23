@@ -32,13 +32,13 @@ internal static class AddedPropertySkipEvaluator
         return null;
     }
 
-    internal static bool HasCompiledProperty(INamedTypeSymbol compiledType, IPropertySymbol property)
+    internal static bool HasCompiledProperty(ExplicitImplementationMatcher explicitImplementations, INamedTypeSymbol compiledType, IPropertySymbol property)
     {
         // Why the matcher for an explicit property: a respelled specifier changes its name, and the
         // property would otherwise be read as added.
-        if (property.ExplicitInterfaceImplementations.Length > 0)
+        if (explicitImplementations.IsExplicitImplementation(property))
         {
-            return ExplicitImplementationMatcher.FindCompiledPropertyImplementation(compiledType, property) != null;
+            return explicitImplementations.FindCompiledPropertyImplementation(compiledType, property) != null;
         }
 
         foreach (ISymbol member in compiledType.GetMembers(property.Name))

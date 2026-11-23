@@ -51,10 +51,11 @@ internal static class OrdinaryMethodQueue
         // for an explicit implementation can differ from the source spelling (global::).
         string methodKey = WorkerMethodKeys.BuildMethodKey(
             CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-            ExplicitImplementationMatcher.RowMethodName(compiledType, methodSymbol),
+            typeState.SourceUnit.ExplicitImplementations.RowMethodName(compiledType, methodSymbol),
             parameterTypeFullNames,
             methodSymbol.Arity);
         (bool isAddedMethod, bool replacesCompiledMethod) = ClassifyOrdinaryMethodAddedState(
+            typeState.SourceUnit.ExplicitImplementations,
             methodDeclaration,
             compiledType,
             methodSymbol);
@@ -72,6 +73,7 @@ internal static class OrdinaryMethodQueue
         }
 
         bool bodylessNotCompared = IsBodylessCompiledMethodWithoutBaseline(
+            typeState.SourceUnit.ExplicitImplementations,
             isAddedMethod,
             hasBaseline,
             methodDeclaration,
@@ -151,7 +153,7 @@ internal static class OrdinaryMethodQueue
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-                Method = WorkerMethodKeys.FormatRowLabel(typeState.CompiledType, methodSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(typeState.SourceUnit.ExplicitImplementations, typeState.CompiledType, methodSymbol),
                 Reason = skipReason
             });
             if (isAddedMethod)
@@ -192,6 +194,7 @@ internal static class OrdinaryMethodQueue
     }
 
     internal static (bool IsAddedMethod, bool ReplacesCompiledMethod) ClassifyOrdinaryMethodAddedState(
+        ExplicitImplementationMatcher explicitImplementations,
         MethodDeclarationSyntax methodDeclaration,
         INamedTypeSymbol compiledType,
         IMethodSymbol methodSymbol)
@@ -201,7 +204,7 @@ internal static class OrdinaryMethodQueue
         // signature is a different member, so an explicit implementation never replaces one.
         if (methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            return (ExplicitImplementationMatcher.FindCompiledImplementation(compiledType, methodSymbol) == null, false);
+            return (explicitImplementations.FindCompiledImplementation(compiledType, methodSymbol) == null, false);
         }
 
         CompiledMethodMatch compiledMatch = CompiledMemberMatcher.MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
@@ -223,7 +226,7 @@ internal static class OrdinaryMethodQueue
             return methodSymbol.Name;
         }
 
-        IMethodSymbol compiledMethod = ExplicitImplementationMatcher.FindCompiledImplementation(typeState.CompiledType, methodSymbol);
+        IMethodSymbol compiledMethod = typeState.SourceUnit.ExplicitImplementations.FindCompiledImplementation(typeState.CompiledType, methodSymbol);
         if (compiledMethod == null)
         {
             throw new InvalidOperationException(
@@ -296,7 +299,7 @@ internal static class OrdinaryMethodQueue
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-            Method = WorkerMethodKeys.FormatRowLabel(typeState.CompiledType, methodSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(typeState.SourceUnit.ExplicitImplementations, typeState.CompiledType, methodSymbol),
             Reason = bodylessNotCompared
                 ? WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformBodylessNotCompared)
                 : WorkerReason.Of(HotReloadWorkerReasonCode.AddedMethodInterfaceMember)
@@ -328,6 +331,7 @@ internal static class OrdinaryMethodQueue
     /// compiled body running until a compile.
     /// </remarks>
     internal static bool IsBodylessCompiledMethodWithoutBaseline(
+        ExplicitImplementationMatcher explicitImplementations,
         bool isAddedMethod,
         bool hasBaseline,
         MethodDeclarationSyntax methodDeclaration,
@@ -344,7 +348,7 @@ internal static class OrdinaryMethodQueue
             return false;
         }
 
-        IMethodSymbol compiledMethod = FindCompiledCounterpart(methodDeclaration, compiledType, methodSymbol);
+        IMethodSymbol compiledMethod = FindCompiledCounterpart(explicitImplementations, methodDeclaration, compiledType, methodSymbol);
         if (compiledMethod == null)
         {
             throw new InvalidOperationException(
@@ -356,12 +360,13 @@ internal static class OrdinaryMethodQueue
 
     /// <summary>The compiled method a source method classified as compiled replaces; null when there is none.</summary>
     internal static IMethodSymbol FindCompiledCounterpart(
+        ExplicitImplementationMatcher explicitImplementations,
         MethodDeclarationSyntax methodDeclaration,
         INamedTypeSymbol compiledType,
         IMethodSymbol methodSymbol)
     {
         return methodDeclaration.ExplicitInterfaceSpecifier != null
-            ? ExplicitImplementationMatcher.FindCompiledImplementation(compiledType, methodSymbol)
+            ? explicitImplementations.FindCompiledImplementation(compiledType, methodSymbol)
             : CompiledMemberMatcher.FindCompiledOrdinaryMethod(compiledType, methodSymbol);
     }
 
@@ -477,7 +482,7 @@ internal static class OrdinaryMethodQueue
         // (Ns.IFoo.Run), which is not a legal shim identifier.
         bool isExplicitImplementation = methodDeclaration.ExplicitInterfaceSpecifier != null;
         string shimMethodName = shimNames.NextShimMethodName(
-            isExplicitImplementation ? ExplicitImplementationMatcher.ImplementedMemberName(methodSymbol) : methodSymbol.Name);
+            isExplicitImplementation ? typeState.SourceUnit.ExplicitImplementations.ImplementedMemberName(methodSymbol) : methodSymbol.Name);
 
         FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
         QueuedShimMethod queued = new QueuedShimMethod

@@ -99,6 +99,7 @@ internal static class TypeEmitPlanner
                 Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap) =
                 baseline.GetAccessorBaselineMaps();
             UnsupportedMemberSkipCollector.AppendExplicitAccessorSkips(
+                sourceUnit.ExplicitImplementations,
                 sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
@@ -123,6 +124,7 @@ internal static class TypeEmitPlanner
                 baseline.GetUnsupportedMemberBaselineMaps();
 
             UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
+                sourceUnit.ExplicitImplementations,
                 sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,

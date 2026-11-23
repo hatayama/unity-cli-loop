@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 internal static class EventAccessorSkipCollector
 {
     internal static void AppendEventAccessorSkips(
+        ExplicitImplementationMatcher explicitImplementations,
         TypeDeclarationSyntax typeDeclaration,
         string typeMetadataNameFromSyntax,
         SemanticModel semanticModel,
@@ -42,6 +43,7 @@ internal static class EventAccessorSkipCollector
             EventDeclarationSyntax currentEvent = hasSnapshotPeer ? plainEvent : eventDeclaration;
             EventDeclarationSyntax snapshotForCompare = hasSnapshotPeer ? snapshotEvent : null;
             AppendEventAccessorSkipForKind(
+                explicitImplementations,
                 skipped,
                 eventDeclaration,
                 snapshotForCompare,
@@ -49,6 +51,7 @@ internal static class EventAccessorSkipCollector
                 SyntaxKind.AddAccessorDeclaration,
                 eventSymbol.AddMethod);
             AppendEventAccessorSkipForKind(
+                explicitImplementations,
                 skipped,
                 eventDeclaration,
                 snapshotForCompare,
@@ -61,6 +64,7 @@ internal static class EventAccessorSkipCollector
     // Why per accessor: an add-only edit used to skip remove as well because the
     // collector compared the whole event declaration.
     private static void AppendEventAccessorSkipForKind(
+        ExplicitImplementationMatcher explicitImplementations,
         List<WorkerSkipped> skipped,
         EventDeclarationSyntax eventDeclaration,
         EventDeclarationSyntax snapshotEvent,
@@ -74,7 +78,7 @@ internal static class EventAccessorSkipCollector
             return;
         }
 
-        AppendEventAccessorSkipIfExplicit(skipped, eventDeclaration, accessorKind, accessorMethod);
+        AppendEventAccessorSkipIfExplicit(explicitImplementations, skipped, eventDeclaration, accessorKind, accessorMethod);
     }
 
     private static bool EventAccessorUnchanged(
@@ -110,6 +114,7 @@ internal static class EventAccessorSkipCollector
     }
 
     private static void AppendEventAccessorSkipIfExplicit(
+        ExplicitImplementationMatcher explicitImplementations,
         List<WorkerSkipped> skipped,
         EventDeclarationSyntax eventDeclaration,
         SyntaxKind accessorKind,
@@ -132,7 +137,10 @@ internal static class EventAccessorSkipCollector
                 return;
             }
 
-            UnsupportedMemberSkipCollector.AppendUnsupportedKindSkip(skipped, accessorMethod);
+            UnsupportedMemberSkipCollector.AppendUnsupportedKindSkip(
+                skipped,
+                accessorMethod,
+                WorkerMethodKeys.FormatSourceLabel(explicitImplementations, accessorMethod));
             return;
         }
     }

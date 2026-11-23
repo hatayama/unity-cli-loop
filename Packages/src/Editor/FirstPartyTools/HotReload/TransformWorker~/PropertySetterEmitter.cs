@@ -31,6 +31,7 @@ internal static class PropertySetterEmitter
             // Added properties are AddedPropertyEmitter's; the rest the skip collector reported.
             if (addedPropertyCatalog.FindBySymbolOrNull(propertySymbol) != null
                 || !PropertySetterClassifier.IsPatchableCompiledSetter(
+                    typeState.SourceUnit.ExplicitImplementations,
                     property,
                     propertySymbol,
                     typeState.CompiledType,
@@ -75,7 +76,7 @@ internal static class PropertySetterEmitter
         string typeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol);
         string[] parameterTypeFullNames = new[] { CecilTypeNames.ToCecilFullName(propertySymbol.Type) };
         // Why the row name: as for the getter, the Editor knows the setter by its compiled name.
-        string setterRowName = ExplicitImplementationMatcher.RowMethodName(typeState.CompiledType, setterSymbol);
+        string setterRowName = typeState.SourceUnit.ExplicitImplementations.RowMethodName(typeState.CompiledType, setterSymbol);
         string methodKey = WorkerMethodKeys.BuildMethodKey(
             typeMetadataName,
             setterRowName,
@@ -110,7 +111,7 @@ internal static class PropertySetterEmitter
         if (setterSymbol.IsInitOnly
             && InitAccessorWriteRules.WritesInitOnlyMember(setterBodyNode, typeState.SourceUnit.SemanticModel))
         {
-            AddSkip(skipped, sourceProjectRelativePath, typeState.CompiledType, setterSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember));
+            AddSkip(skipped, sourceProjectRelativePath, typeState.SourceUnit.ExplicitImplementations, typeState.CompiledType, setterSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformInitAccessorWritesInitOnlyMember));
             return;
         }
 
@@ -138,7 +139,7 @@ internal static class PropertySetterEmitter
             assemblyGlobalUsings,
             typeState.TargetAssembly);
         ShimTypeBuilder shimType = typeState.CurrentShimType;
-        string shimMethodName = shimNames.NextShimMethodName(PropertyGetterEmitter.ShimBaseName(setterSymbol));
+        string shimMethodName = shimNames.NextShimMethodName(PropertyGetterEmitter.ShimBaseName(typeState.SourceUnit.ExplicitImplementations, setterSymbol));
         MethodDeclarationSyntax rewrittenMethod = RewritePropertySetterBody(
             property,
             setterBodyNode,
@@ -191,6 +192,7 @@ internal static class PropertySetterEmitter
     {
         string sourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath;
         (bool skipSetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyAccessorByDecision(
+            typeState.SourceUnit.ExplicitImplementations,
             sourceProjectRelativePath,
             typeState.TypeDeclaration,
             typeState.TypeSymbol,
@@ -229,7 +231,7 @@ internal static class PropertySetterEmitter
             return decision;
         }
 
-        AddSkip(skipped, sourceProjectRelativePath, typeState.CompiledType, setterSymbol, siblingSkip);
+        AddSkip(skipped, sourceProjectRelativePath, typeState.SourceUnit.ExplicitImplementations, typeState.CompiledType, setterSymbol, siblingSkip);
         return null;
     }
 
@@ -319,6 +321,7 @@ internal static class PropertySetterEmitter
     private static void AddSkip(
         List<WorkerSkipped> skipped,
         string sourceProjectRelativePath,
+        ExplicitImplementationMatcher explicitImplementations,
         INamedTypeSymbol compiledType,
         IMethodSymbol setterSymbol,
         WorkerReason reason)
@@ -326,7 +329,7 @@ internal static class PropertySetterEmitter
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatRowLabel(compiledType, setterSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(explicitImplementations, compiledType, setterSymbol),
             Reason = reason
         });
     }

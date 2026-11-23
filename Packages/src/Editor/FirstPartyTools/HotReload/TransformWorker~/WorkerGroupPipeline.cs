@@ -134,11 +134,17 @@ internal static class WorkerGroupPipeline
             projectRelativePathsByBindingTree[transformUnit.BindingSyntaxTree] = transformUnit.Input.ProjectRelativePath;
         }
 
+        // Why every tree of the compilation: a partial type's explicit implementation can sit in a
+        // part another file declares, and the type's members are read across all of its parts.
+        ExplicitImplementationMatcher explicitImplementations = new ExplicitImplementationMatcher(
+            ExplicitInterfaceMemberResolver.Resolve(compilation.SyntaxTrees.Select(tree =>
+                compilation.GetSemanticModel(tree, ignoreAccessibility: true))));
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
             unit.RunProjectRelativePathsByBindingTree = projectRelativePathsByBindingTree;
             unit.PartialTypeParts = partialTypeParts;
+            unit.ExplicitImplementations = explicitImplementations;
         }
 
         WorkerTypeHome home = new WorkerTypeHome(input.TargetAssemblyName, targetAssemblyWithAllMembers);
@@ -336,6 +342,7 @@ internal static class WorkerGroupPipeline
         // touched body, so the generic outside-body warning would bury the name.
         unit.KindChangeSyntaxKeys =
             CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
+                unit.ExplicitImplementations,
                 unit.BindingRoot,
                 unit.SemanticModel,
                 home,
