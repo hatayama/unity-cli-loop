@@ -117,9 +117,7 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            // Why the static form: a call to an added extension method written on a receiver is
-            // keyed, like the method itself, by its declaration with the receiver as a parameter.
-            IMethodSymbol methodSymbol = AddedMethodCallResolver.StaticFormOf(resolvedMethod);
+            IMethodSymbol methodSymbol = DeclarationOf(resolvedMethod);
             string calledKey = WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol);
             // Why the receiver spine (not a WhenNotNull ancestor walk): other?.Inner.AddedPing()
             // and other?.Get().AddedPing() walk left to a MemberBinding. An ancestor walk also
@@ -193,7 +191,9 @@ internal static class AddedCallSiteGuard
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog)
     {
-        foreach (IdentifierNameSyntax name in bodyNode.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+        // Why simple names and not only identifiers: a group with type arguments and no receiver
+        // ('M<int>') is a GenericName, and missing it let the body reach the shim compile.
+        foreach (SimpleNameSyntax name in bodyNode.DescendantNodesAndSelf().OfType<SimpleNameSyntax>())
         {
             if (IsInvocationCalleeName(name) || NameofRules.IsInsideNameofArgument(name))
             {
@@ -243,16 +243,27 @@ internal static class AddedCallSiteGuard
             return null;
         }
 
-        // Why the static form for the key: an added extension method named on a receiver
-        // ('value.AddedM') is keyed by its declaration, as for a call. The group's own form is
-        // returned, since the reason's example lambda takes the parameters the delegate takes.
-        IMethodSymbol staticForm = AddedMethodCallResolver.StaticFormOf(resolvedMethod);
-        return addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(staticForm))
+        // Why the declaration for the key: a method group is keyed like a call. The group's own form
+        // is returned, since the reason's example lambda takes the parameters the delegate takes.
+        return addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(DeclarationOf(resolvedMethod)))
             ? resolvedMethod
             : null;
     }
 
-    internal static bool IsInvocationCalleeName(IdentifierNameSyntax name)
+    /// <summary>
+    /// The declaration a resolved call or method group names, which is what an added method is
+    /// classified under: an extension method written on a receiver in its static form, and a
+    /// constructed generic method, or a method of a constructed generic type, as declared.
+    /// </summary>
+    private static IMethodSymbol DeclarationOf(IMethodSymbol resolvedMethod)
+    {
+        // Why the original definition: 'AddedEcho<int>(int, int)' and the declared
+        // 'AddedEcho<T>(T, int)' build different keys once a parameter type names a type
+        // parameter, so a call to a skipped generic method would not be seen as skipped.
+        return AddedMethodCallResolver.StaticFormOf(resolvedMethod).OriginalDefinition;
+    }
+
+    internal static bool IsInvocationCalleeName(SimpleNameSyntax name)
     {
         if (name.Parent is InvocationExpressionSyntax invocation && invocation.Expression == name)
         {
