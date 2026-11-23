@@ -29,7 +29,27 @@ internal static class CecilTypeNames
             return typeSymbol.MetadataName;
         }
 
-        return typeSymbol.ContainingNamespace.ToDisplayString() + "." + typeSymbol.MetadataName;
+        return ToNamespaceMetadataName(typeSymbol.ContainingNamespace) + "." + typeSymbol.MetadataName;
+    }
+
+    /// <summary>
+    /// Builds the dotted namespace name as metadata records it, for both metadata and reflection
+    /// type names. Returns an empty string for the global namespace.
+    /// </summary>
+    // Why the names and not ToDisplayString: the display escapes a keyword identifier (@event),
+    // which no metadata name carries, so a lookup by that key would miss the type.
+    internal static string ToNamespaceMetadataName(INamespaceSymbol namespaceSymbol)
+    {
+        List<string> names = new List<string>();
+        for (INamespaceSymbol current = namespaceSymbol;
+             current != null && !current.IsGlobalNamespace;
+             current = current.ContainingNamespace)
+        {
+            names.Add(current.Name);
+        }
+
+        names.Reverse();
+        return string.Join(".", names);
     }
 
     public static string ToParameterTypeFullName(IParameterSymbol parameterSymbol)

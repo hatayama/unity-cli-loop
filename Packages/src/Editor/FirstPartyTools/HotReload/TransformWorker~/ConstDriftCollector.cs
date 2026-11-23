@@ -174,23 +174,7 @@ internal static class ConstDriftCollector
             return typeSymbol.MetadataName;
         }
 
-        return ToNamespaceMetadataName(typeSymbol.ContainingNamespace) + "." + typeSymbol.MetadataName;
-    }
-
-    // Why the names and not ToDisplayString: the display escapes a keyword identifier (@event),
-    // which no metadata name carries, so a lookup by that key would miss the type.
-    private static string ToNamespaceMetadataName(INamespaceSymbol namespaceSymbol)
-    {
-        List<string> names = new List<string>();
-        for (INamespaceSymbol current = namespaceSymbol;
-             current != null && !current.IsGlobalNamespace;
-             current = current.ContainingNamespace)
-        {
-            names.Add(current.Name);
-        }
-
-        names.Reverse();
-        return string.Join(".", names);
+        return CecilTypeNames.ToNamespaceMetadataName(typeSymbol.ContainingNamespace) + "." + typeSymbol.MetadataName;
     }
 
     /// <summary>
