@@ -167,7 +167,7 @@ internal static class AccessorEligibility
                 return false;
             }
             else if (node is InvocationExpressionSyntax invocation
-                && CallsAnAddedMethodOfTheEditedType(semanticModel, invocation, addedMemberAccess))
+                && CallsAMethodThisReloadAdds(semanticModel, invocation, addedMemberAccess))
             {
                 registeredCalls.Add(node);
             }
@@ -177,17 +177,23 @@ internal static class AccessorEligibility
         return true;
     }
 
-    // Why a call the registrar declines can count as rewritten: a call to a method this reload adds
-    // to the edited type takes no accessor because the added-method rewrite replaces it with a call
-    // to the shim, so the class name it is written with does not reach the shim either.
-    private static bool CallsAnAddedMethodOfTheEditedType(
+    // Why a call the registrar declines can count as rewritten: a call to a method this reload adds,
+    // to the edited type or as an extension method of a static class the edit declares, takes no
+    // accessor because the added-method rewrite replaces it with a call to the shim, so the class
+    // name it is written with does not reach the shim either.
+    private static bool CallsAMethodThisReloadAdds(
         SemanticModel semanticModel,
         InvocationExpressionSyntax invocation,
         AddedMemberAccessLookup addedMemberAccess)
     {
-        return addedMemberAccess != null
-            && AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation) is IMethodSymbol method
-            && addedMemberAccess.IsAddedMethod(AccessibilityRules.UnreducedMethod(method));
+        if (addedMemberAccess == null
+            || AccessibilityRules.ResolvedSymbolOrNull(semanticModel, invocation) is not IMethodSymbol method)
+        {
+            return false;
+        }
+
+        IMethodSymbol unreduced = AccessibilityRules.UnreducedMethod(method);
+        return addedMemberAccess.IsAddedMethod(unreduced) || addedMemberAccess.IsAddedExtensionMethod(unreduced);
     }
 
     private static bool AreMethodSignatureTypesVisible(IMethodSymbol methodSymbol, out WorkerReason rejectReason)
