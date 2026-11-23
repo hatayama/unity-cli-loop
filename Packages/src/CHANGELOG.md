@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.4](https://github.com/hatayama/unity-cli-loop/compare/v3.36.3...v3.36.4) (2026-11-23)
+
+
+### Bug Fixes
+
+* Hot reload patches types in a namespace with a keyword-named segment such as [@event](https://github.com/event) ([#3620](https://github.com/hatayama/unity-cli-loop/issues/3620)) ([8354255](https://github.com/hatayama/unity-cli-loop/commit/8354255a88de17602e0df3257f18dd620d034dd5))
+
 ## [3.36.3](https://github.com/hatayama/unity-cli-loop/compare/v3.36.2...v3.36.3) (2026-11-23)
 
 
