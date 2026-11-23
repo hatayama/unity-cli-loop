@@ -451,7 +451,8 @@ internal static class AccessorAccessRegistrar
         // The added-method rewrite calls the shim with the argument list as written, so no delegate
         // has to carry the arguments and the compiled type has no such method to bind one to.
         if (addedMemberAccess != null
-            && addedMemberAccess.IsAddedMethod(methodSymbol))
+            && (addedMemberAccess.IsAddedMethod(methodSymbol)
+                || addedMemberAccess.IsAddedExtensionMethod(methodSymbol)))
         {
             return false;
         }

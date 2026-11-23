@@ -27,6 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        internal static int AddedSegmentPlus(this ArraySegment<int> segment, int add) { return segment.Count + add + 1000; }\n"
             + "        internal static int AddedMemoryPlus(this Memory<int> memory, int add) { return memory.Length + add + 1000; }\n"
             + "        internal static int AddedRefRead(this ref HotReloadExtensionCallPoint value, int add) { return value.X + add + 1000; }\n"
+            + "        internal static int AddedRefBump(this ref HotReloadExtensionCallPoint value, int add) { value.X += add; return value.X + 1000; }\n"
+            + "        internal static int AddedOutRead(this int value, int add, out int doubled) { doubled = value * 2; return value + add + 1000; }\n"
             + "        internal static int AddedLengthPlus(this string value, int add) { return value.Length + add + 1000; }\n"
             + "        internal static T AddedDefault<T>(this string value) { return default(T); }\n"
             + "        internal static int AddedEcho<T>(this T value, int add) { return add + 1000; }\n"
@@ -43,6 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string SkippedGenericCalleeReason = "AddedEcho<T>(T, int)', which this reload skipped";
 
         private const string StructStatementCall = "return _point.PointRead(7421);";
+
+        private const string TrailingExtensionAnchor = "        internal static int TrailingPlus(this int value, int add)";
+
+        private const string RefClosureCall = "Func<int> read = () => _point.RefPointRead(7171);";
 
         private HotReloadDomainTestScope _scope;
 
@@ -78,6 +84,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref receiver)");
             yield return new TestCaseData("StatementCallsInternalExtensionOnStruct", StructStatementCall, "return HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, 7421);", 7426, 8426)
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref static form)");
+            yield return new TestCaseData("ClosureCallsRefInternalExtension", RefClosureCall, "Func<int> read = () => _point.AddedRefRead(7171);", 7176, 8176)
+                .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref receiver in a lambda)");
+            yield return new TestCaseData("ClosureCallsRefInternalExtension", RefClosureCall, "Func<int> read = () => HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, 7171);", 7176, 8176)
+                .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(ref static form in a lambda)");
+            yield return new TestCaseData("ClosureCallsInternalExtension", "Func<int> read = () => _value.TriplePlus(7101);", "Func<int> read = () => _value.AddedOutRead(7101, out int doubled) + doubled;", 7110, 8110)
+                .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(out argument in a lambda)");
             yield return new TestCaseData("StatementCallsInternalExtensionConditionally", "return _label?.NullableLengthPlus(7431) ?? 0;", "return _label == null ? 0 : HotReloadPublicClassInternalExtensions.AddedLengthPlus(_label, 7431);", 7434, 8434)
                 .SetName("Run_CallToAddedExtension_IsPatchedLikeTheStaticFormAndReverts(null check and static form instead of conditional access)");
             yield return new TestCaseData("ClosureCallsInternalExtension", "Func<int> read = () => _value.TriplePlus(7101);", "Func<int> read = () => new Memory<int>(_ints).AddedMemoryPlus(7101);", 7110, 8103)
@@ -135,6 +147,105 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(Read(host, hostMethod), Is.EqualTo(patchedValue));
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(Read(host, hostMethod), Is.EqualTo(compiledValue));
+        }
+
+        /// <summary>
+        /// What: an async method that calls an extension method the same reload adds with a 'this ref'
+        /// parameter is Patched and returns the added method's value, in the receiver form as in the
+        /// static form; RevertAll restores the compiled value.
+        /// </summary>
+        [TestCase("return _point.AddedRefRead(7111);")]
+        [TestCase("return HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, 7111);")]
+        public async Task Run_AsyncCallToAddedRefExtension_IsPatchedLikeTheStaticFormAndReverts(string editedCall)
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionsAsync("return _value.TriplePlus(7111);", editedCall);
+
+            AssertNoFailedRow(result);
+            HotReloadMethodOutcome outcome = FindOutcome(result, "AsyncCallsInternalExtension");
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), outcome.Reason);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(8116));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls an extension method the same reload adds, which writes through its
+        /// 'this ref' parameter, is Patched and changes the host's struct field itself, in the receiver
+        /// form as in the static form: a second call sees the first call's write.
+        /// </summary>
+        [TestCase("Func<int> read = () => _point.AddedRefBump(1);")]
+        [TestCase("Func<int> read = () => HotReloadPublicClassInternalExtensions.AddedRefBump(ref _point, 1);")]
+        public async Task Run_LambdaCallToAddedRefExtensionThatWrites_ChangesTheHostField(string editedCall)
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsRefInternalExtension(), Is.EqualTo(7176));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionsAsync(RefClosureCall, editedCall);
+
+            AssertNoFailedRow(result);
+            HotReloadMethodOutcome outcome = FindOutcome(result, "ClosureCallsRefInternalExtension");
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), outcome.Reason);
+            Assert.That(host.ClosureCallsRefInternalExtension(), Is.EqualTo(1006));
+            Assert.That(host.ClosureCallsRefInternalExtension(), Is.EqualTo(1007));
+        }
+
+        /// <summary>
+        /// What: a lambda that calls a 'this ref' extension method the same reload adds and also skips,
+        /// declared in a static class after the host, is Skipped with the skipped-callee reason and
+        /// keeps its compiled value, with no Failed row, although the callee is classified after the
+        /// lambda's body is decided.
+        /// </summary>
+        [Test]
+        public async Task Run_LambdaCallToSkippedAddedRefExtensionDeclaredAfterTheHost_IsSkippedWithTheSkippedCalleeReason()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureCallsRefInternalExtension(), Is.EqualTo(7176));
+
+            HotReloadOrchestratorResult result = await RunEditedFixtureAsync(
+                FixtureFileName,
+                TrailingExtensionAnchor,
+                "        internal static int AddedTrailingRefSkipped(this ref HotReloadExtensionCallPoint value, int add)\n"
+                + "        {\n            int x = value.X;\n"
+                + "            Func<int> f = () => HotReloadPublicClassInternalExtensions.GenericEcho<int>(x, add);\n"
+                + "            return f() + 1000;\n        }\n\n"
+                + TrailingExtensionAnchor,
+                RefClosureCall,
+                "Func<int> read = () => _point.AddedTrailingRefSkipped(7171);",
+                "7121",
+                "7122");
+
+            AssertNoFailedRow(result);
+            HotReloadMethodOutcome outcome = FindOutcome(result, "ClosureCallsRefInternalExtension");
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), outcome.Reason);
+            Assert.That(outcome.Reason, Does.Contain("AddedTrailingRefSkipped("), outcome.Reason);
+            Assert.That(outcome.Reason, Does.Contain("which this reload skipped"), outcome.Reason);
+            Assert.That(host.ClosureCallsRefInternalExtension(), Is.EqualTo(7176));
+            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
+        /// <summary>
+        /// What: a property getter whose lambda calls a 'this ref' extension method the same reload
+        /// adds is Skipped with the ref/out/in accessor reason, since accessor bodies get no
+        /// added-member lookup, keeps its compiled value, and no row is Failed.
+        /// </summary>
+        [Test]
+        public async Task Run_GetterLambdaCallToAddedRefExtension_IsSkippedWithTheRefReason()
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(host.ClosureGetterValue, Is.EqualTo(7310));
+
+            HotReloadOrchestratorResult result = await RunWithAddedExtensionsAsync(
+                "Func<int> read = () => _value.TriplePlus(7301);",
+                "Func<int> read = () => _point.AddedRefRead(7301);");
+
+            AssertNoFailedRow(result);
+            HotReloadMethodOutcome outcome = FindOutcome(result, "get_ClosureGetterValue");
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), outcome.Reason);
+            Assert.That(outcome.Reason, Does.Contain("inaccessible method calls with ref/out/in parameters are not rewritten"));
+            Assert.That(host.ClosureGetterValue, Is.EqualTo(7310));
         }
 
         /// <summary>
@@ -224,8 +335,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "return " + asyncCall + ";");
 
             AssertNoFailedRow(result);
-            Assert.That(FindOutcome(result, "ClosureCallsNonPublicClassExtension").Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
-            Assert.That(FindOutcome(result, "AsyncCallsNonPublicClassExtension").Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+            HotReloadMethodOutcome closure = FindOutcome(result, "ClosureCallsNonPublicClassExtension");
+            HotReloadMethodOutcome asyncOutcome = FindOutcome(result, "AsyncCallsNonPublicClassExtension");
+            Assert.That(closure.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), closure.Reason);
+            Assert.That(asyncOutcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), asyncOutcome.Reason);
             Assert.That(host.ClosureCallsNonPublicClassExtension(), Is.EqualTo(7110));
             Assert.That(await host.AsyncCallsNonPublicClassExtension(), Is.EqualTo(7120));
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
@@ -245,6 +358,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return host.StatementCallsInternalExtensionConditionally();
                 case "ClosureCallsInternalExtension":
                     return host.ClosureCallsInternalExtension();
+                case "ClosureCallsRefInternalExtension":
+                    return host.ClosureCallsRefInternalExtension();
                 default:
                     Assert.Fail("Unknown host method: " + hostMethod);
                     return 0;

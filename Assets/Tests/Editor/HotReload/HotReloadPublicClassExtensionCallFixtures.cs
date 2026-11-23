@@ -383,4 +383,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return add;
         }
     }
+
+    /// <summary>
+    /// Public class with internal extension methods, declared after the host so a method a test adds
+    /// to it is classified after the host's bodies are decided.
+    /// </summary>
+    public static class HotReloadPublicClassTrailingExtensions
+    {
+        internal static int TrailingPlus(this int value, int add)
+        {
+            return value + add;
+        }
+    }
 }
