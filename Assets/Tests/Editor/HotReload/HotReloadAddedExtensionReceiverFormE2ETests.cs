@@ -29,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "        internal static int AddedRefRead(this ref HotReloadExtensionCallPoint value, int add) { return value.X + add + 1000; }\n"
             + "        internal static int AddedLengthPlus(this string value, int add) { return value.Length + add + 1000; }\n"
             + "        internal static T AddedDefault<T>(this string value) { return default(T); }\n"
+            + "        internal static int AddedEcho<T>(this T value, int add) { return add + 1000; }\n"
             + "        internal static int AddedSkipped(this int value, int add) { Func<int> f = () => GenericEcho<int>(value, add); return f() + 1000; }\n\n";
 
         private const string NonPublicFixtureFileName = "HotReloadNonPublicClassExtensionCallFixtures.cs";
@@ -36,6 +37,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string NonPublicAddedExtensionAnchor = "        internal static int NonPublicPlusOne(this int value, int add)";
 
         private const string StatementCall = "return _value.TriplePlus(7401);";
+
+        // Why the skipped-callee reason and not the lambda's generic one: the call itself is not
+        // inaccessible, and the callee's own Skipped row already says why it was skipped.
+        private const string SkippedGenericCalleeReason = "AddedEcho<T>(T, int)', which this reload skipped";
 
         private const string StructStatementCall = "return _point.PointRead(7421);";
 
@@ -93,6 +98,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(skipped callee on a receiver)");
             yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return HotReloadPublicClassInternalExtensions.AddedSkipped(_value, 7401);", 7410, "AddedSkipped(int, int)', which this reload skipped")
                 .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(skipped callee in the static form)");
+            yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return _value.AddedEcho(7401);", 7410, SkippedGenericCalleeReason)
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic callee on a receiver)");
+            yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "return HotReloadPublicClassInternalExtensions.AddedEcho<int>(_value, 7401);", 7410, SkippedGenericCalleeReason)
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic callee in the static form)");
+            yield return new TestCaseData("StatementCallsInternalExtensionConditionally", "return _label?.NullableLengthPlus(7431) ?? 0;", "return _label?.AddedEcho(7431) ?? 0;", 7434, "Added-method calls through conditional access are skipped")
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic callee on a conditional receiver)");
+            yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "Func<int, int> f = _label.AddedEcho; return f(7401);", 7410, "(such as 'a => _label.AddedEcho(a)')")
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic method group whose parameter names the type parameter)");
+            yield return new TestCaseData("StatementCallsInternalExtension", StatementCall, "Func<int, int, int> f = HotReloadPublicClassInternalExtensions.AddedEcho<int>; return f(_value, 7401);", 7410, "capture the added method 'AddedEcho' as a method group")
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic method group with type arguments in the static form)");
+            yield return new TestCaseData("ClosureCallsInternalExtension", "Func<int> read = () => _value.TriplePlus(7101);", "Func<int> read = () => _value.AddedEcho(7101);", 7110, "inaccessible generic method calls are not rewritten.")
+                .SetName("Run_CallToAddedExtensionTheRewriteCannotExpress_IsSkippedAndTheFileApplies(generic callee on a receiver in a lambda)");
         }
 
         /// <summary>
