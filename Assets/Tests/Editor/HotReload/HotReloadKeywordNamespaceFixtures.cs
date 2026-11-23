@@ -7,6 +7,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
     /// </summary>
     public sealed class HotReloadKeywordNamespaceHost
     {
+        public const int KeywordTuning = 4;
+
         public int MethodValue()
         {
             return 35990;
@@ -24,6 +26,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
         {
             return 35996;
         }
+
+        public int CallsIntroducedType()
+        {
+            return 36001;
+        }
+
+        public int KindChangeValue => 36002;
 
         /// <summary>
         /// Nested host, so the conversion of a nested type name in that namespace is covered too.

@@ -120,6 +120,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(nested.NestedValue(), Is.EqualTo(35999));
         }
 
+        /// <summary>
+        /// What: a changed const of a type in a keyword-named namespace produces the const drift
+        /// warning naming that const, so the compiled type is found by its metadata name.
+        /// </summary>
+        [Test]
+        public async Task Run_ConstChangedInTypeOfKeywordNamedNamespace_WarnsAboutTheDrift()
+        {
+            HotReloadOrchestratorResult result = await RunEditAsync(
+                onDisk => onDisk.Replace("KeywordTuning = 4;", "KeywordTuning = 6;"));
+
+            Assert.That(
+                FindWarningContaining(result, "KeywordTuning"),
+                Does.Contain("is 6 in the edited source but 4 in the compiled assembly"),
+                string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: removing a compiled property of a type in a keyword-named namespace produces the
+        /// kind-change warning naming that property, so the compiled type is found by its metadata
+        /// name.
+        /// </summary>
+        [Test]
+        public async Task Run_PropertyRemovedFromTypeOfKeywordNamedNamespace_WarnsAboutTheKindChange()
+        {
+            HotReloadOrchestratorResult result = await RunEditAsync(
+                onDisk => onDisk.Replace("        public int KindChangeValue => 36002;\n", string.Empty));
+
+            Assert.That(
+                FindWarningContaining(result, "KindChangeValue"),
+                Does.StartWith("Compiled property '"),
+                string.Join("\n", result.Warnings));
+        }
+
+        private static string FindWarningContaining(HotReloadOrchestratorResult result, string fragment)
+        {
+            foreach (string warning in result.Warnings)
+            {
+                if (warning.Contains(fragment))
+                {
+                    return warning;
+                }
+            }
+
+            Assert.Fail("No warning names " + fragment + ".\n" + string.Join("\n", result.Warnings));
+            return null;
+        }
+
         private static async Task<HotReloadOrchestratorResult> RunEditAsync(Func<string, string> edit)
         {
             string fixturePath = Path.GetFullPath(
