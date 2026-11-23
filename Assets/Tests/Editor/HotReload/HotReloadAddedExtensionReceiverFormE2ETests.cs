@@ -48,6 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string TrailingExtensionAnchor = "        internal static int TrailingPlus(this int value, int add)";
 
+        private const string HostOrderAnchor = "        public string Order => _order;";
+
         private const string RefClosureCall = "Func<int> read = () => _point.RefPointRead(7171);";
 
         private HotReloadDomainTestScope _scope;
@@ -169,6 +171,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(8116));
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
             Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+        }
+
+        private static IEnumerable<TestCaseData> FieldReferencesHeldAcrossAnAwait()
+        {
+            yield return new TestCaseData("return HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, await Task.FromResult(1));", "_point")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(added extension, static form)");
+            yield return new TestCaseData("return _point.AddedRefRead(await Task.FromResult(1));", "_point")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(added extension, receiver form)");
+            yield return new TestCaseData("return AddedHostRefRead(ref _point, await Task.FromResult(1));", "_point")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(added method of the host)");
+            yield return new TestCaseData("return System.Threading.Interlocked.Exchange(ref _value, await Task.FromResult(1));", "_value")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(accessible callee)");
+            yield return new TestCaseData("_value += await Task.FromResult(1); return _value;", "_value")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(compound assignment)");
+            yield return new TestCaseData("_value = await Task.FromResult(1); return _value;", "_value")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(plain assignment)");
+            yield return new TestCaseData("_point.X += await Task.FromResult(1); return _point.X;", "_point")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(compound assignment to a member of a struct field)");
+            yield return new TestCaseData("_indexed[0] = await Task.FromResult(1); return _indexed[0];", "_indexed")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(indexer of a struct field)");
+            yield return new TestCaseData("(_value, _stored) = await Task.FromResult((1, 2)); return _value + _stored;", "_value")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(deconstruction)");
+            yield return new TestCaseData("return _point.Equals(await Task.FromResult<object>(null)) ? 1 : 0;", "_point")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(instance call on a struct field)");
+        }
+
+        private static IEnumerable<TestCaseData> FieldUsesThatEndBeforeAnAwait()
+        {
+            yield return new TestCaseData("return HotReloadPublicClassInternalExtensions.AddedRefRead(ref _point, 1) + await Task.FromResult(1);", 1007)
+                .SetName("Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(await after the call)");
+            yield return new TestCaseData("return _value + await Task.FromResult(1);", 4)
+                .SetName("Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(read before an await)");
+            yield return new TestCaseData("return AddedHostInRead(_point, await Task.FromResult(1));", 1006)
+                .SetName("Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(in argument without the keyword)");
+        }
+
+        /// <summary>
+        /// What: an async method that uses a private field by reference (a ref argument, a 'this ref'
+        /// receiver, a struct receiver, or an assignment target, directly or through a struct member,
+        /// a struct indexer, or a deconstruction) in an expression that awaits after that use is
+        /// Skipped with the field-reference reason naming the field, whatever the callee is, keeps its
+        /// compiled value, no row is Failed, and the rest of the file applies.
+        /// </summary>
+        [TestCaseSource(nameof(FieldReferencesHeldAcrossAnAwait))]
+        public async Task Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(string editedBody, string fieldName)
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+
+            HotReloadOrchestratorResult result = await RunAsyncBodyEditAsync(editedBody);
+
+            AssertNoFailedRow(result);
+            HotReloadMethodOutcome outcome = FindOutcome(result, "AsyncCallsInternalExtension");
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), outcome.Reason);
+            Assert.That(
+                outcome.Reason,
+                Does.Contain("inaccessible field '" + fieldName + "' is used by reference"),
+                outcome.Reason);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+            Assert.That(host.ClosureCallsInternalExtensionInStaticForm(), Is.EqualTo(7131));
+        }
+
+        /// <summary>
+        /// What: an async method whose use of a private field ends before an await runs (the await is
+        /// outside the call that takes the field by reference, the field is read by value, or an 'in'
+        /// argument is written without its keyword) is Patched and returns the edited value.
+        /// </summary>
+        [TestCaseSource(nameof(FieldUsesThatEndBeforeAnAwait))]
+        public async Task Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(string editedBody, int patchedValue)
+        {
+            HotReloadPublicClassExtensionCallHost host = new HotReloadPublicClassExtensionCallHost();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+
+            HotReloadOrchestratorResult result = await RunAsyncBodyEditAsync(editedBody);
+
+            AssertNoFailedRow(result);
+            HotReloadMethodOutcome outcome = FindOutcome(result, "AsyncCallsInternalExtension");
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), outcome.Reason);
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(patchedValue));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(await host.AsyncCallsInternalExtension(), Is.EqualTo(7120));
+        }
+
+        // Why the host gains methods too: the 'ref' and 'in' rows call a method added to the host.
+        private static Task<HotReloadOrchestratorResult> RunAsyncBodyEditAsync(string editedBody)
+        {
+            return RunEditedFixtureAsync(
+                FixtureFileName,
+                AddedExtensionAnchor,
+                AddedExtensions + AddedExtensionAnchor,
+                HostOrderAnchor,
+                "        private int AddedHostRefRead(ref HotReloadExtensionCallPoint value, int add) { return value.X + add + 1000; }\n\n"
+                + "        private int AddedHostInRead(in HotReloadExtensionCallPoint value, int add) { return value.X + add + 1000; }\n\n"
+                + HostOrderAnchor,
+                "return _value.TriplePlus(7111);",
+                editedBody,
+                "7121",
+                "7122");
         }
 
         /// <summary>
