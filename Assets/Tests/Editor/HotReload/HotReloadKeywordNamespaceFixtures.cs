@@ -34,6 +34,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
 
         public int KindChangeValue => 36002;
 
+        public int @checked => 36007;
+
+        public int ReadsAddedField()
+        {
+            return 36008;
+        }
+
         /// <summary>
         /// Nested host, so the conversion of a nested type name in that namespace is covered too.
         /// </summary>

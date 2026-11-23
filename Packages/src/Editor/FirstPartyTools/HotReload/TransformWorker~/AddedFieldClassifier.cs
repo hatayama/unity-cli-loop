@@ -87,9 +87,9 @@ internal static class AddedFieldClassifier
 
         Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
             WorkerSyntaxMemberMaps.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
-        // Why the identifier text, not the symbol name: the snapshot map is keyed by the text as
-        // written, which keeps the @ of an escaped identifier such as @event.
-        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, variable.Identifier.Text);
+        // Why ValueText: field keys drop the @ of a keyword-named field such as @event, so the
+        // added-field keys built from symbol names meet the snapshot map built from syntax.
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, variable.Identifier.ValueText);
         if (snapshotFieldMap == null
             || !snapshotFieldMap.TryGetValue(syntaxKey, out VariableDeclaratorSyntax snapshotVariable)
             || !(snapshotVariable.Parent is VariableDeclarationSyntax snapshotDeclaration))

@@ -43,7 +43,7 @@ internal static class WorkerSyntaxMemberMaps
             {
                 foreach (VariableDeclaratorSyntax variable in fieldDeclaration.Declaration.Variables)
                 {
-                    string key = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+                    string key = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.ValueText);
                     if (map.ContainsKey(key))
                     {
                         return null;
@@ -215,7 +215,7 @@ internal static class WorkerSyntaxMemberMaps
                 {
                     // Why field key format: kind-change identity is type metadata + "::" + name,
                     // the same shape BuildSyntaxFieldKey already uses.
-                    string key = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+                    string key = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.ValueText);
                     if (map.ContainsKey(key))
                     {
                         return null;

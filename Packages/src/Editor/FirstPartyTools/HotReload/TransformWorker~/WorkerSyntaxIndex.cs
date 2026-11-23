@@ -160,7 +160,9 @@ internal static class WorkerSyntaxIndex
         string typeMetadataName,
         PropertyDeclarationSyntax propertyDeclaration)
     {
-        string name = propertyDeclaration.Identifier.Text;
+        // Why ValueText: kind-change keys name the compiled property by its symbol name, which
+        // drops the @ of a keyword-named property such as @checked.
+        string name = propertyDeclaration.Identifier.ValueText;
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
             // Why NormalizeWhitespace: keep property keys symmetric with BuildSyntaxMethodKey so

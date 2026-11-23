@@ -173,6 +173,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoOutsideMethodBodyDriftWarning(result);
         }
 
+        /// <summary>
+        /// What: removing a compiled keyword-named property (@checked) produces the kind-change
+        /// warning naming it and no outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_KeywordNamedPropertyRemoved_WarnsAboutTheKindChangeOnly()
+        {
+            HotReloadOrchestratorResult result = await RunEditAsync(
+                onDisk => onDisk.Replace("        public int @checked => 36007;\n", string.Empty));
+
+            Assert.That(
+                FindWarningContaining(result, ".checked'"),
+                Does.StartWith("Compiled property '"),
+                string.Join("\n", result.Warnings));
+            AssertNoOutsideMethodBodyDriftWarning(result);
+        }
+
+        /// <summary>
+        /// What: a keyword-named field (@event) that the edit adds and a method now reads is Patched
+        /// with the field's initial value, and raises no outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_KeywordNamedFieldAdded_IsPatchedWithoutDriftWarning()
+        {
+            HotReloadKeywordNamespaceHost host = new HotReloadKeywordNamespaceHost();
+            Assert.That(host.ReadsAddedField(), Is.EqualTo(36008));
+
+            HotReloadOrchestratorResult result = await RunEditAsync(
+                onDisk => onDisk
+                    .Replace(
+                        "        public int ReadsAddedField()",
+                        "        private int @event = 36009;\n\n        public int ReadsAddedField()")
+                    .Replace("return 36008;", "return @event;"));
+
+            AssertKind(result, "ReadsAddedField", HotReloadMethodOutcomeKind.Patched);
+            Assert.That(host.ReadsAddedField(), Is.EqualTo(36009));
+            AssertNoOutsideMethodBodyDriftWarning(result);
+        }
+
         private static void AssertNoOutsideMethodBodyDriftWarning(HotReloadOrchestratorResult result)
         {
             foreach (string warning in result.Warnings)

@@ -240,7 +240,7 @@ internal sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewri
         {
             string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(
                 typeMetadataName,
-                variable.Identifier.Text);
+                variable.Identifier.ValueText);
             if (!_syntaxKeysToStrip.Contains(syntaxKey))
             {
                 remaining.Add(variable);
@@ -273,7 +273,7 @@ internal sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewri
         List<VariableDeclaratorSyntax> remaining = new List<VariableDeclaratorSyntax>();
         foreach (VariableDeclaratorSyntax variable in node.Declaration.Variables)
         {
-            string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+            string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.ValueText);
             if (!_syntaxKeysToStrip.Contains(syntaxKey))
             {
                 remaining.Add(variable);
