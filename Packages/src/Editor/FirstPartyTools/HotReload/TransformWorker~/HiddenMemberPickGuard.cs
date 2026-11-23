@@ -10,8 +10,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 /// private or protected member that the code at the use cannot reach takes part in member lookup and
 /// overload resolution there: an overload that fits the arguments better, or a member that hides the
 /// one the code uses, is then called instead, in place or through a closure that throws for it.
-/// Only members declared in the edited source are compared; the worker sees other types of the
-/// assembly through their public surface only.
+/// Members declared in the edited source are compared through the two bindings; for a type of the
+/// assembly whose source the reload was not given, which the worker sees through its public surface
+/// only, the all-members compiled copy is read instead (UnpassedHiddenMemberLookup).
 /// </summary>
 internal static class HiddenMemberPickGuard
 {
@@ -19,7 +20,10 @@ internal static class HiddenMemberPickGuard
     /// What: the skip reason for the first use in the body that the patch could resolve to a member
     /// the code there cannot reach, naming that member, or null when every use resolves alike.
     /// </summary>
-    internal static WorkerReason DescribeSkipOrNull(SemanticModel semanticModel, SyntaxNode bodyNode)
+    internal static WorkerReason DescribeSkipOrNull(
+        SemanticModel semanticModel,
+        SyntaxNode bodyNode,
+        IAssemblySymbol targetAssembly)
     {
         SemanticModel enforcingModel = null;
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
@@ -36,7 +40,8 @@ internal static class HiddenMemberPickGuard
             }
 
             enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
-            ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info);
+            ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info)
+                ?? UnpassedHiddenMemberLookup.FindOrNull(semanticModel, enforcingModel, node, targetAssembly);
             if (hidden != null)
             {
                 return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember, Display(hidden));
@@ -176,7 +181,11 @@ internal static class HiddenMemberPickGuard
         return receiverType == null || receiverType.TypeKind == TypeKind.Error ? null : receiverType;
     }
 
-    private static ExpressionSyntax ReceiverExpressionOrNull(SyntaxNode node)
+    /// <summary>
+    /// What: the expression a member access, element access or conditional binding is made on, or
+    /// null for a use written without a receiver.
+    /// </summary>
+    internal static ExpressionSyntax ReceiverExpressionOrNull(SyntaxNode node)
     {
         SyntaxNode callee = node is InvocationExpressionSyntax invocation ? invocation.Expression : node;
         if (callee is SimpleNameSyntax name
