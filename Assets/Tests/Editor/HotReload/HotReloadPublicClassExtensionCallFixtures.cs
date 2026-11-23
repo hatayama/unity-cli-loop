@@ -34,6 +34,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Struct whose indexer returns by reference, held in a private field of the host, so an index
+    /// through that field reaches into the field's own storage.
+    /// </summary>
+    public struct HotReloadExtensionCallRefIndexed
+    {
+        private readonly int[] _items;
+
+        public HotReloadExtensionCallRefIndexed(int first)
+        {
+            _items = new[] { first };
+        }
+
+        public ref int this[int index] => ref _items[index];
+    }
+
+    /// <summary>
     /// Public class whose extension methods are internal, declared in the same file as the host,
     /// so a lambda or async body that calls one needs an accessor.
     /// </summary>
@@ -151,6 +167,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private HotReloadExtensionCallPoint _point = new HotReloadExtensionCallPoint(5);
 
         private HotReloadExtensionCallIndexed _indexed;
+
+        private HotReloadExtensionCallRefIndexed _refIndexed = new HotReloadExtensionCallRefIndexed(5);
 
         private string _order = "";
 

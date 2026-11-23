@@ -201,6 +201,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(await in the index of a struct field indexer assignment)");
             yield return new TestCaseData("return _indexed[await Task.FromResult(0)];", "_indexed")
                 .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(await in the index of a struct field indexer read)");
+            yield return new TestCaseData("return _refIndexed[await Task.FromResult(0)];", "_refIndexed")
+                .SetName("Run_AsyncFieldReferenceHeldAcrossAnAwait_IsSkippedAndTheFileApplies(await in the index of a by-reference indexer read)");
         }
 
         private static IEnumerable<TestCaseData> FieldUsesThatEndBeforeAnAwait()
@@ -213,6 +215,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 .SetName("Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(in argument without the keyword)");
             yield return new TestCaseData("return _indexed[0].Equals(await Task.FromResult<object>(0)) ? 1 : 0;", 1)
                 .SetName("Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(instance call on a value a struct indexer returns)");
+            yield return new TestCaseData("return _refIndexed[0] + await Task.FromResult(1);", 6)
+                .SetName("Run_AsyncFieldUseThatEndsBeforeAnAwait_IsPatched(by-reference indexer read before an await)");
         }
 
         /// <summary>

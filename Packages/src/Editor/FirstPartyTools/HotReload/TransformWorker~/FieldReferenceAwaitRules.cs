@@ -19,6 +19,13 @@ internal static class FieldReferenceAwaitRules
     internal static bool IsHeldAcrossLaterAwait(SemanticModel semanticModel, ExpressionSyntax site)
     {
         ExpressionSyntax held = ClimbThroughTheSameVariable(semanticModel, site);
+        // Why the climbed expression on its own: an access that reaches into the field by reference
+        // ('_buffer[await t]' on an indexer returning by reference) holds it even with no outer holder.
+        if (held != site && HasAwaitAfter(held, site.Span.End))
+        {
+            return true;
+        }
+
         SyntaxNode holder = FindHolderOrNull(semanticModel, held);
         // Why the site and not the climbed expression: the reference is taken where the field is
         // read, so an await in an index after it ('_indexed[await t] = 1') still runs while it is held.
