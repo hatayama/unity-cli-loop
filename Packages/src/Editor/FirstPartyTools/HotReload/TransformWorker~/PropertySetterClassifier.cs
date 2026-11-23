@@ -14,6 +14,7 @@ internal static class PropertySetterClassifier
     // not have (or takes another type) fails the Editor's signature lookup and turns the run into
     // Failed, while Skipped keeps pointing the reader at 'uloop compile'.
     internal static bool IsPatchableCompiledSetter(
+        ExplicitImplementationMatcher explicitImplementations,
         PropertyDeclarationSyntax propertyDeclaration,
         IPropertySymbol propertySymbol,
         INamedTypeSymbol compiledType,
@@ -31,7 +32,7 @@ internal static class PropertySetterClassifier
 
         // Why an explicit interface init stays with the accessor row: init patching covers ordinary
         // properties only; an explicit interface init accessor is not part of that support yet.
-        if (propertySymbol.SetMethod.IsInitOnly && propertySymbol.ExplicitInterfaceImplementations.Length > 0)
+        if (propertySymbol.SetMethod.IsInitOnly && explicitImplementations.IsExplicitImplementation(propertySymbol))
         {
             return false;
         }
@@ -45,8 +46,8 @@ internal static class PropertySetterClassifier
 
         // Why the matcher for an explicit property: its name follows the specifier's spelling, so a
         // respelled specifier would not find the compiled property by name.
-        IPropertySymbol compiledProperty = propertySymbol.ExplicitInterfaceImplementations.Length > 0
-            ? ExplicitImplementationMatcher.FindCompiledPropertyImplementation(compiledType, propertySymbol)
+        IPropertySymbol compiledProperty = explicitImplementations.IsExplicitImplementation(propertySymbol)
+            ? explicitImplementations.FindCompiledPropertyImplementation(compiledType, propertySymbol)
             : compiledType.GetMembers(propertySymbol.Name)
                 .OfType<IPropertySymbol>()
                 .FirstOrDefault(candidate => !candidate.IsIndexer);

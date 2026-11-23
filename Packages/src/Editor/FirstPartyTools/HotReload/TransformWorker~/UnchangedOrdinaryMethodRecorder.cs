@@ -106,7 +106,7 @@ internal static class UnchangedOrdinaryMethodRecorder
         {
             SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-            MethodName = ExplicitImplementationMatcher.RowMethodName(typeState.CompiledType, methodSymbol),
+            MethodName = typeState.SourceUnit.ExplicitImplementations.RowMethodName(typeState.CompiledType, methodSymbol),
             ParameterTypeFullNames = parameterTypeFullNames,
             GenericArity = methodSymbol.Arity,
             HomeAssemblyName = typeState.HomeAssemblyName

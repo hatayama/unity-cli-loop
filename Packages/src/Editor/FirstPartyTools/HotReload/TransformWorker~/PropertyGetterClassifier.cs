@@ -65,11 +65,12 @@ internal static class PropertyGetterClassifier
     // artifact serves stays Skipped as its setter does: explicit accessors are patched only on
     // compiled types.
     internal static WorkerReason DescribeUnpatchableGetterOrNull(
+        ExplicitImplementationMatcher explicitImplementations,
         IPropertySymbol propertySymbol,
         INamedTypeSymbol compiledType,
         string homeAssemblyName)
     {
-        bool isExplicit = propertySymbol.ExplicitInterfaceImplementations.Length > 0;
+        bool isExplicit = explicitImplementations.IsExplicitImplementation(propertySymbol);
         if (isExplicit && homeAssemblyName != null)
         {
             return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation);
@@ -81,7 +82,7 @@ internal static class PropertyGetterClassifier
         }
 
         IPropertySymbol compiledProperty = isExplicit
-            ? ExplicitImplementationMatcher.FindCompiledPropertyImplementation(compiledType, propertySymbol)
+            ? explicitImplementations.FindCompiledPropertyImplementation(compiledType, propertySymbol)
             : compiledType.GetMembers(propertySymbol.Name)
                 .OfType<IPropertySymbol>()
                 .FirstOrDefault(candidate => !candidate.IsIndexer);
@@ -110,6 +111,7 @@ internal static class PropertyGetterClassifier
     // What: runs a property accessor body through the same transform decision and name/added-call
     // guards as an ordinary method, adding the skip row itself when one applies.
     internal static (bool SkipAccessor, MethodTransformDecision Decision) TrySkipPropertyAccessorByDecision(
+        ExplicitImplementationMatcher explicitImplementations,
         string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
@@ -144,7 +146,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(explicitImplementations, compiledType, accessorSymbol),
                 Reason = decision.SkipReason
             });
             return (true, decision);
@@ -163,7 +165,7 @@ internal static class PropertyGetterClassifier
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(explicitImplementations, compiledType, accessorSymbol),
                 Reason = unresolvedNameSkip
             });
             return (true, MethodTransformDecision.Skip(unresolvedNameSkip));
@@ -184,12 +186,12 @@ internal static class PropertyGetterClassifier
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatRowLabel(compiledType, accessorSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(explicitImplementations, compiledType, accessorSymbol),
             Reason = addedCallSiteSkip,
             CalledAddedMethodKey = calledAddedMethodKey,
             MethodKey = calledAddedMethodKey == null
                 ? null
-                : WorkerMethodKeys.BuildRowMethodKey(compiledType, accessorSymbol)
+                : WorkerMethodKeys.BuildRowMethodKey(explicitImplementations, compiledType, accessorSymbol)
         });
         return (true, decision);
     }

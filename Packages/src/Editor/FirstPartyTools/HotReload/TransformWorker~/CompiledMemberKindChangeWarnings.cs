@@ -34,6 +34,7 @@ internal static class CompiledMemberKindChangeWarnings
     /// redeclared as another member kind, even when no method body changed.
     /// </summary>
     internal static SyntaxKeys AppendCompiledPropertyOrEventKindChangeWarnings(
+        ExplicitImplementationMatcher explicitImplementations,
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
         WorkerTypeHome home,
@@ -79,6 +80,7 @@ internal static class CompiledMemberKindChangeWarnings
             }
 
             AppendMissingCompiledPropertyOrEventWarnings(
+                explicitImplementations,
                 compiledType,
                 sourceType,
                 typeMetadataName,
@@ -90,6 +92,7 @@ internal static class CompiledMemberKindChangeWarnings
     }
 
     internal static void AppendMissingCompiledPropertyOrEventWarnings(
+        ExplicitImplementationMatcher explicitImplementations,
         INamedTypeSymbol compiledType,
         INamedTypeSymbol sourceType,
         string typeMetadataName,
@@ -98,7 +101,7 @@ internal static class CompiledMemberKindChangeWarnings
     {
         foreach (ISymbol compiledMember in compiledType.GetMembers())
         {
-            string warning = TryFormatMissingCompiledPropertyOrEventWarning(compiledMember, sourceType);
+            string warning = TryFormatMissingCompiledPropertyOrEventWarning(explicitImplementations, compiledMember, sourceType);
             if (warning == null)
             {
                 continue;
@@ -122,6 +125,7 @@ internal static class CompiledMemberKindChangeWarnings
     }
 
     internal static string TryFormatMissingCompiledPropertyOrEventWarning(
+        ExplicitImplementationMatcher explicitImplementations,
         ISymbol compiledMember,
         INamedTypeSymbol sourceType)
     {
@@ -136,7 +140,7 @@ internal static class CompiledMemberKindChangeWarnings
             && property.Parameters.Length == 0
             && !property.IsImplicitlyDeclared
             && !SourceDeclaresProperty(sourceType, property.Name)
-            && !ExplicitImplementationMatcher.SourceImplementsSameInterfaceMember(sourceType, property))
+            && !explicitImplementations.SourceImplementsSameInterfaceMember(sourceType, property))
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
@@ -147,7 +151,7 @@ internal static class CompiledMemberKindChangeWarnings
         if (compiledMember is IEventSymbol compiledEvent
             && !compiledEvent.IsImplicitlyDeclared
             && !SourceDeclaresEvent(sourceType, compiledEvent.Name)
-            && !ExplicitImplementationMatcher.SourceImplementsSameInterfaceMember(sourceType, compiledEvent))
+            && !explicitImplementations.SourceImplementsSameInterfaceMember(sourceType, compiledEvent))
         {
             return string.Format(
                 CultureInfo.InvariantCulture,

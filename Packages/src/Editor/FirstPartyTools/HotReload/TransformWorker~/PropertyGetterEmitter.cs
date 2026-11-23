@@ -76,6 +76,7 @@ internal static class PropertyGetterEmitter
             }
 
             typeState.CurrentShimType = AppendPropertyGetterEntry(
+                typeState.SourceUnit.ExplicitImplementations,
                     propertyDeclaration,
                     typeState.TypeDeclaration,
                     typeState.TypeSymbol,
@@ -112,6 +113,7 @@ internal static class PropertyGetterEmitter
 
     // What: emit a get_<Name> entry / unchanged row / skip for one property with a getter body.
     internal static ShimTypeBuilder AppendPropertyGetterEntry(
+            ExplicitImplementationMatcher explicitImplementations,
             PropertyDeclarationSyntax propertyDeclaration,
             TypeDeclarationSyntax typeDeclaration,
             INamedTypeSymbol typeSymbol,
@@ -166,7 +168,7 @@ internal static class PropertyGetterEmitter
         string[] parameterTypeFullNames = Array.Empty<string>();
         // Why the row name: the Editor finds, excludes and reverts the getter by its compiled name,
         // which for an explicit property differs from the source name when the specifier is respelled.
-        string getterRowName = ExplicitImplementationMatcher.RowMethodName(compiledType, getterSymbol);
+        string getterRowName = explicitImplementations.RowMethodName(compiledType, getterSymbol);
         string methodKey = WorkerMethodKeys.BuildMethodKey(
             CecilTypeNames.ToMetadataName(typeSymbol),
             getterRowName,
@@ -194,6 +196,7 @@ internal static class PropertyGetterEmitter
         }
 
         WorkerReason unpatchableGetter = PropertyGetterClassifier.DescribeUnpatchableGetterOrNull(
+            explicitImplementations,
             propertySymbol,
             compiledType,
             homeAssemblyName);
@@ -202,7 +205,7 @@ internal static class PropertyGetterEmitter
             skipped.Add(new WorkerSkipped
             {
                 SourceProjectRelativePath = sourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatRowLabel(compiledType, getterSymbol),
+                Method = WorkerMethodKeys.FormatRowLabel(explicitImplementations, compiledType, getterSymbol),
                 Reason = unpatchableGetter
             });
             return currentShimType;
@@ -214,6 +217,7 @@ internal static class PropertyGetterEmitter
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
         (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyAccessorByDecision(
+            explicitImplementations,
             sourceProjectRelativePath,
             typeDeclaration,
             typeSymbol,
@@ -251,7 +255,7 @@ internal static class PropertyGetterEmitter
                 skipped.Add(new WorkerSkipped
                 {
                     SourceProjectRelativePath = sourceProjectRelativePath,
-                    Method = WorkerMethodKeys.FormatRowLabel(compiledType, getterSymbol),
+                    Method = WorkerMethodKeys.FormatRowLabel(explicitImplementations, compiledType, getterSymbol),
                     Reason = siblingSkip
                 });
                 return currentShimType;
@@ -259,6 +263,7 @@ internal static class PropertyGetterEmitter
         }
 
         return EmitPropertyGetterShim(
+            explicitImplementations,
             propertyDeclaration,
             typeDeclaration,
             typeSymbol,
@@ -284,6 +289,7 @@ internal static class PropertyGetterEmitter
     }
 
     internal static ShimTypeBuilder EmitPropertyGetterShim(
+            ExplicitImplementationMatcher explicitImplementations,
             PropertyDeclarationSyntax propertyDeclaration,
             TypeDeclarationSyntax typeDeclaration,
             INamedTypeSymbol typeSymbol,
@@ -318,7 +324,7 @@ internal static class PropertyGetterEmitter
             assemblyGlobalUsings,
             targetAssembly);
 
-        string shimMethodName = shimNames.NextShimMethodName(ShimBaseName(getterSymbol));
+        string shimMethodName = shimNames.NextShimMethodName(ShimBaseName(explicitImplementations, getterSymbol));
 
         // Why narrow to the get accessor beside a bodied set or init: the setter gets an entry of
         // its own, and a Skipped init body must not resolve to the getter's patch, so the getter
@@ -385,10 +391,10 @@ internal static class PropertyGetterEmitter
     // What: the name a shim of the accessor is built from. An explicit accessor's own name holds the
     // interface name with dots, which is not a legal identifier, so its shim takes the interface
     // accessor's name.
-    internal static string ShimBaseName(IMethodSymbol accessorSymbol)
+    internal static string ShimBaseName(ExplicitImplementationMatcher explicitImplementations, IMethodSymbol accessorSymbol)
     {
-        return accessorSymbol.ExplicitInterfaceImplementations.Length > 0
-            ? ExplicitImplementationMatcher.ImplementedMemberName(accessorSymbol)
+        return explicitImplementations.IsExplicitImplementation(accessorSymbol)
+            ? explicitImplementations.ImplementedMemberName(accessorSymbol)
             : accessorSymbol.Name;
     }
 

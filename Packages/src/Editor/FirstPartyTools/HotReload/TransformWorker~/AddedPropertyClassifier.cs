@@ -148,7 +148,7 @@ internal static class AddedPropertyClassifier
         AddedMethodCatalog addedMethodCatalog)
     {
         IPropertySymbol symbol = semanticModel.GetDeclaredSymbol(declaration);
-        if (symbol == null || AddedPropertySkipEvaluator.HasCompiledProperty(compiledType, symbol))
+        if (symbol == null || AddedPropertySkipEvaluator.HasCompiledProperty(typeState.SourceUnit.ExplicitImplementations, compiledType, symbol))
         {
             return null;
         }

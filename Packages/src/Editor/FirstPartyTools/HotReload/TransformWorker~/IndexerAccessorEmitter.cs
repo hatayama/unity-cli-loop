@@ -121,7 +121,7 @@ internal static class IndexerAccessorEmitter
 
         if (target.Indexer.ExplicitInterfaceSpecifier != null)
         {
-            AddSkip(skipped, sourceProjectRelativePath, accessorSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation));
+            AddSkip(skipped, sourceProjectRelativePath, typeState.SourceUnit.ExplicitImplementations, accessorSymbol, WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformExplicitInterfaceImplementation));
             return;
         }
 
@@ -202,6 +202,7 @@ internal static class IndexerAccessorEmitter
     {
         string sourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath;
         (bool skipAccessor, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyAccessorByDecision(
+            typeState.SourceUnit.ExplicitImplementations,
             sourceProjectRelativePath,
             typeState.TypeDeclaration,
             typeState.TypeSymbol,
@@ -242,7 +243,7 @@ internal static class IndexerAccessorEmitter
             return decision;
         }
 
-        AddSkip(skipped, sourceProjectRelativePath, accessorSymbol, siblingSkip);
+        AddSkip(skipped, sourceProjectRelativePath, typeState.SourceUnit.ExplicitImplementations, accessorSymbol, siblingSkip);
         return null;
     }
 
@@ -335,13 +336,14 @@ internal static class IndexerAccessorEmitter
     private static void AddSkip(
         List<WorkerSkipped> skipped,
         string sourceProjectRelativePath,
+        ExplicitImplementationMatcher explicitImplementations,
         IMethodSymbol accessorSymbol,
         WorkerReason reason)
     {
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
+            Method = WorkerMethodKeys.FormatSourceLabel(explicitImplementations, accessorSymbol),
             Reason = reason
         });
     }

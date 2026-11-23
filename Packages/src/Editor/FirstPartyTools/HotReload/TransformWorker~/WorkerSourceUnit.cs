@@ -110,6 +110,12 @@ internal sealed class WorkerSourceUnit
     // bind them against a type that is missing those parts.
     public PartialTypeParts PartialTypeParts { get; set; } = PartialTypeParts.Unverified;
 
+    // What every explicit interface implementation of the run implements. Why the declared
+    // members alone until a pipeline resolves the rest: a pipeline that never does keeps reading
+    // an implementation of an inaccessible interface as implementing nothing, as before.
+    public ExplicitImplementationMatcher ExplicitImplementations { get; set; } =
+        new ExplicitImplementationMatcher(new Dictionary<ISymbol, ISymbol>());
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

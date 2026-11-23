@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.3](https://github.com/hatayama/unity-cli-loop/compare/v3.36.2...v3.36.3) (2026-11-23)
+
+
+### Bug Fixes
+
+* Hot reload no longer skips or reports drift for explicit implementations of an internal interface from a file the reload was not given ([#3629](https://github.com/hatayama/unity-cli-loop/issues/3629)) ([4576bfb](https://github.com/hatayama/unity-cli-loop/commit/4576bfb425eb980d71a2ea1afd8e9f07aa65825c))
+
 ## [3.36.2](https://github.com/hatayama/unity-cli-loop/compare/v3.36.1...v3.36.2) (2026-11-23)
 
 

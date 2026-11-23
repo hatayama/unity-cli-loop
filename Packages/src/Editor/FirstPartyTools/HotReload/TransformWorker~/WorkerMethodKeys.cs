@@ -45,9 +45,9 @@ internal static class WorkerMethodKeys
     /// The key of a source method as the Editor builds it from the compiled method: an explicit
     /// implementation the compiled type holds is keyed by its compiled metadata name.
     /// </summary>
-    internal static string BuildRowMethodKey(INamedTypeSymbol compiledType, IMethodSymbol methodSymbol)
+    internal static string BuildRowMethodKey(ExplicitImplementationMatcher explicitImplementations, INamedTypeSymbol compiledType, IMethodSymbol methodSymbol)
     {
-        return BuildMethodKeyNamed(methodSymbol, ExplicitImplementationMatcher.RowMethodName(compiledType, methodSymbol));
+        return BuildMethodKeyNamed(methodSymbol, explicitImplementations.RowMethodName(compiledType, methodSymbol));
     }
 
     private static string BuildMethodKeyNamed(IMethodSymbol methodSymbol, string methodName)
@@ -66,9 +66,9 @@ internal static class WorkerMethodKeys
     /// The label of a source method as the Editor builds it from the compiled method: an explicit
     /// implementation the compiled type holds is named by its compiled metadata name.
     /// </summary>
-    internal static string FormatRowLabel(INamedTypeSymbol compiledType, IMethodSymbol methodSymbol)
+    internal static string FormatRowLabel(ExplicitImplementationMatcher explicitImplementations, INamedTypeSymbol compiledType, IMethodSymbol methodSymbol)
     {
-        return FormatMethodLabelNamed(methodSymbol, ExplicitImplementationMatcher.RowMethodName(compiledType, methodSymbol));
+        return FormatMethodLabelNamed(methodSymbol, explicitImplementations.RowMethodName(compiledType, methodSymbol));
     }
 
     /// <summary>The label of <paramref name="methodSymbol"/> under <paramref name="methodName"/>.</summary>
@@ -87,6 +87,15 @@ internal static class WorkerMethodKeys
     internal static string FormatMethodLabel(IMethodSymbol methodSymbol)
     {
         return FormatMethodLabelNamed(methodSymbol, methodSymbol.Name);
+    }
+
+    /// <summary>
+    /// The label of a source method named as the compiler names it when its interface is
+    /// accessible, for a row that has no compiled counterpart to take the name from.
+    /// </summary>
+    internal static string FormatSourceLabel(ExplicitImplementationMatcher explicitImplementations, IMethodSymbol methodSymbol)
+    {
+        return FormatMethodLabelNamed(methodSymbol, explicitImplementations.SourceMethodName(methodSymbol));
     }
 
     // Keep in sync with HotReloadMethodKeys.FormatMethodLabelParts (Unity package side).
