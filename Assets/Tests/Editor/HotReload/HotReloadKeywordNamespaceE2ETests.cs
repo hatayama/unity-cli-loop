@@ -138,11 +138,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: removing a compiled property of a type in a keyword-named namespace produces the
-        /// kind-change warning naming that property, so the compiled type is found by its metadata
-        /// name.
+        /// kind-change warning naming that property, and no outside-method-body drift warning,
+        /// because the removed declaration is matched to the kind-change key and left out of the
+        /// drift comparison.
         /// </summary>
         [Test]
-        public async Task Run_PropertyRemovedFromTypeOfKeywordNamedNamespace_WarnsAboutTheKindChange()
+        public async Task Run_PropertyRemovedFromTypeOfKeywordNamedNamespace_WarnsAboutTheKindChangeOnly()
         {
             HotReloadOrchestratorResult result = await RunEditAsync(
                 onDisk => onDisk.Replace("        public int KindChangeValue => 36002;\n", string.Empty));
@@ -151,6 +152,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindWarningContaining(result, "KindChangeValue"),
                 Does.StartWith("Compiled property '"),
                 string.Join("\n", result.Warnings));
+            AssertNoOutsideMethodBodyDriftWarning(result);
+        }
+
+        /// <summary>
+        /// What: removing a compiled property of a keyword-named type (@class) in a keyword-named
+        /// namespace produces the kind-change warning naming that property and no
+        /// outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_PropertyRemovedFromKeywordNamedType_WarnsAboutTheKindChangeOnly()
+        {
+            HotReloadOrchestratorResult result = await RunEditAsync(
+                onDisk => onDisk.Replace("        public int ClassKindChangeValue => 36005;\n", string.Empty));
+
+            Assert.That(
+                FindWarningContaining(result, "ClassKindChangeValue"),
+                Does.StartWith("Compiled property '"),
+                string.Join("\n", result.Warnings));
+            AssertNoOutsideMethodBodyDriftWarning(result);
+        }
+
+        private static void AssertNoOutsideMethodBodyDriftWarning(HotReloadOrchestratorResult result)
+        {
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning,
+                    Does.Not.StartWith("Edits outside method bodies"),
+                    string.Join("\n", result.Warnings));
+            }
         }
 
         private static string FindWarningContaining(HotReloadOrchestratorResult result, string fragment)

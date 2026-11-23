@@ -45,4 +45,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
             }
         }
     }
+
+    /// <summary>
+    /// Host whose own name is a C# keyword, so a key built from its identifier must drop the @
+    /// as well as the namespace's.
+    /// </summary>
+    public sealed class @class
+    {
+        public int ClassKindChangeValue => 36005;
+    }
 }
