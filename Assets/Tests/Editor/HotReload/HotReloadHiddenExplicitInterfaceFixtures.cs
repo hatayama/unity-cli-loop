@@ -96,6 +96,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
+    /// <summary>Implements two same-signature members of an internal interface from another file.</summary>
+    public class HotReloadHiddenSiblingsFixture : IHotReloadHiddenSiblings
+    {
+        int IHotReloadHiddenSiblings.Run() { return 8314; }
+
+        int IHotReloadHiddenSiblings.Stop() { return 8315; }
+    }
+
+    /// <summary>Implements overloads of an internal interface from another file that differ by parameter type.</summary>
+    public class HotReloadHiddenOverloadsFixture : IHotReloadHiddenOverloads
+    {
+        int IHotReloadHiddenOverloads.Take(int value) { return value + 8316; }
+
+        int IHotReloadHiddenOverloads.Take(string value) { return value.Length + 8317; }
+    }
+
     /// <summary>Class beside the implementers whose edit leaves them unedited.</summary>
     public class HotReloadHiddenNeighborFixture
     {

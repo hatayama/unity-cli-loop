@@ -44,6 +44,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         HotReloadHiddenCopierFixture Copy(HotReloadHiddenCopierFixture value, ref int count);
     }
 
+    /// <summary>Internal interface with two members of one signature, so a match must use the name.</summary>
+    internal interface IHotReloadHiddenSiblings
+    {
+        int Run();
+
+        int Stop();
+    }
+
+    /// <summary>Internal interface with overloads that differ by parameter type only.</summary>
+    internal interface IHotReloadHiddenOverloads
+    {
+        int Take(int value);
+
+        int Take(string value);
+    }
+
     /// <summary>Extension on an internal interface, so a call on an implementer needs the conversion.</summary>
     internal static class HotReloadHiddenRunnerExtensions
     {

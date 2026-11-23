@@ -423,6 +423,85 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing one of two same-signature explicit members of an internal interface declared
+        /// in a file the reload is not given patches that member only; the sibling keeps its body.
+        /// Both orders are covered so a pick of the first same-shape member cannot pass by luck.
+        /// </summary>
+        [TestCase("8314", "9314", "IHotReloadHiddenSiblings.Run(", 9314, 8315)]
+        [TestCase("8315", "9315", "IHotReloadHiddenSiblings.Stop(", 8314, 9315)]
+        public async Task Run_EditedOneOfSameSignatureSiblingsOfHiddenInterface_PatchesOnlyThatMember(
+            string token,
+            string replacement,
+            string patchedMethodFragment,
+            int expectedRun,
+            int expectedStop)
+        {
+            IHotReloadHiddenSiblings siblings = new HotReloadHiddenSiblingsFixture();
+
+            await ApplyEditOfAsync(HiddenFixtureFileName, "HiddenE2ESiblings.cs", token, replacement, patchedMethodFragment);
+
+            int run = siblings.Run();
+            int stop = siblings.Stop();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(run, Is.EqualTo(expectedRun));
+            Assert.That(stop, Is.EqualTo(expectedStop));
+        }
+
+        /// <summary>
+        /// What: editing one of two explicit overloads of an internal interface declared in a file the
+        /// reload is not given, which differ by parameter type only, patches that overload only.
+        /// </summary>
+        [TestCase("8316", "9316", "Take(System.Int32)", 1 + 9316, 3 + 8317)]
+        [TestCase("8317", "9317", "Take(System.String)", 1 + 8316, 3 + 9317)]
+        public async Task Run_EditedOneOverloadOfHiddenInterface_PatchesOnlyThatOverload(
+            string token,
+            string replacement,
+            string patchedMethodFragment,
+            int expectedIntTake,
+            int expectedStringTake)
+        {
+            IHotReloadHiddenOverloads overloads = new HotReloadHiddenOverloadsFixture();
+
+            await ApplyEditOfAsync(HiddenFixtureFileName, "HiddenE2EOverloads.cs", token, replacement, patchedMethodFragment);
+
+            int intTake = overloads.Take(1);
+            int stringTake = overloads.Take("abc");
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(intTake, Is.EqualTo(expectedIntTake));
+            Assert.That(stringTake, Is.EqualTo(expectedStringTake));
+        }
+
+        /// <summary>
+        /// What: an explicit method or property of an internal interface declared in a file the reload
+        /// is not given, whose edited signature matches no member of that interface, is Skipped rather
+        /// than Failed, and the compiled member keeps running.
+        /// </summary>
+        [TestCase("int IHotReloadHiddenOverloads.Take(int value) { return value + 8316; }", "int IHotReloadHiddenOverloads.Take(long value) { return (int)value + 9316; }", "Take(")]
+        [TestCase("int IHotReloadHiddenValue.Value => 8305;", "long IHotReloadHiddenValue.Value => 9305;", "Value")]
+        public async Task Run_EditedHiddenInterfaceImplementationMatchingNoMember_IsSkippedAndKeepsTheCompiledMember(
+            string token,
+            string replacement,
+            string skippedFragment)
+        {
+            IHotReloadHiddenOverloads overloads = new HotReloadHiddenOverloadsFixture();
+            IHotReloadHiddenValue value = new HotReloadHiddenValueFixture();
+
+            HotReloadOrchestratorResult result = await RunEditOfAsync(HiddenFixtureFileName, "HiddenE2ENoMatch.cs", token, replacement);
+
+            int intTake = overloads.Take(1);
+            int read = value.Value;
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(result.Methods.Where(outcome => outcome.Kind == HotReloadMethodOutcomeKind.Failed), Is.Empty, FormatOutcomes(result));
+            Assert.That(
+                result.Methods.Any(outcome => outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains(skippedFragment, StringComparison.Ordinal)),
+                Is.True,
+                FormatOutcomes(result));
+            Assert.That(intTake, Is.EqualTo(1 + 8316));
+            Assert.That(read, Is.EqualTo(8305));
+        }
+
+        /// <summary>
         /// What: an edited method whose body relies on its class implementing an internal interface
         /// declared in a file the reload is not given (a conversion to it, an extension on it, an
         /// indexer taking it) is Patched and returns the edited value.
@@ -463,6 +542,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string replacement,
             string patchedMethodFragment)
         {
+            HotReloadOrchestratorResult result = await RunEditOfAsync(fixtureFileName, editedFileName, token, replacement);
+            AssertHasPatched(result, patchedMethodFragment);
+        }
+
+        private static async Task<HotReloadOrchestratorResult> RunEditOfAsync(
+            string fixtureFileName,
+            string editedFileName,
+            string token,
+            string replacement)
+        {
             string fixturePath = ResolveFixturePath(fixtureFileName);
             string onDisk = File.ReadAllText(fixturePath);
             int index = onDisk.IndexOf(token, StringComparison.Ordinal);
@@ -475,12 +564,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedFileName,
                 onDisk.Replace(token, replacement, StringComparison.Ordinal));
 
-            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+            return await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
-
-            AssertHasPatched(result, patchedMethodFragment);
         }
 
         private static void AssertHasPatched(HotReloadOrchestratorResult result, string methodFragment)
