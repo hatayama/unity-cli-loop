@@ -731,6 +731,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoEntryFor(result, typeof(HotReloadHiddenValueFixture));
             AssertNoEntryFor(result, typeof(HotReloadHiddenIndexedFixture));
             AssertNoEntryFor(result, typeof(HotReloadHiddenNotifierFixture));
+            AssertNoEntryFor(result, typeof(HotReloadHiddenCopierFixture));
             Assert.That(FormatSkipped(result), Is.EqualTo("(none)"), "No unedited implementation may be skipped.");
             AssertNoDriftOrRemovedMember(result);
         }
@@ -747,6 +748,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 source => ReplaceUniqueFragment(source, "8301", "9301"));
 
             AssertEntry(result, typeof(HotReloadHiddenRunnerFixture), Namespace + ".IHotReloadHiddenRunner.Run", "Run");
+            AssertNoDriftOrRemovedMember(result);
+        }
+
+        /// <summary>
+        /// What: an edited explicit implementation of an internal interface that the reload was not
+        /// given, whose signature names the type the reloaded file declares (as a parameter, a ref
+        /// parameter's neighbor and the return type), is an entry named by the compiled metadata name.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitImplementationOfHiddenInterfaceNamingTheReloadedType_EmitsEntryWithCompiledName()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnEditedHiddenFixtureAsync(
+                "HiddenCopier.cs",
+                source => ReplaceUniqueFragment(source, "8311", "9311"));
+
+            AssertEntry(result, typeof(HotReloadHiddenCopierFixture), Namespace + ".IHotReloadHiddenCopier.Copy", "Copy");
             AssertNoDriftOrRemovedMember(result);
         }
 

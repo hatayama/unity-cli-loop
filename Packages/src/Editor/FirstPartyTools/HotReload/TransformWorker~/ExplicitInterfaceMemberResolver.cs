@@ -112,7 +112,7 @@ internal static class ExplicitInterfaceMemberResolver
             case IEventSymbol eventSymbol:
                 return candidate is IEventSymbol interfaceEvent
                     && interfaceEvent.Name == ExplicitMemberName(eventSymbol.Name)
-                    && SymbolEqualityComparer.Default.Equals(interfaceEvent.Type, eventSymbol.Type);
+                    && SameType(interfaceEvent.Type, eventSymbol.Type);
             default:
                 return false;
         }
@@ -133,7 +133,7 @@ internal static class ExplicitInterfaceMemberResolver
             ? interfaceMethod
             : interfaceMethod.Construct(sourceMethod.TypeParameters.Cast<ITypeSymbol>().ToArray());
         return comparable.RefKind == sourceMethod.RefKind
-            && SymbolEqualityComparer.Default.Equals(comparable.ReturnType, sourceMethod.ReturnType)
+            && SameType(comparable.ReturnType, sourceMethod.ReturnType)
             && SameParameters(comparable.Parameters, sourceMethod.Parameters);
     }
 
@@ -144,7 +144,7 @@ internal static class ExplicitInterfaceMemberResolver
             : !interfaceProperty.IsIndexer && interfaceProperty.Name == ExplicitMemberName(sourceProperty.Name);
         return sameName
             && interfaceProperty.RefKind == sourceProperty.RefKind
-            && SymbolEqualityComparer.Default.Equals(interfaceProperty.Type, sourceProperty.Type)
+            && SameType(interfaceProperty.Type, sourceProperty.Type)
             && SameParameters(interfaceProperty.Parameters, sourceProperty.Parameters);
     }
 
@@ -160,13 +160,20 @@ internal static class ExplicitInterfaceMemberResolver
         for (int index = 0; index < sourceParameters.Count; index++)
         {
             if (interfaceParameters[index].RefKind != sourceParameters[index].RefKind
-                || !SymbolEqualityComparer.Default.Equals(interfaceParameters[index].Type, sourceParameters[index].Type))
+                || !SameType(interfaceParameters[index].Type, sourceParameters[index].Type))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    // Why by metadata name and not by symbol: a type the reloaded file declares has two copies, the
+    // compiled one the interface's signature names and the source one the implementation names.
+    private static bool SameType(ITypeSymbol interfaceType, ITypeSymbol sourceType)
+    {
+        return CecilTypeNames.ToCecilFullName(interfaceType) == CecilTypeNames.ToCecilFullName(sourceType);
     }
 
     // The member name after the specifier: 'Ns.IFoo.Run' declares 'Run'.

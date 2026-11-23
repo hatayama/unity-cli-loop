@@ -403,6 +403,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an edited explicit method of an internal interface declared in a file the reload is
+        /// not given, whose signature names the reloaded type itself, is Patched and a call through
+        /// the interface runs the edited body until RevertAll.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitImplementationOfHiddenInterfaceNamingTheReloadedType_RunsTheEditedBody()
+        {
+            HotReloadHiddenCopierFixture copier = new HotReloadHiddenCopierFixture();
+            IHotReloadHiddenCopier viaInterface = copier;
+
+            await ApplyEditOfAsync(HiddenFixtureFileName, "HiddenE2ECopier.cs", "8311", "9311", "IHotReloadHiddenCopier.Copy(");
+
+            int count = 0;
+            HotReloadHiddenCopierFixture returned = viaInterface.Copy(copier, ref count);
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(count, Is.EqualTo(9311));
+            Assert.That(returned, Is.SameAs(copier));
+        }
+
+        /// <summary>
         /// What: an edited method whose body relies on its class implementing an internal interface
         /// declared in a file the reload is not given (a conversion to it, an extension on it, an
         /// indexer taking it) is Patched and returns the edited value.

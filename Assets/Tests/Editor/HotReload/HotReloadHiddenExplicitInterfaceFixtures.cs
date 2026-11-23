@@ -66,6 +66,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Touched { get; private set; }
     }
 
+    /// <summary>Implements a method whose signature names this type itself, of an internal interface from another file.</summary>
+    public class HotReloadHiddenCopierFixture : IHotReloadHiddenCopier
+    {
+        public int Mark { get; set; }
+
+        HotReloadHiddenCopierFixture IHotReloadHiddenCopier.Copy(HotReloadHiddenCopierFixture value, ref int count)
+        {
+            count += 8311;
+            return value;
+        }
+    }
+
     /// <summary>Class beside the implementers whose edit leaves them unedited.</summary>
     public class HotReloadHiddenNeighborFixture
     {

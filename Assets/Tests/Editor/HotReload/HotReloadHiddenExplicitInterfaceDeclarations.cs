@@ -29,6 +29,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         event Action Changed;
     }
 
+    /// <summary>
+    /// Internal interface whose method takes and returns a type the reloaded file declares, so its
+    /// signature names the compiled copy of that type.
+    /// </summary>
+    internal interface IHotReloadHiddenCopier
+    {
+        HotReloadHiddenCopierFixture Copy(HotReloadHiddenCopierFixture value, ref int count);
+    }
+
     /// <summary>Extension on an internal interface, so a call on an implementer needs the conversion.</summary>
     internal static class HotReloadHiddenRunnerExtensions
     {
