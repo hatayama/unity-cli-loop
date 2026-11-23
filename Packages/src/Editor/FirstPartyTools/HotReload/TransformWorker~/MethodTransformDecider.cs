@@ -30,7 +30,8 @@ internal static class MethodTransformDecider
         AddedMemberAccessLookup addedMemberAccess,
         AddedEventLookup addedEvents,
         PartialTypeParts partialTypeParts,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBinding)
     {
         WorkerReason hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
@@ -52,7 +53,7 @@ internal static class MethodTransformDecider
 
         // Why before the shape decision: the patch resolves the member differently in its own
         // statements too, where no accessor rewrite is asked, and a closure would throw for it.
-        WorkerReason hiddenMemberSkip = HiddenMemberPickGuard.DescribeSkipOrNull(semanticModel, bodyNode);
+        WorkerReason hiddenMemberSkip = HiddenMemberPickGuard.DescribeSkipOrNull(semanticModel, bodyNode, targetAssembly, patchBinding);
         if (hiddenMemberSkip != null)
         {
             return MethodTransformDecision.Skip(hiddenMemberSkip);

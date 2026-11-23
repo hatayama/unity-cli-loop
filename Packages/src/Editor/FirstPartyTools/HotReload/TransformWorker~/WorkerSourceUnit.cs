@@ -44,6 +44,10 @@ internal sealed class WorkerSourceUnit
 
     public SemanticModel SemanticModel { get; set; }
 
+    // The binding compilation as the patch's compile sees it (every metadata member imported,
+    // accessibility ignored), shared by every unit of the run. Only the hidden-member guard asks it.
+    public PatchBindingCompilation PatchBinding { get; set; }
+
     // The verified mapping the binding trees were built with, so the emit steps can ask whether a
     // type is served from a retained artifact without threading it through every signature.
     // Empty for every run that has no artifact.

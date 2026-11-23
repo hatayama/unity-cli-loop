@@ -134,6 +134,7 @@ internal static class WorkerGroupPipeline
             projectRelativePathsByBindingTree[transformUnit.BindingSyntaxTree] = transformUnit.Input.ProjectRelativePath;
         }
 
+        PatchBindingCompilation patchBinding = new PatchBindingCompilation(compilation);
         // Why every tree of the compilation: a partial type's explicit implementation can sit in a
         // part another file declares, and the type's members are read across all of its parts.
         ExplicitImplementationMatcher explicitImplementations = new ExplicitImplementationMatcher(
@@ -142,6 +143,7 @@ internal static class WorkerGroupPipeline
         foreach (WorkerSourceUnit unit in transformUnits)
         {
             unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
+            unit.PatchBinding = patchBinding;
             unit.RunProjectRelativePathsByBindingTree = projectRelativePathsByBindingTree;
             unit.PartialTypeParts = partialTypeParts;
             unit.ExplicitImplementations = explicitImplementations;

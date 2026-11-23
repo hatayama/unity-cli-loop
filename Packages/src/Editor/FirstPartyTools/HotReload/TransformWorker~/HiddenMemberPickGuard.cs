@@ -10,8 +10,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 /// private or protected member that the code at the use cannot reach takes part in member lookup and
 /// overload resolution there: an overload that fits the arguments better, or a member that hides the
 /// one the code uses, is then called instead, in place or through a closure that throws for it.
-/// Only members declared in the edited source are compared; the worker sees other types of the
-/// assembly through their public surface only.
+/// Members declared in the edited source are compared through the two bindings; a type of the
+/// assembly whose source the reload was not given, which the worker sees through its public surface
+/// only, is compared by binding the use the way the patch's compile does (PatchBindingPickComparison).
 /// </summary>
 internal static class HiddenMemberPickGuard
 {
@@ -19,9 +20,14 @@ internal static class HiddenMemberPickGuard
     /// What: the skip reason for the first use in the body that the patch could resolve to a member
     /// the code there cannot reach, naming that member, or null when every use resolves alike.
     /// </summary>
-    internal static WorkerReason DescribeSkipOrNull(SemanticModel semanticModel, SyntaxNode bodyNode)
+    internal static WorkerReason DescribeSkipOrNull(
+        SemanticModel semanticModel,
+        SyntaxNode bodyNode,
+        IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBinding)
     {
         SemanticModel enforcingModel = null;
+        SemanticModel patchModel = null;
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
             if (node is not ExpressionSyntax || NameofRules.IsInsideNameofArgument(node))
@@ -29,14 +35,15 @@ internal static class HiddenMemberPickGuard
                 continue;
             }
 
+            // Why a use the worker binds to nothing still goes to the patch's binding: an internal
+            // member of a compiled type is not imported here, so a call whose only reachable
+            // overload is internal binds to nothing, while the patch sees every overload.
             SymbolInfo info = semanticModel.GetSymbolInfo(node);
-            if (info.Symbol == null && info.CandidateSymbols.IsEmpty)
-            {
-                continue;
-            }
-
+            bool boundHere = info.Symbol != null || !info.CandidateSymbols.IsEmpty;
             enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
-            ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info);
+            patchModel = patchModel ?? patchBinding.ModelFor(semanticModel.SyntaxTree);
+            ISymbol hidden = (boundHere ? FindHiddenPickOrNull(semanticModel, enforcingModel, node, info) : null)
+                ?? PatchBindingPickComparison.FindHiddenPickOrNull(enforcingModel, patchModel, node, targetAssembly);
             if (hidden != null)
             {
                 return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember, Display(hidden));
@@ -140,7 +147,11 @@ internal static class HiddenMemberPickGuard
     // Why the created type for a construction: C# lets a derived type call a protected constructor of
     // its base only from a constructor initializer, so 'new Base(...)' there reaches it through Base.
     // The syntax gives that type even when the call resolves to nothing.
-    private static ITypeSymbol FindReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
+    /// <summary>
+    /// What: the type a use is made on: the receiver of a call or member access, the created type
+    /// of a construction, or null for a use written without a receiver or a static one.
+    /// </summary>
+    internal static ITypeSymbol FindReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
         if (node is BaseObjectCreationExpressionSyntax)
         {
@@ -176,7 +187,11 @@ internal static class HiddenMemberPickGuard
         return receiverType == null || receiverType.TypeKind == TypeKind.Error ? null : receiverType;
     }
 
-    private static ExpressionSyntax ReceiverExpressionOrNull(SyntaxNode node)
+    /// <summary>
+    /// What: the expression a member access, element access or conditional binding is made on, or
+    /// null for a use written without a receiver.
+    /// </summary>
+    internal static ExpressionSyntax ReceiverExpressionOrNull(SyntaxNode node)
     {
         SyntaxNode callee = node is InvocationExpressionSyntax invocation ? invocation.Expression : node;
         if (callee is SimpleNameSyntax name
@@ -216,7 +231,11 @@ internal static class HiddenMemberPickGuard
         return null;
     }
 
-    private static bool IsReachableFromTheWholeAssembly(ISymbol symbol)
+    /// <summary>
+    /// What: whether the member and every type that contains it are public, internal or protected
+    /// internal, so every type of the declaring assembly may reach it.
+    /// </summary>
+    internal static bool IsReachableFromTheWholeAssembly(ISymbol symbol)
     {
         for (ISymbol current = symbol; current != null && current.Kind != SymbolKind.Namespace; current = current.ContainingType)
         {

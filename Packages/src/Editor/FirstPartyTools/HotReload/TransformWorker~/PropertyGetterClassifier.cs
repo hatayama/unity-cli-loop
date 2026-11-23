@@ -125,6 +125,7 @@ internal static class PropertyGetterClassifier
         AddedPropertyCatalog addedPropertyCatalog,
         PartialTypeParts partialTypeParts,
         IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBinding,
         List<WorkerSkipped> skipped)
     {
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
@@ -138,7 +139,8 @@ internal static class PropertyGetterClassifier
             addedMemberAccess: null,
             addedEvents,
             partialTypeParts,
-            targetAssembly);
+            targetAssembly,
+            patchBinding);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped

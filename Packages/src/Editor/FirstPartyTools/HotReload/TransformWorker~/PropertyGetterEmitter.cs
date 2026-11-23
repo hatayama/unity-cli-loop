@@ -106,7 +106,8 @@ internal static class PropertyGetterEmitter
                     typeState.HomeAssemblyName,
                     typeState.SourceUnit.Input.ReappliedSibling,
                     typeState.TargetAssembly,
-                    typeState.SourceUnit.PartialTypeParts);
+                    typeState.SourceUnit.PartialTypeParts,
+                    typeState.SourceUnit.PatchBinding);
         }
     }
 
@@ -139,7 +140,8 @@ internal static class PropertyGetterEmitter
             string homeAssemblyName,
             bool reappliedSibling,
             IAssemblySymbol targetAssembly,
-            PartialTypeParts partialTypeParts)
+            PartialTypeParts partialTypeParts,
+            PatchBindingCompilation patchBinding)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -229,6 +231,7 @@ internal static class PropertyGetterEmitter
             addedPropertyCatalog,
             partialTypeParts,
             targetAssembly,
+            patchBinding,
             skipped);
         if (skipGetter)
         {

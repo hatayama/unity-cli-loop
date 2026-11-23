@@ -148,7 +148,8 @@ internal static class AddedPropertyAccessorGuard
             addedMemberAccess: null,
             typeState.AddedEvents,
             typeState.SourceUnit.PartialTypeParts,
-            typeState.TargetAssembly);
+            typeState.TargetAssembly,
+            typeState.SourceUnit.PatchBinding);
         if (decision.SkipReason != null)
         {
             return decision.SkipReason;
