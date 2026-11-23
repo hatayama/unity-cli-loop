@@ -10,9 +10,9 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 /// private or protected member that the code at the use cannot reach takes part in member lookup and
 /// overload resolution there: an overload that fits the arguments better, or a member that hides the
 /// one the code uses, is then called instead, in place or through a closure that throws for it.
-/// Members declared in the edited source are compared through the two bindings; for a type of the
+/// Members declared in the edited source are compared through the two bindings; a type of the
 /// assembly whose source the reload was not given, which the worker sees through its public surface
-/// only, the all-members compiled copy is read instead (UnpassedHiddenMemberLookup).
+/// only, is compared by binding the use the way the patch's compile does (PatchBindingPickComparison).
 /// </summary>
 internal static class HiddenMemberPickGuard
 {
@@ -23,9 +23,11 @@ internal static class HiddenMemberPickGuard
     internal static WorkerReason DescribeSkipOrNull(
         SemanticModel semanticModel,
         SyntaxNode bodyNode,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBinding)
     {
         SemanticModel enforcingModel = null;
+        SemanticModel patchModel = null;
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
             if (node is not ExpressionSyntax || NameofRules.IsInsideNameofArgument(node))
@@ -40,8 +42,9 @@ internal static class HiddenMemberPickGuard
             }
 
             enforcingModel = enforcingModel ?? AccessibilityRules.EnforcingModel(semanticModel);
+            patchModel = patchModel ?? patchBinding.ModelFor(semanticModel.SyntaxTree);
             ISymbol hidden = FindHiddenPickOrNull(semanticModel, enforcingModel, node, info)
-                ?? UnpassedHiddenMemberLookup.FindOrNull(semanticModel, enforcingModel, node, targetAssembly);
+                ?? PatchBindingPickComparison.FindHiddenPickOrNull(enforcingModel, patchModel, node, targetAssembly);
             if (hidden != null)
             {
                 return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember, Display(hidden));
@@ -145,7 +148,11 @@ internal static class HiddenMemberPickGuard
     // Why the created type for a construction: C# lets a derived type call a protected constructor of
     // its base only from a constructor initializer, so 'new Base(...)' there reaches it through Base.
     // The syntax gives that type even when the call resolves to nothing.
-    private static ITypeSymbol FindReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
+    /// <summary>
+    /// What: the type a use is made on: the receiver of a call or member access, the created type
+    /// of a construction, or null for a use written without a receiver or a static one.
+    /// </summary>
+    internal static ITypeSymbol FindReceiverTypeOrNull(SemanticModel semanticModel, SyntaxNode node)
     {
         if (node is BaseObjectCreationExpressionSyntax)
         {
@@ -225,7 +232,11 @@ internal static class HiddenMemberPickGuard
         return null;
     }
 
-    private static bool IsReachableFromTheWholeAssembly(ISymbol symbol)
+    /// <summary>
+    /// What: whether the member and every type that contains it are public, internal or protected
+    /// internal, so every type of the declaring assembly may reach it.
+    /// </summary>
+    internal static bool IsReachableFromTheWholeAssembly(ISymbol symbol)
     {
         for (ISymbol current = symbol; current != null && current.Kind != SymbolKind.Namespace; current = current.ContainingType)
         {

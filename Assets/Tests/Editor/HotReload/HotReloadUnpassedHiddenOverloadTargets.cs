@@ -82,4 +82,133 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
         }
     }
+
+    /// <summary>
+    /// Public class whose private instance method fits an ArraySegment argument better than the public
+    /// extension method of the same name that code outside the class calls on it.
+    /// </summary>
+    public sealed class HotReloadUnpassedHiddenInstanceTarget
+    {
+        private int Halve(ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+    }
+
+    /// <summary>
+    /// Public extension class whose public extension method is the one code outside
+    /// HotReloadUnpassedHiddenInstanceTarget calls, while that class's private instance method fits
+    /// the argument better.
+    /// </summary>
+    public static class HotReloadUnpassedHiddenInstanceTargetExtensions
+    {
+        public static int Halve(this HotReloadUnpassedHiddenInstanceTarget target, object value)
+        {
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Public extension class with a public extension method taking any value. Another class in the
+    /// namespace declares a private extension method of the same name that fits an ArraySegment better.
+    /// </summary>
+    public static class HotReloadUnpassedPublicMarkExtensions
+    {
+        public static int Mark(this int value, object other)
+        {
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Public extension class whose only extension method is private and takes an ArraySegment.
+    /// </summary>
+    public static class HotReloadUnpassedPrivateMarkExtensions
+    {
+        private static int Mark(this int value, ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+    }
+
+    /// <summary>
+    /// Public base class whose public static overload takes any value while a private one takes an
+    /// ArraySegment. A type nested in a derived class reaches the base's members through its outer
+    /// type, where only the public one is reachable.
+    /// </summary>
+    public class HotReloadUnpassedHiddenOuterBase
+    {
+        public static int Pick(object value)
+        {
+            return 1;
+        }
+
+        private static int Pick(ArraySegment<int> segment)
+        {
+            return segment.Count;
+        }
+
+        private static int Pick(HotReloadUnpassedHiddenOverloadHost host)
+        {
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Public class whose public overload takes any value while a private one takes the host the
+    /// tests edit, which the reload is given while this file is not. The host file imports it with a
+    /// using static directive.
+    /// </summary>
+    public static class HotReloadUnpassedHostTakeOverloads
+    {
+        public static int Take(object value)
+        {
+            return 1;
+        }
+
+        private static int Take(HotReloadUnpassedHiddenOverloadHost host)
+        {
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Public extension class with a public extension method taking any value. Another class in the
+    /// namespace declares a private extension method of the same name that takes the edited host.
+    /// </summary>
+    public static class HotReloadUnpassedPublicHostMarkExtensions
+    {
+        public static int HostMark(this int value, object other)
+        {
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Public extension class whose only extension method is private and takes the edited host.
+    /// </summary>
+    public static class HotReloadUnpassedPrivateHostMarkExtensions
+    {
+        private static int HostMark(this int value, HotReloadUnpassedHiddenOverloadHost host)
+        {
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Public extension class with a public extension method taking any value and a private one
+    /// taking the edited host, called in static form and on a receiver.
+    /// </summary>
+    public static class HotReloadUnpassedHostTwinExtensions
+    {
+        public static int HostTwin(this int value, object other)
+        {
+            return 1;
+        }
+
+        private static int HostTwin(this int value, HotReloadUnpassedHiddenOverloadHost host)
+        {
+            return 2;
+        }
+    }
 }

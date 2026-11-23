@@ -215,6 +215,7 @@ internal static class IndexerAccessorEmitter
             addedPropertyCatalog,
             typeState.SourceUnit.PartialTypeParts,
             typeState.TargetAssembly,
+            typeState.SourceUnit.PatchBinding,
             skipped);
         if (skipAccessor)
         {

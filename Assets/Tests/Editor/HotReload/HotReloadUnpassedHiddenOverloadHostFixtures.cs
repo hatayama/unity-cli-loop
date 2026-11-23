@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
+using static io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadHiddenOverloads;
+using static io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadUnpassedHostTakeOverloads;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -47,6 +50,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int DerivedEditedInOwnStatements()
         {
             return 7151;
+        }
+    }
+
+    /// <summary>
+    /// Compiled host derived from a base whose file the unpassed hidden overload tests do not give the
+    /// reload; its nested type reaches the base's static overloads through the outer type.
+    /// </summary>
+    public sealed class HotReloadUnpassedOuterHost : HotReloadUnpassedHiddenOuterBase
+    {
+        /// <summary>
+        /// Type nested in the host, whose site calls the outer type's inherited overloads by name.
+        /// </summary>
+        public sealed class Nested
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int NestedEditedInOwnStatements()
+            {
+                return 7161;
+            }
         }
     }
 }

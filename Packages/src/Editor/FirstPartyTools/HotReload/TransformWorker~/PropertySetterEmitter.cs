@@ -204,6 +204,7 @@ internal static class PropertySetterEmitter
             addedPropertyCatalog,
             typeState.SourceUnit.PartialTypeParts,
             typeState.TargetAssembly,
+            typeState.SourceUnit.PatchBinding,
             skipped);
         if (skipSetter)
         {

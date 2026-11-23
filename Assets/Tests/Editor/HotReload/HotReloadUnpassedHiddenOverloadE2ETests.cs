@@ -49,8 +49,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// is a call that fits a private overload taking a params array in its expanded form, an
         /// optional parameter left out, a public nested type of the class, a constructed List, or the
         /// host the reload is given; a static-form extension call; a derived type's call that fits a
-        /// protected overload of its base made on a value typed as the base; and a call with a named
-        /// argument, whose fit is not told.
+        /// protected overload of its base made on a value typed as the base; a call by bare name
+        /// through a using static directive; a
+        /// call written on a receiver whose type has a private instance method that fits better than
+        /// the public extension method; a call that a private extension method of another class in
+        /// scope fits better; a nested type's call by bare name that a private overload of its outer
+        /// type's base fits better; and those forms where the private member takes a type the reload
+        /// is given, which the worker compiles from source.
         /// </summary>
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;")]
         [TestCase("own", "return new HotReloadHiddenOverloadBox(new ArraySegment<int>(_ints)).Value + 7102;")]
@@ -73,8 +78,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("own", "return HotReloadUnpassedHiddenMappedOverloads.Pick(new List<int>(_ints)) + 7102;")]
         [TestCase("own", "return HotReloadUnpassedHiddenMappedOverloads.Pick(this) + 7102;")]
         [TestCase("own", "return HotReloadHiddenOverloadExtensions.Choose(_ints.Length, new ArraySegment<int>(_ints)) + 7102;")]
-        [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(value: new ArraySegment<int>(_ints)) + 7102;")]
         [TestCase("derived-own", "return new HotReloadProtectedOverloadBase().Pick(new ArraySegment<int>(new int[2])) + 7152;")]
+        [TestCase("own", "return Pick(new ArraySegment<int>(_ints)) + 7102;")]
+        [TestCase("lambda", "return Pick(new ArraySegment<int>(_ints)) + 7112;")]
+        [TestCase("own", "return new HotReloadUnpassedHiddenInstanceTarget().Halve(new ArraySegment<int>(_ints)) + 7102;")]
+        [TestCase("lambda", "return new HotReloadUnpassedHiddenInstanceTarget().Halve(new ArraySegment<int>(_ints)) + 7112;")]
+        [TestCase("own", "return _ints.Length.Mark(new ArraySegment<int>(_ints)) + 7102;")]
+        [TestCase("lambda", "return _ints.Length.Mark(new ArraySegment<int>(_ints)) + 7112;")]
+        [TestCase("nested-own", "return Pick(new ArraySegment<int>(new int[2])) + 7162;")]
+        [TestCase("own", "return Take(this) + 7102;")]
+        [TestCase("own", "return _ints.Length.HostMark(this) + 7102;")]
+        [TestCase("own", "return HotReloadUnpassedHostTwinExtensions.HostTwin(_ints.Length, this) + 7102;")]
+        [TestCase("own", "return _ints.Length.HostTwin(this) + 7102;")]
+        [TestCase("nested-own", "return Pick(new HotReloadUnpassedHiddenOverloadHost()) + 7162;")]
         public async Task Run_UseOfAnUnpassedTypeThePatchWouldResolveToAPrivateMember_IsSkippedAndKeepsTheCompiledValue(
             string site,
             string statements)
@@ -92,8 +108,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// edited value when no private overload of the same name can apply to the call: one takes
         /// more parameters than the call has arguments, or an argument (a string, also on an
         /// extension call written on its receiver) converts to none of their parameter types, a
-        /// nested type and a constructed List included. So is a derived type's call of its base's
-        /// protected overload on itself, which Unity's compiler resolves too.
+        /// nested type and a constructed List included; or a named argument matches only the public
+        /// overload's parameter name. So is a derived type's call of its base's protected overload on
+        /// itself, which Unity's compiler resolves too.
         /// </summary>
         [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;", 7103)]
         [TestCase("lambda", "return HotReloadUnpassedHiddenArityOverloads.Pick(new ArraySegment<int>(_ints)) + 7112;", 7113)]
@@ -102,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("own", "return HotReloadUnpassedHiddenMappedOverloads.Pick(\"text\") + 7102;", 7103)]
         [TestCase("derived-own", "return Pick(new ArraySegment<int>(new int[2])) + 7152;", 7154)]
         [TestCase("derived-own", "return this.Pick(new Memory<int>(new int[2])) + 7152;", 7154)]
+        [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(value: new ArraySegment<int>(_ints)) + 7102;", 7103)]
         public async Task Run_UseOfAnUnpassedTypeWhosePrivateMemberCannotApply_IsPatchedAndReturnsTheEditedValue(
             string site,
             string statements,
@@ -125,6 +143,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return "EditedInAsync";
                 case "derived-own":
                     return "DerivedEditedInOwnStatements";
+                case "nested-own":
+                    return "NestedEditedInOwnStatements";
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -142,6 +162,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return 7121;
                 case "derived-own":
                     return 7151;
+                case "nested-own":
+                    return 7161;
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -160,6 +182,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     return await host.EditedInAsync();
                 case "derived-own":
                     return new HotReloadUnpassedProtectedOverloadDerived().DerivedEditedInOwnStatements();
+                case "nested-own":
+                    return new HotReloadUnpassedOuterHost.Nested().NestedEditedInOwnStatements();
             }
 
             throw new ArgumentException("Unknown site: " + site, nameof(site));
@@ -181,6 +205,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     break;
                 case "async":
                     edited = ReplaceOnce(edited, "return 7121;", statements);
+                    break;
+                case "nested-own":
+                    edited = ReplaceOnce(edited, "return 7161;", statements);
                     break;
                 default:
                     edited = ReplaceOnce(edited, "return 7151;", statements);
