@@ -84,6 +84,7 @@ internal static class UnsupportedMemberSkipCollector
             if (member is IndexerDeclarationSyntax indexerDeclaration)
             {
                 AppendIndexerAccessorSkips(
+                    explicitImplementations,
                     indexerDeclaration,
                     semanticModel.GetDeclaredSymbol(indexerDeclaration),
                     skipped,
@@ -218,7 +219,7 @@ internal static class UnsupportedMemberSkipCollector
 
             skipped.Add(new WorkerSkipped
             {
-                Method = WorkerMethodKeys.FormatMethodLabel(accessorMethod),
+                Method = WorkerMethodKeys.FormatSourceLabel(explicitImplementations, accessorMethod),
                 Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
             });
             emittedSkip = true;
@@ -265,6 +266,7 @@ internal static class UnsupportedMemberSkipCollector
     // and that the indexer emitter does not report itself (no matching compiled accessor, an init
     // accessor, or a type a retained artifact serves).
     private static void AppendIndexerAccessorSkips(
+        ExplicitImplementationMatcher explicitImplementations,
         IndexerDeclarationSyntax indexerDeclaration,
         IPropertySymbol indexerSymbol,
         List<WorkerSkipped> skipped,
@@ -305,7 +307,7 @@ internal static class UnsupportedMemberSkipCollector
 
             skipped.Add(new WorkerSkipped
             {
-                Method = WorkerMethodKeys.FormatMethodLabel(accessorMethod),
+                Method = WorkerMethodKeys.FormatSourceLabel(explicitImplementations, accessorMethod),
                 Reason = WorkerReason.Of(HotReloadWorkerReasonCode.UnsupportedMemberExplicitAccessor)
             });
         }

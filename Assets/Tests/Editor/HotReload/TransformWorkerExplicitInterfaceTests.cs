@@ -732,6 +732,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoEntryFor(result, typeof(HotReloadHiddenIndexedFixture));
             AssertNoEntryFor(result, typeof(HotReloadHiddenNotifierFixture));
             AssertNoEntryFor(result, typeof(HotReloadHiddenCopierFixture));
+            AssertNoEntryFor(result, typeof(HotReloadHiddenInitValueFixture));
             Assert.That(FormatSkipped(result), Is.EqualTo("(none)"), "No unedited implementation may be skipped.");
             AssertNoDriftOrRemovedMember(result);
         }
@@ -827,12 +828,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an edited accessor of an explicit indexer or event of an internal interface that the
+        /// What: an edited accessor of an explicit indexer, event or init-only property of an internal interface that the
         /// reload was not given stays Skipped as it does for a public interface, under the name the
         /// compiled assembly gives the accessor, with no edit-outside-method-bodies warning.
         /// </summary>
         [TestCase("8309", "9309", "IHotReloadHiddenIndexed.get_Item(System.Int32)", "MethodTransformExplicitInterfaceImplementation")]
         [TestCase("8310", "9310", "IHotReloadHiddenNotifier.add_Changed(System.Action)", "UnsupportedMemberUnsupportedKind")]
+        [TestCase("8312", "9312", "IHotReloadHiddenIndexed.set_Item(System.Int32,System.Int32)", "MethodTransformExplicitInterfaceImplementation")]
+        [TestCase("8313", "9313", "IHotReloadHiddenInitValue.set_Value(System.Int32)", "UnsupportedMemberExplicitAccessor")]
         public async Task Run_EditedExplicitIndexerOrEventAccessorOfHiddenInterface_StaysSkippedUnderTheCompiledName(
             string token,
             string replacement,
@@ -900,7 +903,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string FixtureTypeOf(string token)
         {
-            return token == "8309" ? nameof(HotReloadHiddenIndexedFixture) : nameof(HotReloadHiddenNotifierFixture);
+            switch (token)
+            {
+                case "8309":
+                case "8312":
+                    return nameof(HotReloadHiddenIndexedFixture);
+                case "8313":
+                    return nameof(HotReloadHiddenInitValueFixture);
+                default:
+                    return nameof(HotReloadHiddenNotifierFixture);
+            }
         }
 
         private static void AssertNoDriftOrRemovedMember(TransformWorkerClientResult result)

@@ -20,7 +20,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// <summary>Internal interface with an indexer, declared apart from its implementer.</summary>
     internal interface IHotReloadHiddenIndexed
     {
-        int this[int index] { get; }
+        int this[int index] { get; set; }
+    }
+
+    /// <summary>Internal interface with an init-only property, declared apart from its implementer.</summary>
+    internal interface IHotReloadHiddenInitValue
+    {
+        int Value { get; init; }
     }
 
     /// <summary>Internal interface with an event, declared apart from its implementer.</summary>

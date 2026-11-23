@@ -49,7 +49,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// <summary>Implements an indexer of an internal interface from another file explicitly.</summary>
     public class HotReloadHiddenIndexedFixture : IHotReloadHiddenIndexed
     {
-        int IHotReloadHiddenIndexed.this[int index] => index + 8309;
+        private int _lastWritten;
+
+        int IHotReloadHiddenIndexed.this[int index]
+        {
+            get { return index + 8309; }
+            set { _lastWritten = value + 8312; }
+        }
+    }
+
+    /// <summary>Implements an init-only property of an internal interface from another file explicitly.</summary>
+    public class HotReloadHiddenInitValueFixture : IHotReloadHiddenInitValue
+    {
+        private int _stored;
+
+        int IHotReloadHiddenInitValue.Value
+        {
+            get { return _stored; }
+            init { _stored = value + 8313; }
+        }
     }
 
     /// <summary>Implements an event of an internal interface from another file explicitly.</summary>
