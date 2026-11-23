@@ -74,7 +74,9 @@ internal static class WorkerSyntaxIndex
         TypeDeclarationSyntax current = typeDeclaration;
         while (current != null)
         {
-            string simpleName = current.Identifier.Text;
+            // Why ValueText: the key stands for a metadata name, and kind-change keys built from
+            // symbols meet these keys; Text keeps the @ of a keyword-named type such as @class.
+            string simpleName = current.Identifier.ValueText;
             if (current.TypeParameterList != null && current.TypeParameterList.Parameters.Count > 0)
             {
                 simpleName += "`" + current.TypeParameterList.Parameters.Count.ToString(CultureInfo.InvariantCulture);
@@ -102,7 +104,7 @@ internal static class WorkerSyntaxIndex
 
     internal static string BuildEnumMetadataNameFromSyntax(EnumDeclarationSyntax enumDeclaration)
     {
-        string simpleName = enumDeclaration.Identifier.Text;
+        string simpleName = enumDeclaration.Identifier.ValueText;
         if (enumDeclaration.Parent is TypeDeclarationSyntax containingType)
         {
             return BuildTypeMetadataNameFromSyntax(containingType) + "+" + simpleName;
@@ -125,14 +127,9 @@ internal static class WorkerSyntaxIndex
         SyntaxNode current = node.Parent;
         while (current != null)
         {
-            // Why NormalizeWhitespace: trivia in nested namespace names must not invent distinct keys.
-            if (current is NamespaceDeclarationSyntax namespaceDeclaration)
+            if (current is BaseNamespaceDeclarationSyntax namespaceDeclaration)
             {
-                parts.Add(namespaceDeclaration.Name.NormalizeWhitespace().ToString());
-            }
-            else if (current is FileScopedNamespaceDeclarationSyntax fileScopedNamespace)
-            {
-                parts.Add(fileScopedNamespace.Name.NormalizeWhitespace().ToString());
+                parts.Add(ToUnescapedName(namespaceDeclaration.Name));
             }
 
             current = current.Parent;
@@ -147,11 +144,25 @@ internal static class WorkerSyntaxIndex
         return string.Join(".", parts);
     }
 
+    // Why segment ValueTexts rather than the name text: the text keeps trivia and the @ of a
+    // keyword-named segment such as @event, which no metadata name carries, so a key built from a
+    // symbol would never meet it.
+    private static string ToUnescapedName(NameSyntax name)
+    {
+        return string.Join(
+            ".",
+            name.DescendantNodesAndSelf()
+                .OfType<SimpleNameSyntax>()
+                .Select(simpleName => simpleName.Identifier.ValueText));
+    }
+
     internal static string BuildSyntaxPropertyKey(
         string typeMetadataName,
         PropertyDeclarationSyntax propertyDeclaration)
     {
-        string name = propertyDeclaration.Identifier.Text;
+        // Why ValueText: kind-change keys name the compiled property by its symbol name, which
+        // drops the @ of a keyword-named property such as @checked.
+        string name = propertyDeclaration.Identifier.ValueText;
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
             // Why NormalizeWhitespace: keep property keys symmetric with BuildSyntaxMethodKey so
