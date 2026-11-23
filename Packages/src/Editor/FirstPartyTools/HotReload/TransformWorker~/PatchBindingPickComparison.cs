@@ -47,12 +47,17 @@ internal static class PatchBindingPickComparison
         ISymbol patchPick = patchInfo.Symbol;
         if (patchPick == null)
         {
-            return FirstHiddenCandidateOrNull(patchInfo.CandidateSymbols, use);
+            return FirstHiddenCandidateOrNull(patchInfo.CandidateSymbols, use, null);
         }
 
-        if (IsOfThePatchedAssembly(patchPick, use)
-            && !IsSameMember(patchPick, unityPick)
-            && !IsReachable(patchPick, use))
+        if (!IsOfThePatchedAssembly(patchPick, use))
+        {
+            return IsReachable(patchPick, use)
+                ? RunDeclaredParameterFitOrNull(patchPick, use)
+                : FirstHiddenCandidateOrNull(use.PatchModel.GetMemberGroup(node), use, patchPick);
+        }
+
+        if (!IsSameMember(patchPick, unityPick) && !IsReachable(patchPick, use))
         {
             return patchPick;
         }
@@ -85,7 +90,10 @@ internal static class PatchBindingPickComparison
     // method leave the binding ambiguous without any other member taking part.
     // Why only one that may apply: a candidate the arguments cannot fit is never what the patch
     // calls, whatever made the binding fail.
-    private static ISymbol FirstHiddenCandidateOrNull(ImmutableArray<ISymbol> candidates, PatchUse use)
+    // Why the member group when this binding picks a member of another assembly the code cannot
+    // reach: the patch's compile keeps that member hidden and resolves among the rest, so its pick
+    // is unknown here, and any member of the patched assemblies that may apply could be it.
+    private static ISymbol FirstHiddenCandidateOrNull(ImmutableArray<ISymbol> candidates, PatchUse use, ISymbol patchPickOrNull)
     {
         foreach (ISymbol candidate in candidates)
         {
@@ -93,7 +101,7 @@ internal static class PatchBindingPickComparison
                 && IsOfThePatchedAssembly(candidate, use)
                 && !IsSameMember(candidate, use.UnityPick)
                 && !IsReachable(candidate, use)
-                && MayApply(candidate, use, null))
+                && MayApply(candidate, use, patchPickOrNull))
             {
                 return candidate;
             }

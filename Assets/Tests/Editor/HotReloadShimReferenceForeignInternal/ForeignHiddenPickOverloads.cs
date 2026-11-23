@@ -20,4 +20,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceFo
             return segment.Count;
         }
     }
+
+    /// <summary>
+    /// Private extension method of this assembly that fits a string argument better than the edited
+    /// assembly's overloads in the same namespace. The patch's compile keeps it hidden.
+    /// </summary>
+    public static class ForeignHiddenElectExtensions
+    {
+        private static int Elect(this int value, string other)
+        {
+            return 3;
+        }
+    }
 }

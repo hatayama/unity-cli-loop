@@ -57,7 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// type's base fits better; those forms where the private member takes a type the reload is
         /// given, which the worker compiles from source, also through a type nested in a generic type
         /// constructed with it; and a call whose reachable overload is internal, which the worker's
-        /// binding does not see.
+        /// binding does not see; also when a private extension method of another assembly in scope
+        /// fits better still, which the patch's compile keeps hidden.
         /// </summary>
         [TestCase("own", "return HotReloadHiddenOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;")]
         [TestCase("own", "return new HotReloadHiddenOverloadBox(new ArraySegment<int>(_ints)).Value + 7102;")]
@@ -93,6 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("own", "return HotReloadUnpassedHostTwinExtensions.HostTwin(_ints.Length, this) + 7102;")]
         [TestCase("own", "return _ints.Length.HostTwin(this) + 7102;")]
         [TestCase("nested-own", "return Pick(new HotReloadUnpassedHiddenOverloadHost()) + 7162;")]
+        [TestCase("own", "return 0.Elect(\"text\") + 7102;")]
+        [TestCase("lambda", "return 0.Elect(\"text\") + 7112;")]
         [TestCase("own", "return HotReloadUnpassedEnvelopeOverloads.Pick(new HotReloadUnpassedEnvelope<HotReloadUnpassedHiddenOverloadHost>.Item()) + 7102;")]
         [TestCase("own", "return HotReloadUnpassedInternalPickOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;")]
         [TestCase("lambda", "return HotReloadUnpassedInternalPickOverloads.Pick(new ArraySegment<int>(_ints)) + 7112;")]

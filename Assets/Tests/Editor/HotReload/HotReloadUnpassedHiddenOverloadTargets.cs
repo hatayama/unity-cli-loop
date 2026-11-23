@@ -260,3 +260,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 }
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceForeignInternal
+{
+    /// <summary>
+    /// Extension methods of the edited assembly in a namespace another assembly also declares
+    /// extension methods in, so a call written on a receiver weighs both at one scope: a public
+    /// overload taking any value and a private one taking IComparable.
+    /// </summary>
+    public static class HotReloadUnpassedElectExtensions
+    {
+        public static int Elect(this int value, object other)
+        {
+            return 1;
+        }
+
+        private static int Elect(this int value, IComparable other)
+        {
+            return 2;
+        }
+    }
+}

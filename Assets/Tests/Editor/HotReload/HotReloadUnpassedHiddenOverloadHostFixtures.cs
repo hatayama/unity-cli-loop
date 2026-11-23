@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
+using io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.ShimReferenceForeignInternal;
+
 using static io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadHiddenOverloads;
 using static io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadUnpassedHostTakeOverloads;
 
