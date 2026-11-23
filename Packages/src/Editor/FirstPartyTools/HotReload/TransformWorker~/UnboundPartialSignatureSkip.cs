@@ -42,7 +42,7 @@ internal static class UnboundPartialSignatureSkip
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
-            Method = WorkerMethodKeys.FormatRowLabel(typeState.CompiledType, methodSymbol),
+            Method = WorkerMethodKeys.FormatRowLabel(typeState.SourceUnit.ExplicitImplementations, typeState.CompiledType, methodSymbol),
             Reason = untrustedPart
         });
         RecordGenuinelyAddedMethod(standing, syntaxMethodKey, methodKey, addedMethodCatalog);

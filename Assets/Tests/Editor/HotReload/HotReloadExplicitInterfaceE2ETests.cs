@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadExplicitInterfaceE2ETests
     {
         private const string FixtureFileName = "HotReloadExplicitInterfaceFixtures.cs";
+        private const string HiddenFixtureFileName = "HotReloadHiddenExplicitInterfaceFixtures.cs";
 
         private HotReloadDomainTestScope _scope;
 
@@ -203,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "IHotReloadExplicitBaseCaller.Value(");
             Assert.That(caller.Value(1), Is.EqualTo(1 + 100 + 9108));
 
-            string fixturePath = ResolveFixturePath();
+            string fixturePath = ResolveFixturePath(FixtureFileName);
             string onDisk = File.ReadAllText(fixturePath);
             string skippedEdit = onDisk.Replace(
                 original,
@@ -310,7 +311,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Run_ExplicitPropertyRespelledWithGlobal_ApplyAndRevert_RunsTheEditedGetter()
         {
             IHotReloadExplicitValue value = new HotReloadExplicitValueFixture();
-            string fixturePath = ResolveFixturePath();
+            string fixturePath = ResolveFixturePath(FixtureFileName);
             string onDisk = File.ReadAllText(fixturePath);
             string edited = onDisk
                 .Replace(
@@ -339,7 +340,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Run_GetterAddedToOrdinarySetOnlyProperty_IsSkippedAndTheFileStillApplies()
         {
             IHotReloadExplicitRunner runner = new HotReloadExplicitRunnerFixture();
-            string fixturePath = ResolveFixturePath();
+            string fixturePath = ResolveFixturePath(FixtureFileName);
             string onDisk = File.ReadAllText(fixturePath);
             string edited = onDisk
                 .Replace(
@@ -365,13 +366,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadCompositionRoot.Services.Patcher.RevertAll();
         }
 
+        /// <summary>
+        /// What: an edited explicit method of an internal interface declared in a file the reload is
+        /// not given is Patched, a call through the interface runs the edited body, and RevertAll
+        /// restores the compiled body.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitImplementationOfHiddenInterface_ApplyAndRevert_RunsTheEditedBody()
+        {
+            IHotReloadHiddenRunner runner = new HotReloadHiddenRunnerFixture();
+            Assert.That(runner.Run(), Is.EqualTo(8301));
+
+            await ApplyEditOfAsync(HiddenFixtureFileName, "HiddenE2ERunner.cs", "8301", "9301", "IHotReloadHiddenRunner.Run(");
+
+            Assert.That(runner.Run(), Is.EqualTo(9301));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(runner.Run(), Is.EqualTo(8301), "RevertAll must restore the compiled body.");
+        }
+
+        /// <summary>
+        /// What: an edited explicit property of an internal interface declared in a file the reload is
+        /// not given is Patched under its getter's compiled name and a read through the interface
+        /// returns the edited value until RevertAll.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedExplicitPropertyOfHiddenInterface_ApplyAndRevert_ReturnsTheEditedValue()
+        {
+            IHotReloadHiddenValue value = new HotReloadHiddenValueFixture();
+            Assert.That(value.Value, Is.EqualTo(8305));
+
+            await ApplyEditOfAsync(HiddenFixtureFileName, "HiddenE2EValue.cs", "8305", "9305", "IHotReloadHiddenValue.get_Value(");
+
+            Assert.That(value.Value, Is.EqualTo(9305));
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(value.Value, Is.EqualTo(8305), "RevertAll must restore the compiled getter.");
+        }
+
+        /// <summary>
+        /// What: an edited method whose body relies on its class implementing an internal interface
+        /// declared in a file the reload is not given (a conversion to it, an extension on it, an
+        /// indexer taking it) is Patched and returns the edited value.
+        /// </summary>
+        [TestCase("8306", "9306", "RunThroughInterface(", 8301 + 9306)]
+        [TestCase("8307", "9307", "RunThroughExtension(", 8301 * 2 + 9307)]
+        [TestCase("8308", "9308", "RunThroughIndexer(", 8301 + 1 + 9308)]
+        public async Task Run_EditedBodyRelyingOnTheHiddenInterface_IsPatchedAndReturnsTheEditedValue(
+            string token,
+            string replacement,
+            string patchedMethodFragment,
+            int expected)
+        {
+            HotReloadHiddenRunnerFixture runner = new HotReloadHiddenRunnerFixture();
+
+            await ApplyEditOfAsync(HiddenFixtureFileName, "HiddenE2ERelation.cs", token, replacement, patchedMethodFragment);
+
+            int actual = patchedMethodFragment == "RunThroughInterface("
+                ? runner.RunThroughInterface()
+                : patchedMethodFragment == "RunThroughExtension(" ? runner.RunThroughExtension() : runner.RunThroughIndexer();
+            HotReloadCompositionRoot.Services.Patcher.RevertAll();
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
         private static async Task ApplyEditAsync(
             string editedFileName,
             string token,
             string replacement,
             string patchedMethodFragment)
         {
-            string fixturePath = ResolveFixturePath();
+            await ApplyEditOfAsync(FixtureFileName, editedFileName, token, replacement, patchedMethodFragment);
+        }
+
+        private static async Task ApplyEditOfAsync(
+            string fixtureFileName,
+            string editedFileName,
+            string token,
+            string replacement,
+            string patchedMethodFragment)
+        {
+            string fixturePath = ResolveFixturePath(fixtureFileName);
             string onDisk = File.ReadAllText(fixturePath);
             int index = onDisk.IndexOf(token, StringComparison.Ordinal);
             Assert.That(index, Is.GreaterThanOrEqualTo(0), "Precondition: the fixture must hold " + token);
@@ -416,9 +488,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return string.Join("\n", lines);
         }
 
-        private static string ResolveFixturePath()
+        private static string ResolveFixturePath(string fixtureFileName)
         {
-            string path = Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName);
+            string path = Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fixtureFileName);
             Assert.That(File.Exists(path), Is.True, "Explicit-interface fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
