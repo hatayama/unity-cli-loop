@@ -33,14 +33,20 @@ type releasePRMergeRaceStub struct {
 	readyFailures map[int]bool
 	states        map[int]string
 	failStates    map[int]bool
-	prListCalls   int
-	commandLog    []string
+	// failOn fails every command line starting with it, standing in for a dispatch, run
+	// lookup, or watch that breaks once the PR's head branch is deleted by the merge.
+	failOn      string
+	prListCalls int
+	commandLog  []string
 }
 
 func (stub *releasePRMergeRaceStub) run(_ context.Context, name string, args ...string) (string, error) {
 	commandLine := strings.Join(append([]string{name}, args...), " ")
 	stub.commandLog = append(stub.commandLog, commandLine)
 	fields := strings.Fields(commandLine)
+	if stub.failOn != "" && strings.HasPrefix(commandLine, stub.failOn) {
+		return "", fmt.Errorf("%s failed", stub.failOn)
+	}
 
 	switch {
 	case strings.HasPrefix(commandLine, "gh pr list "):
@@ -240,5 +246,43 @@ func TestReleasePRChecksSkipPullRequestMergedBeforeReady(t *testing.T) {
 			assertReleasePRCheckLogContains(t, stderr, "gh pr ready 2001 failed")
 			assertReleasePRCheckLogDoesNotContain(t, stdout, "Skipping release PR #2001")
 		})
+	}
+}
+
+// Verifies that a failed workflow dispatch, run lookup, or run watch is skipped when the release PR was merged meanwhile, and stays an error when the PR is still open.
+func TestReleasePRChecksSkipDispatchFailureOnMergedPullRequest(t *testing.T) {
+	steps := []string{"gh workflow run", "gh run list", "gh run watch"}
+	states := []struct {
+		name         string
+		state        string
+		wantExitCode int
+	}{
+		{"merged", releasePRMergeRaceMergedState, 0},
+		{"still open", releasePRMergeRaceOpenState, 1},
+	}
+	for _, step := range steps {
+		for _, testCase := range states {
+			t.Run(step+" "+testCase.name, func(t *testing.T) {
+				stub := releasePRMergeRaceStub{
+					firstPRList: `[` + releasePRMergeRaceDispatcherPR + `]`,
+					failOn:      step,
+					states:      map[int]string{2001: testCase.state},
+				}
+
+				exitCode, stdout, stderr := runReleasePRMergeRaceStub(t, &stub)
+
+				if exitCode != testCase.wantExitCode {
+					t.Fatalf("expected exit code %d, got %d\nstdout: %s\nstderr: %s", testCase.wantExitCode, exitCode, stdout, stderr)
+				}
+				assertReleasePRCheckLogDoesNotContain(t, stdout, "as ready after checks passed")
+				if testCase.wantExitCode == 0 {
+					assertReleasePRCheckLogContains(t, stdout, "Skipping release PR #2001: it was merged")
+					assertReleasePRCheckLogDoesNotContain(t, stderr, step+" failed")
+					return
+				}
+				assertReleasePRCheckLogContains(t, stderr, step+" failed")
+				assertReleasePRCheckLogDoesNotContain(t, stdout, "Skipping release PR #2001")
+			})
+		}
 	}
 }

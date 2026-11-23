@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 )
 
@@ -40,4 +41,26 @@ func releasePRCheckMergedSkipMessage(
 		return "", false
 	}
 	return fmt.Sprintf("Skipping release PR #%d: it was merged while the release PR checks ran.", releasePR.Number), true
+}
+
+// reportReleasePRCheckFailureUnlessMerged reports a failed step of a release
+// PR's checks. When a person merged the PR meanwhile, it writes the skip line
+// instead and returns skipped with exit code 0, because the release already went
+// out and the failure files an issue nobody acts on; otherwise it writes err and
+// returns exit code 1.
+func reportReleasePRCheckFailureUnlessMerged(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	deps releasePRCheckDeps,
+	err error,
+) (skipped bool, exitCode int) {
+	if skipMessage, merged := releasePRCheckMergedSkipMessage(ctx, config, releasePR, deps); merged {
+		writeReleasePRCheckLine(stdout, skipMessage)
+		return true, 0
+	}
+	writeReleasePRCheckLine(stderr, err)
+	return false, 1
 }
