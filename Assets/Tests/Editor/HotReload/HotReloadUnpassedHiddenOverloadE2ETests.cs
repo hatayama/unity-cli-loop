@@ -114,7 +114,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// more parameters than the call has arguments, or an argument (a string, also on an
         /// extension call written on its receiver) converts to none of their parameter types, a
         /// nested type and a constructed List included, also when the overload Unity's compiler calls
-        /// is internal; or a named argument matches only the public overload's parameter name. So is a derived type's call of its base's protected overload on
+        /// is internal; or a named argument matches only the public overload's parameter name. So is a
+        /// call whose better-fitting private overload belongs to another assembly, which the patch's
+        /// compile keeps hidden. So is a derived type's call of its base's protected overload on
         /// itself, which Unity's compiler resolves too.
         /// </summary>
         [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;", 7103)]
@@ -126,6 +128,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TestCase("derived-own", "return this.Pick(new Memory<int>(new int[2])) + 7152;", 7154)]
         [TestCase("own", "return HotReloadUnpassedHiddenArityOverloads.Pick(value: new ArraySegment<int>(_ints)) + 7102;", 7103)]
         [TestCase("own", "return HotReloadUnpassedInternalPickOverloads.Pick(\"text\") + 7102;", 7103)]
+        [TestCase("own", "return ShimReferenceForeignInternal.ForeignHiddenPickOverloads.Pick(new ArraySegment<int>(_ints)) + 7102;", 7103)]
+        [TestCase("lambda", "return ShimReferenceForeignInternal.ForeignHiddenPickOverloads.Pick(new ArraySegment<int>(_ints)) + 7112;", 7113)]
         public async Task Run_UseOfAnUnpassedTypeWhosePrivateMemberCannotApply_IsPatchedAndReturnsTheEditedValue(
             string site,
             string statements,

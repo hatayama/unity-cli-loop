@@ -50,7 +50,9 @@ internal static class PatchBindingPickComparison
             return FirstHiddenCandidateOrNull(patchInfo.CandidateSymbols, use);
         }
 
-        if (!IsSameMember(patchPick, unityPick) && !IsReachable(patchPick, use))
+        if (IsOfThePatchedAssembly(patchPick, use)
+            && !IsSameMember(patchPick, unityPick)
+            && !IsReachable(patchPick, use))
         {
             return patchPick;
         }
@@ -88,6 +90,7 @@ internal static class PatchBindingPickComparison
         foreach (ISymbol candidate in candidates)
         {
             if (IsMember(candidate)
+                && IsOfThePatchedAssembly(candidate, use)
                 && !IsSameMember(candidate, use.UnityPick)
                 && !IsReachable(candidate, use)
                 && MayApply(candidate, use, null))
@@ -107,7 +110,8 @@ internal static class PatchBindingPickComparison
     {
         foreach (ISymbol member in use.PatchModel.GetMemberGroup(use.Node))
         {
-            if (IsSameMember(member, patchPick)
+            if (!IsOfThePatchedAssembly(member, use)
+                || IsSameMember(member, patchPick)
                 || IsSameMember(member, use.UnityPick)
                 || IsReachable(member, use)
                 || !CompiledCopyTypeMapper.HasParameterTypeTheRunDeclares(member, use.PatchModel.Compilation, use.TargetAssembly))
@@ -158,13 +162,30 @@ internal static class PatchBindingPickComparison
         return HiddenCandidateApplicability.MayApplyToParameters(use.PatchModel, use.Node, mapped);
     }
 
-    // Why a member of a compiled type that every type of the assembly may reach counts as reachable
+    // Why only the run's source and the target assembly: the patch's compile makes every member
+    // public in the target assembly alone, while this compilation imports every member of every
+    // reference, so a private member of another assembly here is one the patch never sees.
+    private static bool IsOfThePatchedAssembly(ISymbol member, PatchUse use)
+    {
+        IAssemblySymbol assembly = member.ContainingAssembly;
+        return assembly != null
+            && (SymbolEqualityComparer.Default.Equals(assembly, use.PatchModel.Compilation.Assembly)
+                || IsTargetAssembly(assembly, use));
+    }
+
+    private static bool IsTargetAssembly(IAssemblySymbol assembly, PatchUse use)
+    {
+        return use.TargetAssembly != null && assembly.Identity.Equals(use.TargetAssembly.Identity);
+    }
+
+    // Why a member of the target assembly that every type of it may reach counts as reachable
     // although the compiler here says otherwise: the run's code compiles into that assembly in
     // reality, while this compilation is another assembly.
     private static bool IsReachable(ISymbol member, PatchUse use)
     {
         Compilation compilation = use.PatchModel.Compilation;
-        if (!SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, compilation.Assembly)
+        if (member.ContainingAssembly != null
+            && IsTargetAssembly(member.ContainingAssembly, use)
             && HiddenMemberPickGuard.IsReachableFromTheWholeAssembly(member))
         {
             return true;
