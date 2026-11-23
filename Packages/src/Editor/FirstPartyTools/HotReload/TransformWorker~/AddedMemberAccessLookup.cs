@@ -2,9 +2,10 @@ using System;
 using Microsoft.CodeAnalysis;
 
 /// <summary>
-/// Tells the accessor plan which private members of one edited type this reload adds, so a
-/// shape the accessor rewrite cannot express does not refuse a member the added-member
-/// rewrite reaches directly.
+/// Tells the accessor plan which members reached from one edited type this reload adds (its own
+/// private members, and extension methods added to a static class the edit declares), so a shape
+/// the accessor rewrite cannot express does not refuse a member the added-member rewrite reaches
+/// directly.
 /// </summary>
 internal sealed class AddedMemberAccessLookup
 {
@@ -54,6 +55,35 @@ internal sealed class AddedMemberAccessLookup
 
         return CompiledMemberMatcher.MatchCompiledOrdinaryMethod(_compiledType, methodSymbol)
             != CompiledMethodMatch.Matched;
+    }
+
+    /// <summary>
+    /// Whether an extension method is one this reload adds to a static class the edit declares, so a
+    /// call to it is rewritten to the added method directly, whatever its arguments, as a call to a
+    /// method added to the edited type is.
+    /// </summary>
+    // Why the compiled counterpart of the method's own class: an extension method is declared
+    // outside the edited type, and the catalog cannot answer for a class classified later in the
+    // run. A class new to the Editor has no counterpart and is left to the introduced-type paths;
+    // a generic method is left to the generic-method reason, which every call form meets.
+    public bool IsAddedExtensionMethod(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol == null
+            || !methodSymbol.IsExtensionMethod
+            || methodSymbol.IsGenericMethod
+            || methodSymbol.MethodKind != MethodKind.Ordinary
+            || methodSymbol.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return false;
+        }
+
+        INamedTypeSymbol compiledType =
+            _addedEvents.FindCompiledDeclaringTypeOrNull(methodSymbol.ContainingType.OriginalDefinition);
+        // Why NotFound and not "anything but Matched": a method whose return type changed is a
+        // signature change, which keeps its own refusal; it is not added, and no shim method holds it.
+        return compiledType != null
+            && CompiledMemberMatcher.MatchCompiledOrdinaryMethod(compiledType, methodSymbol)
+                == CompiledMethodMatch.NotFound;
     }
 
     // Why the catalog is enough here: a type's properties are classified before any of its

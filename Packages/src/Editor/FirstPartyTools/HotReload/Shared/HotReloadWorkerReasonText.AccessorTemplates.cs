@@ -128,6 +128,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorStructMemberNoShape,
                 Plain("inaccessible instance member of a struct has no accessor rewrite shape.", 0));
+            // Why its own shape: a field accessor returns a reference, so a use that keeps that reference
+            // while a later await in the same expression runs does not compile in the shim (CS8178).
+            templates.Add(
+                HotReloadWorkerReasonCode.AccessorFieldReferenceAcrossAwaitNoShape,
+                Plain(
+                    "inaccessible field '{0}' is used by reference (passed as ref, out or in, used as the receiver "
+                    + "of a call that takes it by reference, or assigned to) in an expression that awaits after "
+                    + "that use, and its accessor returns a reference that cannot be kept across an await. Await "
+                    + "into a local first, such as 'int value = await ...;', and use the local in that expression; "
+                    + "that reads the field after the await, so when the original order matters, read the field "
+                    + "into a local before the await as well.",
+                    1));
             templates.Add(
                 HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
                 Plain(

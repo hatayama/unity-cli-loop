@@ -228,6 +228,7 @@ internal static class AccessorAccessRegistrar
         }
 
         return TryRegisterUseOutsideAssignment(
+            semanticModel,
             memberAccess,
             AccessibilityRules.BoundSymbolOrNull(semanticModel, memberAccess)
             ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
@@ -269,6 +270,7 @@ internal static class AccessorAccessRegistrar
         }
 
         return TryRegisterUseOutsideAssignment(
+            semanticModel,
             name,
             symbol,
             plan,
@@ -282,12 +284,19 @@ internal static class AccessorAccessRegistrar
     // element stays with the reads: its ref accessor is assignable, so the deconstruction writes
     // through it.
     private static bool TryRegisterUseOutsideAssignment(
+        SemanticModel semanticModel,
         ExpressionSyntax site,
         ISymbol symbol,
         AccessorPlan plan,
         AddedMemberAccessLookup addedMemberAccess,
         out WorkerReason rejectReason)
     {
+        rejectReason = FindFieldReferenceAcrossAwaitReasonOrNull(semanticModel, site, symbol as IFieldSymbol);
+        if (rejectReason != null)
+        {
+            return false;
+        }
+
         if (symbol is IPropertySymbol propertySymbol
             && AssignmentTargetRules.IsDeconstructedThroughSetter(propertySymbol, site))
         {
@@ -300,6 +309,24 @@ internal static class AccessorAccessRegistrar
             addedMemberAccess,
             EventAccessorRules.FindHandlerAssignmentKind(site),
             out rejectReason);
+    }
+
+    // Why at field registration and not per callee: every use of an inaccessible field becomes a call
+    // returning a reference, whatever the field is passed to, so the shape is the field's own.
+    private static WorkerReason FindFieldReferenceAcrossAwaitReasonOrNull(
+        SemanticModel semanticModel,
+        ExpressionSyntax site,
+        IFieldSymbol fieldSymbol)
+    {
+        if (fieldSymbol == null
+            || fieldSymbol.IsConst
+            || !AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol)
+            || !FieldReferenceAwaitRules.IsHeldAcrossLaterAwait(semanticModel, site))
+        {
+            return null;
+        }
+
+        return WorkerReason.Of(HotReloadWorkerReasonCode.AccessorFieldReferenceAcrossAwaitNoShape, fieldSymbol.Name);
     }
 
     internal static bool IsInaccessibleBindingTarget(ISymbol bound)
@@ -337,6 +364,12 @@ internal static class AccessorAccessRegistrar
             if (AccessibilityRules.NeedsStructInstanceReceiver(fieldSymbol))
             {
                 rejectReason = WorkerReason.Of(HotReloadWorkerReasonCode.AccessorStructMemberNoShape);
+                return false;
+            }
+
+            rejectReason = FindFieldReferenceAcrossAwaitReasonOrNull(semanticModel, assignment.Left, fieldSymbol);
+            if (rejectReason != null)
+            {
                 return false;
             }
 
@@ -451,7 +484,8 @@ internal static class AccessorAccessRegistrar
         // The added-method rewrite calls the shim with the argument list as written, so no delegate
         // has to carry the arguments and the compiled type has no such method to bind one to.
         if (addedMemberAccess != null
-            && addedMemberAccess.IsAddedMethod(methodSymbol))
+            && (addedMemberAccess.IsAddedMethod(methodSymbol)
+                || addedMemberAccess.IsAddedExtensionMethod(methodSymbol)))
         {
             return false;
         }

@@ -19,6 +19,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Struct with an indexer, held in a private field of the host, so an indexer write through that
+    /// field uses the field by reference.
+    /// </summary>
+    public struct HotReloadExtensionCallIndexed
+    {
+        private int _slot;
+
+        public int this[int index]
+        {
+            get => _slot + index;
+            set => _slot = value - index;
+        }
+    }
+
+    /// <summary>
+    /// Struct whose indexer returns by reference, held in a private field of the host, so an index
+    /// through that field reaches into the field's own storage.
+    /// </summary>
+    public struct HotReloadExtensionCallRefIndexed
+    {
+        private readonly int[] _items;
+
+        public HotReloadExtensionCallRefIndexed(int first)
+        {
+            _items = new[] { first };
+        }
+
+        public ref int this[int index] => ref _items[index];
+    }
+
+    /// <summary>
     /// Public class whose extension methods are internal, declared in the same file as the host,
     /// so a lambda or async body that calls one needs an accessor.
     /// </summary>
@@ -134,6 +165,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private string _missingLabel = null;
 
         private HotReloadExtensionCallPoint _point = new HotReloadExtensionCallPoint(5);
+
+        private HotReloadExtensionCallIndexed _indexed;
+
+        private HotReloadExtensionCallRefIndexed _refIndexed = new HotReloadExtensionCallRefIndexed(5);
 
         private string _order = "";
 
@@ -381,6 +416,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _order += "a";
             return add;
+        }
+    }
+
+    /// <summary>
+    /// Public class with internal extension methods, declared after the host so a method a test adds
+    /// to it is classified after the host's bodies are decided.
+    /// </summary>
+    public static class HotReloadPublicClassTrailingExtensions
+    {
+        internal static int TrailingPlus(this int value, int add)
+        {
+            return value + add;
         }
     }
 }

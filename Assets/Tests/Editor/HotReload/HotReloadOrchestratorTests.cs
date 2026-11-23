@@ -1959,77 +1959,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a caller that invokes an added generic method fails shim compile, and the
-        /// Failed reason's last line is the skipped-member note for that generic add.
+        /// What: a caller whose own statements invoke an added generic method of the same type is
+        /// Skipped with the skipped-callee reason naming that method instead of failing shim
+        /// compile, no row is Failed, and another edited method of the file is still Patched.
         /// </summary>
         [Test]
-        public async Task Run_EditedCallerOfAddedGeneric_FailsWithSkippedMemberNote()
+        public async Task Run_EditedCallerOfAddedGeneric_IsSkippedAndTheOtherEditApplies()
         {
-            const string genericSkipReason =
-                "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
-                + "Run 'uloop compile'.";
-            string expectedLastLine = string.Format(
-                HotReloadConstants.SkippedMemberCompileFailureNoteFormat,
-                "DescribeValue",
-                genericSkipReason);
             string fixturePath = ResolveE2EFixturePath();
-            // Why also edit ComputeWithPrivate: this test protects the isolation path
-            // (BuildFailedMethodOutcomes). The single-entry fallback is covered separately.
             string editedPath = WriteEditedSource(
                 "AddedGenericCaller.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
-                    callsMissingHelperMethod:
-                    "public int CallsMissingHelper(int value)\n        {\n            return DescribeValue(value);\n        }\n\n"
-                    + "        private int DescribeValue<T>(T value)\n        {\n            return 42;\n        }"));
+                    callsMissingHelperMethod: CallerOfAddedGenericDescribeValue));
 
             HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
                 new[] { fixturePath },
                 editedPath,
                 CancellationToken.None);
 
-            string failedReason = null;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
-                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper)))
-                {
-                    failedReason = outcome.Reason;
-                    break;
-                }
-            }
-
-            Assert.That(
-                failedReason,
-                Is.Not.Null,
-                "Expected CallsMissingHelper to fail shim compile.\n" + FormatOutcomes(result));
-            string[] reasonLines = failedReason.Replace("\r\n", "\n").Split('\n');
-            Assert.That(reasonLines[reasonLines.Length - 1], Is.EqualTo(expectedLastLine));
+            AssertCallerOfAddedGenericSkipped(result);
+            HotReloadMethodOutcome other = FindOutcomeContaining(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            Assert.That(other.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), FormatOutcomes(result));
         }
 
         /// <summary>
-        /// What: editing only the caller of an added generic method (single shim entry) still
-        /// ends the Failed reason with the skipped-member note.
+        /// What: editing only the caller of an added generic method of the same type Skips the caller
+        /// with the skipped-callee reason naming that method, and no row is Failed.
         /// </summary>
         [Test]
-        public async Task Run_SingleEditedCallerOfAddedGeneric_FailsWithSkippedMemberNote()
+        public async Task Run_SingleEditedCallerOfAddedGeneric_IsSkippedWithTheSkippedCalleeReason()
         {
-            const string genericSkipReason =
-                "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
-                + "Run 'uloop compile'.";
-            string expectedLastLine = string.Format(
-                HotReloadConstants.SkippedMemberCompileFailureNoteFormat,
-                "DescribeValue",
-                genericSkipReason);
             string fixturePath = ResolveE2EFixturePath();
             string editedPath = WriteEditedSource(
                 "AddedGenericCallerSingleEntry.cs",
                 BuildFixtureSource(
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    callsMissingHelperMethod: CallerOfAddedGenericDescribeValue));
+
+            HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertCallerOfAddedGenericSkipped(result);
+        }
+
+        /// <summary>
+        /// What: a caller that names an added generic method of the same type as a method group with
+        /// type arguments and no receiver ('DescribeValue&lt;int&gt;') is Skipped with the method-group
+        /// reason instead of failing shim compile, and no row is Failed.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedCallerOfAddedGenericMethodGroupWithTypeArguments_IsSkippedWithTheMethodGroupReason()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "AddedGenericMethodGroupCaller.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
                     callsMissingHelperMethod:
-                    "public int CallsMissingHelper(int value)\n        {\n            return DescribeValue(value);\n        }\n\n"
+                    "public int CallsMissingHelper(int value)\n        {\n            Func<int, int> f = DescribeValue<int>;\n            return f(value);\n        }\n\n"
                     + "        private int DescribeValue<T>(T value)\n        {\n            return 42;\n        }"));
 
             HotReloadOrchestratorResult result = await HotReloadCompositionRoot.Services.Orchestrator.RunAsync(
@@ -2037,23 +2030,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedPath,
                 CancellationToken.None);
 
-            string failedReason = null;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
-                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper)))
+                Assert.That(outcome.Kind, Is.Not.EqualTo(HotReloadMethodOutcomeKind.Failed), FormatOutcomes(result));
+            }
+
+            HotReloadMethodOutcome caller = FindOutcomeContaining(result, nameof(HotReloadE2EFixture.CallsMissingHelper));
+            Assert.That(caller.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
+            Assert.That(caller.Reason, Does.Contain("capture the added method 'DescribeValue' as a method group"), FormatOutcomes(result));
+            HotReloadMethodOutcome other = FindOutcomeContaining(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            Assert.That(other.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), FormatOutcomes(result));
+        }
+
+        private const string CallerOfAddedGenericDescribeValue =
+            "public int CallsMissingHelper(int value)\n        {\n            return DescribeValue(value);\n        }\n\n"
+            + "        private int DescribeValue<T>(T value)\n        {\n            return 42;\n        }";
+
+        private static void AssertCallerOfAddedGenericSkipped(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(outcome.Kind, Is.Not.EqualTo(HotReloadMethodOutcomeKind.Failed), FormatOutcomes(result));
+            }
+
+            HotReloadMethodOutcome caller = FindOutcomeContaining(result, nameof(HotReloadE2EFixture.CallsMissingHelper));
+            Assert.That(caller.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
+            Assert.That(caller.Reason, Does.Contain("DescribeValue<T>(T)', which this reload skipped"), FormatOutcomes(result));
+        }
+
+        private static HotReloadMethodOutcome FindOutcomeContaining(HotReloadOrchestratorResult result, string methodName)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method.Contains("." + methodName + "("))
                 {
-                    failedReason = outcome.Reason;
-                    break;
+                    return outcome;
                 }
             }
 
-            Assert.That(
-                failedReason,
-                Is.Not.Null,
-                "Expected CallsMissingHelper to fail shim compile.\n" + FormatOutcomes(result));
-            string[] reasonLines = failedReason.Replace("\r\n", "\n").Split('\n');
-            Assert.That(reasonLines[reasonLines.Length - 1], Is.EqualTo(expectedLastLine));
+            Assert.Fail("No outcome row for " + methodName + ".\n" + FormatOutcomes(result));
+            return null;
         }
 
         /// <summary>
