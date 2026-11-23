@@ -726,7 +726,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "inaccessible field '_point' is used by reference (passed as ref, out or in, used as the receiver "
                 + "of a call that takes it by reference, or assigned to) in an expression that awaits after "
                 + "that use, and its accessor returns a reference that cannot be kept across an await. Await "
-                + "into a local first, such as 'int value = await ...;', and use the local in that expression.");
+                + "into a local first, such as 'int value = await ...;', and use the local in that expression; "
+                + "that reads the field after the await, so when the original order matters, read the field "
+                + "into a local before the await as well.");
             yield return Case(
                 HotReloadWorkerReasonCode.AccessorImplicitCallNoShape,
                 new[] { "GetEnumerator", "foreach" },
