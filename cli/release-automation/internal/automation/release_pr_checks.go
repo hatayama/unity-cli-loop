@@ -133,8 +133,12 @@ func runReleasePRCheckForPullRequest(
 	releasePR releasePullRequest,
 	deps releasePRCheckDeps,
 ) int {
-	if code := prepareReleasePRForChecks(ctx, stdout, stderr, config, releasePR, deps); code != 0 {
+	skipped, code := prepareReleasePRForChecks(ctx, stdout, stderr, config, releasePR, deps)
+	if code != 0 {
 		return code
+	}
+	if skipped {
+		return 0
 	}
 	checkedHeadSHA, skipped, code := dispatchAndWatchReleasePRCheckWorkflows(ctx, stdout, stderr, config, releasePR, deps)
 	if code != 0 {
@@ -158,11 +162,11 @@ func prepareReleasePRForChecks(
 	config releasePRCheckConfig,
 	releasePR releasePullRequest,
 	deps releasePRCheckDeps,
-) int {
+) (skipped bool, exitCode int) {
 	bodyChanged, err := clarifyReleasePRCheckBody(ctx, config, releasePR, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
-		return 1
+		return false, 1
 	}
 	if bodyChanged {
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Updated release PR #%d body to clarify release component labels.", releasePR.Number))
@@ -170,11 +174,10 @@ func prepareReleasePRForChecks(
 
 	err = markReleasePRCheckDraft(ctx, config, releasePR, deps)
 	if err != nil {
-		writeReleasePRCheckLine(stderr, err)
-		return 1
+		return reportReleasePRCheckFailureUnlessMerged(ctx, stdout, stderr, config, releasePR, deps, err)
 	}
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as draft while checks run.", releasePR.Number))
-	return 0
+	return false, 0
 }
 
 // dispatchAndWatchReleasePRCheckWorkflows dispatches each required workflow
@@ -182,7 +185,9 @@ func prepareReleasePRForChecks(
 // release-please force-push between dispatches would otherwise let a mixed set
 // of green runs mark the PR ready. Why skip instead of failing: that update
 // means a newer release-please run already owns the checks for the new head, so
-// failing here only files a release-failure issue nobody acts on.
+// failing here only files a release-failure issue nobody acts on. A failure on
+// a PR merged meanwhile (its deleted head branch can fail the dispatch) is a
+// skip for the same reason.
 func dispatchAndWatchReleasePRCheckWorkflows(
 	ctx context.Context,
 	stdout io.Writer,
@@ -195,23 +200,23 @@ func dispatchAndWatchReleasePRCheckWorkflows(
 	dispatchedAt, err := dispatchPullRequestCheckWorkflows(
 		ctx, stdout, config.repository, releasePR.HeadRefName, description, config.workflows, deps)
 	if err != nil {
-		writeReleasePRCheckLine(stderr, err)
-		return "", false, 1
+		skipped, exitCode := reportReleasePRCheckFailureUnlessMerged(ctx, stdout, stderr, config, releasePR, deps, err)
+		return "", skipped, exitCode
 	}
 
 	checkedHeadWorkflow := ""
 	for _, workflow := range config.workflows {
 		run, err := findDispatchedReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt, deps)
 		if err != nil {
-			writeReleasePRCheckLine(stderr, err)
-			return "", false, 1
+			skipped, exitCode := reportReleasePRCheckFailureUnlessMerged(ctx, stdout, stderr, config, releasePR, deps, err)
+			return "", skipped, exitCode
 		}
 
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", workflow, run.DatabaseID, releasePR.Number))
 		err = watchReleasePRCheckRun(ctx, config, run.DatabaseID, deps)
 		if err != nil {
-			writeReleasePRCheckLine(stderr, err)
-			return "", false, 1
+			skipped, exitCode := reportReleasePRCheckFailureUnlessMerged(ctx, stdout, stderr, config, releasePR, deps, err)
+			return "", skipped, exitCode
 		}
 
 		if checkedHeadSHA == "" {
@@ -261,8 +266,9 @@ func finalizeReleasePRChecks(
 
 	err = markReleasePRCheckReady(ctx, config, releasePR, deps)
 	if err != nil {
-		writeReleasePRCheckLine(stderr, err)
-		return 1
+		// A person can merge the PR in the gap between the re-read above and this call.
+		_, exitCode := reportReleasePRCheckFailureUnlessMerged(ctx, stdout, stderr, config, releasePR, deps, err)
+		return exitCode
 	}
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as ready after checks passed.", releasePR.Number))
 	return 0
@@ -391,8 +397,10 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 // verifyReleasePRCheckHeadMatchesRun re-reads the pending release PR before
 // marking it ready. A moved head is returned as a skip message rather than an
 // error, because the release-please run for the new head re-dispatches the
-// checks; a missing or renumbered PR stays an error because it is not a race
-// the next run resolves.
+// checks. A PR a person merged while its checks ran is a skip message too,
+// because its release already went out. A PR closed without merging or
+// missing for another reason stays an error because it is not a race the next
+// run resolves.
 func verifyReleasePRCheckHeadMatchesRun(
 	ctx context.Context,
 	config releasePRCheckConfig,
@@ -406,6 +414,9 @@ func verifyReleasePRCheckHeadMatchesRun(
 	}
 	currentReleasePR, found := releasePRCheckPullRequestByNumber(currentReleasePRs, releasePR.Number)
 	if !found {
+		if skipMessage, merged := releasePRCheckMergedSkipMessage(ctx, config, releasePR, deps); merged {
+			return skipMessage, nil
+		}
 		return "", fmt.Errorf("release PR #%d is no longer pending before marking ready", releasePR.Number)
 	}
 	if currentReleasePR.HeadRefOID != checkedHeadSHA {
