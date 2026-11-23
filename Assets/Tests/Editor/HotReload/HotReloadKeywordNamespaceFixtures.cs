@@ -1,0 +1,39 @@
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
+{
+    /// <summary>
+    /// Host types declared in a namespace whose last segment is a C# keyword. Tests edit their
+    /// bodies to check that hot reload patches them: the escaped spelling (@event) appears only in
+    /// source, while the compiled metadata names the namespace "event".
+    /// </summary>
+    public sealed class HotReloadKeywordNamespaceHost
+    {
+        public int MethodValue()
+        {
+            return 35990;
+        }
+
+        public int GetterValue
+        {
+            get
+            {
+                return 35993;
+            }
+        }
+
+        public int CallsAddedMethod()
+        {
+            return 35996;
+        }
+
+        /// <summary>
+        /// Nested host, so the conversion of a nested type name in that namespace is covered too.
+        /// </summary>
+        public sealed class Nested
+        {
+            public int NestedValue()
+            {
+                return 35999;
+            }
+        }
+    }
+}
