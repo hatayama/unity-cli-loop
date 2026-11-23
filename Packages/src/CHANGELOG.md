@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.1](https://github.com/hatayama/unity-cli-loop/compare/v3.36.0...v3.36.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* Hot reload skips a method whose own statements call an added generic extension method instead of failing the whole file ([#3623](https://github.com/hatayama/unity-cli-loop/issues/3623)) ([42f59b0](https://github.com/hatayama/unity-cli-loop/commit/42f59b01a810f8d17bb136a89d793492cd8a03be))
+
 ## [3.36.0](https://github.com/hatayama/unity-cli-loop/compare/v3.35.5...v3.36.0) (2026-11-22)
 
 
