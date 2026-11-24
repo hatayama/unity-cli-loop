@@ -34,25 +34,30 @@ type toolReadinessDeps struct {
 	now func() time.Time
 	// findDialogs is the caller's look for a dialog that holds the Editor; nil never looks.
 	findDialogs DialogFinder
+	// lookSchedule is when the wait calls findDialogs.
+	lookSchedule DialogLookSchedule
 	// poll is the time between two probe sequences; zero uses ToolReadinessPoll.
 	poll time.Duration
 }
 
 // WaitForToolReadiness waits up to ToolReadinessTimeout for the Editor to answer tool requests. With
-// findDialogs, it stops early with ToolReadinessBlockedByDialogError when a dialog holds the Editor.
+// findDialogs, it stops early with ToolReadinessBlockedByDialogError when a dialog holds the Editor,
+// looking on DefaultDialogLookSchedule.
 func WaitForToolReadiness(ctx context.Context, projectRoot string, findDialogs DialogFinder) error {
-	return WaitForToolReadinessWithTimeout(ctx, projectRoot, ToolReadinessTimeout, findDialogs)
+	return WaitForToolReadinessWithTimeout(ctx, projectRoot, ToolReadinessTimeout, findDialogs, DefaultDialogLookSchedule())
 }
 
-// WaitForToolReadinessWithTimeout is WaitForToolReadiness with its own timeout.
+// WaitForToolReadinessWithTimeout is WaitForToolReadiness with its own timeout and dialog look schedule.
 func WaitForToolReadinessWithTimeout(
 	ctx context.Context,
 	projectRoot string,
 	timeout time.Duration,
 	findDialogs DialogFinder,
+	lookSchedule DialogLookSchedule,
 ) error {
 	deps := defaultToolReadinessDeps()
 	deps.findDialogs = findDialogs
+	deps.lookSchedule = lookSchedule
 	return waitForToolReadinessWithDeps(ctx, projectRoot, timeout, deps)
 }
 
@@ -71,7 +76,7 @@ func waitForToolReadinessWithDeps(ctx context.Context, projectRoot string, timeo
 
 	var lastErr error
 	exitWatch := NewUnityExitWatch(projectRoot, resolveProjectEndpointAddress(projectRoot), deps.findRunningUnityProcess, deps.now)
-	lookout := NewDialogLookout(deps.findDialogs, deps.now)
+	lookout := NewDialogLookout(deps.findDialogs, deps.lookSchedule, deps.now)
 	poll := deps.poll
 	if poll == 0 {
 		poll = ToolReadinessPoll

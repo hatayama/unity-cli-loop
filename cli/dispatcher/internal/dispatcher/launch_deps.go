@@ -68,7 +68,7 @@ func defaultLaunchDeps() launchDeps {
 		lookForDialogs:                  lookForLaunchDialogs,
 		pressDialogButtonInDialogTitled: pressLaunchDialogButtonInDialogTitled,
 		canPressDialogs:                 unitydialog.NewInspector(runtime.GOOS, nil).CanPress(),
-		waitForToolReadiness:            clicore.WaitForToolReadinessWithTimeout,
+		waitForToolReadiness:            waitForLaunchToolReadiness,
 		probeProjectIpcFallback:         clicore.ProbeToolReadinessSequence,
 		removePath:                      os.RemoveAll,
 		statPath:                        os.Stat,

@@ -30,13 +30,24 @@ type readinessDialogWait struct {
 	findErr error
 	// lookElapsed records when, after the start, each look ran.
 	lookElapsed []time.Duration
+	// lookTakes is how far each look moves the clock, as a look that waits for osascript does.
+	lookTakes time.Duration
+	// schedule is when the wait looks; newReadinessDialogWait starts it at the default.
+	schedule DialogLookSchedule
 	// unityRunning is what the process lookup reports.
 	unityRunning bool
 }
 
 func newReadinessDialogWait(probe func(elapsed time.Duration) error, dialogs ...unitydialog.Dialog) *readinessDialogWait {
 	start := time.Unix(1_700_000_000, 0)
-	return &readinessDialogWait{clock: start, startedAt: start, probe: probe, dialogs: dialogs, unityRunning: true}
+	return &readinessDialogWait{
+		clock:        start,
+		startedAt:    start,
+		probe:        probe,
+		dialogs:      dialogs,
+		schedule:     DefaultDialogLookSchedule(),
+		unityRunning: true,
+	}
 }
 
 func (wait *readinessDialogWait) deps() toolReadinessDeps {
@@ -56,9 +67,11 @@ func (wait *readinessDialogWait) deps() toolReadinessDeps {
 		now: func() time.Time { return wait.clock },
 		findDialogs: func(context.Context) ([]unitydialog.Dialog, error) {
 			wait.lookElapsed = append(wait.lookElapsed, wait.clock.Sub(wait.startedAt))
+			wait.clock = wait.clock.Add(wait.lookTakes)
 			return wait.dialogs, wait.findErr
 		},
-		poll: time.Millisecond,
+		lookSchedule: wait.schedule,
+		poll:         time.Millisecond,
 	}
 }
 
@@ -94,11 +107,11 @@ func TestWaitForToolReadinessStopsAtADialogAfterFiveSeconds(t *testing.T) {
 			if !reflect.DeepEqual(blocked.Dialogs, []unitydialog.Dialog{readinessTestDialog()}) {
 				t.Fatalf("Dialogs = %#v, want the one dialog found", blocked.Dialogs)
 			}
-			if len(wait.lookElapsed) != 1 || wait.lookElapsed[0] < dialogLookDelay {
-				t.Fatalf("looks ran at %v, want one look at or after %s", wait.lookElapsed, dialogLookDelay)
+			if len(wait.lookElapsed) != 1 || wait.lookElapsed[0] < DefaultDialogLookSchedule().FirstLookDelay {
+				t.Fatalf("looks ran at %v, want one look at or after %s", wait.lookElapsed, DefaultDialogLookSchedule().FirstLookDelay)
 			}
-			if wait.lookElapsed[0] > dialogLookDelay+time.Second {
-				t.Fatalf("first look ran at %s, want it soon after %s", wait.lookElapsed[0], dialogLookDelay)
+			if wait.lookElapsed[0] > DefaultDialogLookSchedule().FirstLookDelay+time.Second {
+				t.Fatalf("first look ran at %s, want it soon after %s", wait.lookElapsed[0], DefaultDialogLookSchedule().FirstLookDelay)
 			}
 		})
 	}
@@ -165,9 +178,55 @@ func TestWaitForToolReadinessLooksAtMostEveryTenSeconds(t *testing.T) {
 		t.Fatalf("looks ran at %v, want three or four", wait.lookElapsed)
 	}
 	for index := 1; index < len(wait.lookElapsed); index++ {
-		if gap := wait.lookElapsed[index] - wait.lookElapsed[index-1]; gap < dialogLookInterval {
+		if gap := wait.lookElapsed[index] - wait.lookElapsed[index-1]; gap < DefaultDialogLookSchedule().LookGap {
 			t.Fatalf("looks ran at %v; %d and %d are %s apart, want at least %s",
-				wait.lookElapsed, index-1, index, gap, dialogLookInterval)
+				wait.lookElapsed, index-1, index, gap, DefaultDialogLookSchedule().LookGap)
+		}
+	}
+}
+
+// Verifies a wait given its own schedule looks first once that schedule's delay has passed, not
+// after the default five seconds.
+func TestWaitForToolReadinessLooksFirstAfterTheGivenDelay(t *testing.T) {
+	wait := newReadinessDialogWait(serverGoneProbe, readinessTestDialog())
+	wait.schedule = DialogLookSchedule{FirstLookDelay: time.Second, LookGap: 2 * time.Second}
+
+	err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), readinessDialogTestTimeout, wait.deps())
+
+	var blocked ToolReadinessBlockedByDialogError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("err = %v, want ToolReadinessBlockedByDialogError", err)
+	}
+	if len(wait.lookElapsed) != 1 || wait.lookElapsed[0] < time.Second || wait.lookElapsed[0] > 2*time.Second {
+		t.Fatalf("looks ran at %v, want one look between one and two seconds", wait.lookElapsed)
+	}
+}
+
+// Verifies the gap between two looks is counted from the end of the earlier look: with looks that
+// take a second and a half and a two-second gap, every look starts at least two seconds after the
+// one before it ended, so slow looks cannot run back to back and crowd out the probes.
+func TestWaitForToolReadinessCountsTheLookGapFromTheEndOfTheLook(t *testing.T) {
+	const lookTakes = 1500 * time.Millisecond
+	const gap = 2 * time.Second
+	wait := newReadinessDialogWait(func(elapsed time.Duration) error {
+		if elapsed <= 20*time.Second {
+			return serverGoneProbe(elapsed)
+		}
+		return nil
+	})
+	wait.lookTakes = lookTakes
+	wait.schedule = DialogLookSchedule{FirstLookDelay: time.Second, LookGap: gap}
+
+	if err := waitForToolReadinessWithDeps(context.Background(), t.TempDir(), readinessDialogTestTimeout, wait.deps()); err != nil {
+		t.Fatalf("err = %v, want readiness", err)
+	}
+	if len(wait.lookElapsed) < 3 {
+		t.Fatalf("looks ran at %v, want at least three", wait.lookElapsed)
+	}
+	for index := 1; index < len(wait.lookElapsed); index++ {
+		if sinceEnd := wait.lookElapsed[index] - (wait.lookElapsed[index-1] + lookTakes); sinceEnd < gap {
+			t.Fatalf("looks ran at %v; look %d started %s after look %d ended, want at least %s",
+				wait.lookElapsed, index, sinceEnd, index-1, gap)
 		}
 	}
 }
@@ -186,19 +245,19 @@ func TestWaitForToolReadinessEndsWithItsOwnAnswersBeforeTheLook(t *testing.T) {
 		want         func(error) bool
 	}{
 		"cli update required": {
-			probe:        failingFrom(dialogLookDelay-time.Second, updateRequired),
+			probe:        failingFrom(DefaultDialogLookSchedule().FirstLookDelay-time.Second, updateRequired),
 			unityRunning: true,
 			want:         func(err error) bool { return errors.Is(err, updateRequired) },
 		},
 		"connect refused for good": {
-			probe:        failingFrom(dialogLookDelay-time.Second, refused),
+			probe:        failingFrom(DefaultDialogLookSchedule().FirstLookDelay-time.Second, refused),
 			unityRunning: true,
 			want:         func(err error) bool { return err == error(refused) },
 		},
 		"unity exited": {
 			// The exit watch looks up first in the round that reads three seconds and confirms two seconds
 			// later, in the round the first dialog look is due.
-			probe:        failingFrom(dialogLookDelay-3*time.Second, &unityipc.ConnectionAttemptError{Cause: syscall.ECONNREFUSED}),
+			probe:        failingFrom(DefaultDialogLookSchedule().FirstLookDelay-3*time.Second, &unityipc.ConnectionAttemptError{Cause: syscall.ECONNREFUSED}),
 			unityRunning: false,
 			want: func(err error) bool {
 				var notRunning clierrors.UnityNotRunningError
