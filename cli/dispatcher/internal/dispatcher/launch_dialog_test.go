@@ -258,8 +258,8 @@ func TestRunLaunchReportsADialogThatHoldsAnOpenEditor(t *testing.T) {
 	assertPressGuidance(t, assertLaunchBlockedByDialog(t, run, 1))
 }
 
-// Verifies both V3 readiness waits are handed a dialog look that reads the Editor found by the
-// definitive process lookup, so the wait can stop at a dialog at all.
+// Verifies both V3 readiness waits are handed a dialog look that answers the dialogs of the Editor
+// found by the definitive process lookup, so the wait can stop at a dialog at all.
 func TestRunLaunchHandsTheReadinessWaitADialogLook(t *testing.T) {
 	cases := map[string]func(*testing.T, string, launchDeps) launchBlockedRun{
 		"fresh":    runFreshLaunch,
@@ -280,12 +280,14 @@ func TestRunLaunchHandsTheReadinessWaitADialogLook(t *testing.T) {
 				return &unityprocess.UnityProcess{Pid: 222}, nil
 			}
 			var lookedAt string
-			deps.lookForDialogs = func(ctx context.Context, root string, lookup unitydialog.ProcessLookup) ([]unitydialog.Dialog, error) {
+			deps.answerDialog = func(
+				ctx context.Context, root string, lookup unitydialog.ProcessLookup, _ unitydialog.DialogAnswer,
+			) (unitydialog.AnswerResult, error) {
 				lookedAt = root
 				if _, err := lookup(ctx, root); err != nil {
-					return nil, err
+					return unitydialog.AnswerResult{}, err
 				}
-				return []unitydialog.Dialog{launchTestDialog()}, nil
+				return unitydialog.AnswerResult{Dialogs: []unitydialog.Dialog{launchTestDialog()}}, nil
 			}
 			deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, findDialogs clicore.DialogFinder) error {
 				if findDialogs == nil {

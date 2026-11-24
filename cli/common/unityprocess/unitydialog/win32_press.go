@@ -7,15 +7,12 @@ import (
 )
 
 // pressWin32Button presses the button labeled exactly label in the frontmost modal window of the
-// Unity process on Windows, and returns that dialog as it was read before the press. When title is
-// not empty, it presses only when that dialog's title equals title.
+// Unity process on Windows, and returns that dialog as it was read before the press.
 // Why a failed listing and a disabled button are presses that did not start: nothing has been
 // sent to the dialog.
 // Why a disabled button is not pressed: the dialog would act on the click all the same, and uloop
 // must not do what the dialog does not let the user do.
-func (inspector Inspector) pressWin32Button(
-	ctx context.Context, pid int, title string, label string,
-) (PressResult, error) {
+func (inspector Inspector) pressWin32Button(ctx context.Context, pid int, label string) (PressResult, error) {
 	pressCtx, cancel := context.WithTimeout(ctx, inspector.timeout)
 	defer cancel()
 	windows, err := inspector.listWindows(pressCtx, pid)
@@ -29,11 +26,6 @@ func (inspector Inspector) pressWin32Button(
 
 	target := win32PressTarget(windows, label)
 	result := PressResult{DialogFound: target.DialogFound, Dialog: target.Dialog}
-	// Why the title is compared here: the press names the dialog by its handle, so the dialog read
-	// here is the one that would be pressed.
-	if title != "" && target.Dialog.Title != title {
-		return result, nil
-	}
 	if !target.ButtonFound {
 		return result, nil
 	}

@@ -17,55 +17,88 @@ func safeModePromptDialog() unitydialog.Dialog {
 	}
 }
 
-// answererForTest is a safeModePromptAnswerer whose look returns dialogs and err, and whose press
-// returns result and pressErr and counts its calls in presses.
+// answererCalls counts the looks of an answerer: answers that may press, and plain looks.
+type answererCalls struct {
+	answers int
+	looks   int
+}
+
+// answererForTest is a safeModePromptAnswerer whose answering look returns result and err, and whose
+// plain look returns plain. Both count their calls in calls.
 func answererForTest(
-	dialogs []unitydialog.Dialog, err error, result unitydialog.PressResult, pressErr error, presses *int,
+	result unitydialog.AnswerResult, err error, plain []unitydialog.Dialog, calls *answererCalls,
 ) *safeModePromptAnswerer {
 	return &safeModePromptAnswerer{
-		find: func(context.Context) ([]unitydialog.Dialog, error) { return dialogs, err },
-		pressIgnore: func(context.Context) (unitydialog.PressResult, error) {
-			*presses++
-			return result, pressErr
+		find: func(context.Context) ([]unitydialog.Dialog, error) {
+			calls.looks++
+			return plain, nil
+		},
+		answer: func(context.Context) (unitydialog.AnswerResult, error) {
+			calls.answers++
+			return result, err
 		},
 	}
 }
 
-// Verifies a look that failed is returned as is, without a press.
-func TestSafeModePromptAnswererPassesThroughAFailedLook(t *testing.T) {
+// pressedPrompt is an answer that pressed Ignore in the prompt, frontmost in dialogs.
+func pressedPrompt(dialogs ...unitydialog.Dialog) unitydialog.AnswerResult {
+	return unitydialog.AnswerResult{Dialogs: dialogs, Matched: true, Pressed: true}
+}
+
+// Verifies the answer given is the Safe Mode prompt's: Ignore, only in a dialog titled
+// "Enter Safe Mode?" with exactly its three buttons in order.
+func TestSafeModePromptAnswerNamesThePromptAndIgnore(t *testing.T) {
+	answer := safeModePromptAnswer()
+
+	if !answer.Matches(safeModePromptDialog()) || answer.Label != "Ignore" {
+		t.Fatalf("answer = %#v, want Ignore in the Safe Mode prompt", answer)
+	}
+	if !reflect.DeepEqual(answer.Buttons, []string{"Enter Safe Mode", "Ignore", "Quit"}) {
+		t.Fatalf("Buttons = %q, want exactly the prompt's three buttons", answer.Buttons)
+	}
+}
+
+// Verifies a look that failed is returned as is and does not count as the one press: the next look
+// answers again, because the failed one read nothing and cannot tell whether the prompt was up.
+func TestSafeModePromptAnswererAnswersAgainAfterAFailedLook(t *testing.T) {
 	lookErr := errors.New("osascript did not answer")
-	presses := 0
-	answerer := answererForTest(nil, lookErr, unitydialog.PressResult{}, nil, &presses)
+	calls := answererCalls{}
+	answerer := answererForTest(unitydialog.AnswerResult{}, lookErr, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
+	_, _ = answerer.findDialogs(context.Background())
 
-	if !errors.Is(err, lookErr) || len(got) != 0 || presses != 0 || answerer.ignored {
-		t.Fatalf("got %#v, %v, presses %d, ignored %v; want the look error and no press", got, err, presses, answerer.ignored)
+	if !errors.Is(err, lookErr) || len(got) != 0 || answerer.ignored {
+		t.Fatalf("got %#v, %v, ignored %v; want the look error", got, err, answerer.ignored)
+	}
+	if calls.answers != 2 || calls.looks != 0 {
+		t.Fatalf("calls = %+v, want two answering looks and no plain look", calls)
 	}
 }
 
-// Verifies a look that found no dialog is returned as is, without a press.
+// Verifies a look that found no dialog is returned as is, and the next look answers again.
 func TestSafeModePromptAnswererPassesThroughNoDialog(t *testing.T) {
-	presses := 0
-	answerer := answererForTest(nil, nil, unitydialog.PressResult{}, nil, &presses)
+	calls := answererCalls{}
+	answerer := answererForTest(unitydialog.AnswerResult{Dialogs: []unitydialog.Dialog{}}, nil, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
+	_, _ = answerer.findDialogs(context.Background())
 
-	if err != nil || len(got) != 0 || presses != 0 || answerer.ignored {
-		t.Fatalf("got %#v, %v, presses %d, ignored %v; want no dialog and no press", got, err, presses, answerer.ignored)
+	if err != nil || len(got) != 0 || answerer.ignored || calls.answers != 2 {
+		t.Fatalf("got %#v, %v, ignored %v, calls %+v; want no dialog and two answering looks",
+			got, err, answerer.ignored, calls)
 	}
 }
 
-// Verifies the Safe Mode prompt alone is pressed once and reported as gone, so the wait goes on.
+// Verifies the Safe Mode prompt pressed in the look is reported as gone, so the wait goes on.
 func TestSafeModePromptAnswererPressesIgnoreOnceAndKeepsWaiting(t *testing.T) {
-	presses := 0
-	answerer := answererForTest(
-		[]unitydialog.Dialog{safeModePromptDialog()}, nil, unitydialog.PressResult{DialogFound: true, Pressed: true}, nil, &presses)
+	calls := answererCalls{}
+	answerer := answererForTest(pressedPrompt(safeModePromptDialog()), nil, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
 
-	if err != nil || len(got) != 0 || presses != 1 || !answerer.ignored {
-		t.Fatalf("got %#v, %v, presses %d, ignored %v; want no dialog after one press", got, err, presses, answerer.ignored)
+	if err != nil || len(got) != 0 || calls.answers != 1 || !answerer.ignored {
+		t.Fatalf("got %#v, %v, calls %+v, ignored %v; want no dialog after one press", got, err, calls, answerer.ignored)
 	}
 }
 
@@ -73,106 +106,79 @@ func TestSafeModePromptAnswererPressesIgnoreOnceAndKeepsWaiting(t *testing.T) {
 // stops at them as before.
 func TestSafeModePromptAnswererReportsTheDialogsBehindThePromptAfterPressing(t *testing.T) {
 	behind := launchTestDialog()
-	presses := 0
-	answerer := answererForTest(
-		[]unitydialog.Dialog{safeModePromptDialog(), behind}, nil,
-		unitydialog.PressResult{DialogFound: true, Pressed: true}, nil, &presses)
+	calls := answererCalls{}
+	answerer := answererForTest(pressedPrompt(safeModePromptDialog(), behind), nil, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
 
-	if err != nil || !reflect.DeepEqual(got, []unitydialog.Dialog{behind}) || presses != 1 || !answerer.ignored {
-		t.Fatalf("got %#v, %v, presses %d, ignored %v; want only the dialog behind the prompt", got, err, presses, answerer.ignored)
+	if err != nil || !reflect.DeepEqual(got, []unitydialog.Dialog{behind}) || !answerer.ignored {
+		t.Fatalf("got %#v, %v, ignored %v; want only the dialog behind the prompt", got, err, answerer.ignored)
 	}
 }
 
 // Verifies that after the prompt is pressed, a second listing of the same prompt, as a real
 // Editor on macOS showed it, is dropped with the first, so the wait goes on after one press.
 func TestSafeModePromptAnswererDropsRepeatedListingsOfThePromptAfterPressing(t *testing.T) {
-	presses := 0
-	answerer := answererForTest(
-		[]unitydialog.Dialog{safeModePromptDialog(), safeModePromptDialog()}, nil,
-		unitydialog.PressResult{DialogFound: true, Pressed: true}, nil, &presses)
+	calls := answererCalls{}
+	answerer := answererForTest(pressedPrompt(safeModePromptDialog(), safeModePromptDialog()), nil, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
 
-	if err != nil || len(got) != 0 || presses != 1 || !answerer.ignored {
-		t.Fatalf("got %#v, %v, presses %d, ignored %v; want no dialog after one press", got, err, presses, answerer.ignored)
+	if err != nil || len(got) != 0 || !answerer.ignored {
+		t.Fatalf("got %#v, %v, ignored %v; want no dialog after one press", got, err, answerer.ignored)
 	}
 }
 
-// Verifies a press that pressed nothing leaves the prompt reported, so the wait stops at it.
-func TestSafeModePromptAnswererReportsThePromptWhenThePressDidNotPress(t *testing.T) {
+// Verifies a prompt the look matched but did not press is reported, so the wait stops at it.
+func TestSafeModePromptAnswererReportsThePromptWhenTheLookDidNotPress(t *testing.T) {
 	dialogs := []unitydialog.Dialog{safeModePromptDialog()}
-	presses := 0
-	answerer := answererForTest(dialogs, nil, unitydialog.PressResult{DialogFound: true, Pressed: false}, nil, &presses)
+	calls := answererCalls{}
+	answerer := answererForTest(unitydialog.AnswerResult{Dialogs: dialogs, Matched: true}, nil, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
 
-	if err != nil || !reflect.DeepEqual(got, dialogs) || presses != 1 || answerer.ignored {
-		t.Fatalf("got %#v, %v, presses %d, ignored %v; want the prompt after one press", got, err, presses, answerer.ignored)
+	if err != nil || !reflect.DeepEqual(got, dialogs) || answerer.ignored {
+		t.Fatalf("got %#v, %v, ignored %v; want the prompt", got, err, answerer.ignored)
 	}
 }
 
-// Verifies a press that failed, before it started or after, leaves the prompt reported without an
-// error, so the wait stops at the prompt.
-func TestSafeModePromptAnswererReportsThePromptWhenThePressFailed(t *testing.T) {
-	failures := map[string]error{
-		"not started": unitydialog.PressNotStartedError{Err: errors.New("no process")},
-		"other":       errors.New("osascript could not press the button"),
+// Verifies that once a look has matched the prompt, pressed or not, later looks only read the
+// dialogs and report a prompt still there without pressing it again.
+func TestSafeModePromptAnswererDoesNotAnswerASecondTime(t *testing.T) {
+	prompt := []unitydialog.Dialog{safeModePromptDialog()}
+	cases := map[string]unitydialog.AnswerResult{
+		"pressed":     pressedPrompt(safeModePromptDialog()),
+		"not pressed": {Dialogs: prompt, Matched: true},
 	}
-	for name, pressErr := range failures {
+	for name, first := range cases {
 		t.Run(name, func(t *testing.T) {
-			dialogs := []unitydialog.Dialog{safeModePromptDialog()}
-			presses := 0
-			answerer := answererForTest(dialogs, nil, unitydialog.PressResult{}, pressErr, &presses)
+			calls := answererCalls{}
+			answerer := answererForTest(first, nil, prompt, &calls)
+			if _, err := answerer.findDialogs(context.Background()); err != nil {
+				t.Fatalf("first look: %v", err)
+			}
 
 			got, err := answerer.findDialogs(context.Background())
 
-			if err != nil || !reflect.DeepEqual(got, dialogs) || presses != 1 || answerer.ignored {
-				t.Fatalf("got %#v, %v, presses %d, ignored %v; want the prompt after one press", got, err, presses, answerer.ignored)
+			if err != nil || !reflect.DeepEqual(got, prompt) || calls.answers != 1 || calls.looks != 1 {
+				t.Fatalf("got %#v, %v, calls %+v; want the prompt from one plain look after one answer", got, err, calls)
 			}
 		})
 	}
 }
 
-// Verifies the prompt seen again after a press is reported and not pressed a second time.
-func TestSafeModePromptAnswererDoesNotPressASecondTime(t *testing.T) {
-	dialogs := []unitydialog.Dialog{safeModePromptDialog()}
-	presses := 0
-	answerer := answererForTest(dialogs, nil, unitydialog.PressResult{DialogFound: true, Pressed: true}, nil, &presses)
-	if _, err := answerer.findDialogs(context.Background()); err != nil {
-		t.Fatalf("first look: %v", err)
-	}
+// Verifies dialogs the look did not match are reported as they are, and the next look answers
+// again, so a prompt that comes to the front later is still pressed.
+func TestSafeModePromptAnswererLeavesUnmatchedDialogsAlone(t *testing.T) {
+	dialogs := []unitydialog.Dialog{launchTestDialog(), safeModePromptDialog()}
+	calls := answererCalls{}
+	answerer := answererForTest(unitydialog.AnswerResult{Dialogs: dialogs}, nil, nil, &calls)
 
 	got, err := answerer.findDialogs(context.Background())
+	_, _ = answerer.findDialogs(context.Background())
 
-	if err != nil || !reflect.DeepEqual(got, dialogs) || presses != 1 {
-		t.Fatalf("got %#v, %v, presses %d; want the prompt and still one press", got, err, presses)
-	}
-}
-
-// Verifies dialogs that are not the Safe Mode prompt in front are reported as they are and never
-// pressed: the prompt's title with other buttons, another title with an Ignore button, and the
-// prompt behind another dialog.
-func TestSafeModePromptAnswererLeavesOtherDialogsAlone(t *testing.T) {
-	sameTitle := safeModePromptDialog()
-	sameTitle.Buttons = []string{"OK"}
-	otherTitle := unitydialog.Dialog{Title: "Probe retry", Buttons: []string{"Retry", "Ignore"}}
-	cases := map[string][]unitydialog.Dialog{
-		"prompt title with other buttons":   {sameTitle},
-		"other title with an Ignore button": {otherTitle},
-		"prompt behind another dialog":      {launchTestDialog(), safeModePromptDialog()},
-	}
-	for name, dialogs := range cases {
-		t.Run(name, func(t *testing.T) {
-			presses := 0
-			answerer := answererForTest(dialogs, nil, unitydialog.PressResult{DialogFound: true, Pressed: true}, nil, &presses)
-
-			got, err := answerer.findDialogs(context.Background())
-
-			if err != nil || !reflect.DeepEqual(got, dialogs) || presses != 0 || answerer.ignored {
-				t.Fatalf("got %#v, %v, presses %d, ignored %v; want the dialogs and no press", got, err, presses, answerer.ignored)
-			}
-		})
+	if err != nil || !reflect.DeepEqual(got, dialogs) || answerer.ignored || calls.answers != 2 {
+		t.Fatalf("got %#v, %v, ignored %v, calls %+v; want the dialogs and two answering looks",
+			got, err, answerer.ignored, calls)
 	}
 }
