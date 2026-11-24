@@ -167,15 +167,20 @@ func dialogsFromAccessibilityOutput(output []byte) ([]Dialog, error) {
 	if !raw.ProcessFound {
 		return nil, errors.New("this project's Unity process is not listed by System Events")
 	}
+	return dialogsFromAccessibilityWindows(raw.Dialogs), nil
+}
 
-	dialogs := make([]Dialog, 0, len(raw.Dialogs))
-	for _, window := range raw.Dialogs {
+// dialogsFromAccessibilityWindows turns the windows the accessibility scripts read into dialogs, in
+// their order, leaving out the windows with neither a title nor a named button. The result is never nil.
+func dialogsFromAccessibilityWindows(windows []accessibilityWindow) []Dialog {
+	dialogs := make([]Dialog, 0, len(windows))
+	for _, window := range windows {
 		if window.isUntitledWithoutButtons() {
 			continue
 		}
 		dialogs = append(dialogs, window.dialog())
 	}
-	return dialogs, nil
+	return dialogs
 }
 
 // accessibilityWindow is one dialog window as the accessibility scripts print it.

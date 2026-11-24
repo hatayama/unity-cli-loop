@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -38,12 +39,26 @@ func v3LaunchDialogFinder(projectRoot string, deps launchDeps) clicore.DialogFin
 	return launchDialogFinder(projectRoot, deps.findRunningUnityProcessDefinitively, deps)
 }
 
+// launchDialogLookSchedule is when the readiness wait of a V3 launch looks for a dialog: one second
+// in, then two seconds after each look ends.
+// Why sooner than the default: Unity shows the Safe Mode prompt while it starts, and launch presses
+// Ignore only from a look, so every second between two looks is a second the prompt stays up.
+// Why not a shorter gap: a look runs between two probes and takes one to two seconds on macOS, so
+// with less time between looks the wait would mostly be looking, and see the Editor become ready
+// only after the look in progress.
+func launchDialogLookSchedule() clicore.DialogLookSchedule {
+	return clicore.DialogLookSchedule{FirstLookDelay: time.Second, LookGap: 2 * time.Second}
+}
+
 // v2LaunchDialogLookout looks at the Editor whose process ID the V2 launch already knows.
+// Why the default schedule: a V2 launch only reports a dialog and presses nothing, so the prompt
+// stays up until someone answers it whenever the look finds it.
 func v2LaunchDialogLookout(projectRoot string, pid int, deps launchDeps) *clicore.DialogLookout {
 	lookupProcess := func(context.Context, string) (*unityprocess.UnityProcess, error) {
 		return &unityprocess.UnityProcess{Pid: pid}, nil
 	}
-	return clicore.NewDialogLookout(launchDialogFinder(projectRoot, lookupProcess, deps), deps.now)
+	return clicore.NewDialogLookout(
+		launchDialogFinder(projectRoot, lookupProcess, deps), clicore.DefaultDialogLookSchedule(), deps.now)
 }
 
 // launchBlockedByDialogError reports that launch stopped waiting for an Editor that a modal dialog

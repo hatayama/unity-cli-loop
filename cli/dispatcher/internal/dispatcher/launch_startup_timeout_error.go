@@ -46,7 +46,7 @@ func waitForLaunchReadinessWithDeps(
 	ctx context.Context, projectRoot string, restart bool, deps launchDeps,
 ) (launchReadiness, error) {
 	answerer := newSafeModePromptAnswerer(projectRoot, deps)
-	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout, answerer.findDialogs)
+	err := deps.waitForToolReadiness(ctx, projectRoot, launchReadinessTimeout, answerer.findDialogs, launchDialogLookSchedule())
 	readiness := launchReadiness{safeModePromptIgnored: answerer.ignored}
 	if err == nil {
 		return readiness, nil

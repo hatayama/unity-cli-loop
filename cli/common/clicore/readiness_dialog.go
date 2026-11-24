@@ -7,14 +7,22 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
-const (
-	// dialogLookDelay is how long a readiness wait goes without readiness before it first looks for a
-	// dialog. Why not at once: Unity starts and reloads without a dialog most of the time, and a look
-	// on macOS starts osascript.
-	dialogLookDelay = 5 * time.Second
-	// dialogLookInterval is the least time between two looks of one wait.
-	dialogLookInterval = 10 * time.Second
-)
+// DialogLookSchedule says when a readiness wait looks for a dialog: first once the wait has gone
+// FirstLookDelay without readiness, then each time LookGap has passed since the previous look ended.
+// Why the gap is counted from the end of a look: a look runs between two probes of the wait, so a
+// gap counted from its start would let looks that take as long as the gap run back to back, and
+// the wait would see the Editor become ready only after the look in progress.
+type DialogLookSchedule struct {
+	FirstLookDelay time.Duration
+	LookGap        time.Duration
+}
+
+// DefaultDialogLookSchedule first looks after five seconds and then leaves ten seconds between looks.
+// Why not at once: Unity starts and reloads without a dialog most of the time, and a look on macOS
+// starts osascript.
+func DefaultDialogLookSchedule() DialogLookSchedule {
+	return DialogLookSchedule{FirstLookDelay: 5 * time.Second, LookGap: 10 * time.Second}
+}
 
 // DialogFinder returns the modal dialogs that hold the Editor, frontmost first. An error is read as
 // no dialog: the wait goes on as it would without the look.
@@ -36,22 +44,23 @@ func (err ToolReadinessBlockedByDialogError) Error() string {
 	return "a modal dialog is open in Unity; the wait for the Editor to be ready stopped"
 }
 
-// DialogLookout decides, during one readiness wait, when to look for a dialog: first once the wait
-// has gone dialogLookDelay without readiness, then at most once per dialogLookInterval.
+// DialogLookout decides, during one readiness wait, when to look for a dialog, on its schedule.
 type DialogLookout struct {
 	find      DialogFinder
+	schedule  DialogLookSchedule
 	now       func() time.Time
 	startedAt time.Time
-	lastLook  time.Time
-	looked    bool
+	// lastLookEnd is when the previous look returned; meaningful only once looked is true.
+	lastLookEnd time.Time
+	looked      bool
 }
 
 // NewDialogLookout starts the lookout's clock. A nil find never looks; a nil now uses time.Now.
-func NewDialogLookout(find DialogFinder, now func() time.Time) *DialogLookout {
+func NewDialogLookout(find DialogFinder, schedule DialogLookSchedule, now func() time.Time) *DialogLookout {
 	if now == nil {
 		now = time.Now
 	}
-	return &DialogLookout{find: find, now: now, startedAt: now()}
+	return &DialogLookout{find: find, schedule: schedule, now: now, startedAt: now()}
 }
 
 // Look is called after each probe that found the Editor not ready, with that probe's failure. It
@@ -61,6 +70,8 @@ func (lookout *DialogLookout) Look(ctx context.Context, cause error) error {
 		return nil
 	}
 	dialogs, err := lookout.find(ctx)
+	lookout.looked = true
+	lookout.lastLookEnd = lookout.now()
 	// Why a failed look is not reported: the wait goes on as it would without the look, and a
 	// macOS without the permission fails every look while no dialog is open.
 	if err != nil || len(dialogs) == 0 {
@@ -69,16 +80,11 @@ func (lookout *DialogLookout) Look(ctx context.Context, cause error) error {
 	return ToolReadinessBlockedByDialogError{Dialogs: dialogs, Cause: cause}
 }
 
-// due reports whether a look is due now, and when it is, counts it as made.
+// due reports whether a look is due now.
 func (lookout *DialogLookout) due() bool {
 	now := lookout.now()
-	if now.Sub(lookout.startedAt) < dialogLookDelay {
+	if now.Sub(lookout.startedAt) < lookout.schedule.FirstLookDelay {
 		return false
 	}
-	if lookout.looked && now.Sub(lookout.lastLook) < dialogLookInterval {
-		return false
-	}
-	lookout.looked = true
-	lookout.lastLook = now
-	return true
+	return !lookout.looked || now.Sub(lookout.lastLookEnd) >= lookout.schedule.LookGap
 }

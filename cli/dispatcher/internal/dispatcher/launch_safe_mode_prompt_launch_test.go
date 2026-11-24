@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,44 +14,47 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityprocess/unitydialog"
 )
 
-// safeModePromptPresses records the presses a launch asked for.
-type safeModePromptPresses struct {
-	titles []string
-	labels []string
+// safeModePromptAnswers records the answers a launch gave and how many of them pressed.
+type safeModePromptAnswers struct {
+	answers []unitydialog.DialogAnswer
+	pressed int
 }
 
 // safeModePromptLaunchDeps is freshV3LaunchDeps whose readiness wait looks once, through the
-// finder launch hands it, at the dialogs looked returns, and then ends with err. Every press is
-// recorded and presses.
-func safeModePromptLaunchDeps(t *testing.T, looked []unitydialog.Dialog, err error) (launchDeps, *safeModePromptPresses) {
+// finder launch hands it, at the dialogs looked returns, and then ends with err. Every answer is
+// recorded, and presses when the frontmost dialog matches it.
+func safeModePromptLaunchDeps(t *testing.T, looked []unitydialog.Dialog, err error) (launchDeps, *safeModePromptAnswers) {
 	t.Helper()
 	deps := freshV3LaunchDeps(t, nil)
-	presses := &safeModePromptPresses{}
+	answers := &safeModePromptAnswers{}
 	deps.lookForDialogs = func(context.Context, string, unitydialog.ProcessLookup) ([]unitydialog.Dialog, error) {
 		return looked, nil
 	}
-	deps.pressDialogButtonInDialogTitled = func(
-		_ context.Context, _ string, _ unitydialog.ProcessLookup, title string, label string,
-	) (unitydialog.PressResult, error) {
-		presses.titles = append(presses.titles, title)
-		presses.labels = append(presses.labels, label)
-		return unitydialog.PressResult{DialogFound: true, Pressed: true}, nil
+	deps.answerDialog = func(
+		_ context.Context, _ string, _ unitydialog.ProcessLookup, answer unitydialog.DialogAnswer,
+	) (unitydialog.AnswerResult, error) {
+		answers.answers = append(answers.answers, answer)
+		matched := len(looked) > 0 && answer.Matches(looked[0])
+		if matched {
+			answers.pressed++
+		}
+		return unitydialog.AnswerResult{Dialogs: looked, Matched: matched, Pressed: matched}, nil
 	}
-	deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, find clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, find clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		dialogs, findErr := find(ctx)
 		if findErr == nil && len(dialogs) > 0 {
 			return clicore.ToolReadinessBlockedByDialogError{Dialogs: dialogs}
 		}
 		return err
 	}
-	return deps, presses
+	return deps, answers
 }
 
-// assertOneIgnorePressOnThePrompt checks launch pressed exactly once, Ignore in the Safe Mode prompt.
-func assertOneIgnorePressOnThePrompt(t *testing.T, presses *safeModePromptPresses) {
+// assertOneIgnorePressOnThePrompt checks launch pressed exactly once, with the Safe Mode prompt's answer.
+func assertOneIgnorePressOnThePrompt(t *testing.T, answers *safeModePromptAnswers) {
 	t.Helper()
-	if len(presses.titles) != 1 || presses.titles[0] != "Enter Safe Mode?" || presses.labels[0] != "Ignore" {
-		t.Fatalf("presses = %+v, want one press of Ignore in \"Enter Safe Mode?\"", presses)
+	if answers.pressed != 1 || !reflect.DeepEqual(answers.answers, []unitydialog.DialogAnswer{safeModePromptAnswer()}) {
+		t.Fatalf("answers = %+v, want one press of Ignore in \"Enter Safe Mode?\"", answers)
 	}
 }
 
@@ -129,7 +133,7 @@ func TestLaunchWithoutTheSafeModePromptLeavesTheResponseUnchanged(t *testing.T) 
 
 	run := runLaunchForTest(t, launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"}, deps)
 
-	if run.code != 0 || len(presses.titles) != 0 {
+	if run.code != 0 || presses.pressed != 0 {
 		t.Fatalf("exit code = %d, presses = %+v, want 0 and no press\nstderr=%s", run.code, presses, run.stderr)
 	}
 	if strings.Contains(run.stdout, "SafeModePromptIgnored") || !strings.Contains(run.stdout, `"Message": "Unity CLI Loop is ready."`) {
