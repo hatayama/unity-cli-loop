@@ -40,7 +40,7 @@ func safeModePromptLaunchDeps(t *testing.T, looked []unitydialog.Dialog, err err
 		}
 		return unitydialog.AnswerResult{Dialogs: looked, Matched: matched, Pressed: matched}, nil
 	}
-	deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, find clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, find clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		dialogs, findErr := find(ctx)
 		if findErr == nil && len(dialogs) > 0 {
 			return clicore.ToolReadinessBlockedByDialogError{Dialogs: dialogs}

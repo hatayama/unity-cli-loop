@@ -49,7 +49,9 @@ func freshV3LaunchDeps(t *testing.T, err error) launchDeps {
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error { return nil }
 	deps.focusUnityProcess = func(context.Context, int) error { return nil }
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error { return err }
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
+		return err
+	}
 	deps.canPressDialogs = true
 	return deps
 }
@@ -258,6 +260,40 @@ func TestRunLaunchReportsADialogThatHoldsAnOpenEditor(t *testing.T) {
 	assertPressGuidance(t, assertLaunchBlockedByDialog(t, run, 1))
 }
 
+// Verifies both V3 readiness waits look for a dialog one second in and then two seconds after each
+// look, rather than on the default schedule, so the Safe Mode prompt is answered within seconds.
+func TestRunLaunchLooksForDialogsOnTheLaunchSchedule(t *testing.T) {
+	cases := map[string]func(*testing.T, string, launchDeps) launchBlockedRun{
+		"fresh":    runFreshLaunch,
+		"existing": runExistingLaunch,
+	}
+	for name, run := range cases {
+		t.Run(name, func(t *testing.T) {
+			projectRoot := createLaunchTestProject(t)
+			deps := freshV3LaunchDeps(t, nil)
+			if name == "existing" {
+				deps.findRunningUnityProcess = func(context.Context, string) (*unityprocess.UnityProcess, error) {
+					return &unityprocess.UnityProcess{Pid: 111}, nil
+				}
+			}
+			var schedules []clicore.DialogLookSchedule
+			deps.waitForToolReadiness = func(
+				_ context.Context, _ string, _ time.Duration, _ clicore.DialogFinder, schedule clicore.DialogLookSchedule,
+			) error {
+				schedules = append(schedules, schedule)
+				return clicore.ToolReadinessBlockedByDialogError{Dialogs: []unitydialog.Dialog{launchTestDialog()}}
+			}
+
+			_ = run(t, projectRoot, deps)
+
+			want := []clicore.DialogLookSchedule{{FirstLookDelay: time.Second, LookGap: 2 * time.Second}}
+			if !slices.Equal(schedules, want) {
+				t.Fatalf("readiness waits looked on %+v, want %+v", schedules, want)
+			}
+		})
+	}
+}
+
 // Verifies both V3 readiness waits are handed a dialog look that answers the dialogs of the Editor
 // found by the definitive process lookup, so the wait can stop at a dialog at all.
 func TestRunLaunchHandsTheReadinessWaitADialogLook(t *testing.T) {
@@ -289,7 +325,7 @@ func TestRunLaunchHandsTheReadinessWaitADialogLook(t *testing.T) {
 				}
 				return unitydialog.AnswerResult{Dialogs: []unitydialog.Dialog{launchTestDialog()}}, nil
 			}
-			deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, findDialogs clicore.DialogFinder) error {
+			deps.waitForToolReadiness = func(ctx context.Context, _ string, _ time.Duration, findDialogs clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 				if findDialogs == nil {
 					return errors.New("no dialog look was handed to the wait")
 				}
@@ -381,7 +417,7 @@ func v2LaunchDeps(t *testing.T, dialogs []unitydialog.Dialog, timeout time.Durat
 	deps.resolveUnityExecutablePath = func(string) (string, error) { return fakeUnityExecutablePath(t), nil }
 	deps.focusUnityProcess = func(context.Context, int) error { return nil }
 	deps.waitForFreshUnityLockfile = func(context.Context, string, time.Time, time.Duration, time.Duration) error { return nil }
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		t.Fatal("a V2 launch must not wait for the V3 server")
 		return nil
 	}
@@ -468,7 +504,7 @@ func TestRunLaunchForV2ProjectTimesOutWithoutADialog(t *testing.T) {
 // connection, even for a title such as "EOF" (#13).
 func TestLaunchDialogErrorLeavesTheDialogOutOfItsText(t *testing.T) {
 	deps := defaultLaunchDeps()
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return blockedReadiness(unitydialog.Dialog{Title: "Unexpected EOF", Buttons: []string{"OK"}})
 	}
 

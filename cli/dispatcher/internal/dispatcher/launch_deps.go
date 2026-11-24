@@ -25,7 +25,7 @@ type launchDeps struct {
 	waitForUnityStartupMarker           func(context.Context, string, time.Duration, time.Duration) error
 	waitForFreshUnityLockfile           func(context.Context, string, time.Time, time.Duration, time.Duration) error
 	waitForV2ServerReady                func(context.Context, string, string, *clicore.DialogLookout, time.Duration, time.Duration) error
-	waitForToolReadiness                func(context.Context, string, time.Duration, clicore.DialogFinder) error
+	waitForToolReadiness                func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error
 	// lookForDialogs reads the modal dialogs of the Editor that lookupProcess finds, through the
 	// operating system.
 	lookForDialogs func(context.Context, string, unitydialog.ProcessLookup) ([]unitydialog.Dialog, error)
@@ -68,7 +68,7 @@ func defaultLaunchDeps() launchDeps {
 		lookForDialogs:          lookForLaunchDialogs,
 		answerDialog:            answerLaunchDialog,
 		canPressDialogs:         unitydialog.NewInspector(runtime.GOOS, nil).CanPress(),
-		waitForToolReadiness:    waitForLaunchToolReadiness,
+		waitForToolReadiness:    clicore.WaitForToolReadinessWithTimeout,
 		probeProjectIpcFallback: clicore.ProbeToolReadinessSequence,
 		removePath:              os.RemoveAll,
 		statPath:                os.Stat,

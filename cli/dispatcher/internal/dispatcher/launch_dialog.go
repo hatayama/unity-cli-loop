@@ -50,14 +50,6 @@ func launchDialogLookSchedule() clicore.DialogLookSchedule {
 	return clicore.DialogLookSchedule{FirstLookDelay: time.Second, LookGap: 2 * time.Second}
 }
 
-// waitForLaunchToolReadiness is the readiness wait of a V3 launch, which looks for a dialog on
-// launchDialogLookSchedule.
-func waitForLaunchToolReadiness(
-	ctx context.Context, projectRoot string, timeout time.Duration, findDialogs clicore.DialogFinder,
-) error {
-	return clicore.WaitForToolReadinessWithTimeout(ctx, projectRoot, timeout, findDialogs, launchDialogLookSchedule())
-}
-
 // v2LaunchDialogLookout looks at the Editor whose process ID the V2 launch already knows.
 // Why the default schedule: a V2 launch only reports a dialog and presses nothing, so the prompt
 // stays up until someone answers it whenever the look finds it.

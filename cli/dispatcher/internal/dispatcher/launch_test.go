@@ -371,7 +371,7 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 	deps.focusUnityProcess = func(context.Context, int) error {
@@ -428,7 +428,7 @@ func TestRunLaunchForV2ProjectWaitsForLockfileAndServerReady(t *testing.T) {
 		v2ServerWaited = true
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		t.Fatal("V2 launch must not wait for the V3 server")
 		return nil
 	}
@@ -471,7 +471,7 @@ func TestRunLaunchForV2ProjectFocusesEditorBeforeServerProbe(t *testing.T) {
 		callOrder = append(callOrder, "probe")
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		t.Fatal("V2 launch must not wait for the V3 server")
 		return nil
 	}
@@ -502,7 +502,7 @@ func TestRunLaunchForExistingV2ProjectWaitsForServerReady(t *testing.T) {
 		capturedPreviousSessionID = previousServerSessionID
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		t.Fatal("V2 existing launch must not wait for the V3 server")
 		return nil
 	}
@@ -551,7 +551,7 @@ func TestRunLaunchForV2RestartPassesPreviousServerSessionID(t *testing.T) {
 		capturedPreviousSessionID = previousServerSessionID
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		t.Fatal("V2 restart must not wait for the V3 server")
 		return nil
 	}
@@ -621,7 +621,7 @@ func TestWaitForLaunchReadinessUsesLaunchTimeout(t *testing.T) {
 	// Verifies launch gets a longer startup window without changing shared readiness defaults.
 	deps := defaultLaunchDeps()
 	var capturedTimeout time.Duration
-	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		capturedTimeout = timeout
 		return nil
 	}
@@ -637,7 +637,7 @@ func TestWaitForLaunchReadinessUsesLaunchTimeout(t *testing.T) {
 func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 	// Verifies launch timeout errors receive the launch-specific startup classification.
 	deps := defaultLaunchDeps()
-	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		return clierrors.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
@@ -656,7 +656,7 @@ func TestWaitForLaunchReadinessWrapsStartupTimeout(t *testing.T) {
 func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 	// Verifies probe deadlines are classified as launch startup timeouts while the parent context is active.
 	deps := defaultLaunchDeps()
-	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		return clierrors.UnityServerNotRespondingError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
@@ -678,7 +678,7 @@ func TestWaitForLaunchReadinessWrapsInternalProbeDeadline(t *testing.T) {
 func TestWaitForLaunchReadinessPreservesNoProcessReachability(t *testing.T) {
 	// Verifies a launch whose Editor exited before readiness does not report that Unity is running.
 	deps := defaultLaunchDeps()
-	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		return fmt.Errorf("timed out waiting for Unity tool readiness: %w", &unityipc.ConnectionAttemptError{
 			ProjectRoot: projectRoot,
 			Endpoint:    "/tmp/uloop/UnityCliLoop-sample.sock",
@@ -705,7 +705,7 @@ func TestWaitForLaunchReadinessReportsAnEditorThatExitedDuringStartup(t *testing
 	// Verifies an Editor that exited while launch waited for it is reported as not running, with launch
 	// still safe to run again, rather than as a startup timeout that says Unity is running.
 	deps := defaultLaunchDeps()
-	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		return clierrors.UnityNotRunningError{ProjectRoot: projectRoot, ExitedDuringCommand: true}
 	}
 
@@ -727,7 +727,7 @@ func TestWaitForLaunchReadinessReportsAnEditorThatExitedDuringStartup(t *testing
 func TestWaitForLaunchReadinessPreservesParentCancellation(t *testing.T) {
 	// Verifies caller cancellation is not converted into a launch startup timeout.
 	deps := defaultLaunchDeps()
-	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(ctx context.Context, projectRoot string, timeout time.Duration, _ clicore.DialogFinder, _ clicore.DialogLookSchedule) error {
 		return ctx.Err()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -750,7 +750,7 @@ func TestRunLaunchWritesStructuredResponseForExistingUnityProcess(t *testing.T) 
 	deps.focusUnityProcess = func(context.Context, int) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		readinessChecked = true
 		return nil
 	}
@@ -796,7 +796,7 @@ func TestRunLaunchRequiresRestartForEditorVersionWithExistingUnityProcess(t *tes
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return &clicore.UnityProcess{Pid: 222}, nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		readinessChecked = true
 		return nil
 	}
@@ -848,7 +848,7 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 	deps.focusUnityProcess = func(context.Context, int) error {
@@ -990,7 +990,7 @@ func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 	deps.focusUnityProcess = func(context.Context, int) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 
@@ -1037,7 +1037,7 @@ func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 	deps.focusUnityProcess = func(context.Context, int) error {
 		return fmt.Errorf("activation denied")
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 
@@ -1086,7 +1086,7 @@ func TestRunLaunchFocusesFreshUnityAfterStartupMarker(t *testing.T) {
 		events = append(events, "startup_marker")
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 	deps.focusUnityProcess = func(_ context.Context, pid int) error {
@@ -1144,7 +1144,7 @@ func TestRunLaunchSucceedsWhenFreshFocusFails(t *testing.T) {
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 	deps.focusUnityProcess = func(context.Context, int) error {
@@ -1507,7 +1507,7 @@ func newRestartLaunchTestDeps(t *testing.T) launchDeps {
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 		return nil
 	}
 	deps.focusUnityProcess = func(context.Context, int) error {
@@ -1815,7 +1815,9 @@ func isolatedLaunchTestDeps(t *testing.T) launchDeps {
 	deps.waitForV2ServerReady = func(context.Context, string, string, *clicore.DialogLookout, time.Duration, time.Duration) error {
 		return nil
 	}
-	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error { return nil }
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
+		return nil
+	}
 	deps.probeProjectIpcFallback = func(context.Context, string) error { return errors.New("no IPC in tests") }
 	deps.sleep = func(time.Duration) {}
 	return deps
@@ -1907,7 +1909,7 @@ func TestRunLaunchReportsRunningProcessFailures(t *testing.T) {
 		deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 			return &clicore.UnityProcess{Pid: 4242}, nil
 		}
-		deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+		deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 			return errors.New("tools not ready")
 		}
 		projectRoot := createVersionedLaunchTestProject(t)
@@ -1947,7 +1949,7 @@ func TestRunLaunchReportsStartFailures(t *testing.T) {
 			}
 		}, wantMessage: "no lockfile"},
 		{name: "tools never ready", modify: func(_ *testing.T, deps *launchDeps, _ string) {
-			deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder) error {
+			deps.waitForToolReadiness = func(context.Context, string, time.Duration, clicore.DialogFinder, clicore.DialogLookSchedule) error {
 				return errors.New("tools not ready")
 			}
 		}, wantMessage: "tools not ready"},
