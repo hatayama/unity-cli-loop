@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.14.0...uloop-project-runner-v3.14.1) (2026-11-25)
+
+
+### Performance Improvements
+
+* uloop launch presses Ignore on the Safe Mode prompt sooner ([#3634](https://github.com/hatayama/unity-cli-loop/issues/3634)) ([e591437](https://github.com/hatayama/unity-cli-loop/commit/e5914379b8381fee8a92eb3eebb5ee99e6ec41a8))
+
 ## [3.14.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.13.1...uloop-project-runner-v3.14.0) (2026-11-16)
 
 
