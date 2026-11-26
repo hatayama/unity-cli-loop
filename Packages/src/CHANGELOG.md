@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.6](https://github.com/hatayama/unity-cli-loop/compare/v3.36.5...v3.36.6) (2026-11-26)
+
+
+### Performance Improvements
+
+* uloop launch presses Ignore on the Safe Mode prompt sooner ([#3634](https://github.com/hatayama/unity-cli-loop/issues/3634)) ([e591437](https://github.com/hatayama/unity-cli-loop/commit/e5914379b8381fee8a92eb3eebb5ee99e6ec41a8))
+
 ## [3.36.5](https://github.com/hatayama/unity-cli-loop/compare/v3.36.4...v3.36.5) (2026-11-23)
 
 
