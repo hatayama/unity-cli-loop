@@ -74,6 +74,9 @@ jobs:
           # HotReloadEditorTickPumpTestSafety would otherwise pull the whole namespace
           # into shard 1. The "." matches a test's Class.Method name but never a
           # SetUpFixture's own name. A new SetUpFixture must not match any shard.
+          # Shard 3 requires a character after "HotReload" for the same reason: the
+          # bare namespace suite is the parent of shard 1 and 2 tests and would pull
+          # them in if the namespace ever lost its SetUpFixtures.
           # Why shards: on a slow runner the whole suite alone took 42 minutes of a
           # 45-minute step (#3653); each shard stays near a third of that.
           - unity-version: 6000.3.15f1
@@ -86,7 +89,7 @@ jobs:
             strict-compile-check: false
           - unity-version: 6000.3.15f1
             shard: 3
-            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload(?!\.HotReload)'
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload(?!\.HotReload)(?=.)'
             strict-compile-check: false
           - unity-version: 6000.5.8f1
             shard: 1
@@ -98,7 +101,7 @@ jobs:
             strict-compile-check: false
           - unity-version: 6000.5.8f1
             shard: 3
-            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload(?!\.HotReload)'
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload(?!\.HotReload)(?=.)'
             strict-compile-check: false
     env:
       HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
