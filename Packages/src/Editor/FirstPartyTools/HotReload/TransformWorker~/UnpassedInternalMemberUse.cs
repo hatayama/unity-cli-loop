@@ -116,8 +116,9 @@ internal sealed class UnpassedInternalMemberUse
         }
 
         // Why an inapplicable call skips the receiver's own members: such a call is looked up only
-        // as an internal extension, which is used only to refuse a use outside the patched method,
-        // so the error never lets a body through that was not let through before. Why a same-named
+        // as an internal extension. Outside the patched method that lookup only refuses the use; in
+        // the method's own statements the patch binding decides it, so the call is let through only
+        // where the compiler calls that internal extension. Why a same-named
         // instance method of the receiver does not stop the refusal: the compiler goes on to the
         // extension methods when no instance method takes the call, so 'value.Name(1)' beside an
         // instance 'Name(string)' calls the internal extension. The cost is a CS1503 that comes from

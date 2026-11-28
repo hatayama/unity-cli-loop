@@ -1309,6 +1309,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: on a partial type, a property getter whose own statements call an internal extension
+        /// method of a class the reload was not given is an entry, as a method is: the patch binding
+        /// shows that the compiler calls that method there.
+        /// </summary>
+        [Test]
+        public async Task InternalExtensionCalledInTheOwnStatementsOfAPartialTypeGetter_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    PartialDerivedFileName,
+                    "PartialGetterInternalExtensionCall.cs",
+                    "return 40;",
+                    "return 50.Twice(1);")
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "get_DerivedProperty");
+        }
+
+        /// <summary>
+        /// What: a plain file brought back to re-bind its active patches, whose method's own
+        /// statements call an internal extension method of a class the reload was not given, is an
+        /// entry, as the same file is when it is passed: the patch binding shows that the compiler
+        /// calls that method there.
+        /// </summary>
+        [Test]
+        public async Task Run_PlainSiblingBroughtBack_CallingInternalExtensionInItsOwnStatements_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("PlainSiblingExtensionPassed.cs", "2"),
+                AsReappliedSibling(BuildEditedFixtureSource(
+                    PlainDerivedFileName,
+                    "PlainSiblingExtensionCaller.cs",
+                    PlainDerivedValueBody,
+                    "return 50.Twice(1);"))
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "DerivedValue");
+        }
+
+        /// <summary>
         /// What: a partial file brought back to re-bind its active patches, whose method's own
         /// statements call an internal extension method of a class the reload was not given, is an
         /// entry instead of being skipped for a body that does not bind.
