@@ -11,14 +11,15 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 /// <remarks>
 /// Why these errors: the worker's binding imports the target assembly through its public surface
 /// only, so a same-named public extension method is all it can see. When that method takes another
-/// receiver type the compiler reports CS1929 instead of CS1061, and when it takes the receiver with
-/// other parameter types it reports CS1503. Neither error is located on the name: CS1929 marks the
-/// receiver and CS1503 the argument, so the name is found from the node the error marks.
+/// receiver type the compiler reports CS1929 instead of CS1061; when it takes the receiver with other
+/// parameter types, CS1503; with fewer parameters, CS1501; with more, CS7036. Only the last two are
+/// located on the name: CS1929 marks the receiver and CS1503 the argument, so the name is found from
+/// the node the error marks.
 /// </remarks>
 internal static class InapplicableCallName
 {
     private static readonly HashSet<string> InapplicableCallDiagnosticIds =
-        new HashSet<string>(StringComparer.Ordinal) { "CS1929", "CS1503" };
+        new HashSet<string>(StringComparer.Ordinal) { "CS1929", "CS1503", "CS1501", "CS7036" };
 
     /// <summary>
     /// What: whether <paramref name="error"/> reports a call whose name only binds to methods that
@@ -31,9 +32,9 @@ internal static class InapplicableCallName
 
     /// <summary>
     /// What: the called name of the call <paramref name="error"/>, an inapplicable-call error inside
-    /// <paramref name="bodyNode"/>, reports: the name after the receiver CS1929 marks, or of the call
-    /// whose argument CS1503 marks. Null when the marked node is not the receiver or an argument of
-    /// such a call, such as a call by bare name.
+    /// <paramref name="bodyNode"/>, reports: the name after the receiver CS1929 marks, of the call
+    /// whose argument CS1503 marks, or the called name CS1501 and CS7036 mark. Null when the marked
+    /// node is not the receiver, an argument or the name of such a call, such as a call by bare name.
     /// </summary>
     internal static SimpleNameSyntax FindOrNull(Diagnostic error, SyntaxNode bodyNode)
     {
@@ -52,7 +53,7 @@ internal static class InapplicableCallName
             node != null && node.Span == location.SourceSpan;
             node = node.Parent)
         {
-            SimpleNameSyntax name = error.Id == "CS1929" ? NameAfterReceiverOrNull(node) : NameOfCallWithArgumentOrNull(node);
+            SimpleNameSyntax name = NameForMarkedNodeOrNull(error.Id, node);
             if (name != null)
             {
                 return name;
@@ -60,6 +61,44 @@ internal static class InapplicableCallName
         }
 
         return null;
+    }
+
+    private static SimpleNameSyntax NameForMarkedNodeOrNull(string diagnosticId, SyntaxNode node)
+    {
+        switch (diagnosticId)
+        {
+            case "CS1929":
+                return NameAfterReceiverOrNull(node);
+            case "CS1503":
+                return NameOfCallWithArgumentOrNull(node);
+            default:
+                return CalledNameOrNull(node);
+        }
+    }
+
+    // 'receiver.Name(...)' or 'receiver?.Name(...)', where 'node' is 'Name', or the '.Name' binding,
+    // which the compiler marks for a call after '?.'.
+    private static SimpleNameSyntax CalledNameOrNull(SyntaxNode node)
+    {
+        if (node is MemberBindingExpressionSyntax marked)
+        {
+            return marked.Parent is InvocationExpressionSyntax call && call.Expression == marked ? marked.Name : null;
+        }
+
+        if (node is not SimpleNameSyntax name)
+        {
+            return null;
+        }
+
+        switch (name.Parent)
+        {
+            case MemberAccessExpressionSyntax access when access.Name == name:
+                return access.Parent is InvocationExpressionSyntax invocation && invocation.Expression == access ? name : null;
+            case MemberBindingExpressionSyntax binding when binding.Name == name:
+                return CalledNameOrNull(binding);
+            default:
+                return null;
+        }
     }
 
     // 'receiver.Name(...)' or 'receiver?.Name(...)', where 'node' is the receiver.
@@ -105,6 +144,9 @@ internal static class InapplicableCallName
                     break;
                 case MemberAccessExpressionSyntax access:
                     current = access.Expression;
+                    break;
+                case ElementAccessExpressionSyntax elementAccess:
+                    current = elementAccess.Expression;
                     break;
                 default:
                     return null;

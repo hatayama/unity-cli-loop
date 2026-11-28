@@ -47,9 +47,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Calls the shim assembly compiles as code of its own: in a lambda, through conditional
-        // access (also followed by another call), on a receiver that is itself a member access,
-        // beside a same-named public extension that takes an int with another argument type (also
-        // with a named argument), in an async body and in an iterator body.
+        // access (also followed by a call, a property or an element access), on a receiver that is
+        // itself a member access, beside a same-named public extension that takes an int with another
+        // argument type (also with a named argument), fewer parameters (CS1501, also after '?.') or
+        // more parameters (CS7036), in an async body and in an iterator body.
         private static IEnumerable<TestCaseData> CallsInShimCompiledBodies()
         {
             yield return new TestCaseData("LambdaValue", "() => 20", "() => 50.AddDouble(1)", 20, 101);
@@ -58,6 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return new TestCaseData("IntOverloadLambdaValue", "() => 70", "() => 50.AddTriple(1)", 70, 151);
             yield return new TestCaseData("ChainedConditionalAccessLambdaValue", "() => 80", "() => ((int?)50)?.AddDouble(1).CompareTo(0) ?? 0", 80, 1);
             yield return new TestCaseData("NamedArgumentLambdaValue", "() => 90", "() => 50.AddTriple(add: 1)", 90, 151);
+            yield return new TestCaseData("ConditionalAccessLambdaValue", "() => 30", "() => ((int?)50)?.AddDouble(1).ToString().Length ?? 0", 30, 3);
+            yield return new TestCaseData("ConditionalAccessLambdaValue", "() => 30", "() => ((int?)50)?.AddDouble(1).ToString()[0] ?? 0", 30, (int)'1');
+            yield return new TestCaseData("LambdaValue", "() => 20", "() => 50.AddQuadruple(1)", 20, 201);
+            yield return new TestCaseData("ConditionalAccessLambdaValue", "() => 30", "() => ((int?)50)?.AddQuadruple(1) ?? 0", 30, 201);
+            yield return new TestCaseData("LambdaValue", "() => 20", "() => 50.AddQuintuple(1)", 20, 251);
             yield return new TestCaseData("AsyncValue", "return 40;", "return 50.AddDouble(1);", 40, 101);
             yield return new TestCaseData("IteratorValues", "yield return 50;", "yield return 50.AddDouble(1);", 50, 101);
         }
@@ -135,6 +141,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(FindRow(result, FixtureKind.Partial, methodName).Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
             Assert.That(await CallAsync(FixtureKind.Partial, methodName), Is.EqualTo(compiledValue), FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: a lambda calling the internal extension method is skipped with a reason that names
+        /// the internal class, and the method keeps the compiled value. This holds beside a same-named
+        /// public extension method, and beside a public instance method of the receiver that does not
+        /// take the call, because the compiler then goes on to the extension methods.
+        /// </summary>
+        [TestCase(FixtureKind.Plain, "() => 50.AddDouble(1)")]
+        [TestCase(FixtureKind.Plain, "() => new HotReloadSameNameInstanceTarget().Measure(1)")]
+        [TestCase(FixtureKind.Partial, "() => new HotReloadSameNameInstanceTarget().Measure(1)")]
+        public async Task Run_LambdaCallingInternalExtensionBesideSameNamedPublicMethod_IsSkippedNamingTheInternalClass(
+            FixtureKind fixture,
+            string replacement)
+        {
+            HotReloadOrchestratorResult result = await RunEditAsync(fixture, "LambdaValue", "() => 20", replacement);
+
+            HotReloadMethodOutcome row = FindRow(result, fixture, "LambdaValue");
+            Assert.That(row.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
+            Assert.That(row.Reason, Does.Contain("is internal to 'HotReloadSameNameInternalExtensionMath'"), FormatOutcomes(result));
+            Assert.That(await CallAsync(fixture, "LambdaValue"), Is.EqualTo(20), FormatOutcomes(result));
         }
 
         private static async Task<HotReloadOrchestratorResult> RunEditAsync(

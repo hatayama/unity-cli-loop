@@ -1448,6 +1448,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a lambda in a partial type calling a same-named public extension method that does not
+        /// take its receiver (CS1929), with no internal extension method behind the call, is not
+        /// skipped and stays an entry, as before: the error is not a part the worker cannot see.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialTypeLambdaCallingOnlyAnInapplicablePublicExtension_IsNotSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    "HotReloadSameNameExtensionPartialCaller.cs",
+                    "InapplicablePublicExtensionOnly.cs",
+                    "() => 20",
+                    "() => 50L.AddDouble(1)")
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipReason(result, "LambdaValue("), Is.Null, FormatSkipped(result));
+            Assert.That(FindEntry(result, "LambdaValue"), Is.Not.Null, "LambdaValue must be an entry.");
+        }
+
+        /// <summary>
         /// What: a body of a partial type that uses an internal member of a type in another assembly
         /// keeps the missing-name reason.
         /// </summary>
