@@ -142,21 +142,6 @@ internal static class ExtensionClassNameBind
                 : null;
     }
 
-    /// <summary>
-    /// What: the assembly-qualified name the bind looks the class of <paramref name="method"/> up by,
-    /// in <paramref name="targetAssembly"/>.
-    /// </summary>
-    internal static string AssemblyQualifiedClassName(IMethodSymbol method, IAssemblySymbol targetAssembly)
-    {
-        if (targetAssembly == null)
-        {
-            throw new InvalidOperationException(
-                "An accessor for an extension method of a non-public class needs the target assembly.");
-        }
-
-        return ConstDriftCollector.ToReflectionMetadataName(method.ContainingType) + ", " + targetAssembly.Identity.Name;
-    }
-
     // Why only a class of the patch target: a class of another assembly can share its metadata name
     // with an unrelated class of the target, and the accessor would bind that one. A class from the
     // edited source belongs to the target, as does one the worker reads from the target's metadata.

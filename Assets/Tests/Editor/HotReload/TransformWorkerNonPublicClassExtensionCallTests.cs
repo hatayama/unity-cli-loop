@@ -14,8 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
     /// Transform worker coverage for lambdas and async bodies that call an extension method of a
-    /// non-public static class. Calls the accessor can carry become entries whose accessor binds
-    /// the class by name; the shapes it cannot carry are skipped with the reason of the check that
+    /// non-public static class. Calls the accessor can carry become entries whose accessor names
+    /// the class through typeof; the shapes it cannot carry are skipped with the reason of the check that
     /// refuses them, as they are for an internal extension method of a public class.
     /// </summary>
     public class TransformWorkerNonPublicClassExtensionCallTests
@@ -23,7 +23,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureFileName = "HotReloadNonPublicClassExtensionCallFixtures.cs";
         private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
         private const string Namespace = "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload";
-        private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string AddedExtensionAnchor = "        internal static int NonPublicPlusOne(this int value, int add)";
         private const string StaticFormCallOfTriple = "HotReloadNonPublicClassExtensions.NonPublicTriple(_value, 6121)";
         private const string OwnClassAddedMethodAnchor =
@@ -48,17 +47,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a lambda or async body that calls an extension method of a non-public static class
         /// (reduced form, static form, chained, a public method of the class, or a class in a
         /// namespace named with a keyword) becomes an entry
-        /// whose shim calls the accessor with the receiver first, and whose accessor finds the class
-        /// by its name in the edited assembly.
+        /// whose shim calls the accessor with the receiver first, and whose accessor names the class
+        /// through typeof.
         /// </summary>
         [TestCase("6101", "ClosureCallsNonPublicClassExtension", @"__M_NonPublicTriple\w*\(__F__value\(__uloopInstance\), 6102\)", "HotReloadNonPublicClassExtensions")]
         [TestCase("6111", "AsyncCallsNonPublicClassExtension", @"__M_NonPublicTriple\w*\(__F__value\(__uloopInstance\), 6112\)", "HotReloadNonPublicClassExtensions")]
         [TestCase("6121", "ClosureCallsNonPublicClassExtensionInStaticForm", @"__M_NonPublicTriple\w*\(__F__value\(__uloopInstance\), 6122\)", "HotReloadNonPublicClassExtensions")]
         [TestCase("6131", "ClosureChainsNonPublicClassExtensions", @"__M_NonPublicPlusOne\w*\(__M_NonPublicTriple\w*\(__F__value\(__uloopInstance\), 6132\), 1\)", "HotReloadNonPublicClassExtensions")]
         [TestCase("6141", "ClosureCallsPublicExtensionOfNonPublicClass", @"__M_NonPublicDouble\w*\(__F__value\(__uloopInstance\), 6142\)", "HotReloadNonPublicClassExtensions")]
-        [TestCase("6311", "ClosureCallsKeywordNamespaceExtension", @"__M_KeywordNamespaceTriple\w*\(__F__value\(__uloopInstance\), 6312\)", "event.HotReloadKeywordNamespaceExtensions")]
+        [TestCase("6311", "ClosureCallsKeywordNamespaceExtension", @"__M_KeywordNamespaceTriple\w*\(__F__value\(__uloopInstance\), 6312\)", "@event.HotReloadKeywordNamespaceExtensions")]
         [TestCase("6291", "ClosureRecordsThroughPublicExtensionOfNonPublicClass", @"__M_NonPublicRecord\w*\(__F__value\(__uloopInstance\), ", "HotReloadNonPublicClassExtensions")]
-        public async Task NonPublicClassExtensionCall_IsAnEntryBindingTheClassByName(
+        public async Task NonPublicClassExtensionCall_IsAnEntryBindingTheClassThroughTypeof(
             string token,
             string methodName,
             string expectedCallPattern,
@@ -71,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.shimSource, Does.Match(expectedCallPattern));
             Assert.That(
                 result.Output.shimSource,
-                Does.Contain("global::System.Type.GetType(\"" + Namespace + "." + className + ", " + TestAssemblyName + "\", true)"));
+                Does.Contain("typeof(global::" + Namespace + "." + className + ")"));
         }
 
         /// <summary>
@@ -111,8 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an extension method of a non-public static class this reload
-        /// adds is skipped for the class, because the class is not in the compiled assembly the
-        /// accessor would look it up in by name.
+        /// adds is skipped for the class, because the class is not in the compiled assembly the shim
+        /// compiles against, so the accessor's typeof of it would fail the shim compile.
         /// </summary>
         [Test]
         public async Task ExtensionCallOfNonPublicClassAddedInThisReload_IsSkippedForTheClass()

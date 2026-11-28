@@ -284,8 +284,7 @@ internal static class PropertyGetterEmitter
             addedMethodCatalog,
             addedFieldCatalog,
             addedPropertyCatalog,
-            homeAssemblyName,
-            targetAssembly);
+            homeAssemblyName);
     }
 
     internal static ShimTypeBuilder EmitPropertyGetterShim(
@@ -310,8 +309,7 @@ internal static class PropertyGetterEmitter
             AddedMethodCatalog addedMethodCatalog,
             AddedFieldCatalog addedFieldCatalog,
             AddedPropertyCatalog addedPropertyCatalog,
-            string homeAssemblyName,
-            IAssemblySymbol targetAssembly)
+            string homeAssemblyName)
     {
         currentShimType = EnsureShimType(
             currentShimType,
@@ -321,8 +319,7 @@ internal static class PropertyGetterEmitter
             sourceProjectRelativePath,
             shimTypes,
             shimNames,
-            assemblyGlobalUsings,
-            targetAssembly);
+            assemblyGlobalUsings);
 
         string shimMethodName = shimNames.NextShimMethodName(ShimBaseName(explicitImplementations, getterSymbol));
 
@@ -407,8 +404,7 @@ internal static class PropertyGetterEmitter
         string sourceProjectRelativePath,
         List<ShimTypeBuilder> shimTypes,
         ShimNameAllocator shimNames,
-        List<UsingDirectiveSyntax> assemblyGlobalUsings,
-        IAssemblySymbol targetAssembly)
+        List<UsingDirectiveSyntax> assemblyGlobalUsings)
     {
         if (currentShimType != null)
         {
@@ -424,8 +420,7 @@ internal static class PropertyGetterEmitter
             shimTypeName,
             namespaceName,
             WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
-            sourceProjectRelativePath,
-            targetAssembly);
+            sourceProjectRelativePath);
         shimTypes.Add(shimType);
         return shimType;
     }

@@ -32,8 +32,7 @@ internal static class OrdinaryMethodShimTypes
             shimTypeName,
             namespaceName,
             WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings),
-            typeState.SourceUnit.Input.ProjectRelativePath,
-            typeState.TargetAssembly);
+            typeState.SourceUnit.Input.ProjectRelativePath);
         shimTypes.Add(typeState.CurrentShimType);
         return typeState.CurrentShimType;
     }

@@ -558,39 +558,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that reads a private field and calls, in reduced form (x.M()), an
-        /// internal extension method of an internal class is an entry whose accessor finds the
-        /// class by name, because the class is not public.
+        /// internal extension method of an internal class is an entry whose accessor names the
+        /// class through typeof, although the class is not public.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureReadingPrivateFieldAndCallingInternalExtension_BindsTheClassByName()
+        public async Task ExtensionCall_ClosureReadingPrivateFieldAndCallingInternalExtension_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4101", "4102");
             AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsInternalExtension");
-            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
         /// What: a lambda whose only inaccessible use is an internal extension method of an
-        /// internal class called in reduced form is an entry whose accessor finds the class by name.
+        /// internal class called in reduced form is an entry whose accessor names the class through typeof.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureCallingOnlyInternalExtension_BindsTheClassByName()
+        public async Task ExtensionCall_ClosureCallingOnlyInternalExtension_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4201", "4202");
             AssertEntryAndNotSkipped(result, "ClosureCallsOnlyInternalExtension");
-            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
         /// What: an async method that calls an internal extension method of an internal class in
-        /// reduced form is an entry whose accessor finds the class by name.
+        /// reduced form is an entry whose accessor names the class through typeof.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_AsyncMethodCallingInternalExtension_BindsTheClassByName()
+        public async Task ExtensionCall_AsyncMethodCallingInternalExtension_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4301", "4302");
             AssertEntryAndNotSkipped(result, "AsyncCallsInternalExtension");
-            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
@@ -607,15 +607,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an internal extension method in static form through its
-        /// internal class is an entry: the accessor call replaces the whole call, so the shim never
-        /// names the class, and the accessor finds it by name.
+        /// internal class is an entry: the accessor call replaces the whole call, so only the
+        /// accessor's bind names the class, through typeof.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureNamingInternalExtensionClass_BindsTheClassByName()
+        public async Task ExtensionCall_ClosureNamingInternalExtensionClass_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("4501", "4502");
             AssertEntryAndNotSkipped(result, "ClosureCallsInternalExtensionInStaticForm");
-            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
@@ -660,17 +660,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls, in reduced form, a public extension method of an internal
-        /// class declared in the edited file is an entry whose accessor finds the class by name.
+        /// class declared in the edited file is an entry whose accessor names the class through typeof.
         /// The edited and compiled copies of the class both offer the method, so the call binds
         /// ambiguously; the accessor still binds the method the source calls, also while a public
         /// class in another file declares an extension of the same name.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureCallingPublicExtensionOfInternalClassInEditedFile_BindsTheClassByName()
+        public async Task ExtensionCall_ClosureCallingPublicExtensionOfInternalClassInEditedFile_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5101", "5102");
             AssertEntryAndNotSkipped(result, "ClosureCallsPublicExtensionOfInternalClass");
-            AssertBindsByName(result, InternalClassExtensionClassName, "Thrice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalClassExtensionClassName, "Thrice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
@@ -692,11 +692,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// name.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_AsyncMethodCallingPublicExtensionOfInternalClassInEditedFile_BindsTheClassByName()
+        public async Task ExtensionCall_AsyncMethodCallingPublicExtensionOfInternalClassInEditedFile_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5201", "5202");
             AssertEntryAndNotSkipped(result, "AsyncCallsPublicExtensionOfInternalClass");
-            AssertBindsByName(result, InternalClassExtensionClassName, "Thrice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalClassExtensionClassName, "Thrice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
@@ -727,7 +727,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5401", "5402");
             AssertEntryAndNotSkipped(result, "ClosureCallsOverloadedExtensionOfInternalClass");
-            AssertBindsByName(result, InternalClassExtensionClassName, "Step", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalClassExtensionClassName, "Step", "typeof(int), typeof(int)");
             AssertShimDoesNotContain(result, "\"Step\", new global::System.Type[]{typeof(int), typeof(string)}");
         }
 
@@ -741,17 +741,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5501", "5502");
             AssertEntryAndNotSkipped(result, "ClosureCallsBetterOverloadOfExtensionOfInternalClass");
-            AssertBindsByName(result, InternalClassExtensionClassName, "Pick", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalClassExtensionClassName, "Pick", "typeof(int), typeof(int)");
             AssertShimDoesNotContain(result, "\"Pick\", new global::System.Type[]{typeof(int), typeof(long)}");
         }
 
         /// <summary>
         /// What: when the same edit makes the internal extension class public and changes a lambda
-        /// that calls it, the lambda is an entry whose accessor still finds the class by name,
+        /// that calls it, the lambda is an entry whose accessor still names the class through typeof,
         /// because the running code calls the compiled class, which is still internal.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureCallingExtensionOfClassMadePublicInSameEdit_BindsTheClassByName()
+        public async Task ExtensionCall_ClosureCallingExtensionOfClassMadePublicInSameEdit_BindsTheClassThroughTypeof()
         {
             string fixturePath = ResolveTestSourcePath("HotReloadExtensionCallFixtures.cs");
             string onDisk = File.ReadAllText(fixturePath);
@@ -770,7 +770,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             AssertEntryAndNotSkipped(result, "ClosureCallsPublicExtensionOfInternalClass");
-            AssertBindsByName(result, InternalClassExtensionClassName, "Thrice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalClassExtensionClassName, "Thrice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
@@ -800,10 +800,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a method added in this reload that calls an internal extension method of an internal
-        /// class in reduced form is added, and its accessor finds the class by name.
+        /// class in reduced form is added, and its accessor names the class through typeof.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_AddedMethodCallingInternalExtension_BindsTheClassByName()
+        public async Task ExtensionCall_AddedMethodCallingInternalExtension_BindsTheClassThroughTypeof()
         {
             string fixturePath = ResolveTestSourcePath("HotReloadExtensionCallFixtures.cs");
             string onDisk = File.ReadAllText(fixturePath);
@@ -821,16 +821,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             AssertAddedAndNotSkipped(result, "AddedCallsInternalExtension");
-            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
         /// What: when the same edit makes an internal class public and changes a lambda that calls an
-        /// internal extension method of it, the accessor still finds the class by name, because the
+        /// internal extension method of it, the accessor still names the class through typeof, because the
         /// running code calls the compiled class, which is still internal.
         /// </summary>
         [Test]
-        public async Task ExtensionCall_ClosureCallingInternalExtensionOfClassMadePublicInSameEdit_BindsTheClassByName()
+        public async Task ExtensionCall_ClosureCallingInternalExtensionOfClassMadePublicInSameEdit_BindsTheClassThroughTypeof()
         {
             TransformWorkerClientResult result = await RunExtensionCallHostCustomEditAsync(onDisk =>
             {
@@ -846,7 +846,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
 
             AssertEntryAndNotSkipped(result, "ClosureReadsPrivateFieldAndCallsInternalExtension");
-            AssertBindsByName(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
+            AssertBindsThroughTypeof(result, InternalExtensionClassName, "Twice", "typeof(int), typeof(int)");
         }
 
         /// <summary>
@@ -927,14 +927,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, methodName), Is.Not.Null, methodName + " must be an entry.");
         }
 
-        private static void AssertBindsByName(
+        private static void AssertBindsThroughTypeof(
             TransformWorkerClientResult result,
             string className,
             string methodName,
             string lookupTypes)
         {
-            string expected = "global::System.Type.GetType(\"" + TestNamespace + "." + className + ", " + TestAssemblyName
-                + "\", true), \"" + methodName + "\", new global::System.Type[]{" + lookupTypes + "})";
+            string expected = "typeof(global::" + TestNamespace + "." + className + "), \"" + methodName
+                + "\", new global::System.Type[]{" + lookupTypes + "})";
             Assert.That(
                 WithoutWhitespace(result.Output.shimSource),
                 Does.Contain(WithoutWhitespace(expected)),
