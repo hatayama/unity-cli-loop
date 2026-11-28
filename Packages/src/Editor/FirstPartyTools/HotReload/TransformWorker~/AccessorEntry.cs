@@ -203,7 +203,11 @@ internal sealed class AccessorEntry
     /// Mono). On a runtime that did check it, the bind would throw in __BindAccessors, before any
     /// patch is applied, not after the method was reported patched. ADR 0010
     /// (docs/adr/0010-hot-reload-internal-introduced-types.md) reopens Mono-only behavior when the
-    /// Editor moves to CoreCLR.
+    /// Editor moves to CoreCLR. Known limit: when a referenced assembly declares a public type with
+    /// the full name of the class (the target compiles with CS0436 and its own class wins), the
+    /// typeof is ambiguous in the shim compile (CS0433), so the file's entries are dropped and
+    /// recompiled, or the file fails; it never binds the wrong class. A public class has the same
+    /// limit.
     /// </remarks>
     public StatementSyntax EmitBindStatement()
     {

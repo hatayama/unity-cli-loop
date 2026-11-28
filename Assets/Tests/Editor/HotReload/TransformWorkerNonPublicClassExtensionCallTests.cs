@@ -110,8 +110,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an extension method of a non-public static class this reload
-        /// adds is skipped for the class, because the class is not in the compiled assembly the shim
-        /// compiles against, so the accessor's typeof of it would fail the shim compile.
+        /// adds is skipped for the class, because the class is not in the compiled assembly: without
+        /// that check the reload would report the method Patched and its first call would throw
+        /// MethodAccessException.
         /// </summary>
         [Test]
         public async Task ExtensionCallOfNonPublicClassAddedInThisReload_IsSkippedForTheClass()

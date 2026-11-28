@@ -56,9 +56,9 @@ internal static class NonPublicExtensionClassBind
     /// and holds the method with the same return type or not at all.
     /// </summary>
     /// <remarks>
-    /// Why the class must already be compiled: the shim compiles against a copy of that assembly, and
-    /// a class this reload adds is not there, so the bind's typeof of it would fail the whole file
-    /// instead of skipping the one method. Why a method this reload adds passes: only its
+    /// Why the class must already be compiled: a class this reload adds is not in the compiled
+    /// assembly. Without this check the reload reports the method Patched and its first call throws
+    /// MethodAccessException from the shim (measured), so the method is skipped instead. Why a method this reload adds passes: only its
     /// static-form call gets this far, the reduced form being refused before, and the added-method
     /// rewrite replaces that call, so the shim binds no accessor for it. Why a changed return type
     /// fails: the bind would find the compiled method by its parameters and could not make a delegate
