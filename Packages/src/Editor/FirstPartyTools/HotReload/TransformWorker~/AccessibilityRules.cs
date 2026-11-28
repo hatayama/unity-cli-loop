@@ -134,8 +134,8 @@ internal static class AccessibilityRules
         }
 
         return first.Parameters
-            .Select(CecilTypeNames.ToParameterTypeFullName)
-            .SequenceEqual(second.Parameters.Select(CecilTypeNames.ToParameterTypeFullName));
+            .Select(CecilTypeNames.ToParameterSignatureComparisonName)
+            .SequenceEqual(second.Parameters.Select(CecilTypeNames.ToParameterSignatureComparisonName));
     }
 
     /// <summary>

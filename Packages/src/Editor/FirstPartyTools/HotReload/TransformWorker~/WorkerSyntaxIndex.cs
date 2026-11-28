@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -54,7 +56,7 @@ internal static class WorkerSyntaxIndex
     {
         // Why NormalizeWhitespace: trivia / spacing differences must not invent distinct keys.
         string typeText = parameter.Type != null
-            ? parameter.Type.NormalizeWhitespace().ToString()
+            ? SpellTypeParametersByPosition(parameter.Type.NormalizeWhitespace(), parameter)
             : string.Empty;
         if (parameter.Modifiers.Any(SyntaxKind.RefKeyword)
             || parameter.Modifiers.Any(SyntaxKind.OutKeyword)
@@ -64,6 +66,101 @@ internal static class WorkerSyntaxIndex
         }
 
         return typeText;
+    }
+
+    /// <summary>
+    /// The text of <paramref name="normalizedType"/> with every name of an in-scope type parameter
+    /// spelled by its position: <c>!!n</c> for the n-th type parameter of the declaring method, and
+    /// <c>!d.n</c> for the n-th type parameter of the containing type declaration at depth d,
+    /// counted from the outermost type (0). A type with no such name keeps its text byte for byte.
+    /// </summary>
+    // Why by position: renaming a type parameter (Echo<T>(T) to Echo<U>(U)) leaves the member the
+    // same, so its snapshot and current keys must meet; a swap of positions must not.
+    private static string SpellTypeParametersByPosition(TypeSyntax normalizedType, ParameterSyntax parameter)
+    {
+        Dictionary<string, string> positions = CollectTypeParameterPositions(parameter);
+        if (positions.Count == 0)
+        {
+            return normalizedType.ToString();
+        }
+
+        StringBuilder builder = new StringBuilder();
+        foreach (SyntaxToken token in normalizedType.DescendantTokens())
+        {
+            if (IsTypeParameterReference(token) && positions.TryGetValue(token.ValueText, out string position))
+            {
+                builder.Append(token.LeadingTrivia.ToFullString());
+                builder.Append(position);
+                builder.Append(token.TrailingTrivia.ToFullString());
+                continue;
+            }
+
+            builder.Append(token.ToFullString());
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    // Why the method's own list first: a method type parameter hides a containing type's one of
+    // the same name, so the first position recorded for a name wins.
+    private static Dictionary<string, string> CollectTypeParameterPositions(ParameterSyntax parameter)
+    {
+        Dictionary<string, string> positions = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (parameter.Parent?.Parent is MethodDeclarationSyntax method && method.TypeParameterList != null)
+        {
+            AddPositions(positions, method.TypeParameterList, "!!");
+        }
+
+        List<TypeDeclarationSyntax> containingTypes = new List<TypeDeclarationSyntax>();
+        for (TypeDeclarationSyntax current = parameter.FirstAncestorOrSelf<TypeDeclarationSyntax>();
+             current != null;
+             current = current.Parent as TypeDeclarationSyntax)
+        {
+            containingTypes.Add(current);
+        }
+
+        // Innermost first, so an inner type's parameter hides an outer one of the same name;
+        // the depth is still counted from the outermost type.
+        for (int index = 0; index < containingTypes.Count; index++)
+        {
+            TypeParameterListSyntax typeParameters = containingTypes[index].TypeParameterList;
+            if (typeParameters != null)
+            {
+                int depth = containingTypes.Count - 1 - index;
+                AddPositions(positions, typeParameters, "!" + depth.ToString(CultureInfo.InvariantCulture) + ".");
+            }
+        }
+
+        return positions;
+    }
+
+    private static void AddPositions(Dictionary<string, string> positions, TypeParameterListSyntax typeParameters, string prefix)
+    {
+        for (int index = 0; index < typeParameters.Parameters.Count; index++)
+        {
+            string name = typeParameters.Parameters[index].Identifier.ValueText;
+            if (!positions.ContainsKey(name))
+            {
+                positions.Add(name, prefix + index.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+    }
+
+    // Why only a bare or leftmost name: the right side of A.T or alias::T names a member type
+    // called T, not the type parameter.
+    private static bool IsTypeParameterReference(SyntaxToken token)
+    {
+        if (!(token.Parent is IdentifierNameSyntax identifierName))
+        {
+            return false;
+        }
+
+        if (identifierName.Parent is QualifiedNameSyntax qualified && qualified.Right == identifierName)
+        {
+            return false;
+        }
+
+        return !(identifierName.Parent is AliasQualifiedNameSyntax aliasQualified && aliasQualified.Name == identifierName);
     }
 
     // What: syntax-only type metadata name for baseline signature keys (not shim naming).

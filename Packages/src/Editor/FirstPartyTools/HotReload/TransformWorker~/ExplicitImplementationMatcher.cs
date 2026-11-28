@@ -138,15 +138,15 @@ internal sealed class ExplicitImplementationMatcher
             return null;
         }
 
-        string sourceInterface = sourceMember.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        string sourceType = CecilTypeNames.ToCecilFullName(sourceProperty.Type);
+        string sourceInterface = InterfaceComparisonName(sourceMember.ContainingType);
+        string sourceType = CecilTypeNames.ToSignatureComparisonName(sourceProperty.Type);
         foreach (IPropertySymbol compiledProperty in compiledType.GetMembers().OfType<IPropertySymbol>())
         {
             bool implementsSameMember = compiledProperty.ExplicitInterfaceImplementations.Any(implemented =>
                 implemented.Name == sourceMember.Name
                 && implemented.IsIndexer == sourceMember.IsIndexer
-                && implemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == sourceInterface);
-            if (implementsSameMember && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == sourceType)
+                && InterfaceComparisonName(implemented.ContainingType) == sourceInterface);
+            if (implementsSameMember && CecilTypeNames.ToSignatureComparisonName(compiledProperty.Type) == sourceType)
             {
                 return compiledProperty;
             }
@@ -171,14 +171,14 @@ internal sealed class ExplicitImplementationMatcher
             return false;
         }
 
-        string compiledInterface = compiledImplemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string compiledInterface = InterfaceComparisonName(compiledImplemented.ContainingType);
         foreach (ISymbol sourceMember in sourceType.GetMembers())
         {
             ISymbol implemented = ImplementedPropertyOrEventOrNull(sourceMember);
             if (implemented != null
                 && implemented.Kind == compiledImplemented.Kind
                 && implemented.Name == compiledImplemented.Name
-                && implemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == compiledInterface)
+                && InterfaceComparisonName(implemented.ContainingType) == compiledInterface)
             {
                 return true;
             }
@@ -245,14 +245,21 @@ internal sealed class ExplicitImplementationMatcher
         }
     }
 
+    // Why by position: the interface of a generic host names the host's type parameters
+    // (IBox<T>), and a source that renamed them (Host<U> : IBox<U>) still implements the same one.
+    private static string InterfaceComparisonName(INamedTypeSymbol interfaceType)
+    {
+        return CecilTypeNames.ToSignatureComparisonName(interfaceType);
+    }
+
     private static bool ImplementsSameMember(IMethodSymbol compiledMethod, IMethodSymbol sourceMember)
     {
-        string sourceInterface = sourceMember.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string sourceInterface = InterfaceComparisonName(sourceMember.ContainingType);
         // Why arity too: M(int) and M<T>(int) of one interface share a name and parameter types.
         return compiledMethod.ExplicitInterfaceImplementations.Any(implemented =>
             implemented.Name == sourceMember.Name
             && implemented.Arity == sourceMember.Arity
-            && implemented.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == sourceInterface);
+            && InterfaceComparisonName(implemented.ContainingType) == sourceInterface);
     }
 
     private static bool SignaturesMatch(IMethodSymbol compiledMethod, IMethodSymbol sourceMethod)
@@ -268,8 +275,8 @@ internal sealed class ExplicitImplementationMatcher
             IParameterSymbol compiledParameter = compiledMethod.Parameters[index];
             IParameterSymbol sourceParameter = sourceMethod.Parameters[index];
             if (compiledParameter.RefKind != sourceParameter.RefKind
-                || CecilTypeNames.ToParameterTypeFullName(compiledParameter)
-                    != CecilTypeNames.ToParameterTypeFullName(sourceParameter))
+                || CecilTypeNames.ToParameterSignatureComparisonName(compiledParameter)
+                    != CecilTypeNames.ToParameterSignatureComparisonName(sourceParameter))
             {
                 return false;
             }

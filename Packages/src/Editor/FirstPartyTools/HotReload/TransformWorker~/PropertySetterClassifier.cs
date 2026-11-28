@@ -93,6 +93,6 @@ internal static class PropertySetterClassifier
         return compiledProperty.SetMethod != null
             && compiledProperty.SetMethod.IsInitOnly == propertySymbol.SetMethod.IsInitOnly
             && compiledProperty.IsStatic == propertySymbol.IsStatic
-            && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == CecilTypeNames.ToCecilFullName(propertySymbol.Type);
+            && CecilTypeNames.ToSignatureComparisonName(compiledProperty.Type) == CecilTypeNames.ToSignatureComparisonName(propertySymbol.Type);
     }
 }
