@@ -68,15 +68,21 @@ jobs:
           # Shards 1 and 2 split ...HotReload.HotReload* by a lookahead and its
           # negation, and shard 3 is the negation of their common prefix, so the
           # union is exactly the old unanchored-prefix filter and no test runs twice.
+          # Why shards 1 and 2 require a "." after the class name: a [SetUpFixture]
+          # is the parent suite of every test in its namespace, and a test runs when
+          # its parent matches. HotReloadAutoRefreshHoldTestSafety and
+          # HotReloadEditorTickPumpTestSafety would otherwise pull the whole namespace
+          # into shard 1. The "." matches a test's Class.Method name but never a
+          # SetUpFixture's own name. A new SetUpFixture must not match any shard.
           # Why shards: on a slow runner the whole suite alone took 42 minutes of a
           # 45-minute step (#3653); each shard stays near a third of that.
           - unity-version: 6000.3.15f1
             shard: 1
-            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload[A-N]'
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload[A-N][^.]*\.'
             strict-compile-check: false
           - unity-version: 6000.3.15f1
             shard: 2
-            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload(?![A-N])'
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload(?![A-N])[^.]*\.'
             strict-compile-check: false
           - unity-version: 6000.3.15f1
             shard: 3
@@ -84,11 +90,11 @@ jobs:
             strict-compile-check: false
           - unity-version: 6000.5.8f1
             shard: 1
-            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload[A-N]'
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload[A-N][^.]*\.'
             strict-compile-check: false
           - unity-version: 6000.5.8f1
             shard: 2
-            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload(?![A-N])'
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload(?![A-N])[^.]*\.'
             strict-compile-check: false
           - unity-version: 6000.5.8f1
             shard: 3
