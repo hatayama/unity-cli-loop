@@ -35,7 +35,7 @@ jobs:
           dotnet test tests/RunTestsExecutionTimeout.UnitTests/RunTestsExecutionTimeout.UnitTests.csproj --configuration Release
 
   editmode-tests:
-    name: EditMode Tests (${{ matrix.unity-version }})
+    name: EditMode Tests (${{ matrix.unity-version }}${{ matrix.shard && format(' shard {0}', matrix.shard) || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -55,15 +55,53 @@ jobs:
           # zero-warning gate and run only the hot-reload suites, which are the
           # cross-version compatibility signal these legs exist for. Compile errors
           # still fail the leg because the test runner cannot run without compiling.
-          # The filter is an unanchored prefix on purpose: it matches both the
-          # ...Tests.Editor.HotReload namespace and the ...HotReloadSpike namespace,
-          # whose publicizer/worker-bootstrap spikes exercise exactly the machinery
-          # that breaks across editor generations.
+          # The hot-reload suites are the tests whose full name starts with
+          # io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload: the ...HotReload
+          # namespace and the ...HotReloadSpike namespace, whose publicizer and
+          # worker-bootstrap spikes exercise exactly the machinery that breaks across
+          # editor generations. Each version runs them in three shards (the test
+          # filter is a regular expression):
+          #   1: ...HotReload.HotReload followed by a letter A-N
+          #   2: ...HotReload.HotReload followed by anything else
+          #   3: ...HotReload followed by anything but ".HotReload" (TransformWorker*,
+          #      HotReloadSpike and the remaining hot-reload fixtures)
+          # Shards 1 and 2 split ...HotReload.HotReload* by a lookahead and its
+          # negation, and shard 3 is the negation of their common prefix, so the
+          # union is exactly the old unanchored-prefix filter and no test runs twice.
+          # Why shards 1 and 2 require a "." after the class name: a [SetUpFixture]
+          # is the parent suite of every test in its namespace, and a test runs when
+          # its parent matches. HotReloadAutoRefreshHoldTestSafety and
+          # HotReloadEditorTickPumpTestSafety would otherwise pull the whole namespace
+          # into shard 1. The "." matches a test's Class.Method name but never a
+          # SetUpFixture's own name. A new SetUpFixture must not match any shard.
+          # Shard 3 requires a character after "HotReload" for the same reason: the
+          # bare namespace suite is the parent of shard 1 and 2 tests and would pull
+          # them in if the namespace ever lost its SetUpFixtures.
+          # Why shards: on a slow runner the whole suite alone took 42 minutes of a
+          # 45-minute step (#3653); each shard stays near a third of that.
           - unity-version: 6000.3.15f1
-            test-filter: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+            shard: 1
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload[A-N][^.]*\.'
+            strict-compile-check: false
+          - unity-version: 6000.3.15f1
+            shard: 2
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload(?![A-N])[^.]*\.'
+            strict-compile-check: false
+          - unity-version: 6000.3.15f1
+            shard: 3
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload(?!\.HotReload)(?=.)'
             strict-compile-check: false
           - unity-version: 6000.5.8f1
-            test-filter: io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+            shard: 1
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload[A-N][^.]*\.'
+            strict-compile-check: false
+          - unity-version: 6000.5.8f1
+            shard: 2
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload\.HotReload(?![A-N])[^.]*\.'
+            strict-compile-check: false
+          - unity-version: 6000.5.8f1
+            shard: 3
+            test-filter: 'io\.github\.hatayama\.UnityCliLoop\.Tests\.Editor\.HotReload(?!\.HotReload)(?=.)'
             strict-compile-check: false
     env:
       HAS_UNITY_LICENSE: ${{ secrets.UNITY_LICENSE != '' }}
@@ -182,7 +220,7 @@ jobs:
           unityVersion: ${{ matrix.unity-version }}
           testMode: EditMode
           customParameters: ${{ matrix.test-filter != '' && format('-testFilter {0}', matrix.test-filter) || '' }}
-          checkName: Unity Test Results (${{ matrix.unity-version }})
+          checkName: Unity Test Results (${{ matrix.unity-version }}${{ matrix.shard && format(' shard {0}', matrix.shard) || '' }})
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           coverageOptions: ${{ matrix.coverage-options }}
 
@@ -201,7 +239,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always() && env.HAS_UNITY_LICENSE == 'true'
         with:
-          name: Unity test results (${{ matrix.unity-version }})
+          name: Unity test results (${{ matrix.unity-version }}${{ matrix.shard && format(' shard {0}', matrix.shard) || '' }})
           path: artifacts
 
   # Records Go and C# coverage on the coverage-trend issue every night. It runs even when a Unity
