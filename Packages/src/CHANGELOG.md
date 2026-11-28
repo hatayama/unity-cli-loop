@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.7](https://github.com/hatayama/unity-cli-loop/compare/v3.36.6...v3.36.7) (2026-11-28)
+
+
+### Bug Fixes
+
+* Hot reload no longer reports an internal extension call as patched and then throws when a public extension of the same name exists ([#3643](https://github.com/hatayama/unity-cli-loop/issues/3643)) ([bd7c967](https://github.com/hatayama/unity-cli-loop/commit/bd7c967088d0fe44d69a3805f4c665b2e7c3f6c0))
+
 ## [3.36.6](https://github.com/hatayama/unity-cli-loop/compare/v3.36.5...v3.36.6) (2026-11-26)
 
 
