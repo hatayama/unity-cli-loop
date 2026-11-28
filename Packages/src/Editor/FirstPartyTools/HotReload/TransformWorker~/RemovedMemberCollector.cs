@@ -164,7 +164,7 @@ internal static class RemovedMemberCollector
         IMethodSymbol compiledMethod)
     {
         string[] compiledParameterTypeFullNames = compiledMethod.Parameters
-            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .Select(CecilTypeNames.ToParameterSignatureComparisonName)
             .ToArray();
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())
@@ -183,7 +183,7 @@ internal static class RemovedMemberCollector
             bool parametersMatch = true;
             for (int index = 0; index < compiledParameterTypeFullNames.Length; index++)
             {
-                if (CecilTypeNames.ToParameterTypeFullName(sourceMethod.Parameters[index])
+                if (CecilTypeNames.ToParameterSignatureComparisonName(sourceMethod.Parameters[index])
                     != compiledParameterTypeFullNames[index])
                 {
                     parametersMatch = false;

@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -35,7 +37,7 @@ internal static class WorkerSyntaxIndex
         // BuildSyntaxPropertyKey). Property keys already include ExplicitInterfaceSpecifier.
         if (methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            methodName = methodDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
+            methodName = SpellTypeParametersByPosition(methodDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace(), methodDeclaration)
                 + "." + methodName;
         }
 
@@ -54,7 +56,7 @@ internal static class WorkerSyntaxIndex
     {
         // Why NormalizeWhitespace: trivia / spacing differences must not invent distinct keys.
         string typeText = parameter.Type != null
-            ? parameter.Type.NormalizeWhitespace().ToString()
+            ? SpellTypeParametersByPosition(parameter.Type.NormalizeWhitespace(), parameter.FirstAncestorOrSelf<MemberDeclarationSyntax>())
             : string.Empty;
         if (parameter.Modifiers.Any(SyntaxKind.RefKeyword)
             || parameter.Modifiers.Any(SyntaxKind.OutKeyword)
@@ -64,6 +66,110 @@ internal static class WorkerSyntaxIndex
         }
 
         return typeText;
+    }
+
+    /// <summary>
+    /// The text of <paramref name="normalizedType"/>, written in <paramref name="member"/>, with
+    /// every name of an in-scope type parameter spelled by its position: <c>!!n</c> for the n-th
+    /// type parameter of the member when it is a generic method, and <c>!d.n</c> for the n-th type
+    /// parameter of the containing type declaration at depth d, counted from the outermost type (0).
+    /// A type with no such name in scope keeps its text byte for byte.
+    /// </summary>
+    // Why by position: renaming a type parameter (Echo<T>(T) to Echo<U>(U)) leaves the member the
+    // same, so its snapshot and current keys must meet; a swap of positions must not.
+    private static string SpellTypeParametersByPosition(TypeSyntax normalizedType, MemberDeclarationSyntax member)
+    {
+        Dictionary<string, string> positions = CollectTypeParameterPositions(member);
+        if (positions.Count == 0)
+        {
+            return normalizedType.ToString();
+        }
+
+        // Why without the outer trivia: ToString above leaves out a comment before or after the
+        // type, so a comment edit must not move this key either.
+        StringBuilder builder = new StringBuilder();
+        foreach (SyntaxToken token in normalizedType.WithoutTrivia().DescendantTokens())
+        {
+            if (IsTypeParameterReference(token) && positions.TryGetValue(token.ValueText, out string position))
+            {
+                builder.Append(token.LeadingTrivia.ToFullString());
+                builder.Append(position);
+                builder.Append(token.TrailingTrivia.ToFullString());
+                continue;
+            }
+
+            builder.Append(token.ToFullString());
+        }
+
+        return builder.ToString();
+    }
+
+    // Why the method's own list first: a method type parameter hides a containing type's one of
+    // the same name, so the first position recorded for a name wins.
+    private static Dictionary<string, string> CollectTypeParameterPositions(MemberDeclarationSyntax member)
+    {
+        Dictionary<string, string> positions = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (member == null)
+        {
+            return positions;
+        }
+
+        if (member is MethodDeclarationSyntax method && method.TypeParameterList != null)
+        {
+            AddPositions(positions, method.TypeParameterList, "!!");
+        }
+
+        List<TypeDeclarationSyntax> containingTypes = new List<TypeDeclarationSyntax>();
+        for (TypeDeclarationSyntax current = member.Parent as TypeDeclarationSyntax;
+             current != null;
+             current = current.Parent as TypeDeclarationSyntax)
+        {
+            containingTypes.Add(current);
+        }
+
+        // Innermost first, so an inner type's parameter hides an outer one of the same name;
+        // the depth is still counted from the outermost type.
+        for (int index = 0; index < containingTypes.Count; index++)
+        {
+            TypeParameterListSyntax typeParameters = containingTypes[index].TypeParameterList;
+            if (typeParameters != null)
+            {
+                int depth = containingTypes.Count - 1 - index;
+                AddPositions(positions, typeParameters, "!" + depth.ToString(CultureInfo.InvariantCulture) + ".");
+            }
+        }
+
+        return positions;
+    }
+
+    private static void AddPositions(Dictionary<string, string> positions, TypeParameterListSyntax typeParameters, string prefix)
+    {
+        for (int index = 0; index < typeParameters.Parameters.Count; index++)
+        {
+            string name = typeParameters.Parameters[index].Identifier.ValueText;
+            if (!positions.ContainsKey(name))
+            {
+                positions.Add(name, prefix + index.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+    }
+
+    // Why only a bare or leftmost name: the right side of A.T names a member type called T, and
+    // both sides of T::X are an alias and a name in it, none of them the type parameter. Type
+    // arguments inside either are separate names and still checked on their own.
+    private static bool IsTypeParameterReference(SyntaxToken token)
+    {
+        if (!(token.Parent is IdentifierNameSyntax identifierName))
+        {
+            return false;
+        }
+
+        if (identifierName.Parent is QualifiedNameSyntax qualified && qualified.Right == identifierName)
+        {
+            return false;
+        }
+
+        return !(identifierName.Parent is AliasQualifiedNameSyntax);
     }
 
     // What: syntax-only type metadata name for baseline signature keys (not shim naming).
@@ -167,7 +273,7 @@ internal static class WorkerSyntaxIndex
         {
             // Why NormalizeWhitespace: keep property keys symmetric with BuildSyntaxMethodKey so
             // trivia in the interface name cannot invent a distinct baseline key.
-            name = propertyDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
+            name = SpellTypeParametersByPosition(propertyDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace(), propertyDeclaration)
                 + "." + name;
         }
 
@@ -247,7 +353,7 @@ internal static class WorkerSyntaxIndex
         }
 
         string targetType = conversionDeclaration.Type != null
-            ? conversionDeclaration.Type.NormalizeWhitespace().ToString()
+            ? SpellTypeParametersByPosition(conversionDeclaration.Type.NormalizeWhitespace(), conversionDeclaration)
             : string.Empty;
         return typeMetadataName + "::" + conversionDeclaration.ImplicitOrExplicitKeyword.ValueText
             + "->" + targetType + "(" + string.Join(",", parameterKeys) + ")";
@@ -260,7 +366,7 @@ internal static class WorkerSyntaxIndex
         string name = eventDeclaration.Identifier.Text;
         if (eventDeclaration.ExplicitInterfaceSpecifier != null)
         {
-            name = eventDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
+            name = SpellTypeParametersByPosition(eventDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace(), eventDeclaration)
                 + "." + name;
         }
 

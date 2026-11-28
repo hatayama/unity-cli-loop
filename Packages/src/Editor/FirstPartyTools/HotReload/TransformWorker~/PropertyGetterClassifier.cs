@@ -105,7 +105,7 @@ internal static class PropertyGetterClassifier
         return compiledProperty.GetMethod != null
             && compiledProperty.IsStatic == propertySymbol.IsStatic
             && compiledProperty.RefKind == propertySymbol.RefKind
-            && CecilTypeNames.ToCecilFullName(compiledProperty.Type) == CecilTypeNames.ToCecilFullName(propertySymbol.Type);
+            && CecilTypeNames.ToSignatureComparisonName(compiledProperty.Type) == CecilTypeNames.ToSignatureComparisonName(propertySymbol.Type);
     }
 
     // What: runs a property accessor body through the same transform decision and name/added-call

@@ -42,7 +42,7 @@ internal static class CompiledMemberMatcher
         IMethodSymbol sourceMethod)
     {
         string[] sourceParameterTypeFullNames = sourceMethod.Parameters
-            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .Select(CecilTypeNames.ToParameterSignatureComparisonName)
             .ToArray();
         foreach (ISymbol member in compiledType.GetMembers(sourceMethod.Name))
         {
@@ -59,7 +59,7 @@ internal static class CompiledMemberMatcher
             bool parametersMatch = true;
             for (int index = 0; index < sourceParameterTypeFullNames.Length; index++)
             {
-                if (CecilTypeNames.ToParameterTypeFullName(compiledMethod.Parameters[index])
+                if (CecilTypeNames.ToParameterSignatureComparisonName(compiledMethod.Parameters[index])
                     != sourceParameterTypeFullNames[index])
                 {
                     parametersMatch = false;
@@ -78,13 +78,13 @@ internal static class CompiledMemberMatcher
 
     internal static bool ReturnTypesMatch(IMethodSymbol compiledMethod, IMethodSymbol sourceMethod)
     {
-        if (CecilTypeNames.ToCecilFullName(compiledMethod.ReturnType)
-            != CecilTypeNames.ToCecilFullName(sourceMethod.ReturnType))
+        if (CecilTypeNames.ToSignatureComparisonName(compiledMethod.ReturnType)
+            != CecilTypeNames.ToSignatureComparisonName(sourceMethod.ReturnType))
         {
             return false;
         }
 
-        // Why compare byref flags separately: ToCecilFullName sees only ITypeSymbol, so
+        // Why compare byref flags separately: ToSignatureComparisonName sees only ITypeSymbol, so
         // int F() and ref int F() both become System.Int32. Missing this would transplant
         // the new body onto the old non-byref signature.
         return compiledMethod.ReturnsByRef == sourceMethod.ReturnsByRef
@@ -122,8 +122,8 @@ internal static class CompiledMemberMatcher
                 return CompiledFieldMatch.FieldModifiersChanged;
             }
 
-            if (CecilTypeNames.ToCecilFullName(compiledField.Type)
-                == CecilTypeNames.ToCecilFullName(sourceField.Type))
+            if (CecilTypeNames.ToSignatureComparisonName(compiledField.Type)
+                == CecilTypeNames.ToSignatureComparisonName(sourceField.Type))
             {
                 return CompiledFieldMatch.Matched;
             }

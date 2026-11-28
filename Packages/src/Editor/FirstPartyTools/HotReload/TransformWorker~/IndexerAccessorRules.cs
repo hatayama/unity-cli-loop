@@ -113,16 +113,16 @@ internal static class IndexerAccessorRules
     // name alone does not tell int from ref int.
     internal static IPropertySymbol FindCompiledPeerOrNull(INamedTypeSymbol compiledType, IPropertySymbol sourceIndexer)
     {
-        string[] sourceParameterTypes = ToParameterTypeFullNames(sourceIndexer);
-        string sourceElementType = CecilTypeNames.ToCecilFullName(sourceIndexer.Type);
+        string[] sourceParameterTypes = ToParameterSignatureComparisonNames(sourceIndexer);
+        string sourceElementType = CecilTypeNames.ToSignatureComparisonName(sourceIndexer.Type);
         return compiledType.GetMembers()
             .OfType<IPropertySymbol>()
             .FirstOrDefault(candidate => candidate.IsIndexer
                 && candidate.MetadataName == sourceIndexer.MetadataName
                 && candidate.IsStatic == sourceIndexer.IsStatic
-                && CecilTypeNames.ToCecilFullName(candidate.Type) == sourceElementType
+                && CecilTypeNames.ToSignatureComparisonName(candidate.Type) == sourceElementType
                 && candidate.RefKind == sourceIndexer.RefKind
-                && ToParameterTypeFullNames(candidate).SequenceEqual(sourceParameterTypes));
+                && ToParameterSignatureComparisonNames(candidate).SequenceEqual(sourceParameterTypes));
     }
 
     // What: whether the accessor of this kind equals its peer in the verified snapshot. False when
@@ -164,9 +164,9 @@ internal static class IndexerAccessorRules
             && SyntaxFactory.AreEquivalent(snapshotBody, plainBody, topLevel: false);
     }
 
-    internal static string[] ToParameterTypeFullNames(IPropertySymbol indexer)
+    internal static string[] ToParameterSignatureComparisonNames(IPropertySymbol indexer)
     {
-        return indexer.Parameters.Select(CecilTypeNames.ToParameterTypeFullName).ToArray();
+        return indexer.Parameters.Select(CecilTypeNames.ToParameterSignatureComparisonName).ToArray();
     }
 
     private static SyntaxNode FindBodyOrNull(IndexerDeclarationSyntax indexerDeclaration, SyntaxKind accessorKind)
