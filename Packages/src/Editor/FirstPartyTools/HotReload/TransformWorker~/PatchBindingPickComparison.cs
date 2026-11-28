@@ -65,6 +65,64 @@ internal static class PatchBindingPickComparison
         return RunDeclaredParameterFitOrNull(patchPick, use);
     }
 
+    /// <summary>
+    /// What: whether Unity's compiler reports <paramref name="node"/> as an error rather than calling
+    /// a member: the worker's binding resolves no member there, and the code reaches none of the
+    /// members the use may name, counted over every assembly. A reachable public member of another
+    /// assembly could still be Unity's pick, which the worker's binding does not tell, so it counts.
+    /// </summary>
+    internal static bool ReachesNoMember(
+        SemanticModel enforcingModel,
+        SemanticModel patchModel,
+        SyntaxNode node,
+        IAssemblySymbol targetAssembly)
+    {
+        ISymbol unityPick = enforcingModel.GetSymbolInfo(node).Symbol;
+        ISymbol enclosing = patchModel.GetEnclosingSymbol(node.SpanStart);
+        INamedTypeSymbol enclosingType = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType;
+        if (unityPick != null || enclosingType == null)
+        {
+            return false;
+        }
+
+        PatchUse use = new PatchUse(patchModel, node, targetAssembly, null, enclosingType, ReceiverTypeOrNull(patchModel, node));
+        return !HasReachableMember(patchModel.GetSymbolInfo(node), use);
+    }
+
+    private static bool HasReachableMember(SymbolInfo patchInfo, PatchUse use)
+    {
+        if (IsReachableMember(patchInfo.Symbol, use))
+        {
+            return true;
+        }
+
+        foreach (ISymbol candidate in patchInfo.CandidateSymbols)
+        {
+            if (IsReachableMember(candidate, use))
+            {
+                return true;
+            }
+        }
+
+        // Why the callee for a call: the member group belongs to the name being called, and the call
+        // expression itself has none.
+        SyntaxNode named = use.Node is InvocationExpressionSyntax invocation ? invocation.Expression : use.Node;
+        foreach (ISymbol member in use.PatchModel.GetMemberGroup(named))
+        {
+            if (IsReachableMember(member, use))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsReachableMember(ISymbol symbol, PatchUse use)
+    {
+        return IsMember(symbol) && IsReachable(symbol, use);
+    }
+
     private static bool HasMemberCandidate(SymbolInfo info)
     {
         foreach (ISymbol candidate in info.CandidateSymbols)
@@ -199,8 +257,54 @@ internal static class PatchBindingPickComparison
             return true;
         }
 
+        if (member.ContainingAssembly != null
+            && IsTargetAssembly(member.ContainingAssembly, use)
+            && member.DeclaredAccessibility == Accessibility.ProtectedAndInternal
+            && HiddenMemberPickGuard.IsReachableFromTheWholeAssembly(member.ContainingType)
+            && IsProtectedReachable(member, use))
+        {
+            return true;
+        }
+
         ISymbol unreduced = member is IMethodSymbol method ? AccessibilityRules.UnreducedMethod(method) : member;
         return compilation.IsSymbolAccessibleWithin(unreduced, use.EnclosingType, use.ReceiverType);
+    }
+
+    // Why only the protected half of private protected: the run's code compiles into the target
+    // assembly, so the internal half holds, while this compilation is another assembly and refuses it.
+    // Why the receiver must be the accessing type or derive from it: that is C#'s protected rule for an
+    // instance member, so a derived type cannot reach the member on a value typed as the base. A static
+    // member, or a use through this, base or no receiver, has no receiver to check.
+    private static bool IsProtectedReachable(ISymbol member, PatchUse use)
+    {
+        INamedTypeSymbol owner = member.ContainingType.OriginalDefinition;
+        for (INamedTypeSymbol accessing = use.EnclosingType; accessing != null; accessing = accessing.ContainingType)
+        {
+            if (!DerivesFromOrIs(accessing, owner))
+            {
+                continue;
+            }
+
+            if (member.IsStatic || use.ReceiverType == null || DerivesFromOrIs(use.ReceiverType, accessing.OriginalDefinition))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool DerivesFromOrIs(ITypeSymbol type, INamedTypeSymbol baseType)
+    {
+        for (ITypeSymbol current = type; current != null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, baseType))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Why no receiver type for this and base: a protected member is reachable through either, and

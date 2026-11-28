@@ -27,9 +27,24 @@ internal sealed class MethodTransformDecision
     // closures go through accessors, since the closures JIT normally while the body skips checks.
     public bool ClosureScopedAccessors { get; private set; }
 
+    // The shape the body would have had, kept only for a skip whose reason an unresolved-name reason
+    // for the same body may replace; null for every other decision.
+    public MethodTransformDecision ShapeForUnresolvedNameCheck { get; private set; }
+
     public static MethodTransformDecision Skip(WorkerReason reason)
     {
         return new MethodTransformDecision { SkipReason = reason };
+    }
+
+    // Why still a skip: a caller that does not ask for the unresolved-name reason keeps the body
+    // skipped with this reason, so deferring the reason can never let the body be patched.
+    public static MethodTransformDecision SkipUnlessUnresolvedNameExplains(WorkerReason reason, MethodTransformDecision shape)
+    {
+        return new MethodTransformDecision
+        {
+            SkipReason = reason,
+            ShapeForUnresolvedNameCheck = shape.SkipReason == null ? shape : null
+        };
     }
 
     public static MethodTransformDecision Transplant()

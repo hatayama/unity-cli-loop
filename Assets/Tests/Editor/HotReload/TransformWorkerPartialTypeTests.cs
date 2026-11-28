@@ -946,6 +946,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// </summary>
         [TestCase("Protected", "ProtectedValue()")]
         [TestCase("PrivateProtected", "PrivateProtectedValue()")]
+        [TestCase("ProtectedInternal", "ProtectedInternalValue()")]
         [TestCase("InheritedInternalThroughThis", "this.InternalInstanceValue()")]
         public async Task Run_DerivedPartialTypeBodyUsingBaseMemberOfUnpassedType_Binds(string memberKind, string expression)
         {
@@ -967,6 +968,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             });
 
             AssertControlAndReproEmitted(control, "DerivedValue", repro, "DerivedValue");
+        }
+
+        /// <summary>
+        /// What: a derived type's body that calls a private protected member of its compiled base on
+        /// a value typed as the base, which C# refuses because the receiver is not the derived type,
+        /// is not applied and keeps the hidden-member reason: reaching the member through derivation
+        /// does not extend to another receiver, and no unresolved-name reason applies to the call.
+        /// </summary>
+        [TestCase(PlainDerivedFileName, PlainDerivedValueBody)]
+        [TestCase(PartialDerivedFileName, PartialDerivedValueBody)]
+        public async Task Skip_DerivedTypeBodyCallingPrivateProtectedBaseMemberOnABaseTypedValue_IsNotApplied(
+            string fileName,
+            string valueBody)
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    fileName,
+                    "BaseTypedPrivateProtected" + fileName,
+                    valueBody,
+                    "return new HotReloadInternalMemberHost().PrivateProtectedValue();")
+            });
+
+            Assert.That(
+                AssertSkipped(result, "DerivedValue"),
+                Does.Contain("instead of the member Unity's compiler uses"),
+                FormatSkipped(result));
+        }
+
+        /// <summary>
+        /// What: a method newly added to a derived type whose body calls a private member of its
+        /// compiled base, which Unity's compiler refuses, is not applied.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedMethodCallingPrivateMemberOfUnpassedType_IsNotApplied()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    PlainDerivedFileName,
+                    "AddedPrivateMemberCall.cs",
+                    "        public int DerivedValue()",
+                    "        public int AddedPrivateMemberCall()\n"
+                    + "        {\n"
+                    + "            return HotReloadInternalMemberHost.PrivateStaticValue();\n"
+                    + "        }\n\n"
+                    + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public int DerivedValue()")
+            });
+
+            AssertSkipped(result, "AddedPrivateMemberCall");
         }
 
         /// <summary>
