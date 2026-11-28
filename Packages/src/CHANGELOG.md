@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.8](https://github.com/hatayama/unity-cli-loop/compare/v3.36.7...v3.36.8) (2026-11-28)
+
+
+### Bug Fixes
+
+* Hot reload treats renaming a type parameter of a generic method as an edit instead of an added method ([#3644](https://github.com/hatayama/unity-cli-loop/issues/3644)) ([095614c](https://github.com/hatayama/unity-cli-loop/commit/095614c48dea5ac76e4d0538e47629d6405e9b4a))
+
 ## [3.36.7](https://github.com/hatayama/unity-cli-loop/compare/v3.36.6...v3.36.7) (2026-11-28)
 
 
