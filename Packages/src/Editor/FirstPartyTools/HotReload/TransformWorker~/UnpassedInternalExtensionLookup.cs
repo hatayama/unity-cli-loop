@@ -113,8 +113,9 @@ internal static class UnpassedInternalExtensionLookup
     /// method the compiler would not call must not be returned here. Why a private method is
     /// refused: that binding ignores accessibility, so it may bind a private extension that Unity's
     /// compiler cannot call from the edited type. HiddenMemberPickGuard, which the method transform
-    /// asks first, already skips such a call with its own reason (measured), so this check keeps
-    /// the lookup from returning one where that guard has not run, rather than deciding the skip.
+    /// asks first, keeps such a body skipped; this check makes its reason the missing-name one
+    /// instead of one that counts the private method as patchable in place, and keeps the lookup
+    /// from returning it where that guard has not run.
     /// </remarks>
     internal static IMethodSymbol FindInPlaceCallTargetOrNull(
         SimpleNameSyntax name,

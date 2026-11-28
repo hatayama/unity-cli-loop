@@ -229,11 +229,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a partial type's own statements that call an extension method the compiler would
         /// not call from there (one in a namespace the file does not import, a private one, or a
         /// same-named one with other arguments) are skipped with the reason of the check that refuses
-        /// them, keep the compiled value, and do not fail the file. The private one is refused by the
-        /// check that the patch could bind another member than Unity's compiler does.
+        /// them, keep the compiled value, and do not fail the file. The private one stays skipped by
+        /// the check that the patch could bind another member than Unity's compiler does, and since
+        /// the in-place lookup refuses a private method, its reason is the missing-name one.
         /// </summary>
         [TestCase("return 50.UnimportedTwice(1);", "None of this partial type's source files known to hot reload declares that name")]
-        [TestCase("return 50.PrivateTwice(1);", "The patch could use 'HotReloadPrivateExtensionMath.PrivateTwice(int, int)' here instead of the member Unity's compiler uses")]
+        [TestCase("return 50.PrivateTwice(1);", "None of this partial type's source files known to hot reload declares that name")]
         [TestCase("return 50.Twice(\"x\");", "None of this partial type's source files known to hot reload declares that name")]
         public async Task Run_PartialTypeOwnStatementsCallingAnExtensionTheCompilerWouldNotCall_IsSkipped(string body, string expectedReason)
         {

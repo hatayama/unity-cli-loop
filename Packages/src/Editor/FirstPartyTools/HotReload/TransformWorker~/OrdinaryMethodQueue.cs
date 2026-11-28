@@ -479,7 +479,8 @@ internal static class OrdinaryMethodQueue
             methodDeclaration,
             decision.ShapeForUnresolvedNameCheck,
             typeState.TypeSymbol,
-            typeState.TargetAssembly);
+            typeState.TargetAssembly,
+            typeState.SourceUnit.PatchBinding);
         return unresolvedNameReason == null ? decision : MethodTransformDecision.Skip(unresolvedNameReason);
     }
 
