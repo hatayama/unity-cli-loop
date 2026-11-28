@@ -219,11 +219,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertAcceptedAsync(".Name + 2200", ".Name + 2201", "UnsafeFixtureTypeOfPointerHost");
         }
 
-        /// <summary>What: a pointer type used only as a generic type argument is not refused; both methods are entries.</summary>
+        /// <summary>What: a pointer type used only as a generic type argument (inside a typeof operand) is not refused; both methods are entries.</summary>
         [Test]
         public async Task Run_PointerTypeAsTypeArgument_IsAnEntry()
         {
-            await AssertAcceptedAsync("values.Count + 2250", "values.Count + 2251", "UnsafeFixturePointerTypeArgumentHost");
+            await AssertAcceptedAsync(".Name.Length + 2250", ".Name.Length + 2251", "UnsafeFixturePointerTypeArgumentHost");
         }
 
         private static async Task AssertRefusedAsync(string anchor, string replacement, string methodFragment)
