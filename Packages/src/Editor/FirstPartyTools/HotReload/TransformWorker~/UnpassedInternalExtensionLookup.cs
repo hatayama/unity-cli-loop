@@ -96,6 +96,70 @@ internal static class UnpassedInternalExtensionLookup
         return FindInternalExtensionOrNull(receiverType, methodName, outParameterCount: null, semanticModel, targetAssembly);
     }
 
+    /// <summary>
+    /// What: the internal extension method that the call 'receiver.Name(...)' or
+    /// 'receiver?.Name(...)' to <paramref name="name"/>, written in the patched method's own
+    /// statements, runs, as
+    /// <paramref name="patchBindingOrNull"/> binds the call; null when there is no patch binding,
+    /// the call is not of that form, the binding resolves no single method, or the method is not an
+    /// internal extension method of a class of <paramref name="targetAssembly"/> the run does not
+    /// declare.
+    /// </summary>
+    /// <remarks>
+    /// Why the patch binding and not <see cref="FindReducedCallTargetOrNull"/>: it binds the call as
+    /// the shim compile does, so the extension-method scope at the call site (enclosing namespaces,
+    /// using, global using and using static directives), the argument count, applicability and
+    /// overload resolution are the compiler's own. A partial type patches such a call in place, so a
+    /// method the compiler would not call must not be returned here. Why a private method is
+    /// refused: that binding ignores accessibility, so it may bind a private extension that Unity's
+    /// compiler cannot call from the edited type. HiddenMemberPickGuard, which the method transform
+    /// asks first, keeps such a body skipped; this check makes its reason the missing-name one
+    /// instead of one that counts the private method as patchable in place, and keeps the lookup
+    /// from returning it where that guard has not run.
+    /// </remarks>
+    internal static IMethodSymbol FindInPlaceCallTargetOrNull(
+        SimpleNameSyntax name,
+        SemanticModel semanticModel,
+        PatchBindingCompilation patchBindingOrNull,
+        IAssemblySymbol targetAssembly)
+    {
+        InvocationExpressionSyntax call = InvocationOfOrNull(name);
+        if (patchBindingOrNull == null || call == null)
+        {
+            return null;
+        }
+
+        IMethodSymbol bound = patchBindingOrNull.ModelFor(semanticModel.SyntaxTree).GetSymbolInfo(call).Symbol as IMethodSymbol;
+        IMethodSymbol method = bound?.ReducedFrom ?? bound;
+        if (method == null
+            || !method.IsExtensionMethod
+            || method.DeclaredAccessibility == Accessibility.Private
+            || !AccessibilityRules.IsInaccessibleFromExternalAssembly(method)
+            || method.ContainingAssembly == null
+            || !method.ContainingAssembly.Identity.Equals(targetAssembly.Identity)
+            || UnpassedInternalMemberUse.IsDeclaredByTheRun(method.ContainingType, semanticModel))
+        {
+            return null;
+        }
+
+        return method;
+    }
+
+    // The invocation whose called member is 'name', written 'receiver.Name(...)' or
+    // 'receiver?.Name(...)', or null when the name is not called that way.
+    private static InvocationExpressionSyntax InvocationOfOrNull(SimpleNameSyntax name)
+    {
+        ExpressionSyntax calledExpression = name.Parent switch
+        {
+            MemberAccessExpressionSyntax access when access.Name == name => access,
+            MemberBindingExpressionSyntax binding when binding.Name == name => binding,
+            _ => null,
+        };
+        return calledExpression?.Parent is InvocationExpressionSyntax call && call.Expression == calledExpression
+            ? call
+            : null;
+    }
+
     // Why a type parameter is compared by its constraints: `this T` accepts every receiver its
     // constraints allow, and an unconstrained one accepts any receiver.
     private static bool AcceptsReceiver(ITypeSymbol thisType, ITypeSymbol receiver, HashSet<string> acceptedThisTypes)

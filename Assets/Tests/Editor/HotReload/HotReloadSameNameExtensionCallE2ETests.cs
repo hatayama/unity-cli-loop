@@ -83,22 +83,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a partial type's own statements calling the internal extension method are either
-        /// patched and return the edited value, or skipped and keep the compiled value. They are never
-        /// reported as patched and then throw when called.
+        /// What: a partial type's own statements calling the internal extension method are patched in
+        /// place, and the method returns the edited value: the patch binding shows that the compiler
+        /// calls the internal method there, not the public one of the same name.
         /// </summary>
         [Test]
-        public async Task Run_PartialOwnStatementsCallingInternalExtensionBesideSameNamePublicOne_IsAppliedAsEditedOrSkipped()
+        public async Task Run_PartialOwnStatementsCallingInternalExtensionBesideSameNamePublicOne_PatchesBehavior()
         {
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, OwnStatementsValue, "return 10;", "return 50.AddDouble(1);");
 
-            HotReloadMethodOutcomeKind kind = FindRow(result, FixtureKind.Partial, OwnStatementsValue).Kind;
-            Assert.That(
-                kind,
-                Is.EqualTo(HotReloadMethodOutcomeKind.Patched).Or.EqualTo(HotReloadMethodOutcomeKind.Skipped),
-                FormatOutcomes(result));
-            int expected = kind == HotReloadMethodOutcomeKind.Patched ? 101 : 10;
-            Assert.That(await CallAsync(FixtureKind.Partial, OwnStatementsValue), Is.EqualTo(expected), FormatOutcomes(result));
+            Assert.That(FindRow(result, FixtureKind.Partial, OwnStatementsValue).Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched), FormatOutcomes(result));
+            Assert.That(await CallAsync(FixtureKind.Partial, OwnStatementsValue), Is.EqualTo(101), FormatOutcomes(result));
         }
 
         /// <summary>

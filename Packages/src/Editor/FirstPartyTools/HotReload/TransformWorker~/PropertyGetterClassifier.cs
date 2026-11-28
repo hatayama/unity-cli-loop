@@ -159,7 +159,8 @@ internal static class PropertyGetterClassifier
             methodDeclarationOrNull: null,
             decision,
             typeSymbol,
-            targetAssembly);
+            targetAssembly,
+            patchBinding);
         if (unresolvedNameSkip != null)
         {
             skipped.Add(new WorkerSkipped

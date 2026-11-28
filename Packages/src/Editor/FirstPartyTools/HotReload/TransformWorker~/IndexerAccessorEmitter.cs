@@ -236,7 +236,8 @@ internal static class IndexerAccessorEmitter
             typeState.TargetAssembly,
             methodDeclarationOrNull: null,
             decision,
-            typeState.TypeSymbol);
+            typeState.TypeSymbol,
+            typeState.SourceUnit.PatchBinding);
         if (siblingSkip == null)
         {
             return decision;

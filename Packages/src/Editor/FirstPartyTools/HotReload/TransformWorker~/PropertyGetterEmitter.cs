@@ -249,7 +249,8 @@ internal static class PropertyGetterEmitter
                 targetAssembly,
                 methodDeclarationOrNull: null,
                 decision,
-                typeSymbol);
+                typeSymbol,
+                patchBinding);
             if (siblingSkip != null)
             {
                 skipped.Add(new WorkerSkipped

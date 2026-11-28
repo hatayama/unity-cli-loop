@@ -92,7 +92,8 @@ internal sealed class UnpassedInternalMemberUse
         MethodDeclarationSyntax methodDeclarationOrNull,
         MethodTransformDecision decision,
         INamedTypeSymbol enclosingType,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBindingOrNull)
     {
         Debug.Assert(error != null, "error must not be null.");
         Debug.Assert(semanticModel != null, "semanticModel must not be null.");
@@ -115,8 +116,9 @@ internal sealed class UnpassedInternalMemberUse
         }
 
         // Why an inapplicable call skips the receiver's own members: such a call is looked up only
-        // as an internal extension, which is used only to refuse a use outside the patched method,
-        // so the error never lets a body through that was not let through before. Why a same-named
+        // as an internal extension. Outside the patched method that lookup only refuses the use; in
+        // the method's own statements the patch binding decides it, so the call is let through only
+        // where the compiler calls that internal extension. Why a same-named
         // instance method of the receiver does not stop the refusal: the compiler goes on to the
         // extension methods when no instance method takes the call, so 'value.Name(1)' beside an
         // instance 'Name(string)' calls the internal extension. The cost is a CS1503 that comes from
@@ -130,17 +132,17 @@ internal sealed class UnpassedInternalMemberUse
         // Why the extensions after the receiver's own members: 'value.Name(...)' calls an extension
         // only when the receiver's type has no member of that name, and an internal extension
         // declared in a file the run was not given is missing to the worker in the same way.
-        // Why only where the use runs outside the patched method: there such a call throws once
-        // called, and a candidate the compiler would not pick only words the reason wrongly. The
-        // lookup reads neither using directives nor overloads, so in the method's own statements it
-        // could turn a name the compiler rejects into an in-place patch; the shim compile settles
-        // those calls, as it always did.
+        // Why two lookups: outside the patched method such a call throws once called, and a
+        // candidate the compiler would not pick only words the reason wrongly, so the lookup by name,
+        // which reads neither using directives nor overloads, is enough there. In the method's own
+        // statements a match lets a partial type patch the call in place, so there the method is
+        // the one the patch binding resolves the call to, which the compiler decides.
         UseRunPlace? runPlaceOrNull = null;
         if (member == null && hasReceiver)
         {
             runPlaceOrNull = FindWhereTheUseMayRun(name, bodyNode, methodDeclarationOrNull, decision, semanticModel);
             member = runPlaceOrNull == UseRunPlace.PatchedMethod
-                ? null
+                ? UnpassedInternalExtensionLookup.FindInPlaceCallTargetOrNull(name, semanticModel, patchBindingOrNull, targetAssembly)
                 : UnpassedInternalExtensionLookup.FindReducedCallTargetOrNull(
                     FindReceiverOrNull(name),
                     name.Identifier.ValueText,
