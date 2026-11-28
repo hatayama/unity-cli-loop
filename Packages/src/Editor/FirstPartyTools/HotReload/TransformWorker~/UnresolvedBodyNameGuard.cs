@@ -59,16 +59,19 @@ internal static class UnresolvedBodyNameGuard
 
             // Why before the name check: a call the compiler generates has no name in the source,
             // and the error its missing method raises varies with what else is in scope.
-            UnpassedInternalMemberUse implicitCall = UnpassedImplicitCallLookup.FindUseOrNull(
-                diagnostic,
-                semanticModel,
-                bodyNode,
-                methodDeclarationOrNull,
-                decision,
-                targetAssembly);
-            if (implicitCall != null && !IsWithinReach(implicitCall, isPartial))
+            WorkerReason implicitCallSkip = DescribeOutOfReachOrNull(
+                UnpassedImplicitCallLookup.FindUseOrNull(
+                    diagnostic,
+                    semanticModel,
+                    bodyNode,
+                    methodDeclarationOrNull,
+                    decision,
+                    targetAssembly),
+                isPartial,
+                diagnosticText);
+            if (implicitCallSkip != null)
             {
-                return Describe(implicitCall, isPartial, diagnosticText);
+                return implicitCallSkip;
             }
 
             // Why apart from the missing-name IDs: a missing accessor is either an internal accessor
@@ -76,16 +79,44 @@ internal static class UnresolvedBodyNameGuard
             // part the worker cannot see.
             if (UnpassedInternalAccessorLookup.IsMissingAccessorDiagnostic(diagnostic))
             {
-                UnpassedInternalMemberUse accessorCall = UnpassedInternalAccessorLookup.FindOrNull(
-                    diagnostic,
-                    semanticModel,
-                    bodyNode,
-                    methodDeclarationOrNull,
-                    decision,
-                    targetAssembly);
-                if (accessorCall != null && !IsWithinReach(accessorCall, isPartial))
+                WorkerReason accessorCallSkip = DescribeOutOfReachOrNull(
+                    UnpassedInternalAccessorLookup.FindOrNull(
+                        diagnostic,
+                        semanticModel,
+                        bodyNode,
+                        methodDeclarationOrNull,
+                        decision,
+                        targetAssembly),
+                    isPartial,
+                    diagnosticText);
+                if (accessorCallSkip != null)
                 {
-                    return Describe(accessorCall, isPartial, diagnosticText);
+                    return accessorCallSkip;
+                }
+
+                continue;
+            }
+
+            // Why apart from the missing-name IDs: a same-named public extension method turns the
+            // missing internal extension into an inapplicable call, which on a partial type is still
+            // not a part the worker cannot see, so one with no internal extension behind it goes on
+            // to the shim compile as before.
+            if (InapplicableCallName.IsInapplicableCallDiagnostic(diagnostic))
+            {
+                WorkerReason inapplicableCallSkip = DescribeOutOfReachOrNull(
+                    UnpassedInternalMemberUse.FindOrNull(
+                        diagnostic,
+                        semanticModel,
+                        bodyNode,
+                        methodDeclarationOrNull,
+                        decision,
+                        typeSymbol,
+                        targetAssembly),
+                    isPartial,
+                    diagnosticText);
+                if (inapplicableCallSkip != null)
+                {
+                    return inapplicableCallSkip;
                 }
 
                 continue;
@@ -142,6 +173,15 @@ internal static class UnresolvedBodyNameGuard
         }
 
         return null;
+    }
+
+    // The skip reason for 'useOrNull' when there is such a use and the patched method cannot reach
+    // it; null otherwise.
+    private static WorkerReason DescribeOutOfReachOrNull(UnpassedInternalMemberUse useOrNull, bool isPartial, string diagnosticText)
+    {
+        return useOrNull != null && !IsWithinReach(useOrNull, isPartial)
+            ? Describe(useOrNull, isPartial, diagnosticText)
+            : null;
     }
 
     private static WorkerReason Describe(UnpassedInternalMemberUse use, bool isPartial, string diagnosticText)

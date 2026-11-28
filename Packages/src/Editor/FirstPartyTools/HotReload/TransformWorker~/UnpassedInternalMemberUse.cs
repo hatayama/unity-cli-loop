@@ -100,27 +100,32 @@ internal sealed class UnpassedInternalMemberUse
         Debug.Assert(decision != null, "decision must not be null.");
         Debug.Assert(enclosingType != null, "enclosingType must not be null.");
 
-        if (targetAssembly == null || !MemberNotFoundDiagnosticIds.Contains(error.Id))
+        bool isInapplicableCall = InapplicableCallName.IsInapplicableCallDiagnostic(error);
+        if (targetAssembly == null || (!isInapplicableCall && !MemberNotFoundDiagnosticIds.Contains(error.Id)))
         {
             return null;
         }
 
-        SimpleNameSyntax name = FindReportedNameOrNull(error, bodyNode);
+        SimpleNameSyntax name = isInapplicableCall
+            ? InapplicableCallName.FindOrNull(error, bodyNode)
+            : FindReportedNameOrNull(error, bodyNode);
         if (name == null)
         {
             return null;
         }
 
+        // Why an inapplicable call skips the receiver's own members: such a call is looked up only
+        // as an internal extension, which is used only to refuse a use outside the patched method,
+        // so the error never lets a body through that was not let through before. Why a same-named
+        // instance method of the receiver does not stop the refusal: the compiler goes on to the
+        // extension methods when no instance method takes the call, so 'value.Name(1)' beside an
+        // instance 'Name(string)' calls the internal extension. The cost is a CS1503 that comes from
+        // a source and compiled copy of one type next to such an extension: it is skipped too, with
+        // this reason, and keeps its compiled behavior.
         bool hasReceiver = HasReceiver(name);
-        INamedTypeSymbol start = hasReceiver ? FindReceiverTypeOrNull(name, semanticModel) : enclosingType;
-        ISymbol member = start == null
+        ISymbol member = isInapplicableCall
             ? null
-            : FindInternalMemberOfUnpassedTypeOrNull(
-                start,
-                name.Identifier.ValueText,
-                outParameterCount: null,
-                semanticModel,
-                targetAssembly);
+            : FindInternalMemberOrNull(name, hasReceiver, enclosingType, semanticModel, targetAssembly);
 
         // Why the extensions after the receiver's own members: 'value.Name(...)' calls an extension
         // only when the receiver's type has no member of that name, and an internal extension
@@ -250,6 +255,26 @@ internal sealed class UnpassedInternalMemberUse
         return isSimpleNameLookup
             ? UnpassedInternalMemberUseForm.BareName
             : UnpassedInternalMemberUseForm.OutOfReach;
+    }
+
+    // The internal member of a compiled type the run does not declare that 'name' names: looked up
+    // on the receiver's type, or on the enclosing type for a bare name.
+    private static ISymbol FindInternalMemberOrNull(
+        SimpleNameSyntax name,
+        bool hasReceiver,
+        INamedTypeSymbol enclosingType,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetAssembly)
+    {
+        INamedTypeSymbol start = hasReceiver ? FindReceiverTypeOrNull(name, semanticModel) : enclosingType;
+        return start == null
+            ? null
+            : FindInternalMemberOfUnpassedTypeOrNull(
+                start,
+                name.Identifier.ValueText,
+                outParameterCount: null,
+                semanticModel,
+                targetAssembly);
     }
 
     private static SimpleNameSyntax FindReportedNameOrNull(Diagnostic error, SyntaxNode bodyNode)
