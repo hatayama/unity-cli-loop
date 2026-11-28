@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.10](https://github.com/hatayama/unity-cli-loop/compare/v3.36.9...v3.36.10) (2026-11-28)
+
+
+### Bug Fixes
+
+* Hot reload patches an internal extension call in a partial type's own statements when the extension class is in another file ([#3655](https://github.com/hatayama/unity-cli-loop/issues/3655)) ([bb07f6c](https://github.com/hatayama/unity-cli-loop/commit/bb07f6c1f1463c2b8d1558dff6ce0ec1936e6831))
+
 ## [3.36.9](https://github.com/hatayama/unity-cli-loop/compare/v3.36.8...v3.36.9) (2026-11-28)
 
 
