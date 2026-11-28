@@ -1023,16 +1023,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a method newly added to a derived type whose body calls a private member of its
-        /// compiled base, which Unity's compiler refuses, is not applied.
+        /// What: a method newly added to a plain or partial derived type whose body calls a private
+        /// member of its compiled base, which Unity's compiler refuses, is not applied and keeps the
+        /// hidden-member reason, because an added method's reason is not replaced by the
+        /// unresolved-name one.
         /// </summary>
-        [Test]
-        public async Task Skip_AddedMethodCallingPrivateMemberOfUnpassedType_IsNotApplied()
+        [TestCase(PlainDerivedFileName)]
+        [TestCase(PartialDerivedFileName)]
+        public async Task Skip_AddedMethodCallingPrivateMemberOfUnpassedType_IsNotApplied(string fileName)
         {
             TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
             {
                 BuildEditedFixtureSource(
-                    PlainDerivedFileName,
+                    fileName,
                     "AddedPrivateMemberCall.cs",
                     "        public int DerivedValue()",
                     "        public int AddedPrivateMemberCall()\n"
@@ -1043,7 +1046,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "        public int DerivedValue()")
             });
 
-            AssertSkipped(result, "AddedPrivateMemberCall");
+            Assert.That(
+                AssertSkipped(result, "AddedPrivateMemberCall"),
+                Does.Contain("instead of the member Unity's compiler uses"),
+                FormatSkipped(result));
         }
 
         /// <summary>
