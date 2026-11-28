@@ -97,8 +97,9 @@ internal static class UnpassedInternalExtensionLookup
     }
 
     /// <summary>
-    /// What: the internal extension method that the call 'receiver.Name(...)' to
-    /// <paramref name="name"/>, written in the patched method's own statements, runs, as
+    /// What: the internal extension method that the call 'receiver.Name(...)' or
+    /// 'receiver?.Name(...)' to <paramref name="name"/>, written in the patched method's own
+    /// statements, runs, as
     /// <paramref name="patchBindingOrNull"/> binds the call; null when there is no patch binding,
     /// the call is not of that form, the binding resolves no single method, or the method is not an
     /// internal extension method of a class of <paramref name="targetAssembly"/> the run does not
@@ -121,11 +122,8 @@ internal static class UnpassedInternalExtensionLookup
         PatchBindingCompilation patchBindingOrNull,
         IAssemblySymbol targetAssembly)
     {
-        if (patchBindingOrNull == null
-            || name.Parent is not MemberAccessExpressionSyntax access
-            || access.Name != name
-            || access.Parent is not InvocationExpressionSyntax call
-            || call.Expression != access)
+        InvocationExpressionSyntax call = InvocationOfOrNull(name);
+        if (patchBindingOrNull == null || call == null)
         {
             return null;
         }
@@ -144,6 +142,21 @@ internal static class UnpassedInternalExtensionLookup
         }
 
         return method;
+    }
+
+    // The invocation whose called member is 'name', written 'receiver.Name(...)' or
+    // 'receiver?.Name(...)', or null when the name is not called that way.
+    private static InvocationExpressionSyntax InvocationOfOrNull(SimpleNameSyntax name)
+    {
+        ExpressionSyntax calledExpression = name.Parent switch
+        {
+            MemberAccessExpressionSyntax access when access.Name == name => access,
+            MemberBindingExpressionSyntax binding when binding.Name == name => binding,
+            _ => null,
+        };
+        return calledExpression?.Parent is InvocationExpressionSyntax call && call.Expression == calledExpression
+            ? call
+            : null;
     }
 
     // Why a type parameter is compared by its constraints: `this T` accepts every receiver its

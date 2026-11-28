@@ -84,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalInstanceMethodOfAnInternalResult";
             yield return "InternalExtensionMethodOfAnInternalClass";
             yield return "InternalExtensionMethodOfAPublicClass";
+            yield return "InternalExtensionMethodThroughConditionalAccess";
         }
 
         // Edits whose body runs as IL copied into the patched method.
@@ -466,6 +467,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         + "            System.Func<int> read = () => seed;\n"
                         + "            return read();",
                         101);
+                case "InternalExtensionMethodThroughConditionalAccess":
+                    return BodyEdit.OfDerivedValue("return ((int?)50)?.Twice(1) ?? 0;", 101);
                 case "InternalExtensionMethodThroughConditionalAccessInLambda":
                     return new BodyEdit(ClosureValue, "() => 30", "() => ((int?)50)?.Twice(1) ?? 0", 101);
                 case "InternalStaticMethodInLambda":
