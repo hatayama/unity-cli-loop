@@ -94,12 +94,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: renaming a generic host's type parameter matches its field of that type to the
-        /// compiled field, so the host gets the rows the same edit without the rename gets.
+        /// compiled field, so the host gets the rows the same edit without the rename gets, and an
+        /// edited caller outside the host that reads the field is an entry, not skipped.
         /// </summary>
         [Test]
         public async Task Run_RenamedHostTypeParameter_MatchesTheFieldOfThatType()
         {
+            string[] callerEdit = { "Stored + 1750;", "Stored + 1760;" };
             await AssertHostRenameMatchesControlAsync("HotReloadTypeParameterRenameFieldHost", "return 1700;", "return 1710;");
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(Concat(
+                RenameIn("    public sealed class HotReloadTypeParameterRenameFieldHost<T>", "T", "V"),
+                callerEdit));
+
+            AssertNoSkippedRow(result, "HotReloadTypeParameterRenameWorkerMethods.ReadStored");
+            Assert.That(FindEntryCount(result, "HotReloadTypeParameterRenameWorkerMethods", "ReadStored"), Is.EqualTo(1), Describe(result));
+        }
+
+        /// <summary>
+        /// What: editing only a comment after a parameter type of a generic host's method keeps the
+        /// method's snapshot key, so no removed member is reported and the method gets no row.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedCommentAfterAParameterTypeOfAGenericHost_KeepsTheKey()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync("T /* first */ value", "T /* second */ value");
+
+            Assert.That(result.Output.files[0].removedMembers, Is.Empty, Describe(result));
+            AssertNoSkippedRow(result, "HotReloadTypeParameterRenameCommentHost");
+            Assert.That(FindEntryCount(result, "HotReloadTypeParameterRenameCommentHost`1", "Take"), Is.EqualTo(0), Describe(result));
         }
 
         /// <summary>

@@ -51,6 +51,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadStored()
+        {
+            return new HotReloadTypeParameterRenameFieldHost<int>().Stored + 1750;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int CallNested()
         {
             return new HotReloadTypeParameterRenameOuter<int>.Inner<int>().Read(1, 2) + 1600;
@@ -176,6 +182,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Read()
         {
             return 2600;
+        }
+    }
+
+    /// <summary>Generic host whose method has a comment between its parameter type and name.</summary>
+    public sealed class HotReloadTypeParameterRenameCommentHost<T>
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Take(T /* first */ value)
+        {
+            return 2700;
         }
     }
 }

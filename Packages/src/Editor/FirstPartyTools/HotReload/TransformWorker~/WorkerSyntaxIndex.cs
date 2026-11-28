@@ -85,8 +85,10 @@ internal static class WorkerSyntaxIndex
             return normalizedType.ToString();
         }
 
+        // Why without the outer trivia: ToString above leaves out a comment before or after the
+        // type, so a comment edit must not move this key either.
         StringBuilder builder = new StringBuilder();
-        foreach (SyntaxToken token in normalizedType.DescendantTokens())
+        foreach (SyntaxToken token in normalizedType.WithoutTrivia().DescendantTokens())
         {
             if (IsTypeParameterReference(token) && positions.TryGetValue(token.ValueText, out string position))
             {
@@ -99,7 +101,7 @@ internal static class WorkerSyntaxIndex
             builder.Append(token.ToFullString());
         }
 
-        return builder.ToString().Trim();
+        return builder.ToString();
     }
 
     // Why the method's own list first: a method type parameter hides a containing type's one of
