@@ -146,4 +146,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 2300;
         }
     }
+
+    /// <summary>Generic interface whose method a generic host implements explicitly.</summary>
+    public interface IHotReloadTypeParameterRenameSink<T>
+    {
+        int Take(T value);
+    }
+
+    /// <summary>Generic host that explicitly implements a generic interface's method.</summary>
+    public sealed class HotReloadTypeParameterRenameExplicitMethodHost<T> : IHotReloadTypeParameterRenameSink<T>
+    {
+        int IHotReloadTypeParameterRenameSink<T>.Take(T value)
+        {
+            return 2500;
+        }
+    }
+
+    /// <summary>Generic host with a conversion operator to its type parameter.</summary>
+    public sealed class HotReloadTypeParameterRenameConversionHost<T>
+    {
+        public T Stored;
+
+        public static implicit operator T(HotReloadTypeParameterRenameConversionHost<T> host)
+        {
+            return host.Stored;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Read()
+        {
+            return 2600;
+        }
+    }
 }

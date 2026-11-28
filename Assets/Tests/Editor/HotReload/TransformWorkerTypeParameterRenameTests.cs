@@ -169,6 +169,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: renaming a generic host's type parameter keeps the key of its explicit
+        /// implementation of a generic interface's method, whose interface names that type
+        /// parameter, so the method is not reported removed and the host gets the rows the same
+        /// edit without the rename gets.
+        /// </summary>
+        [Test]
+        public async Task Run_RenamedHostTypeParameter_MatchesTheExplicitMethodImplementation()
+        {
+            await AssertHostRenameMatchesControlAsync("HotReloadTypeParameterRenameExplicitMethodHost", "return 2500;", "return 2510;");
+        }
+
+        /// <summary>
+        /// What: renaming a generic host's type parameter keeps the key of its conversion operator
+        /// to that type parameter, so the snapshot operator pairs with the renamed one: the drift
+        /// warning names that conversion as changed instead of losing it, and no removed member or
+        /// added-generic reason appears. The operator itself stays Skipped, as an edited operator is.
+        /// </summary>
+        [Test]
+        public async Task Run_RenamedHostTypeParameter_PairsTheConversionOperatorToThatType()
+        {
+            TransformWorkerClientResult result = await RunEditedFixtureAsync(Concat(
+                RenameIn("    public sealed class HotReloadTypeParameterRenameConversionHost<T>", "T", "V"),
+                new[] { "return 2600;", "return 2610;" }));
+
+            AssertNoReason(result, AddedGenericReason);
+            Assert.That(result.Output.files[0].removedMembers, Is.Empty, Describe(result));
+            Assert.That(
+                string.Join("\n", result.Output.files[0].declarationDriftWarnings),
+                Does.Contain("conversion: implicit->"),
+                Describe(result));
+        }
+
+        /// <summary>
         /// What: renaming the outer type parameter of Outer&lt;T&gt;.Inner&lt;U&gt; keeps
         /// Read(T, U) matched to the compiled method, so an edited caller of it is an entry and is
         /// not skipped for calling an added method.
@@ -313,7 +346,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // The rows of members whose label contains the fragment, without the labels themselves,
-        // which spell the type parameters as the source names them.
+        // which spell the type parameters as the source names them, plus the file's removed members
+        // and removed signatures.
         private static List<string> Summarize(TransformWorkerClientResult result, string typeFragment)
         {
             List<string> rows = new List<string>();
@@ -403,6 +437,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
             {
                 lines.Add("skipped " + skipped.method + " => " + HotReloadWorkerReasonText.Render(skipped.reason));
+            }
+
+            foreach (string warning in result.Output.files[0].declarationDriftWarnings)
+            {
+                lines.Add("drift " + warning);
             }
 
             foreach (TransformWorkerRemovedMethodSignatureDto removed in result.Output.files[0].removedMethodSignatures)
