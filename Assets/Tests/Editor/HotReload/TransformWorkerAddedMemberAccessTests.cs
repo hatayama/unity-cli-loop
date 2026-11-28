@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -727,7 +728,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5401", "5402");
             AssertEntryAndNotSkipped(result, "ClosureCallsOverloadedExtensionOfInternalClass");
             AssertBindsByName(result, InternalClassExtensionClassName, "Step", "typeof(int), typeof(int)");
-            Assert.That(result.Output.shimSource, Does.Not.Contain("\"Step\", new global::System.Type[]{typeof(int), typeof(string)}"));
+            AssertShimDoesNotContain(result, "\"Step\", new global::System.Type[]{typeof(int), typeof(string)}");
         }
 
         /// <summary>
@@ -741,7 +742,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result = await RunExtensionCallHostEditAsync("5501", "5502");
             AssertEntryAndNotSkipped(result, "ClosureCallsBetterOverloadOfExtensionOfInternalClass");
             AssertBindsByName(result, InternalClassExtensionClassName, "Pick", "typeof(int), typeof(int)");
-            Assert.That(result.Output.shimSource, Does.Not.Contain("\"Pick\", new global::System.Type[]{typeof(int), typeof(long)}"));
+            AssertShimDoesNotContain(result, "\"Pick\", new global::System.Type[]{typeof(int), typeof(long)}");
         }
 
         /// <summary>
@@ -932,11 +933,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string methodName,
             string lookupTypes)
         {
+            string expected = "global::System.Type.GetType(\"" + TestNamespace + "." + className + ", " + TestAssemblyName
+                + "\", true), \"" + methodName + "\", new global::System.Type[]{" + lookupTypes + "})";
             Assert.That(
-                result.Output.shimSource,
-                Does.Contain(
-                    "global::System.Type.GetType(\"" + TestNamespace + "." + className + ", " + TestAssemblyName
-                    + "\", true), \"" + methodName + "\", new global::System.Type[]{" + lookupTypes + "})"));
+                WithoutWhitespace(result.Output.shimSource),
+                Does.Contain(WithoutWhitespace(expected)),
+                "Expected the accessor bind:\n" + expected + "\nShim source:\n" + result.Output.shimSource);
+        }
+
+        private static void AssertShimDoesNotContain(TransformWorkerClientResult result, string unexpected)
+        {
+            Assert.That(
+                WithoutWhitespace(result.Output.shimSource),
+                Does.Not.Contain(WithoutWhitespace(unexpected)),
+                "Unexpected accessor bind:\n" + unexpected + "\nShim source:\n" + result.Output.shimSource);
+        }
+
+        // Why strip whitespace: the shim is reformatted by the Editor's bundled Roslyn, and Roslyn 4.3.1
+        // prints "Type[]{typeof(int)}" while 4.10.0 and later print "Type[] { typeof(int) }".
+        private static string WithoutWhitespace(string text)
+        {
+            return Regex.Replace(text, @"\s+", string.Empty);
         }
 
         private static void AssertAddedAndNotSkipped(TransformWorkerClientResult result, string methodNameFragment)
