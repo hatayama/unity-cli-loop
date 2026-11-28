@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.36.9](https://github.com/hatayama/unity-cli-loop/compare/v3.36.8...v3.36.9) (2026-11-28)
+
+
+### Bug Fixes
+
+* Hot reload patches a derived type's call to a private protected base member again ([#3656](https://github.com/hatayama/unity-cli-loop/issues/3656)) ([964a01c](https://github.com/hatayama/unity-cli-loop/commit/964a01cf8928af1ba81af93764cb9535e042c41c))
+
 ## [3.36.8](https://github.com/hatayama/unity-cli-loop/compare/v3.36.7...v3.36.8) (2026-11-28)
 
 
