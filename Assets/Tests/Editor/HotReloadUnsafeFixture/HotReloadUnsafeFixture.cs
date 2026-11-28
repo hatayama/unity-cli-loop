@@ -356,10 +356,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReloadUnsafeFixture
 
     public class UnsafeFixturePointerTypeArgumentHost
     {
+        // Why inside typeof: the C# compiler of Unity 6000.5 and later rejects a pointer type argument
+        // anywhere else outside an unsafe context (CS0214), while older ones accept it. Inside typeof
+        // every compiler accepts it, and the worker still judges it through the type-argument rule.
         public int Read()
         {
-            List<int*[]> values = new List<int*[]>();
-            return values.Count + 2250;
+            return typeof(List<int*[]>).Name.Length + 2250;
         }
     }
 }
