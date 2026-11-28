@@ -424,7 +424,8 @@ internal static class OrdinaryMethodQueue
                 typeState.TargetAssembly,
                 methodDeclaration,
                 decision,
-                typeState.TypeSymbol);
+                typeState.TypeSymbol,
+                typeState.SourceUnit.PatchBinding);
             if (siblingSkip != null)
             {
                 decision = MethodTransformDecision.Skip(siblingSkip);
@@ -442,7 +443,8 @@ internal static class OrdinaryMethodQueue
                 methodDeclaration,
                 decision,
                 typeState.TypeSymbol,
-                typeState.TargetAssembly);
+                typeState.TargetAssembly,
+                typeState.SourceUnit.PatchBinding);
             if (unresolvedNameSkip != null)
             {
                 decision = MethodTransformDecision.Skip(unresolvedNameSkip);

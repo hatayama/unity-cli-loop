@@ -27,7 +27,8 @@ internal static class ReappliedSiblingBodyGuard
         IAssemblySymbol targetAssembly,
         MethodDeclarationSyntax methodDeclarationOrNull,
         MethodTransformDecision decision,
-        INamedTypeSymbol typeSymbol)
+        INamedTypeSymbol typeSymbol,
+        PatchBindingCompilation patchBindingOrNull)
     {
         Diagnostic bindingError = AddedMemberBindingGuard.FindFirstBindingError(semanticModel, methodBodyNode);
         if (bindingError == null)
@@ -41,7 +42,8 @@ internal static class ReappliedSiblingBodyGuard
             methodDeclarationOrNull,
             decision,
             typeSymbol,
-            targetAssembly))
+            targetAssembly,
+            patchBindingOrNull))
         {
             return null;
         }
@@ -69,7 +71,8 @@ internal static class ReappliedSiblingBodyGuard
         MethodDeclarationSyntax methodDeclarationOrNull,
         MethodTransformDecision decision,
         INamedTypeSymbol typeSymbol,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBindingOrNull)
     {
         foreach (Diagnostic diagnostic in semanticModel.GetDiagnostics(methodBodyNode.Span))
         {
@@ -85,7 +88,8 @@ internal static class ReappliedSiblingBodyGuard
                 methodDeclarationOrNull,
                 decision,
                 typeSymbol,
-                targetAssembly);
+                targetAssembly,
+                patchBindingOrNull);
             if (use == null || !use.CanBePatchedInPlace)
             {
                 return false;

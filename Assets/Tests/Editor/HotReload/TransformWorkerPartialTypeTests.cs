@@ -1289,12 +1289,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: on a partial type, an internal extension method of a class the reload was not given,
-        /// called with its receiver in the method's own statements, keeps the reason for a name no
-        /// part declares: the lookup reads neither using directives nor overloads, so it does not
-        /// decide an in-place patch.
+        /// called with its receiver in the method's own statements, is an entry: the patch binding
+        /// shows that the compiler calls that method there, so the call is patched in place.
         /// </summary>
         [Test]
-        public async Task InternalExtensionCalledInTheOwnStatementsOfAPartialType_KeepsTheUnboundNameReason()
+        public async Task InternalExtensionCalledInTheOwnStatementsOfAPartialType_EmitsEntry()
         {
             TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
             {
@@ -1305,8 +1304,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "return 50.Twice(1);")
             });
 
-            string reason = AssertSkipped(result, "DerivedValue");
-            Assert.That(reason, Does.Contain("None of this partial type's source files known to hot reload declares that name"), FormatSkipped(result));
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "DerivedValue");
+        }
+
+        /// <summary>
+        /// What: a partial file brought back to re-bind its active patches, whose method's own
+        /// statements call an internal extension method of a class the reload was not given, is an
+        /// entry instead of being skipped for a body that does not bind.
+        /// </summary>
+        [Test]
+        public async Task Run_PartialSiblingBroughtBack_CallingInternalExtensionInItsOwnStatements_EmitsEntry()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildFixtureOwnOnlyEdit("PartialSiblingExtensionPassed.cs", "2"),
+                AsReappliedSibling(BuildEditedFixtureSource(
+                    PartialDerivedFileName,
+                    "PartialSiblingExtensionCaller.cs",
+                    PartialDerivedValueBody,
+                    "return 50.Twice(1);"))
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "DerivedValue");
         }
 
         /// <summary>

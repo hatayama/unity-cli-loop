@@ -37,7 +37,8 @@ internal static class UnresolvedBodyNameGuard
         MethodDeclarationSyntax methodDeclarationOrNull,
         MethodTransformDecision decision,
         INamedTypeSymbol typeSymbol,
-        IAssemblySymbol targetAssembly)
+        IAssemblySymbol targetAssembly,
+        PatchBindingCompilation patchBindingOrNull)
     {
         if (bodyNode == null)
         {
@@ -111,7 +112,8 @@ internal static class UnresolvedBodyNameGuard
                         methodDeclarationOrNull,
                         decision,
                         typeSymbol,
-                        targetAssembly),
+                        targetAssembly,
+                        patchBindingOrNull),
                     isPartial,
                     diagnosticText);
                 if (inapplicableCallSkip != null)
@@ -134,7 +136,8 @@ internal static class UnresolvedBodyNameGuard
                 methodDeclarationOrNull,
                 decision,
                 typeSymbol,
-                targetAssembly);
+                targetAssembly,
+                patchBindingOrNull);
             if (use == null)
             {
                 if (isPartial)

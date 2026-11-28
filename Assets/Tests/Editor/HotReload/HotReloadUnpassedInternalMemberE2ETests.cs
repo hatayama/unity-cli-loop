@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -81,6 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalFieldInsideNameof";
             yield return "InternalStaticMethodNextToLambdaReadingOwnPrivateField";
             yield return "InternalInstanceMethodOfAnInternalResult";
+            yield return "InternalExtensionMethodOfAnInternalClass";
+            yield return "InternalExtensionMethodOfAPublicClass";
         }
 
         // Edits whose body runs as IL copied into the patched method.
@@ -126,9 +129,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Edits whose body runs as IL copied into the patched method but uses an internal member in a
-        // form a partial type does not patch: a method passed as a delegate, an event, a member named
-        // in an object initializer or a property pattern, or an extension method called with its
-        // receiver.
+        // form a partial type does not patch: a method passed as a delegate, an event, or a member
+        // named in an object initializer or a property pattern.
         private static IEnumerable<string> EditsThatOnlyAPlainTypeRunsInThePatchedMethod()
         {
             yield return "InternalStaticMethodPassedAsDelegate";
@@ -136,8 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             yield return "InternalEventSubscription";
             yield return "InternalFieldInObjectInitializer";
             yield return "InternalPropertyInPropertyPattern";
-            yield return "InternalExtensionMethodOfAnInternalClass";
-            yield return "InternalExtensionMethodOfAPublicClass";
         }
 
         /// <summary>
@@ -211,10 +211,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an edited body of a plain type that passes an internal method of a compiled type the
-        /// reload was not given as a delegate, subscribes to its internal event, names its internal
-        /// member in an object initializer or a property pattern, or calls an internal extension
-        /// method of such a class with its receiver, is patched, and the method returns the edited
-        /// value.
+        /// reload was not given as a delegate, subscribes to its internal event, or names its
+        /// internal member in an object initializer or a property pattern, is patched, and the method
+        /// returns the edited value.
         /// </summary>
         [TestCaseSource(nameof(EditsThatOnlyAPlainTypeRunsInThePatchedMethod))]
         public async Task Run_PlainTypeBodyUsingInternalMemberInAFormAPartialTypeSkips_PatchesBehavior(string editName)
@@ -223,6 +222,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Plain, edit);
 
             await AssertPatchedAsEditedAsync(result, FixtureKind.Plain, edit);
+        }
+
+        /// <summary>
+        /// What: a partial type's own statements that call an extension method the compiler would
+        /// not call from there (one in a namespace the file does not import, a private one, or a
+        /// same-named one with other arguments) are skipped with the reason of the check that refuses
+        /// them, keep the compiled value, and do not fail the file. The private one is refused by the
+        /// check that the patch could bind another member than Unity's compiler does.
+        /// </summary>
+        [TestCase("return 50.UnimportedTwice(1);", "None of this partial type's source files known to hot reload declares that name")]
+        [TestCase("return 50.PrivateTwice(1);", "The patch could use 'HotReloadPrivateExtensionMath.PrivateTwice(int, int)' here instead of the member Unity's compiler uses")]
+        [TestCase("return 50.Twice(\"x\");", "None of this partial type's source files known to hot reload declares that name")]
+        public async Task Run_PartialTypeOwnStatementsCallingAnExtensionTheCompilerWouldNotCall_IsSkipped(string body, string expectedReason)
+        {
+            BodyEdit edit = BodyEdit.OfDerivedValue(body, 101);
+            HotReloadOrchestratorResult result = await RunEditAsync(FixtureKind.Partial, edit);
+
+            HotReloadMethodOutcome row = FindRow(result, FixtureTypeName(FixtureKind.Partial), edit.MethodName);
+            Assert.That(row.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped), FormatOutcomes(result));
+            Assert.That(row.Reason, Does.Contain(expectedReason), FormatOutcomes(result));
+            Assert.That(
+                result.Methods.Any(outcome => outcome.Kind == HotReloadMethodOutcomeKind.Failed),
+                Is.False,
+                FormatOutcomes(result));
+            Assert.That(await CallFixtureAsync(FixtureKind.Partial, edit.MethodName), Is.EqualTo(CompiledValue(FixtureKind.Partial, edit.MethodName)));
         }
 
         /// <summary>
