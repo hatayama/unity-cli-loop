@@ -146,8 +146,9 @@ internal static class WorkerSyntaxIndex
         }
     }
 
-    // Why only a bare or leftmost name: the right side of A.T or alias::T names a member type
-    // called T, not the type parameter.
+    // Why only a bare or leftmost name: the right side of A.T names a member type called T, and
+    // both sides of T::X are an alias and a name in it, none of them the type parameter. Type
+    // arguments inside either are separate names and still checked on their own.
     private static bool IsTypeParameterReference(SyntaxToken token)
     {
         if (!(token.Parent is IdentifierNameSyntax identifierName))
@@ -160,7 +161,7 @@ internal static class WorkerSyntaxIndex
             return false;
         }
 
-        return !(identifierName.Parent is AliasQualifiedNameSyntax aliasQualified && aliasQualified.Name == identifierName);
+        return !(identifierName.Parent is AliasQualifiedNameSyntax);
     }
 
     // What: syntax-only type metadata name for baseline signature keys (not shim naming).

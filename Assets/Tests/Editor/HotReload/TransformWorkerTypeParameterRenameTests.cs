@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerTypeParameterRenameTests
     {
         private const string FixtureFileName = "HotReloadTypeParameterRenameWorkerFixture.cs";
-        private const string FixtureProjectRelativePath = "Assets/Tests/Editor/HotReload/" + FixtureFileName;
+        private const string AliasFixtureFileName = "HotReloadTypeParameterRenameAliasFixture.cs";
+        private const string FixtureDirectory = "Assets/Tests/Editor/HotReload/";
         private const string AddedGenericReason = "Added generic methods are skipped";
         private const string GenericEditReason = "Generic methods and methods inside generic types cannot be safely patched";
         private const string CallsAddedReason = "which this reload skipped";
@@ -203,6 +204,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertSkipped(result, "HotReloadTypeParameterRenameWorkerMethods.CallNested", CallsAddedReason);
         }
 
+        /// <summary>
+        /// What: renaming the type parameter T of Format&lt;T&gt;(T::String, T) to U leaves the
+        /// using alias T on the left of '::' as it is, so the method keeps its snapshot key: no
+        /// removed member is reported, and Format gets the row the same edit without the rename gets.
+        /// </summary>
+        [Test]
+        public async Task Run_RenamedTypeParameterBesideAnAliasOfTheSameName_KeepsTheAliasInTheKey()
+        {
+            string[] bodyEdit = { "return 2400;", "return 2410;" };
+            TransformWorkerClientResult control = await RunEditedFileAsync(AliasFixtureFileName, bodyEdit);
+            TransformWorkerClientResult renamed = await RunEditedFileAsync(
+                AliasFixtureFileName,
+                Concat(new[] { "public int Format<T>(T::String text, T value)", "public int Format<U>(T::String text, U value)" }, bodyEdit));
+
+            Assert.That(renamed.Output.files[0].removedMembers, Is.Empty, Describe(renamed));
+            Assert.That(
+                Summarize(renamed, "HotReloadTypeParameterRenameAliasFixture."),
+                Is.EqualTo(Summarize(control, "HotReloadTypeParameterRenameAliasFixture.")),
+                "Renamed: " + Describe(renamed) + "\nControl: " + Describe(control));
+            AssertNoReason(renamed, AddedGenericReason);
+        }
+
         private static async Task AssertHostRenameMatchesControlAsync(string hostName, string bodyAnchor, string editedBody)
         {
             await AssertSameRowsAsControlAsync(
@@ -248,15 +271,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string ReadFixture()
         {
+            return ReadFixtureFile(FixtureFileName);
+        }
+
+        private static string ReadFixtureFile(string fileName)
+        {
             return File.ReadAllText(Path.GetFullPath(
-                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", FixtureFileName))).Replace("\r\n", "\n");
+                Path.Combine(Application.dataPath, "Tests", "Editor", "HotReload", fileName))).Replace("\r\n", "\n");
+        }
+
+        private static Task<TransformWorkerClientResult> RunEditedFixtureAsync(params string[] replacements)
+        {
+            return RunEditedFileAsync(FixtureFileName, replacements);
         }
 
         // Why pairs of strings: the replacements run in order, and each must find its text exactly
         // once, so a typo fails the precondition instead of editing nothing.
-        private static async Task<TransformWorkerClientResult> RunEditedFixtureAsync(params string[] replacements)
+        private static async Task<TransformWorkerClientResult> RunEditedFileAsync(string fileName, string[] replacements)
         {
-            string onDisk = ReadFixture();
+            string onDisk = ReadFixtureFile(fileName);
             string edited = onDisk;
             for (int index = 0; index < replacements.Length; index += 2)
             {
@@ -271,7 +304,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string editedPath = HotReloadTestSourceWriter.WriteEditedSource("TypeParameterRenameWorker.cs", edited);
             TransformWorkerInputDto input = TransformWorkerClientTests.BuildInputForSource(
                 editedPath,
-                FixtureProjectRelativePath,
+                FixtureDirectory + fileName,
                 snapshotSource: onDisk);
             TransformWorkerClientResult result =
                 await HotReloadCompositionRoot.Services.TransformWorkerClient.RunAsync(input, CancellationToken.None);
