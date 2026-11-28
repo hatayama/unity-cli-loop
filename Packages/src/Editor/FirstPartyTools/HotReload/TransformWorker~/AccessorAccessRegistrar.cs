@@ -502,7 +502,7 @@ internal static class AccessorAccessRegistrar
             return false;
         }
 
-        rejectReason = ExtensionClassNameBind.FindRejectReasonOrNull(semanticModel, invocation, methodSymbol);
+        rejectReason = NonPublicExtensionClassBind.FindRejectReasonOrNull(semanticModel, invocation, methodSymbol);
         if (rejectReason != null)
         {
             return false;

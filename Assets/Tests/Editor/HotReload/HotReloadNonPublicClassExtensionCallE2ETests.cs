@@ -200,8 +200,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a lambda that calls an extension method of an internal static class in a namespace
-        /// named with a keyword is Patched and returns the edited value, because the accessor looks
-        /// the class up by its metadata name.
+        /// named with a keyword is Patched and returns the edited value, because the accessor's
+        /// typeof escapes the keyword (@event).
         /// </summary>
         [Test]
         public async Task Run_ClosureCallingExtensionInKeywordNamedNamespace_IsPatched()

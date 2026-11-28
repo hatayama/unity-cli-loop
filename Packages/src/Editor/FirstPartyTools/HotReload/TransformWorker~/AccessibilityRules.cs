@@ -87,7 +87,7 @@ internal static class AccessibilityRules
     // What: the candidate of the twin's compiled class that has the signature of the overload the
     // edited source calls, or null when the enforcing binding resolves no method or no candidate
     // matches. Why not any candidate of that class: the twin is picked to refuse the call, and any
-    // overload refuses it, but an accessor that reaches the class by name binds the overload it is
+    // overload refuses it, but an accessor of a non-public class binds the overload it is
     // given, which must be the one the source calls (Pick(int) over Pick(long) for an int argument).
     private static IMethodSymbol FindTwinOfTheEditedOverloadOrNull(
         SemanticModel semanticModel,

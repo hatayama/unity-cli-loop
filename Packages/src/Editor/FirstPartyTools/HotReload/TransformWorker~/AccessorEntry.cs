@@ -117,11 +117,11 @@ internal sealed class AccessorEntry
     /// </summary>
     public bool TryGetVisibilityFailure(IAssemblySymbol targetAssembly, out WorkerReason reason)
     {
-        bool bindsClassByName = BindsDeclaringClassByName(targetAssembly)
-            && ExtensionClassNameBind.IsCompiledIn(MethodSymbol, targetAssembly);
+        bool allowsNonPublicClass = AllowsNonPublicDeclaringClass(targetAssembly)
+            && NonPublicExtensionClassBind.IsCompiledIn(MethodSymbol, targetAssembly);
         foreach (ITypeSymbol typeSymbol in EnumerateSignatureTypes())
         {
-            if (bindsClassByName && SymbolEqualityComparer.Default.Equals(typeSymbol, MethodSymbol.ContainingType))
+            if (allowsNonPublicClass && SymbolEqualityComparer.Default.Equals(typeSymbol, MethodSymbol.ContainingType))
             {
                 continue;
             }
@@ -139,15 +139,15 @@ internal sealed class AccessorEntry
         return false;
     }
 
-    private bool BindsDeclaringClassByName(IAssemblySymbol targetAssembly)
+    private bool AllowsNonPublicDeclaringClass(IAssemblySymbol targetAssembly)
     {
-        return Kind == AccessorKind.MethodDelegate && ExtensionClassNameBind.FindsClassByName(MethodSymbol, targetAssembly);
+        return Kind == AccessorKind.MethodDelegate && NonPublicExtensionClassBind.AllowsNonPublicClass(MethodSymbol, targetAssembly);
     }
 
     public IEnumerable<ITypeSymbol> EnumerateSignatureTypes()
     {
-        // Bind statements name ContainingType, including for static members; only an extension
-        // method of a non-public class names it as a string, which TryGetVisibilityFailure allows.
+        // Bind statements name ContainingType through typeof, including for static members;
+        // TryGetVisibilityFailure allows it only for an extension method of a non-public class.
         switch (Kind)
         {
             case AccessorKind.FieldRef:
@@ -194,11 +194,22 @@ internal sealed class AccessorEntry
     }
 
     /// <summary>
-    /// What: the statement that binds this accessor. <paramref name="targetAssembly"/> is the
-    /// compiled patch target read with every member visible, which an extension method of a
-    /// non-public class is looked up in; it may be null only when no entry needs that lookup.
+    /// What: the statement that binds this accessor.
     /// </summary>
-    public StatementSyntax EmitBindStatement(IAssemblySymbol targetAssembly)
+    /// <remarks>
+    /// Why typeof also for an extension method of a non-public class: the shim compiles against
+    /// publicized references, and the Editor's Mono runtime does not check type access on the
+    /// ldtoken, so typeof of a top-level internal class binds (measured, every supported Editor is
+    /// Mono). On a runtime that did check it, the bind would throw in __BindAccessors, before any
+    /// patch is applied, not after the method was reported patched. ADR 0010
+    /// (docs/adr/0010-hot-reload-internal-introduced-types.md) reopens Mono-only behavior when the
+    /// Editor moves to CoreCLR. Known limit: when a referenced assembly declares a public type with
+    /// the full name of the class (the target compiles with CS0436 and its own class wins), the
+    /// typeof is ambiguous in the shim compile (CS0433), so the file's entries are dropped and
+    /// recompiled, or the file fails; it never binds the wrong class. A public class has the same
+    /// limit.
+    /// </remarks>
+    public StatementSyntax EmitBindStatement()
     {
         string statement = Kind switch
         {
@@ -206,7 +217,7 @@ internal sealed class AccessorEntry
             AccessorKind.MethodDelegate => BuildMethodDelegateBindStatement(
                 MethodSymbol.Name,
                 MethodSymbol,
-                BuildDeclaringTypeExpression(targetAssembly)),
+                "typeof(" + TypeDisplay(MethodSymbol.ContainingType) + ")"),
             AccessorKind.PropertyGetter => BuildMethodDelegateBindStatement(
                 PropertySymbol.GetMethod.Name,
                 PropertySymbol.GetMethod,
@@ -224,20 +235,6 @@ internal sealed class AccessorEntry
         };
 
         return SyntaxFactory.ParseStatement(statement);
-    }
-
-    // Why by name for a non-public class: reflection reaches a non-public type whatever access
-    // checks the runtime applies to the shim's own IL. Under the Editor's Mono, typeof of a
-    // top-level internal class binds as well (measured), but the name lookup does not rely on that.
-    private string BuildDeclaringTypeExpression(IAssemblySymbol targetAssembly)
-    {
-        if (!BindsDeclaringClassByName(targetAssembly))
-        {
-            return "typeof(" + TypeDisplay(MethodSymbol.ContainingType) + ")";
-        }
-
-        string assemblyQualifiedName = ExtensionClassNameBind.AssemblyQualifiedClassName(MethodSymbol, targetAssembly);
-        return "global::System.Type.GetType(\"" + EscapeStringLiteral(assemblyQualifiedName) + "\", true)";
     }
 
     private string BuildDelegateTypeDisplayString()

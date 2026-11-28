@@ -26,8 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
     /// <summary>
     /// Internal static class whose extension methods the host below calls, declared in the same
-    /// file as the host. A lambda or async body that calls one needs an accessor, which finds the
-    /// class by name because the class is not public.
+    /// file as the host. A lambda or async body that calls one needs an accessor, which names the
+    /// class through typeof although the class is not public.
     /// </summary>
     internal static class HotReloadNonPublicClassExtensions
     {
@@ -285,8 +285,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.@event
 {
     /// <summary>
-    /// Internal static class in a namespace named with a keyword, so the lookup of the class by name
-    /// must use its metadata name (event), not the escaped display (@event).
+    /// Internal static class in a namespace named with a keyword, so the accessor's typeof of the
+    /// class must escape that namespace as @event.
     /// </summary>
     internal static class HotReloadKeywordNamespaceExtensions
     {
