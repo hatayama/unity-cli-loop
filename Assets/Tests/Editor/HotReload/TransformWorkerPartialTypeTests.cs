@@ -998,6 +998,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a derived type's body that calls a private protected member of its compiled base on
+        /// a value of its own type, returned by a compiled API whose file the run was not given, binds:
+        /// that value is typed as the compiled copy of the edited type, which is the same type.
+        /// </summary>
+        [TestCase(PlainDerivedFileName, PlainDerivedValueBody, "CreatePlain")]
+        [TestCase(PartialDerivedFileName, PartialDerivedValueBody, "CreatePartial")]
+        public async Task Run_DerivedTypeBodyCallingPrivateProtectedBaseMemberOnItsOwnTypeFromACompiledApi_Binds(
+            string fileName,
+            string valueBody,
+            string factoryMethod)
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourcesAsync(new[]
+            {
+                BuildEditedFixtureSource(
+                    fileName,
+                    "OwnTypedPrivateProtected" + fileName,
+                    valueBody,
+                    "return HotReloadPrivateProtectedReceiverFactory." + factoryMethod + "().PrivateProtectedValue();")
+            });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertEmitted(result, "DerivedValue");
+        }
+
+        /// <summary>
         /// What: a method newly added to a derived type whose body calls a private member of its
         /// compiled base, which Unity's compiler refuses, is not applied.
         /// </summary>

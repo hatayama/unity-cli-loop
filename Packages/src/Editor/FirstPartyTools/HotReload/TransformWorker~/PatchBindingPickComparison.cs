@@ -275,9 +275,15 @@ internal static class PatchBindingPickComparison
     // Why the receiver must be the accessing type or derive from it: that is C#'s protected rule for an
     // instance member, so a derived type cannot reach the member on a value typed as the base. A static
     // member, or a use through this, base or no receiver, has no receiver to check.
+    // Why the receiver is mapped: a compiled API the run was not given names the compiled copy of a
+    // type the run declares, which is the run's declaration in reality; a receiver that maps to
+    // nothing keeps its own type, so it never counts as having no receiver.
     private static bool IsProtectedReachable(ISymbol member, PatchUse use)
     {
         INamedTypeSymbol owner = member.ContainingType.OriginalDefinition;
+        ITypeSymbol receiver = use.ReceiverType == null
+            ? null
+            : CompiledCopyTypeMapper.MapOrNull(use.ReceiverType, use.PatchModel.Compilation, use.TargetAssembly) ?? use.ReceiverType;
         for (INamedTypeSymbol accessing = use.EnclosingType; accessing != null; accessing = accessing.ContainingType)
         {
             if (!DerivesFromOrIs(accessing, owner))
@@ -285,7 +291,7 @@ internal static class PatchBindingPickComparison
                 continue;
             }
 
-            if (member.IsStatic || use.ReceiverType == null || DerivesFromOrIs(use.ReceiverType, accessing.OriginalDefinition))
+            if (member.IsStatic || receiver == null || DerivesFromOrIs(receiver, accessing.OriginalDefinition))
             {
                 return true;
             }
