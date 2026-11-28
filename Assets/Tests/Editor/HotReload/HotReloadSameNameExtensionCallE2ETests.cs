@@ -47,14 +47,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Calls the shim assembly compiles as code of its own: in a lambda, through conditional
-        // access, on a receiver that is itself a member access, beside a same-named public extension
-        // that takes an int with another argument type, in an async body and in an iterator body.
+        // access (also followed by another call), on a receiver that is itself a member access,
+        // beside a same-named public extension that takes an int with another argument type (also
+        // with a named argument), in an async body and in an iterator body.
         private static IEnumerable<TestCaseData> CallsInShimCompiledBodies()
         {
             yield return new TestCaseData("LambdaValue", "() => 20", "() => 50.AddDouble(1)", 20, 101);
             yield return new TestCaseData("ConditionalAccessLambdaValue", "() => 30", "() => ((int?)50)?.AddDouble(1) ?? 0", 30, 101);
             yield return new TestCaseData("MemberAccessReceiverLambdaValue", "() => this._seed + 10", "() => this._seed.AddDouble(1)", 60, 101);
             yield return new TestCaseData("IntOverloadLambdaValue", "() => 70", "() => 50.AddTriple(1)", 70, 151);
+            yield return new TestCaseData("ChainedConditionalAccessLambdaValue", "() => 80", "() => ((int?)50)?.AddDouble(1).CompareTo(0) ?? 0", 80, 1);
+            yield return new TestCaseData("NamedArgumentLambdaValue", "() => 90", "() => 50.AddTriple(add: 1)", 90, 151);
             yield return new TestCaseData("AsyncValue", "return 40;", "return 50.AddDouble(1);", 40, 101);
             yield return new TestCaseData("IteratorValues", "yield return 50;", "yield return 50.AddDouble(1);", 50, 101);
         }
@@ -153,52 +156,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Why async: the async fixture method is awaited rather than waited on, because an EditMode
         // test must not block the main thread on a task.
-        private static async Task<int> CallAsync(FixtureKind fixture, string methodName)
+        private static Task<int> CallAsync(FixtureKind fixture, string methodName)
         {
-            if (fixture == FixtureKind.Plain)
-            {
-                HotReloadSameNameExtensionCaller plain = new HotReloadSameNameExtensionCaller();
-                switch (methodName)
-                {
-                    case OwnStatementsValue:
-                        return plain.OwnStatementsValue();
-                    case "LambdaValue":
-                        return plain.LambdaValue();
-                    case "ConditionalAccessLambdaValue":
-                        return plain.ConditionalAccessLambdaValue();
-                    case "MemberAccessReceiverLambdaValue":
-                        return plain.MemberAccessReceiverLambdaValue();
-                    case "IntOverloadLambdaValue":
-                        return plain.IntOverloadLambdaValue();
-                    case "AsyncValue":
-                        return await plain.AsyncValue();
-                    case "IteratorValues":
-                        return First(plain.IteratorValues());
-                }
-            }
-            else
-            {
-                HotReloadSameNameExtensionPartialCaller partial = new HotReloadSameNameExtensionPartialCaller();
-                switch (methodName)
-                {
-                    case OwnStatementsValue:
-                        return partial.OwnStatementsValue();
-                    case "LambdaValue":
-                        return partial.LambdaValue();
-                    case "ConditionalAccessLambdaValue":
-                        return partial.ConditionalAccessLambdaValue();
-                    case "MemberAccessReceiverLambdaValue":
-                        return partial.MemberAccessReceiverLambdaValue();
-                    case "IntOverloadLambdaValue":
-                        return partial.IntOverloadLambdaValue();
-                    case "AsyncValue":
-                        return await partial.AsyncValue();
-                    case "IteratorValues":
-                        return First(partial.IteratorValues());
-                }
-            }
+            return fixture == FixtureKind.Plain ? CallPlainAsync(methodName) : CallPartialAsync(methodName);
+        }
 
-            throw new ArgumentException("Unknown caller method: " + methodName);
+        private static async Task<int> CallPlainAsync(string methodName)
+        {
+            HotReloadSameNameExtensionCaller caller = new HotReloadSameNameExtensionCaller();
+            switch (methodName)
+            {
+                case OwnStatementsValue:
+                    return caller.OwnStatementsValue();
+                case "LambdaValue":
+                    return caller.LambdaValue();
+                case "ConditionalAccessLambdaValue":
+                    return caller.ConditionalAccessLambdaValue();
+                case "ChainedConditionalAccessLambdaValue":
+                    return caller.ChainedConditionalAccessLambdaValue();
+                case "MemberAccessReceiverLambdaValue":
+                    return caller.MemberAccessReceiverLambdaValue();
+                case "IntOverloadLambdaValue":
+                    return caller.IntOverloadLambdaValue();
+                case "NamedArgumentLambdaValue":
+                    return caller.NamedArgumentLambdaValue();
+                case "AsyncValue":
+                    return await caller.AsyncValue();
+                case "IteratorValues":
+                    return First(caller.IteratorValues());
+                default:
+                    throw new ArgumentException("Unknown caller method: " + methodName);
+            }
+        }
+
+        private static async Task<int> CallPartialAsync(string methodName)
+        {
+            HotReloadSameNameExtensionPartialCaller caller = new HotReloadSameNameExtensionPartialCaller();
+            switch (methodName)
+            {
+                case OwnStatementsValue:
+                    return caller.OwnStatementsValue();
+                case "LambdaValue":
+                    return caller.LambdaValue();
+                case "ConditionalAccessLambdaValue":
+                    return caller.ConditionalAccessLambdaValue();
+                case "ChainedConditionalAccessLambdaValue":
+                    return caller.ChainedConditionalAccessLambdaValue();
+                case "MemberAccessReceiverLambdaValue":
+                    return caller.MemberAccessReceiverLambdaValue();
+                case "IntOverloadLambdaValue":
+                    return caller.IntOverloadLambdaValue();
+                case "NamedArgumentLambdaValue":
+                    return caller.NamedArgumentLambdaValue();
+                case "AsyncValue":
+                    return await caller.AsyncValue();
+                case "IteratorValues":
+                    return First(caller.IteratorValues());
+                default:
+                    throw new ArgumentException("Unknown caller method: " + methodName);
+            }
         }
 
         private static int First(IEnumerable<int> values)

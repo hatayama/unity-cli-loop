@@ -12,9 +12,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return value.Length;
         }
 
-        public static int AddTriple(this int value, string other)
+        // Why the parameter is named like the internal one's: a named argument then fails only on
+        // its type, as a positional one does.
+        public static int AddTriple(this int value, string add)
         {
-            return value + other.Length;
+            return value + add.Length;
         }
     }
 }

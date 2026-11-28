@@ -47,6 +47,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ChainedConditionalAccessLambdaValue()
+        {
+            Func<int> read = () => 80;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int NamedArgumentLambdaValue()
+        {
+            Func<int> read = () => 90;
+            return read();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public async Task<int> AsyncValue()
         {
             await Task.CompletedTask;

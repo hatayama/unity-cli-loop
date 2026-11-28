@@ -81,17 +81,44 @@ internal static class InapplicableCallName
             return access.Name;
         }
 
-        return node.Parent is ConditionalAccessExpressionSyntax conditional
-            && conditional.Expression == node
-            && conditional.WhenNotNull is InvocationExpressionSyntax { Expression: MemberBindingExpressionSyntax binding }
-                ? binding.Name
-                : null;
+        return node.Parent is ConditionalAccessExpressionSyntax conditional && conditional.Expression == node
+            ? CalledBindingNameOrNull(conditional.WhenNotNull)
+            : null;
     }
 
-    // 'receiver.Name(..., node, ...)' or 'receiver?.Name(..., node, ...)', where 'node' is an argument.
+    // The name of the call that '?.' starts, the leftmost member binding of 'whenNotNull', which may
+    // be followed by more calls or member accesses ('?.Name(...).Other()'); null when that binding is
+    // not called.
+    private static SimpleNameSyntax CalledBindingNameOrNull(ExpressionSyntax whenNotNull)
+    {
+        ExpressionSyntax current = whenNotNull;
+        while (true)
+        {
+            switch (current)
+            {
+                case MemberBindingExpressionSyntax binding:
+                    return binding.Parent is InvocationExpressionSyntax call && call.Expression == binding
+                        ? binding.Name
+                        : null;
+                case InvocationExpressionSyntax invocation:
+                    current = invocation.Expression;
+                    break;
+                case MemberAccessExpressionSyntax access:
+                    current = access.Expression;
+                    break;
+                default:
+                    return null;
+            }
+        }
+    }
+
+    // 'receiver.Name(..., node, ...)' or 'receiver?.Name(..., node, ...)', where 'node' is an argument
+    // or the expression of one. Why the expression too: for a named argument 'add: 1' the compiler
+    // marks only '1', whose span is not the argument's.
     private static SimpleNameSyntax NameOfCallWithArgumentOrNull(SyntaxNode node)
     {
-        if (node is not ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation } })
+        SyntaxNode argument = node.Parent is ArgumentSyntax parent && parent.Expression == node ? parent : node;
+        if (argument is not ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation } })
         {
             return null;
         }
