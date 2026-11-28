@@ -117,11 +117,11 @@ internal sealed class AccessorEntry
     /// </summary>
     public bool TryGetVisibilityFailure(IAssemblySymbol targetAssembly, out WorkerReason reason)
     {
-        bool bindsClassByName = BindsDeclaringClassByName(targetAssembly)
-            && ExtensionClassNameBind.IsCompiledIn(MethodSymbol, targetAssembly);
+        bool allowsNonPublicClass = AllowsNonPublicDeclaringClass(targetAssembly)
+            && NonPublicExtensionClassBind.IsCompiledIn(MethodSymbol, targetAssembly);
         foreach (ITypeSymbol typeSymbol in EnumerateSignatureTypes())
         {
-            if (bindsClassByName && SymbolEqualityComparer.Default.Equals(typeSymbol, MethodSymbol.ContainingType))
+            if (allowsNonPublicClass && SymbolEqualityComparer.Default.Equals(typeSymbol, MethodSymbol.ContainingType))
             {
                 continue;
             }
@@ -139,9 +139,9 @@ internal sealed class AccessorEntry
         return false;
     }
 
-    private bool BindsDeclaringClassByName(IAssemblySymbol targetAssembly)
+    private bool AllowsNonPublicDeclaringClass(IAssemblySymbol targetAssembly)
     {
-        return Kind == AccessorKind.MethodDelegate && ExtensionClassNameBind.FindsClassByName(MethodSymbol, targetAssembly);
+        return Kind == AccessorKind.MethodDelegate && NonPublicExtensionClassBind.AllowsNonPublicClass(MethodSymbol, targetAssembly);
     }
 
     public IEnumerable<ITypeSymbol> EnumerateSignatureTypes()

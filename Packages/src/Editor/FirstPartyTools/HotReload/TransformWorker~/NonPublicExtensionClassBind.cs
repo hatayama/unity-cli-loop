@@ -17,27 +17,25 @@ using Microsoft.CodeAnalysis.Text;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 /// <summary>
-/// What: when an accessor finds the class of an extension method by its name, because the class is
-/// not public, and what that name is. The class must be compiled into the patch target, and the call
-/// must bind to the overload the edited source calls.
+/// What: when an accessor may bind an extension method whose class is not public. The class must be
+/// compiled into the patch target, and the call must bind to the overload the edited source calls.
 /// </summary>
-internal static class ExtensionClassNameBind
+internal static class NonPublicExtensionClassBind
 {
     /// <summary>
-    /// What: whether the accessor for <paramref name="method"/>, an unreduced method, finds its class
-    /// by name: the method is an extension method whose class is not public in the edited source or
-    /// in <paramref name="targetAssembly"/> (read with every member visible, or null when the run
-    /// could not read it).
+    /// What: whether the accessor for <paramref name="method"/>, an unreduced method, may name a
+    /// non-public class: the method is an extension method whose class is not public in the edited
+    /// source or in <paramref name="targetAssembly"/> (read with every member visible, or null when
+    /// the run could not read it).
     /// </summary>
     /// <remarks>
     /// Why only an extension method: the language makes its class top-level, non-generic and static,
-    /// so the metadata name alone finds the class, and the delegate type never names it, because the
-    /// class is not a parameter. Another non-public class may be generic or nested in one, which a
-    /// name lookup cannot construct, so a method of such a class stays refused. Why the compiled class
-    /// too: one edit can make the class public while the class that runs stays internal, and the bind
-    /// finds the class by name whenever the class that runs is not public.
+    /// and the delegate type never names it, because the class is not a parameter; only the bind's
+    /// typeof does. A method of another non-public class stays refused. Why the compiled class too:
+    /// one edit can make the class public while the class that runs stays internal, and the accessor
+    /// binds the class that runs.
     /// </remarks>
-    internal static bool FindsClassByName(IMethodSymbol method, IAssemblySymbol targetAssembly)
+    internal static bool AllowsNonPublicClass(IMethodSymbol method, IAssemblySymbol targetAssembly)
     {
         if (!method.IsExtensionMethod)
         {
@@ -58,9 +56,9 @@ internal static class ExtensionClassNameBind
     /// and holds the method with the same return type or not at all.
     /// </summary>
     /// <remarks>
-    /// Why the class must already be compiled: the bind looks it up by name in that assembly when the
-    /// shim loads, and a class this reload adds is not there, so the bind would throw and fail the
-    /// whole file instead of skipping the one method. Why a method this reload adds passes: only its
+    /// Why the class must already be compiled: the shim compiles against a copy of that assembly, and
+    /// a class this reload adds is not there, so the bind's typeof of it would fail the whole file
+    /// instead of skipping the one method. Why a method this reload adds passes: only its
     /// static-form call gets this far, the reduced form being refused before, and the added-method
     /// rewrite replaces that call, so the shim binds no accessor for it. Why a changed return type
     /// fails: the bind would find the compiled method by its parameters and could not make a delegate
@@ -77,13 +75,13 @@ internal static class ExtensionClassNameBind
     /// <summary>
     /// What: the reason an accessor may not bind <paramref name="methodSymbol"/>, the unreduced
     /// method the worker bound <paramref name="invocation"/> to, or null when it may. Only a method of
-    /// a class that is not public is checked; the reason is the one the class would get without the
-    /// lookup by name, or the [Conditional] one.
+    /// a class that is not public is checked; the reason is the one the class would get if the
+    /// accessor could not name it, or the [Conditional] one.
     /// </summary>
     /// <remarks>
     /// Why at the call: when the bound method's class is not public, the worker's binding may have
-    /// stood a compiled twin in for the call, and an accessor that finds the class by name binds the
-    /// method it is given, so it must be the one the edited source calls. Why read [Conditional] from
+    /// stood a compiled twin in for the call, and an accessor of a non-public class binds the method
+    /// it is given, so it must be the one the edited source calls. Why read [Conditional] from
     /// the edited overload: a twin carries the attributes of the last compile, and an edit that makes
     /// the method conditional means the compiler omits the call.
     /// </remarks>
