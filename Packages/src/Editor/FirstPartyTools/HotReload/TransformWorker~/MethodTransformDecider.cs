@@ -53,12 +53,41 @@ internal static class MethodTransformDecider
 
         // Why before the shape decision: the patch resolves the member differently in its own
         // statements too, where no accessor rewrite is asked, and a closure would throw for it.
-        WorkerReason hiddenMemberSkip = HiddenMemberPickGuard.DescribeSkipOrNull(semanticModel, bodyNode, targetAssembly, patchBinding);
-        if (hiddenMemberSkip != null)
+        HiddenMemberPick hiddenPick = HiddenMemberPickGuard.FindOrNull(semanticModel, bodyNode, targetAssembly, patchBinding);
+        if (hiddenPick != null && !hiddenPick.UseReachesNoMember)
         {
-            return MethodTransformDecision.Skip(hiddenMemberSkip);
+            return MethodTransformDecision.Skip(hiddenPick.Reason);
         }
 
+        MethodTransformDecision decision = DecideAfterHiddenMemberCheck(
+            typeSymbol,
+            methodDeclaration,
+            methodSymbol,
+            bodyNode,
+            semanticModel,
+            compiledType,
+            addedMemberAccess,
+            addedEvents,
+            targetAssembly);
+
+        // Why the shape is still decided for a use Unity's compiler rejects: the unresolved-name check
+        // that may explain the skip better reads it, and the body stays skipped either way.
+        return hiddenPick == null
+            ? decision
+            : MethodTransformDecision.SkipUnlessUnresolvedNameExplains(hiddenPick.Reason, decision);
+    }
+
+    private static MethodTransformDecision DecideAfterHiddenMemberCheck(
+        INamedTypeSymbol typeSymbol,
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        INamedTypeSymbol compiledType,
+        AddedMemberAccessLookup addedMemberAccess,
+        AddedEventLookup addedEvents,
+        IAssemblySymbol targetAssembly)
+    {
         WorkerReason baseCallSkip = BaseCallRules.EvaluateSkipReason(
             methodDeclaration,
             typeSymbol,

@@ -17,10 +17,10 @@ using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 internal static class HiddenMemberPickGuard
 {
     /// <summary>
-    /// What: the skip reason for the first use in the body that the patch could resolve to a member
-    /// the code there cannot reach, naming that member, or null when every use resolves alike.
+    /// What: the first use in the body that the patch could resolve to a member the code there cannot
+    /// reach, with the skip reason naming that member, or null when every use resolves alike.
     /// </summary>
-    internal static WorkerReason DescribeSkipOrNull(
+    internal static HiddenMemberPick FindOrNull(
         SemanticModel semanticModel,
         SyntaxNode bodyNode,
         IAssemblySymbol targetAssembly,
@@ -46,7 +46,9 @@ internal static class HiddenMemberPickGuard
                 ?? PatchBindingPickComparison.FindHiddenPickOrNull(enforcingModel, patchModel, node, targetAssembly);
             if (hidden != null)
             {
-                return WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember, Display(hidden));
+                return new HiddenMemberPick(
+                    WorkerReason.Of(HotReloadWorkerReasonCode.MethodTransformUseResolvesToHiddenMember, Display(hidden)),
+                    PatchBindingPickComparison.ReachesNoMember(enforcingModel, patchModel, node, targetAssembly));
             }
         }
 
@@ -273,4 +275,22 @@ internal static class HiddenMemberPickGuard
         ISymbol shown = symbol is IMethodSymbol method ? AccessibilityRules.UnreducedMethod(method) : symbol;
         return shown.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat);
     }
+}
+
+/// <summary>
+/// What: a use the patch could resolve to a member the code cannot reach. The body is skipped with
+/// <see cref="Reason"/>; when <see cref="UseReachesNoMember"/> holds, Unity's compiler rejects the use
+/// itself, so a reason that names the use as unresolved may replace it, but never the skip.
+/// </summary>
+internal sealed class HiddenMemberPick
+{
+    internal HiddenMemberPick(WorkerReason reason, bool useReachesNoMember)
+    {
+        Reason = reason;
+        UseReachesNoMember = useReachesNoMember;
+    }
+
+    internal WorkerReason Reason { get; }
+
+    internal bool UseReachesNoMember { get; }
 }

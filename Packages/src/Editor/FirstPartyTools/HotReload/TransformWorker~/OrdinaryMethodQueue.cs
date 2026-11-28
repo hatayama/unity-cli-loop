@@ -449,7 +449,36 @@ internal static class OrdinaryMethodQueue
             }
         }
 
-        return decision;
+        return isAddedMethod
+            ? decision
+            : PreferUnresolvedNameReason(decision, methodDeclaration, methodBodyNode, typeState, semanticModel);
+    }
+
+    // Why only the reason moves: the body names a member Unity's compiler rejects there, and the
+    // unresolved-name reason says why better than the hidden-member one when it applies; without
+    // one the body keeps the hidden-member skip. Added methods keep it too: their unbound body is
+    // reported by the added-member binding check, not by the unresolved-name check.
+    private static MethodTransformDecision PreferUnresolvedNameReason(
+        MethodTransformDecision decision,
+        MethodDeclarationSyntax methodDeclaration,
+        SyntaxNode methodBodyNode,
+        TypeEmitState typeState,
+        SemanticModel semanticModel)
+    {
+        if (decision.ShapeForUnresolvedNameCheck == null)
+        {
+            return decision;
+        }
+
+        WorkerReason unresolvedNameReason = UnresolvedBodyNameGuard.DescribeSkipOrNull(
+            typeState.TypeDeclaration,
+            semanticModel,
+            methodBodyNode,
+            methodDeclaration,
+            decision.ShapeForUnresolvedNameCheck,
+            typeState.TypeSymbol,
+            typeState.TargetAssembly);
+        return unresolvedNameReason == null ? decision : MethodTransformDecision.Skip(unresolvedNameReason);
     }
 
     internal static void QueueDecidedOrdinaryMethod(
